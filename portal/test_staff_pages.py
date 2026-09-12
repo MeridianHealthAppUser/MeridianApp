@@ -363,7 +363,8 @@ class StaffPagesTests(TestCase):
         parser.feed(response.content.decode())
         expected = {reverse(f'portal:{name}') for name in (*self.section_names, 'staff-inbox')}
         self.assertTrue(expected.issubset({href for href, label in parser.links}))
-        self.assertIn(reverse('portal:staff-patient-record', args=[self.patient.pk]), parser.active_links)
+        self.assertIn(reverse('portal:patient-detail', args=[self.patient.pk]), parser.active_links)
+        self.assertNotIn(reverse('portal:staff-patient-record', args=[self.patient.pk]), parser.active_links)
         self.assertTrue(all(not urlsplit(href).fragment for href, label in parser.links))
 
     def test_schedule_proposal_link_preselects_eligible_appointment_in_conversation(self):

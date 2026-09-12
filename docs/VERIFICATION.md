@@ -1,9 +1,28 @@
 # Local verification — 12 September 2026
 
+## Final regression and package checks
+
+- **PostgreSQL 16: all 990 tests passed, no skips** (97.3 seconds), with Redis atomic-presence checks, Chrome presentation checks, patient editor layouts and timeline interactions enabled.
+- **SQLite: 990 tests, 975 passed and 15 expected skips** (31.5 seconds). The skips are 12 optional browser checks, one isolated-Redis check and two PostgreSQL-only concurrent-booking tests; all of these ran in the PostgreSQL verification above.
+- Django system checks and dependency checks passed. No migration drift was detected; the additive schema includes `care.0010_compounding_and_review_reminders` and `video.0001_initial`.
+- The final Docker application image built successfully, collecting 162 static assets. Its unprivileged Daphne container migrated an empty disposable database and returned 200 for health, proxied HTTPS login and hashed CSS; ordinary HTTP login redirected to HTTPS. Production checks reported only the intentional HSTS-preload warning described below.
+- Existing local data and passwords were preserved. Verification databases, servers and containers were separate from the user's development server on port 8000.
+
+The final PostgreSQL run used:
+
+```sh
+DATABASE_URL=<isolated-postgresql-test-database> \
+VIDEO_TEST_REDIS_URL=<isolated-redis-test-database> \
+MERIDIAN_PLAYWRIGHT_PATH=<installed-playwright-package> \
+MERIDIAN_TIMELINE_BROWSER=1 \
+MERIDIAN_WORKSPACE_FORMS_BROWSER=1 \
+python manage.py test --noinput --failfast
+```
+
 ## Patient workspace and final UI verification
 
 - The canonical patient workspace passed 32 role-permitted tab clicks across Doctor, Practice Administrator and Super Admin accounts. Every tab retained the selected patient and was checked at 1440px, 390px and 320px, with no document overflow or JavaScript errors. Mobile patient-section targets are at least 44px high.
-- Dedicated consultation, blood-test and appointment detail/forms retain the same patient header and current tab; invalid values remain in context. Practice-wide navigation remains separate, and clinical access is not granted by selecting a tab.
+- Dedicated consultation, blood-test and appointment detail/forms retain the same patient header and current tab; invalid values remain in context. Task, treatment, delivery and nested compounding actions preserve patient context when opened from a patient tab, including successful POST redirects. Their global entry points retain the practice-wide shell. The editor checks include 39 layouts, plus 18 additional real-clone shared-action layouts. Clinical access is not granted by selecting a tab or supplying a presentation marker.
 - Eighteen adversarial workspace tests cover tenant/role boundaries, malformed imported relations, oversized identifiers, private/unsigned clinical content, selected-message receipts and retention of invalid off-page note-tag edits.
 - History starts with 20 events and loads older entries inside the bounded timeline panel. Browser checks cover scroll-triggered loading, stable event ordering, duplicate suppression, manual fallback, retry/end states and expired or changed access. The signed cursor and spreadsheet export recheck current permissions and the selected snapshot/filter scope.
 - Real `.xlsx` files were independently opened using openpyxl 3.1.5, in both normal and read-only modes, without warnings. Empty sheets, Unicode, long text split across continuation rows, SAST timestamps and leading-zero identifiers round-tripped correctly. Formula-like text remained string cells, never executable formulas. The independent reader was installed only in a temporary external directory and is not a runtime dependency.
@@ -45,7 +64,7 @@ Browser workflows used disposable database copies. Existing local accounts, pass
 - An isolated, unprivileged container migrated an empty disposable database and served the health endpoint, login page and hashed CSS. Application HTTP requests redirect to HTTPS; the minimal internal health probe remains available without a proxy header.
 - Container startup was checked without Gunicorn control-socket errors.
 - Production Django checks reported only `security.W021`: browser HSTS preload is deliberately not enabled automatically. Review domain-wide HTTPS policy before opting in.
-- GitHub Actions configuration and a DigitalOcean App Platform example are included. Neither workflow was executed remotely, and no repository push, production database or external deployment was performed.
+- GitHub Actions configuration and a DigitalOcean App Platform example are included. This report records local verification; remote CI is a separate result. A source-code push does not provision a production database, TURN service or external application deployment.
 
 ## Native video verification
 
