@@ -1,0 +1,52 @@
+{% extends 'portal/staff_page_base.html' %}
+{% load static %}
+
+{% block title %}{{ lead }} | Leads | {{ company.name }}{% endblock %}
+{% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/leads.css' %}">{% endblock %}
+{% block breadcrumb %}<span>Leads</span><span class="console-breadcrumb__dot" aria-hidden="true"></span><span>{{ company.name }}</span>{% endblock %}
+{% block topbar_actions %}<a class="console-icon-button" href="{% url 'portal:staff-leads' %}"><span aria-hidden="true">←</span><span>All leads</span></a>{% endblock %}
+
+{% block page_heading %}
+  <header class="staff-page-header"><div><p class="console-kicker">Practice enquiry · {{ company.name }}</p><h1>{{ lead.first_name }} {{ lead.last_name }}</h1><p>Submitted {{ lead.created_at|date:"j F Y, H:i" }} SAST</p></div><span class="lead-status lead-status--{{ lead.screening_status }}">{{ lead.get_screening_status_display }}</span></header>
+{% endblock %}
+
+{% block page_content %}
+  <p><a class="console-button console-button--primary" href="{% url 'portal:lead-follow-up' lead.pk %}">Follow-up notes and next contact</a></p>
+  <aside class="staff-lead-notice"><strong>{% if lead.converted_patient_id %}Converted enquiry{% else %}Lead only — no patient account created{% endif %}</strong><p>This is the original enquiry, not a clinical record. Payment processing and account activation are not available in this checkpoint.</p></aside>
+  <div class="staff-lead-detail-grid">
+    <section class="staff-page-card" aria-labelledby="lead-answers-heading">
+      <header class="staff-page-card__header"><div><h2 id="lead-answers-heading">Questionnaire answers</h2><p>{% if questionnaire.submitted_at %}Submitted {{ questionnaire.submitted_at|date:"j F Y, H:i" }} SAST{% else %}Information supplied with this enquiry.{% endif %}</p></div></header>
+      <dl class="staff-lead-answers">
+        {% for title, value in answers_display %}<div><dt>{{ title }}</dt><dd>{{ value|linebreaksbr }}</dd></div>{% empty %}<div><dt>Questionnaire</dt><dd>No submitted answers are available for this enquiry.</dd></div>{% endfor %}
+      </dl>
+    </section>
+    <aside class="staff-lead-detail-sidebar">
+      <section class="staff-page-card" aria-labelledby="lead-contact-heading">
+        <header class="staff-page-card__header"><div><h2 id="lead-contact-heading">Enquiry details</h2></div></header>
+        <dl class="staff-lead-facts">
+          <div><dt>Practice</dt><dd>{{ lead.company.name }}</dd></div>
+          <div><dt>Email</dt><dd>{{ lead.email }}</dd></div>
+          <div><dt>Phone</dt><dd>{{ lead.phone|default:"Not provided" }}</dd></div>
+          <div><dt>ID / passport</dt><dd>{{ lead.id_number|default:"Not provided" }}</dd></div>
+          <div><dt>BMI</dt><dd>{% if lead.bmi %}{{ lead.bmi|floatformat:1 }}{% else %}Not recorded{% endif %}</dd></div>
+          <div><dt>Stage</dt><dd>{{ lead.get_stage_display }}</dd></div>
+          <div><dt>Screening</dt><dd>{{ lead.get_screening_status_display }}</dd></div>
+        </dl>
+      </section>
+      <section class="staff-page-card" aria-labelledby="lead-consents-heading">
+        <header class="staff-page-card__header"><div><h2 id="lead-consents-heading">Recorded consent</h2><p>Versions and acceptance times retained with this enquiry.</p></div></header>
+        <ul class="staff-lead-consents">
+          {% for consent in consents %}
+            <li><strong>{% if consent.document %}{{ consent.document.title }}{% else %}{{ consent.get_consent_type_display }}{% endif %}</strong><span>{{ consent.document_version }} · {% if consent.accepted %}Accepted{% else %}Not accepted{% endif %}</span>{% if consent.accepted_at %}<time datetime="{{ consent.accepted_at|date:'c' }}">{{ consent.accepted_at|date:"j M Y, H:i" }} SAST</time>{% endif %}<small>Source: {{ consent.source }}</small></li>
+          {% empty %}<li>No consent records are available.</li>{% endfor %}
+        </ul>
+      </section>
+      {% if screening_reasons or questionnaire.answers.screening_rules_version == 'prototype-rev2.6-demo' %}
+        <section class="staff-page-card" aria-labelledby="lead-screening-heading">
+          <header class="staff-page-card__header"><div><h2 id="lead-screening-heading">Screening context</h2>{% if questionnaire.answers.screening_rules_version == 'prototype-rev2.6-demo' %}<p>Prototype screening only — not clinical approval.</p>{% endif %}</div></header>
+          {% if screening_reasons %}<ul class="staff-lead-screening-reasons">{% for reason in screening_reasons %}<li>{{ reason }}</li>{% endfor %}</ul>{% endif %}
+        </section>
+      {% endif %}
+    </aside>
+  </div>
+{% endblock %}

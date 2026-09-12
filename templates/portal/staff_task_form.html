@@ -1,0 +1,97 @@
+{% extends 'portal/staff_page_base.html' %}
+
+{% block title %}{{ title|default:page_title }} | {{ company.name }} | Meridian{% endblock %}
+
+{% block breadcrumb %}
+  <a class="console-breadcrumb__link" href="{% url 'portal:staff-tasks' %}">Tasks</a>
+  <span class="console-breadcrumb__dot" aria-hidden="true"></span>
+  <span>{{ page_title }}</span>
+{% endblock %}
+
+{% block page_heading %}
+  <header class="staff-page-header">
+    <div>
+      <p class="console-kicker">Care coordination</p>
+      <h1>{{ page_title }}</h1>
+      <p>{% if task %}Update the task details for {{ company.name }}.{% else %}Create a patient-linked or general practice task for {{ company.name }}.{% endif %}</p>
+    </div>
+    <a class="console-button console-button--secondary" href="{% url 'portal:staff-tasks' %}">Back to tasks</a>
+  </header>
+{% endblock %}
+
+{% block page_content %}
+  <section class="staff-page-card staff-task-form-card" aria-labelledby="task-form-heading">
+    <header class="staff-page-card__header">
+      <div>
+        <h2 id="task-form-heading">Task details</h2>
+        <p>Workflow status and free-form tags are separate.</p>
+      </div>
+    </header>
+    <form class="staff-task-form" method="post">
+      {% csrf_token %}
+      <input type="hidden" name="workflow_context" value="{{ workflow_context }}">
+      {{ form.non_field_errors }}
+
+      <div class="staff-task-form__grid">
+        <div class="staff-form-field staff-form-field--wide">
+          <label for="{{ form.title.id_for_label }}">{{ form.title.label }}</label>
+          {{ form.title }}
+          {{ form.title.errors }}
+        </div>
+        <div class="staff-form-field staff-form-field--wide">
+          <label for="{{ form.description.id_for_label }}">{{ form.description.label }}</label>
+          {{ form.description }}
+          {% if form.description.help_text %}<p class="staff-form-help">{{ form.description.help_text }}</p>{% endif %}
+          {{ form.description.errors }}
+        </div>
+        <div class="staff-form-field">
+          <label for="{{ form.patient.id_for_label }}">{{ form.patient.label }}</label>
+          {{ form.patient }}
+          <p class="staff-form-help">Leave blank for a general practice task.</p>
+          {{ form.patient.errors }}
+        </div>
+        <div class="staff-form-field">
+          <label for="{{ form.assigned_to.id_for_label }}">{{ form.assigned_to.label }}</label>
+          {{ form.assigned_to }}
+          {{ form.assigned_to.errors }}
+        </div>
+        <div class="staff-form-field">
+          <label for="{{ form.priority.id_for_label }}">{{ form.priority.label }}</label>
+          {{ form.priority }}
+          {{ form.priority.errors }}
+        </div>
+        <div class="staff-form-field">
+          <label for="{{ form.status.id_for_label }}">{{ form.status.label }}</label>
+          {{ form.status }}
+          <p class="staff-form-help">This is the workflow status, not a tag.</p>
+          {{ form.status.errors }}
+        </div>
+        <div class="staff-form-field">
+          <label for="{{ form.due_at.id_for_label }}">{{ form.due_at.label }}</label>
+          {{ form.due_at }}
+          <p class="staff-form-help">Time is South Africa time (SAST).</p>
+          {{ form.due_at.errors }}
+        </div>
+      </div>
+
+      <fieldset class="tag-fields">
+        <legend>Free-form tags</legend>
+        <p>Tags are optional free-form labels, for example a local label your practice uses. They do not change the workflow status.</p>
+        {{ form.tags.errors }}
+        {{ form.tags }}
+      </fieldset>
+
+      <div class="staff-form-field staff-task-form__new-tag">
+        <label for="{{ form.new_tag.id_for_label }}">{{ form.new_tag.label }}</label>
+        {{ form.new_tag }}
+        <p class="staff-form-help">Enter a new label to create and apply it to this task.</p>
+        {{ form.new_tag.errors }}
+      </div>
+
+      <div class="staff-task-form__actions">
+        <button class="console-button console-button--primary" type="submit">Save task</button>
+        <a class="console-button console-button--quiet" href="{% url 'portal:staff-tasks' %}">Back to tasks</a>
+      </div>
+    </form>
+  </section>
+{% endblock %}

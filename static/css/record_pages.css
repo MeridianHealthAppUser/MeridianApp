@@ -1,0 +1,69 @@
+.record-heading, .record-actions, .record-practices, .record-timeline__meta { display:flex; flex-wrap:wrap; align-items:center; gap:.65rem; }
+.record-heading { justify-content:space-between; }
+.record-heading > div:first-child { min-width:0; }
+.record-heading h1 { overflow-wrap:anywhere; }
+.record-scope { padding:1.25rem; }
+.record-scope h2 { color:var(--console-ink); font-size:1rem; margin:0 0 .4rem; }
+.record-scope p, .record-footnote { color:var(--console-muted); font-size:.85rem; line-height:1.6; }
+.record-filters { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:.85rem; align-items:end; margin:1rem 0; }
+.record-filters > div { min-width:0; }
+.record-filters label { color:var(--console-muted); display:block; font-size:.78rem; font-weight:700; margin-bottom:.35rem; }
+.record-filters input, .record-filters select { background:#fff; border:1px solid var(--console-line); border-radius:.65rem; box-sizing:border-box; color:var(--console-ink); font:inherit; font-size:.83rem; min-width:0; min-height:2.7rem; padding:.6rem .7rem; width:100%; }
+.record-filters input:focus-visible, .record-filters select:focus-visible { outline:2px solid var(--console-teal); outline-offset:2px; }
+.record-filters .errorlist { color:#a33030; font-size:.8rem; margin:.4rem 0 0; padding-left:1.1rem; }
+.record-filters > .errorlist { grid-column:1/-1; }
+.record-layout { display:grid; grid-template-columns:minmax(0,2fr) minmax(17rem,1fr); gap:1rem; align-items:start; }
+.record-timeline-card, .record-sidebar, .record-summary { min-width:0; }
+.record-timeline { list-style:none; margin:0; padding:1.4rem 1.5rem 1rem 2rem; }
+.record-timeline__entry { border-left:1px solid var(--console-line); padding:0 0 1.5rem 1rem; position:relative; overflow-wrap:anywhere; }
+.record-timeline__entry::before { background:#fff; border:2px solid #8299a1; border-radius:50%; content:""; height:.65rem; left:-.39rem; position:absolute; top:.18rem; width:.65rem; }
+.record-timeline__entry--clinical::before { border-color:#0d958b; }
+.record-timeline__entry--supply::before { border-color:#2e889f; }
+.record-timeline__entry--system::before { border-color:#b07828; }
+.record-timeline__meta { color:var(--console-muted); font-size:.7rem; gap:.4rem; }
+.record-timeline__meta .console-status { font-size:.65rem; }
+.record-timeline__entry h3 { color:var(--console-ink); font-family:inherit; font-size:.88rem; line-height:1.45; margin:.45rem 0 .25rem; }
+.record-timeline__detail, .record-timeline__actor { color:var(--console-muted); font-size:.8rem; line-height:1.6; margin:.25rem 0; }
+.record-timeline__detail { white-space:pre-wrap; }
+.record-timeline__actor { font-size:.73rem; }
+.record-text-link, .record-care-links a { color:#087e76; font-size:.8rem; font-weight:700; text-decoration:underline; text-underline-offset:3px; }
+.record-sidebar { display:grid; gap:1rem; }
+.record-summary { padding:1.2rem; }
+.record-summary > p:not(.console-kicker) { color:var(--console-muted); font-size:.8rem; line-height:1.6; }
+.record-summary dl { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.3fr); gap:.65rem .8rem; margin:1rem 0; font-size:.77rem; }
+.record-summary dt { color:var(--console-muted); }
+.record-summary dd { color:var(--console-ink); font-weight:600; margin:0; overflow-wrap:anywhere; text-align:right; }
+.record-small { color:var(--console-muted); display:block; font-size:.72rem; font-weight:400; line-height:1.6; }
+.record-care-links { display:grid; gap:.9rem; margin-top:1rem; }
+.record-profile { background:var(--console-bg,#f4f8f8); border:1px solid var(--console-line); border-radius:.6rem; margin-top:.7rem; padding:.65rem .8rem; }
+.record-profile summary { color:var(--console-ink); cursor:pointer; font-size:.8rem; font-weight:600; line-height:1.5; }
+.record-profile summary:focus-visible { outline:2px solid var(--console-teal); outline-offset:4px; }
+.record-profile dl { display:block; margin:.8rem 0 0; }
+.record-profile dt { color:var(--console-ink); font-size:.78rem; font-weight:700; margin:.8rem 0 .25rem; }
+.record-profile dd { color:var(--console-muted); font-size:.78rem; font-weight:400; line-height:1.6; margin:0; text-align:left; white-space:pre-wrap; overflow-wrap:anywhere; }
+.record-pagination { border-top:1px solid var(--console-line); padding:1rem; margin:0; }
+.record-footnote { margin:.5rem 0 0; }
+.record-directory-table { min-width:84rem; }
+.record-directory-table th { position:relative; }
+.staff-patient-table-wrap:focus-visible { outline:2px solid var(--console-teal); outline-offset:-3px; }
+.record-directory-table small { color:var(--console-muted); display:block; font-size:.68rem; font-weight:400; margin-top:.3rem; }
+.record-directory-actions { display:flex; flex-wrap:wrap; gap:.5rem; }
+.record-directory-switch { margin:0; }
+.record-directory-switch button { white-space:normal; }
+.record-directory-filters { flex-wrap:wrap; }
+.record-directory-filters .staff-filter-form__field { flex:1 1 12rem; min-width:0; }
+@media (max-width:1100px) { .record-layout { grid-template-columns:minmax(0,1fr); } .record-sidebar { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+@media (max-width:680px) {
+  .record-filters, .record-sidebar { grid-template-columns:minmax(0,1fr); }
+  .record-scope, .record-summary { padding:1rem; }
+  .record-timeline { padding:1.1rem .9rem 1rem 1.4rem; }
+  .record-heading .console-button { flex:1 1 auto; text-align:center; }
+  .record-actions { width:100%; }
+  .record-directory-table { min-width:0; }
+  .record-directory-scroll-hint { display:none; }
+  .record-directory-filters { display:grid; grid-template-columns:minmax(0,1fr); }
+  .record-directory-filters .staff-filter-form__field { width:100%; }
+  .record-directory-table .record-directory-actions { align-items:flex-start; }
+  .record-directory-table .console-status { white-space:normal; }
+  .record-pagination { flex-wrap:wrap; }
+}

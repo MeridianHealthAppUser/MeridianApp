@@ -1,0 +1,225 @@
+{% extends 'portal/staff_page_base.html' %}
+{% load static %}
+
+{% block title %}{{ title|default:page_title }} | {{ company.name }} | Meridian{% endblock %}
+{% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/schedule_availability.css' %}">{% endblock %}
+
+{% block breadcrumb %}
+  <span>Schedule</span>
+  <span class="console-breadcrumb__dot" aria-hidden="true"></span>
+  <span>{{ company.name }}</span>
+{% endblock %}
+
+{% block page_heading %}
+  <header class="staff-page-header staff-schedule-page-header">
+    <div>
+      <p class="console-kicker">Appointments</p>
+      <h1>{{ page_title }}</h1>
+      <p>Times shown in South Africa time (SAST).</p>
+    </div>
+    <div class="staff-schedule-header-actions">
+      <a class="console-button console-button--primary" href="{% url 'portal:appointment-book' %}">Book appointment</a>
+      <nav class="staff-view-toggle" aria-label="Schedule view">
+        <a{% if schedule_view == 'table' %} class="is-active" aria-current="page"{% endif %} href="{{ table_view_url }}">Table</a>
+        <a{% if schedule_view == 'calendar' %} class="is-active" aria-current="page"{% endif %} href="{{ calendar_view_url }}">Calendar</a>
+      </nav>
+      {% if next_appointment_date and next_appointment_url %}
+        <a class="console-button console-button--secondary" href="{{ next_appointment_url }}">Next appointment day: {{ next_appointment_date|date:"j M" }}</a>
+      {% endif %}
+    </div>
+  </header>
+{% endblock %}
+
+{% block page_content %}
+  <section class="staff-metrics staff-metrics--four" aria-label="Selected day appointment summary">
+    <article><span>Booked</span><strong>{{ metrics.booked }}</strong></article>
+    <article><span>Completed</span><strong>{{ metrics.completed }}</strong></article>
+    <article><span>Cancelled</span><strong>{{ metrics.cancelled }}</strong></article>
+    <article><span>No show</span><strong>{{ metrics.no_show }}</strong></article>
+  </section>
+
+  <section class="staff-page-card" aria-labelledby="schedule-filters-heading">
+    <header class="staff-page-card__header">
+      <div>
+        <h2 id="schedule-filters-heading">View schedule</h2>
+        <p>{% if selected_clinician %}Showing {{ selected_clinician.full_name }}'s appointments.{% else %}Showing appointments for all clinicians.{% endif %}</p>
+      </div>
+    </header>
+    <form class="staff-filter-form staff-filter-form--schedule" method="get" action="{% url 'portal:staff-schedule' %}">
+      <input type="hidden" name="view" value="{{ schedule_view }}">
+      {{ filter_form.non_field_errors }}
+      <div class="staff-filter-form__field">
+        <label for="{{ filter_form.date.id_for_label }}">{{ filter_form.date.label }}</label>
+        {{ filter_form.date }}
+        {{ filter_form.date.errors }}
+      </div>
+      <div class="staff-filter-form__field">
+        <label for="{{ filter_form.clinician.id_for_label }}">{{ filter_form.clinician.label }}</label>
+        {{ filter_form.clinician }}
+        {{ filter_form.clinician.errors }}
+      </div>
+      <button class="console-button console-button--primary" type="submit">View schedule</button>
+    </form>
+  </section>
+
+  {% if filter_form.errors %}
+    <div class="staff-filter-error" role="alert">Correct the filter fields above to view appointments.</div>
+  {% else %}
+    {% if schedule_view == 'calendar' %}
+      <section class="staff-page-card staff-calendar-card" aria-labelledby="calendar-heading">
+        <header class="staff-calendar-card__header">
+          <div>
+            <p class="console-kicker">Month view</p>
+            <h2 id="calendar-heading">{{ calendar_month|date:"F Y" }}</h2>
+            <p>Select a day to see its appointments and recorded availability below.</p>
+          </div>
+          <nav class="staff-calendar-nav" aria-label="Calendar month">
+            {% if prev_month_url %}<a class="console-button console-button--quiet" href="{{ prev_month_url }}">Previous<span class="sr-only"> month</span></a>{% endif %}
+            <a class="console-button console-button--secondary" href="{{ today_url }}">Today</a>
+            {% if next_month_url %}<a class="console-button console-button--quiet" href="{{ next_month_url }}">Next<span class="sr-only"> month</span></a>{% endif %}
+          </nav>
+        </header>
+        <div class="staff-calendar" aria-label="{{ calendar_month|date:'F Y' }} calendar">
+          <div class="staff-calendar__weekdays" aria-hidden="true">
+            <span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span>
+          </div>
+          <div class="staff-calendar__days">
+            {% for week in calendar_weeks %}
+              {% for day in week %}
+                <article class="staff-calendar__day{% if not day.is_current_month %} staff-calendar__day--outside{% endif %}{% if day.is_selected %} staff-calendar__day--selected{% endif %}{% if day.is_today %} staff-calendar__day--today{% endif %}{% if not day.is_enabled %} staff-calendar__day--disabled{% endif %}">
+                  {% if day.is_enabled and day.url %}
+                    <a class="staff-calendar__date" href="{{ day.url }}#appointment-list-heading"{% if day.is_selected %} aria-current="date"{% endif %} aria-label="{{ day.date|date:'l, j F Y' }}{% if day.count %}, {{ day.count }} appointment{{ day.count|pluralize }}{% endif %}">
+                      <time datetime="{{ day.date|date:'Y-m-d' }}">{{ day.date|date:"j" }}</time>
+                      {% if day.count %}<span class="staff-calendar__count" aria-hidden="true">{{ day.count }}</span>{% endif %}
+                    </a>
+                  {% else %}
+                    <span class="staff-calendar__date" aria-disabled="true" aria-label="{{ day.date|date:'l, j F Y' }}">
+                      <time datetime="{{ day.date|date:'Y-m-d' }}">{{ day.date|date:"j" }}</time>
+                    </span>
+                  {% endif %}
+                  {% if day.is_current_month and day.appointments %}
+                    <ul class="staff-calendar__preview-list" aria-label="Appointments on {{ day.date|date:'j F' }}">
+                      {% for appointment in day.appointments %}
+                        <li>
+                          <time datetime="{{ appointment.starts_at|date:'c' }}">{{ appointment.starts_at|date:"H:i" }}</time>
+                          <span class="staff-calendar__preview-patient">{{ appointment.patient }}</span>
+                          <span class="staff-calendar__preview-status">{{ appointment.get_status_display }}</span>
+                        </li>
+                      {% endfor %}
+                    </ul>
+                  {% endif %}
+                  {% if day.is_current_month and day.more_count %}
+                    <a class="staff-calendar__more" href="{{ day.url }}#appointment-list-heading">+{{ day.more_count }} more<span class="sr-only"> appointment{{ day.more_count|pluralize }} on {{ day.date|date:"j F" }}</span></a>
+                  {% endif %}
+                </article>
+              {% endfor %}
+            {% empty %}
+              <p class="staff-empty-state">No calendar dates are available for these filters.</p>
+            {% endfor %}
+          </div>
+        </div>
+      </section>
+    {% endif %}
+
+    <div class="staff-schedule-grid schedule-workspace-grid">
+      <div class="schedule-diary-stack">
+      <section class="staff-page-card staff-page-card--list" aria-labelledby="appointment-list-heading">
+        <header class="staff-page-card__header">
+          <div>
+            <h2 id="appointment-list-heading" tabindex="-1">Appointments{% if selected_date %} on {{ selected_date|date:"j F" }}{% endif %}</h2>
+            <p>{% if selected_date %}{{ selected_date|date:"l, j F Y" }} · {{ page_obj.paginator.count }} appointment{{ page_obj.paginator.count|pluralize }} · SAST{% else %}Selected date · SAST{% endif %}</p>
+          </div>
+        </header>
+        <div class="staff-schedule-table-wrap">
+          <table class="staff-schedule-table">
+            <thead>
+              <tr>
+                <th scope="col">Time</th>
+                <th scope="col">Patient</th>
+                <th scope="col">Type</th>
+                <th scope="col">Clinician</th>
+                <th scope="col">Duration</th>
+                <th scope="col">Status</th>
+                <th scope="col"><span class="sr-only">Appointment actions</span></th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for appointment in appointments %}
+                <tr{% if appointment.needs_attention %} class="schedule-appointment-attention"{% endif %}>
+                  <td data-label="Time"><time class="staff-schedule-table__time" datetime="{{ appointment.starts_at|date:'c' }}">{{ appointment.starts_at|date:"H:i" }}</time></td>
+                  <td data-label="Patient"><a class="staff-schedule-table__patient" href="{% url 'portal:patient-detail' appointment.patient_id %}">{{ appointment.patient }}</a></td>
+                  <td data-label="Type">{{ appointment.get_appointment_type_display }}</td>
+                  <td data-label="Clinician">{% if appointment.clinician %}{{ appointment.clinician.full_name }}{% else %}Clinician pending{% endif %}</td>
+                  <td data-label="Duration">{{ appointment.duration_minutes }} min</td>
+                  <td data-label="Status"><div class="schedule-status-stack"><span class="console-status console-status--{{ appointment.status }}">{{ appointment.get_status_display }}</span>{% if appointment.needs_attention %}<span class="schedule-attention-badge">Needs rescheduling</span>{% endif %}</div></td>
+                  <td class="staff-schedule-table__actions-cell" data-label="Actions">
+                    <div class="staff-schedule-table__actions">
+                      <a class="staff-row-link" href="{% url 'portal:appointment-detail' appointment.pk %}">Appointment details</a>
+                      {% include 'portal/includes/video_join_link.html' %}
+                      {% if appointment.proposal_url %}<a class="staff-row-link" href="{{ appointment.proposal_url }}">{{ appointment.proposal_label }}</a>{% endif %}
+                      <a class="staff-row-link" href="{% url 'portal:patient-detail' appointment.patient_id %}">Open record<span class="sr-only"> for {{ appointment.patient }}</span></a>
+                    </div>
+                  </td>
+                </tr>
+              {% empty %}
+                <tr><td class="staff-schedule-table__empty" colspan="7"><div class="staff-empty-state"><p>There are no appointments for this date.</p></div></td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="staff-page-card staff-availability-card" aria-labelledby="availability-heading">
+        <header class="staff-page-card__header">
+          <div><h2 id="availability-heading">Available time</h2><p>Open availability for the selected day, after appointments and time off.</p></div>
+        </header>
+        <ul class="staff-availability-list">
+          {% for slot in open_slots %}
+            <li>
+              <time datetime="{{ slot.starts_at|date:'c' }}">{{ slot.starts_at|date:"H:i" }}–{{ slot.ends_at|date:"H:i" }}</time>
+              <span>{% if slot.clinician %}{{ slot.clinician.full_name }}{% else %}Clinician pending{% endif %}</span>
+            </li>
+          {% empty %}
+            <li class="staff-availability-list__empty">No available times for this date.</li>
+          {% endfor %}
+        </ul>
+        <p class="staff-availability-card__note">Where a working pattern is saved, these are 30-minute consultation windows with start times every 15 minutes. Up to 100 available windows are shown. These times are not bookings or reservations.</p>
+      </section>
+
+        <section class="staff-page-card schedule-attention-card" aria-labelledby="affected-appointments-heading">
+          <header class="staff-page-card__header">
+            <div><h2 id="affected-appointments-heading">Appointments needing attention</h2><p>Future bookings at {{ company.name }} outside working hours or during time off.</p></div>
+            {% if affected_count %}<span class="schedule-attention-count">{{ affected_count }} affected</span>{% endif %}
+          </header>
+          <ul class="schedule-attention-list">
+            {% for appointment in affected_appointments %}
+              <li>
+                <div><strong>{{ appointment.patient }}</strong><time datetime="{{ appointment.starts_at|date:'c' }}">{{ appointment.starts_at|date:"j M Y, H:i" }} SAST · {{ appointment.get_appointment_type_display }}</time><p>{{ appointment.attention_reason }}</p></div>
+                {% if appointment.attention_url %}<a class="console-button console-button--secondary" href="{{ appointment.attention_url }}">Review appointment<span class="sr-only"> for {{ appointment.patient }}</span></a>{% endif %}
+              </li>
+            {% empty %}
+              <li class="schedule-attention-empty">No future bookings in this view need attention because of working hours or time off.</li>
+            {% endfor %}
+          </ul>
+          {% if affected_page_obj.has_other_pages %}
+            <nav class="schedule-panel-pagination" aria-label="Affected appointment pages">
+              {% if affected_previous_url %}<a href="{{ affected_previous_url }}">Previous</a>{% endif %}
+              <span>Page {{ affected_page_obj.number }} of {{ affected_page_obj.paginator.num_pages }}</span>
+              {% if affected_next_url %}<a href="{{ affected_next_url }}">Next</a>{% endif %}
+            </nav>
+          {% endif %}
+          <p class="schedule-attention-note">Existing appointments stay booked. Agree a new time with the patient before changing an appointment.</p>
+        </section>
+
+      {% if is_paginated %}
+        <nav class="staff-pagination" aria-label="Schedule pages">
+          {% if page_obj.has_previous %}<a class="console-button console-button--quiet" href="?{{ pagination_query }}{% if pagination_query %}&amp;{% endif %}page={{ page_obj.previous_page_number }}">Previous</a>{% endif %}
+          <span>Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+          {% if page_obj.has_next %}<a class="console-button console-button--quiet" href="?{{ pagination_query }}{% if pagination_query %}&amp;{% endif %}page={{ page_obj.next_page_number }}">Next</a>{% endif %}
+        </nav>
+      {% endif %}
+      </div>
+      {% include 'portal/includes/schedule_availability.html' %}
+    </div>
+  {% endif %}
+{% endblock %}

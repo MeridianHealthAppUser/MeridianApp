@@ -1,0 +1,43 @@
+{% extends 'portal/staff_page_base.html' %}
+{% load static %}
+{% block title %}{% if encounter %}Consultation note{% else %}New consultation{% endif %} | {{ patient }} | Meridian{% endblock %}
+{% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/clinical_workflow.css' %}">{% endblock %}
+{% block breadcrumb %}<span>Clinical · Consultations</span><span class="console-breadcrumb__dot" aria-hidden="true"></span><span>{{ company.name }}</span>{% endblock %}
+
+{% block page_heading %}
+  <header class="staff-page-header"><div><p class="console-kicker">Clinical · Consultation note</p><h1>{% if encounter %}Consultation note{% else %}New consultation{% endif %}</h1><p>{{ patient }} · {{ company.name }}</p></div><div class="clinical-heading-actions"><a class="console-button console-button--secondary" href="{% url 'portal:patient-detail' patient.pk %}">Open patient record</a><a class="console-button console-button--quiet" href="{% url 'portal:clinical-consultations' %}">All consultations</a></div></header>
+{% endblock %}
+
+{% block page_content %}
+  <div class="clinical-workflow clinical-workflow-grid">
+    <section class="staff-page-card" aria-labelledby="consultation-note-heading">
+      <header class="staff-page-card__header"><div><h2 id="consultation-note-heading">Consultation note</h2><p>{% if can_edit %}Save a draft or sign the final record.{% else %}Read-only clinical record.{% endif %}</p></div>{% if encounter %}<span class="console-status{% if encounter.status == 'signed' %} console-status--active{% endif %}">{{ encounter.get_status_display }}</span>{% endif %}</header>
+      <div class="clinical-panel-body">
+        {% if can_edit %}
+          <form class="console-form" method="post" action="{{ request.path }}">
+            {% csrf_token %}<input type="hidden" name="clinical_context" value="{{ clinical_context }}">
+            {{ form.non_field_errors }}
+            <div class="console-form__field"><label for="{{ form.appointment.id_for_label }}">{{ form.appointment.label }}</label>{{ form.appointment }}{{ form.appointment.errors }}{% if form.appointment.help_text %}<span class="helptext">{{ form.appointment.help_text }}</span>{% endif %}</div>
+            <div class="console-form__field"><label for="{{ form.occurred_at.id_for_label }}">Consultation date and time (SAST)</label>{{ form.occurred_at }}{{ form.occurred_at.errors }}</div>
+            <div class="console-form__field"><label for="{{ form.summary.id_for_label }}">{{ form.summary.label }}</label>{{ form.summary }}{{ form.summary.errors }}</div>
+            {% if can_sign %}<div class="clinical-signature"><label class="clinical-signature-check" for="{{ form.confirm_signature.id_for_label }}">{{ form.confirm_signature }}<span>I confirm this is the final note.</span></label>{{ form.confirm_signature.errors }}<p>Signing locks this consultation note. Check the patient, appointment and wording before signing. You do not need to confirm this to save a draft.</p></div>{% endif %}
+            <div class="clinical-form-actions"><button class="console-button console-button--secondary" type="submit" name="action" value="save">Save draft</button>{% if can_sign %}<button class="console-button console-button--primary" type="submit" name="action" value="sign">Sign final note</button>{% endif %}</div>
+          </form>
+        {% else %}
+          {{ form.non_field_errors }}
+          {% for field in form %}{{ field.errors }}{% endfor %}
+          {% if encounter.status == 'signed' %}<div class="clinical-readonly-status"><span class="console-status console-status--active">Signed record</span><p>This note is locked and cannot be edited.</p></div>{% else %}<div class="clinical-readonly-status"><p>Only the clinician responsible for this note can edit or sign it.</p></div>{% endif %}
+          <div class="clinical-summary">{% if encounter.clinical_summary %}<p>{{ encounter.clinical_summary|linebreaksbr }}</p>{% else %}<p class="clinical-summary-empty">No consultation summary has been recorded.</p>{% endif %}</div>
+        {% endif %}
+      </div>
+    </section>
+    <aside class="staff-page-card" aria-labelledby="consultation-details-heading">
+      <header class="staff-page-card__header"><div><h2 id="consultation-details-heading">Record details</h2></div></header>
+      <div class="clinical-panel-body"><dl class="clinical-facts">
+        <div><dt>Patient</dt><dd>{{ patient }}</dd></div><div><dt>Practice</dt><dd>{{ company.name }}</dd></div>
+        <div><dt>Clinician</dt><dd>{% if encounter %}{{ encounter.clinician.full_name }}{% else %}{{ user.full_name }}{% endif %}</dd></div>
+        {% if encounter %}<div><dt>Consultation</dt><dd>{{ encounter.occurred_at|date:"j M Y, H:i" }} SAST</dd></div>{% if encounter.appointment %}<div><dt>Appointment</dt><dd>{{ encounter.appointment.get_appointment_type_display }} · {{ encounter.appointment.starts_at|date:"j M Y, H:i" }} SAST</dd></div>{% endif %}{% if encounter.signed_at %}<div><dt>Signed</dt><dd>{{ encounter.signed_at|date:"j M Y, H:i" }} SAST</dd></div>{% endif %}{% if encounter.signed_by %}<div><dt>Signed by</dt><dd>{{ encounter.signed_by.full_name }}</dd></div>{% endif %}{% endif %}
+      </dl></div>
+    </aside>
+  </div>
+{% endblock %}

@@ -1,0 +1,13 @@
+{% extends 'portal/staff_page_base.html' %}
+{% load static %}
+{% block title %}Practices | Meridian{% endblock %}
+{% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/management.css' %}">{% endblock %}
+{% block breadcrumb %}<span>Setup · Practices</span>{% endblock %}
+{% block page_heading %}<header class="staff-page-header"><div><p class="console-kicker">Super Admin · Practice setup</p><h1>Your practices</h1><p>Only practices where you hold active Super Admin access appear here. Patient records and staff permissions remain separate.</p></div><a class="console-button console-button--primary" href="{% url 'portal:management-practice-create' %}">Create a practice</a></header>{% endblock %}
+{% block page_content %}
+  <section class="management-practice-grid" aria-label="Authorized practices">
+  {% for practice in practices %}<article class="staff-page-card management-practice-card"><p class="console-kicker">{% if practice.pk == company.pk %}Selected practice{% else %}Super Admin access{% endif %}</p><h2>{{ practice.name }}</h2><p class="management-help">{{ practice.slug }}</p>{% if practice.pk == company.pk %}<div class="management-actions"><a class="console-button console-button--primary" href="{% url 'portal:management-practice-edit' practice.pk %}">Edit details</a><a class="console-button console-button--quiet" href="{% url 'portal:management-users' %}">Manage staff</a></div>{% else %}<p class="management-help">Select this practice in the practice switcher to manage its details and staff.</p>{% endif %}</article>{% endfor %}
+  </section>
+  {% if page_obj.has_other_pages %}<nav class="staff-pagination" aria-label="Practice pages">{% if page_obj.has_previous %}<a class="console-button console-button--quiet" href="?page={{ page_obj.previous_page_number }}">Previous</a>{% endif %}<span>Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>{% if page_obj.has_next %}<a class="console-button console-button--quiet" href="?page={{ page_obj.next_page_number }}">Next</a>{% endif %}</nav>{% endif %}
+  <section class="staff-page-card management-practice-card"><h2>A separate practice, not a copy</h2><p class="management-help">Creating a practice adds its name, identifier and your Super Admin membership. It does not copy patient records, clinical approvals or staff. Branding, domains and clinical rules are not configured on this page. Email and payments remain disabled.</p></section>
+{% endblock %}

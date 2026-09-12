@@ -1,0 +1,88 @@
+{% extends 'portal/patient_page_base.html' %}
+
+{% block title %}Your care overview | Meridian{% endblock %}
+
+{% block patient_heading %}
+  <section class="patient-hero" aria-labelledby="patient-dashboard-heading">
+    <div class="patient-hero__content">
+      <p class="console-kicker">Your care · Overview</p>
+      <h1 id="patient-dashboard-heading">Hello, {{ user.first_name|default:user.full_name }}.</h1>
+      <p>A quick look at your care with {{ patient_company.name }}. Use the navigation to open your appointments, conversations, progress or account details.</p>
+      <a class="console-button console-button--secondary" href="{% url 'portal:patient-messages' %}">Message your care team</a>
+    </div>
+  </section>
+{% endblock %}
+
+{% block patient_content %}
+  <section class="console-metrics" aria-label="Your care at a glance">
+    <article class="metric-card">
+      <span class="metric-card__label">Care plan</span>
+      <strong class="metric-card__value">{{ active_subscription.plan_name|default:"Not started" }}</strong>
+      <span class="metric-card__hint">{% if active_subscription %}{{ active_subscription.get_status_display }}{% else %}Your care team will guide your next steps{% endif %}</span>
+    </article>
+    <article class="metric-card">
+      <span class="metric-card__label">Latest weight</span>
+      <strong class="metric-card__value">{% if recent_weights %}{{ recent_weights.0.weight_kg }} kg{% else %}—{% endif %}</strong>
+      <span class="metric-card__hint">{% if recent_weights %}Recorded {{ recent_weights.0.recorded_on|date:"j M" }}{% else %}Add your first check-in on Progress{% endif %}</span>
+    </article>
+    <article class="metric-card">
+      <span class="metric-card__label">Unread messages</span>
+      <strong class="metric-card__value">{{ unread_messages|default:0 }}</strong>
+      <span class="metric-card__hint"><a class="patient-inline-link" href="{% url 'portal:patient-messages' %}">Open your secure inbox</a></span>
+    </article>
+  </section>
+
+  <div class="patient-page-grid">
+    <section class="console-card" aria-labelledby="patient-upcoming-heading">
+      <header class="console-card__header">
+        <div class="console-card__heading"><h2 id="patient-upcoming-heading">Upcoming appointments</h2><p>Your next consultations · South Africa time (SAST)</p></div>
+        <a class="console-button console-button--quiet" href="{% url 'portal:patient-appointments' %}">All appointments</a>
+      </header>
+      <div class="console-card__body">
+        <ul class="console-list">
+          {% for appointment in upcoming_appointments %}
+            <li class="console-list__item">
+              <time class="console-time" datetime="{{ appointment.starts_at|date:'c' }}">{{ appointment.starts_at|date:"H:i" }}<span>{{ appointment.starts_at|date:"D, j M" }}</span></time>
+              <div class="console-list__copy"><strong>{{ appointment.get_appointment_type_display }}</strong><span>{% if appointment.clinician %}With {{ appointment.clinician.full_name }}{% else %}With your care team{% endif %}</span>{% include 'portal/includes/video_join_link.html' %}</div>
+              <span class="console-status console-status--{{ appointment.status }}">{{ appointment.get_status_display }}</span>
+            </li>
+          {% empty %}
+            <li class="patient-empty">You do not have an upcoming appointment. Contact your care team when you need to arrange a consultation.</li>
+          {% endfor %}
+        </ul>
+      </div>
+    </section>
+
+    <section class="console-card" aria-labelledby="patient-recent-progress-heading">
+      <header class="console-card__header">
+        <div class="console-card__heading"><h2 id="patient-recent-progress-heading">Recent check-ins</h2><p>Your latest weight updates</p></div>
+        <a class="console-button console-button--quiet" href="{% url 'portal:patient-progress' %}">View progress</a>
+      </header>
+      <div class="console-card__body">
+        <ul class="patient-progress-list">
+          {% for weight in recent_weights %}
+            <li><time datetime="{{ weight.recorded_on|date:'Y-m-d' }}">{{ weight.recorded_on|date:"j F Y" }}</time><strong>{{ weight.weight_kg }} kg</strong></li>
+          {% empty %}
+            <li><p class="patient-empty">No check-ins yet. Open Progress to record your first weight update.</p></li>
+          {% endfor %}
+        </ul>
+      </div>
+    </section>
+  </div>
+
+  <section class="console-card patient-page-section" aria-labelledby="patient-recent-updates-heading">
+    <header class="console-card__header"><div class="console-card__heading"><h2 id="patient-recent-updates-heading">Recent care updates</h2><p>Updates shared with you by your care team</p></div></header>
+    <div class="console-card__body">
+      <ul class="console-list patient-event-list">
+        {% for event in patient_events %}
+          <li class="console-list__item">
+            <time class="console-time" datetime="{{ event.occurred_at|date:'c' }}">{{ event.occurred_at|date:"j M" }}<span>{{ event.get_category_display }}</span></time>
+            <div class="console-list__copy"><strong>{{ event.title }}</strong><span>{{ event.detail|default:"Your care team has updated your record."|truncatechars:120 }}</span></div>
+          </li>
+        {% empty %}
+          <li class="patient-empty">Updates shared with you will appear here as your care progresses.</li>
+        {% endfor %}
+      </ul>
+    </div>
+  </section>
+{% endblock %}

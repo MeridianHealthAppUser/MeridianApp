@@ -1,0 +1,15 @@
+.compounding-warning { border: 2px solid #ccad78; color: #6d4e19; background: #fff8ea; border-radius: .8rem; padding: 1rem 1.2rem; line-height: 1.6; }
+.compounding-warning strong { display: block; letter-spacing: .08em; font-size: .8rem; }
+.compounding-note { overflow-wrap: anywhere; line-height: 1.65; }
+.compounding-status { margin: .7rem 0; }
+.compounding-step { border-top: 1px solid #e1eaea; padding-top: 1.25rem; margin-top: 1.25rem; }
+.compounding-print { background: #fff; color: #15343b; font: 15px/1.6 Arial, sans-serif; margin: 0 auto; max-width: 850px; padding: 2rem; }
+.compounding-print h1 { font-family: Georgia, serif; font-size: 1.8rem; font-weight: 500; }
+.compounding-print table { border-collapse: collapse; width: 100%; }
+.compounding-print th, .compounding-print td { border-bottom: 1px solid #dce6e8; padding: .65rem 0; text-align: left; vertical-align: top; }
+.compounding-print th { width: 40%; }
+.compounding-print td { overflow-wrap: anywhere; }
+.compounding-print-actions { display: flex; gap: 1rem; margin-bottom: 1rem; }
+.compounding-print-actions button, .compounding-print-actions a { background: #087f77; color: #fff; border: 0; border-radius: .5rem; padding: .7rem 1rem; text-decoration: none; font: inherit; cursor: pointer; }
+@media print { .compounding-print-actions { display: none; } .compounding-print { padding: 0; max-width: none; } .compounding-warning { border-color: #333; background: #fff; color: #111; } }
+@media (max-width: 42rem) { .compounding-print { padding: 1rem; } }

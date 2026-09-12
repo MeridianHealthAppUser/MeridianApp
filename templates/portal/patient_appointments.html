@@ -1,0 +1,63 @@
+{% extends 'portal/patient_page_base.html' %}
+
+{% block patient_heading %}
+  <header class="patient-page-heading">
+    <div>
+      <p class="console-kicker">Your care · Appointments</p>
+      <h1>Your appointments</h1>
+      <p>See your upcoming consultations and past appointments at {{ patient_company.name }}. All times are shown in South Africa time (SAST).</p>
+    </div>
+    <a class="console-button console-button--primary" href="{% url 'portal:patient-book-appointment' %}">Book an appointment</a>
+  </header>
+{% endblock %}
+
+{% block patient_content %}
+  <section class="console-card" aria-labelledby="patient-appointments-heading">
+    <header class="console-card__header">
+      <div class="console-card__heading">
+        <h2 id="patient-appointments-heading">Appointment diary</h2>
+        <p>{{ page_obj.paginator.count }} appointment{{ page_obj.paginator.count|pluralize }} in this view</p>
+      </div>
+      <form class="console-form patient-filter-form" method="get" action="{% url 'portal:patient-appointments' %}">
+        {{ filter_form.non_field_errors }}
+        <div class="console-form__field">
+          <label for="{{ filter_form.status.id_for_label }}">{{ filter_form.status.label }}</label>
+          {{ filter_form.status }}
+          {{ filter_form.status.errors }}
+        </div>
+        <button class="console-button console-button--secondary" type="submit">View appointments</button>
+      </form>
+    </header>
+    {% if not filter_form.errors %}
+      <div class="patient-table-wrap">
+        <table class="patient-table patient-appointment-table" aria-labelledby="patient-appointments-heading">
+          <thead><tr><th scope="col">Date and time</th><th scope="col">Appointment</th><th scope="col">Clinician</th><th scope="col">Status</th><th scope="col">Actions</th></tr></thead>
+          <tbody>
+            {% for appointment in appointments %}
+              <tr>
+                <td data-label="Date and time"><div class="patient-table__date"><time datetime="{{ appointment.starts_at|date:'c' }}">{{ appointment.starts_at|date:"j M Y" }}</time><span>{{ appointment.starts_at|date:"H:i" }} · {{ appointment.duration_minutes }} minutes</span></div></td>
+                <td data-label="Appointment">{{ appointment.get_appointment_type_display }}</td>
+                <td data-label="Clinician">{% if appointment.clinician %}{{ appointment.clinician.full_name }}{% else %}Your care team{% endif %}</td>
+                <td data-label="Status"><span class="console-status console-status--{{ appointment.status }}">{{ appointment.get_status_display }}</span></td>
+                <td data-label="Actions">
+                  <div class="patient-table__actions">
+                    <a class="patient-inline-link" href="{% url 'portal:patient-appointment-detail' appointment.pk %}">Details / cancel</a>
+                    <a class="patient-inline-link" href="{% url 'portal:patient-appointment-calendar' appointment.pk %}">Add to calendar</a>
+                    {% include 'portal/includes/video_join_link.html' %}
+                    {% if appointment.proposal_url %}<a class="console-button console-button--secondary" href="{{ appointment.proposal_url }}">{{ appointment.proposal_label }}</a>{% else %}<a class="patient-inline-link" href="{% url 'portal:patient-messages' %}">Contact care team</a>{% endif %}
+                  </div>
+                </td>
+              </tr>
+            {% empty %}
+              <tr><td class="patient-table__empty" colspan="5">No appointments match this view. Try another view or contact your care team.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% endif %}
+  </section>
+  {% include 'portal/includes/patient_pagination.html' with pagination_label='Appointment' %}
+  <aside class="patient-care-notice">
+    <p><strong>Need a different time?</strong> You or your doctor can suggest a new time in Messages. Your existing appointment stays in place until the other person accepts the change.</p>
+  </aside>
+{% endblock %}

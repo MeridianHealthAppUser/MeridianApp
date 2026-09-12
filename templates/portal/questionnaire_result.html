@@ -1,0 +1,71 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Your enquiry | {{ lead.company.name }}{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{% static 'css/questionnaire.css' %}?v=intake-20260912">{% endblock %}
+
+{% block content %}
+  <section class="questionnaire-result-layout" aria-labelledby="result-title">
+    <header class="questionnaire-result-heading">
+      <span class="questionnaire-badge {% if can_continue %}questionnaire-badge--success{% else %}questionnaire-badge--review{% endif %}">{% if demo_screening %}Prototype · {% endif %}{{ lead.get_screening_status_display }}</span>
+      <h1 id="result-title">{% if can_continue %}You look like a candidate.{% else %}Your enquiry has been received.{% endif %}</h1>
+      <p>Thank you, {{ lead.first_name }}. Your answers are saved as an enquiry with {{ lead.company.name }}. You are still a lead — no patient account, login or medical record has been created.</p>
+    </header>
+
+    {% if demo_screening %}
+      <aside class="questionnaire-callout questionnaire-callout--warm"><span class="questionnaire-badge questionnaire-badge--blue">Prototype</span><div><strong>This screening result is for testing, not clinical approval.</strong><p>A clinician must decide whether treatment is suitable. Booking and payment are not live; no money will be taken and no account will be created.</p></div></aside>
+    {% endif %}
+
+    {% if not can_continue %}
+      <section class="questionnaire-card questionnaire-checkout-summary" aria-labelledby="review-heading">
+        <h2 id="review-heading">A practice review is needed before proceeding</h2>
+        <p>Your submitted information is available to the practice’s authorised team. This questionnaire is not a diagnosis or a prescribing decision.</p>
+        {% if screening_reasons %}<ul class="questionnaire-reasons">{% for reason in screening_reasons %}<li>{{ reason }}</li>{% endfor %}</ul>{% endif %}
+      </section>
+    {% endif %}
+
+    <div class="questionnaire-result-grid">
+      <div class="questionnaire-result-column">
+        <section class="questionnaire-card" aria-labelledby="pricing-heading">
+          <h2 class="questionnaire-kicker" id="pricing-heading">What you pay for the initial consult</h2>
+          <dl class="questionnaire-price-list">
+            <div class="questionnaire-price-row"><dt>Initial consultation<span>30 minutes with a doctor, on Zoom</span></dt><dd>{% if pricing %}R{{ pricing.initial_consult_fee|floatformat:"-2" }}{% else %}<small>Price not configured</small>{% endif %}</dd></div>
+          </dl>
+          <div class="questionnaire-price-divider">
+            <h2 class="questionnaire-kicker">If your doctor prescribes treatment</h2>
+            <dl class="questionnaire-price-list">
+              <div class="questionnaire-price-row"><dt>First two months<span>Introductory rate</span></dt><dd>{% if pricing %}R{{ pricing.standard_subscription_amount|floatformat:"-2" }} <small>/ month</small>{% else %}<small>Price not configured</small>{% endif %}</dd></div>
+              <div class="questionnaire-price-row"><dt>Thereafter<span>Standard rate, cancel any time</span></dt><dd>{% if pricing %}R{{ pricing.ongoing_subscription_amount|floatformat:"-2" }} <small>/ month</small>{% else %}<small>Price not configured</small>{% endif %}</dd></div>
+            </dl>
+          </div>
+          <aside class="questionnaire-callout questionnaire-pricing-included"><span class="questionnaire-badge">Included</span><p>Medication couriered to your door, <strong>all follow-up consultations at no additional charge</strong>, and dose adjustments whenever your doctor considers them appropriate.</p></aside>
+        </section>
+        <section class="questionnaire-card" aria-labelledby="before-booking-heading">
+          <h2 class="questionnaire-kicker" id="before-booking-heading">Before you book</h2>
+          <p>Nothing beyond the initial consultation is charged unless a doctor prescribes treatment and you choose to subscribe.</p>
+          <p>A prescription is not guaranteed. Your doctor makes that decision at the consultation.</p>
+          <p>We do not claim from medical aid directly. An invoice for the consultation can be requested for you to submit yourself.</p>
+        </section>
+      </div>
+      <aside class="questionnaire-result-column">
+        <section class="questionnaire-card" aria-labelledby="next-step-heading">
+          <h2 class="questionnaire-kicker" id="next-step-heading">Next step</h2>
+          <p>{% if can_continue %}Preview the consultation payment screen. This is a dummy checkout: it does not reserve a slot, charge you or create a login.{% else %}Your enquiry remains with {{ lead.company.name }} for review. You can correct your answers below.{% endif %}</p>
+          <div class="questionnaire-next-step">
+            {% if can_continue %}<a class="questionnaire-button" href="{% url 'portal:questionnaire-checkout' %}">Preview payment{% if pricing %} · R{{ pricing.initial_consult_fee|floatformat:"-2" }}{% endif %}</a>{% endif %}
+            <a class="questionnaire-button questionnaire-button--secondary" href="{% url 'portal:questionnaire' %}?edit=1">Change an answer</a>
+          </div>
+        </section>
+        <section class="questionnaire-card" aria-labelledby="review-cycle-heading">
+          <h2 class="questionnaire-kicker" id="review-cycle-heading">Your review cycle</h2>
+          <dl class="questionnaire-review-list">
+            <div><dt>Medication ships</dt><dd>{% if pricing %}Every {{ pricing.delivery_interval_days }} days{% else %}Confirmed by the practice{% endif %}</dd></div>
+            <div><dt>Doctor review</dt><dd>{% if pricing %}Every {{ pricing.review_interval_days }} days{% else %}Confirmed by the practice{% endif %}</dd></div>
+            <div><dt>Follow-up cost</dt><dd>Included</dd></div>
+          </dl>
+          <p>If treatment is prescribed, ongoing reviews keep your authorisation current. The practice confirms your treatment and delivery plan with you.</p>
+        </section>
+      </aside>
+    </div>
+  </section>
+{% endblock %}

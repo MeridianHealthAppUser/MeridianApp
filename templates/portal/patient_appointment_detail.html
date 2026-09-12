@@ -1,0 +1,4 @@
+{% extends 'portal/patient_page_base.html' %}{% load static %}
+{% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/backoffice.css' %}">{% endblock %}
+{% block patient_heading %}<header class="patient-page-heading"><div><p class="console-kicker">Your care · Appointment</p><h1>{{ appointment.get_appointment_type_display }}</h1><p>{{ appointment.starts_at|date:'j F Y, H:i' }} SAST</p></div><a class="console-button console-button--secondary" href="{% url 'portal:patient-appointments' %}">All appointments</a></header>{% endblock %}
+{% block patient_content %}<div class="backoffice">{% include 'portal/includes/appointment_detail_content.html' %}</div>{% endblock %}

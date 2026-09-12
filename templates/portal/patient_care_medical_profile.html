@@ -1,0 +1,27 @@
+{% extends 'portal/patient_page_base.html' %}
+{% load static %}
+{% block patient_extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/patient_care.css' %}">{% endblock %}
+
+{% block patient_heading %}
+  <header class="patient-page-heading"><div><p class="console-kicker">Your care · Medical profile</p><h1>Your medical profile</h1><p>Give your doctor more context before you meet. These are your own answers, not a diagnosis or a treatment decision.</p></div></header>
+{% endblock %}
+
+{% block patient_content %}
+  <div class="patient-care">
+    <aside class="patient-care-notice"><strong>Save now, come back later.</strong> Every section is optional. Use “Save my profile” to keep your progress. Changes apply only to {{ patient_company.name }}; previous saved versions are retained in your record.</aside>
+    <section class="console-card" aria-labelledby="medical-profile-heading">
+      <header class="console-card__header"><div class="console-card__heading"><h2 id="medical-profile-heading">Your health and daily life</h2><p>{% if profile %}Last saved {{ profile.updated_at|date:"j F Y, H:i" }} SAST · version {{ profile.revision }}{% else %}You have not saved this profile yet.{% endif %}</p></div></header>
+      <div class="console-card__body">
+        <form method="post" action="{% url 'portal:patient-medical-profile' %}" class="console-form" id="medical-profile-form">
+          {% csrf_token %}<input type="hidden" name="clinical_context" value="{{ clinical_context }}">
+          {{ profile_form.non_field_errors }}
+          <div class="patient-care-profile-fields">
+            {% for field in profile_form %}<div class="console-form__field"><label for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}{{ field.errors }}<span class="helptext" id="{{ field.auto_id }}_helptext">{{ field.help_text }}</span></div>{% endfor %}
+          </div>
+          <div class="patient-care-profile-footer"><p>Your answers are available to authorised doctors in this practice. They are not shown to practice administrators.</p><button type="submit" class="console-button console-button--primary">Save my profile</button></div>
+        </form>
+      </div>
+    </section>
+    <p class="patient-care-caption">For appointment changes or a question that needs a reply, <a class="patient-inline-link" href="{% url 'portal:patient-messages' %}">message your care team</a>. Saving this form does not send a message or request an urgent review.</p>
+  </div>
+{% endblock %}

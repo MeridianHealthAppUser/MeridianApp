@@ -1,0 +1,117 @@
+{% extends 'portal/staff_page_base.html' %}
+{% load static %}
+
+{% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/record_pages.css' %}">{% endblock %}
+
+{% block title %}{{ title|default:"Patients" }} | {{ company.name }} | Meridian{% endblock %}
+
+{% block breadcrumb %}
+  <span>Patients</span>
+  <span class="console-breadcrumb__dot" aria-hidden="true"></span>
+  <span>{{ company.name }}</span>
+{% endblock %}
+
+{% block page_heading %}
+  <header class="staff-page-header">
+    <div>
+      <p class="console-kicker">Patient directory</p>
+      <h1>Patients</h1>
+      <p>{{ patient_count }} active patient record{{ patient_count|pluralize }} {% if directory_all_practices %}across {{ directory_company_count }} permitted practice{{ directory_company_count|pluralize }}{% else %}in {{ company.name }}{% endif %}.</p>
+    </div>
+  </header>
+{% endblock %}
+
+{% block page_content %}
+  <section class="staff-page-card" aria-labelledby="patient-filters-heading">
+    <header class="staff-page-card__header">
+      <div><h2 id="patient-filters-heading">Find a patient</h2><p>Search this practice or all your active practices. Switch practice explicitly before opening a record held elsewhere.</p></div>
+    </header>
+    <form class="staff-filter-form staff-filter-form--directory record-directory-filters" method="get" action="{% url 'portal:patient-list' %}">
+      {{ filter_form.non_field_errors }}
+      <div class="staff-filter-form__field">
+        <label for="{{ filter_form.q.id_for_label }}">{{ filter_form.q.label }}</label>
+        {{ filter_form.q }}
+        {{ filter_form.q.errors }}
+      </div>
+      <div class="staff-filter-form__field">
+        <label for="{{ filter_form.clinician.id_for_label }}">{{ filter_form.clinician.label }}</label>
+        {{ filter_form.clinician }}
+        {{ filter_form.clinician.errors }}
+      </div>
+      <div class="staff-filter-form__field">
+        <label for="{{ filter_form.scope.id_for_label }}">{{ filter_form.scope.label }}</label>
+        {{ filter_form.scope }}{{ filter_form.scope.errors }}
+      </div>
+      <button class="console-button console-button--primary" type="submit">Search</button>
+    </form>
+  </section>
+
+  <section class="staff-page-card staff-page-card--list" aria-labelledby="patient-directory-heading">
+    <header class="staff-page-card__header">
+      <div><h2 id="patient-directory-heading">Patient directory</h2><p>Open a record to view care activity or add a task.</p><p class="record-directory-scroll-hint">Scroll the table sideways to see every column and action.</p></div>
+      <span class="staff-page-card__count">{{ page_obj.paginator.count }} matching</span>
+    </header>
+    {% if filter_form.errors %}
+      <div class="staff-filter-error" role="alert">Correct the search fields above to view patient records.</div>
+    {% else %}
+      <div class="patient-table-wrap staff-patient-table-wrap" role="region" aria-label="Patient directory table" tabindex="0">
+        <table class="patient-table staff-patient-table record-directory-table">
+          <thead>
+            <tr>
+              <th scope="col">Patient</th>
+              <th scope="col">Practice</th>
+              <th scope="col">ID and record</th>
+              <th scope="col">Assigned clinician</th>
+              <th scope="col">Authorized for</th>
+              <th scope="col">Subscription</th>
+              <th scope="col">Cycle</th>
+              <th scope="col">Next debit</th>
+              <th scope="col">Auth expires</th>
+              <th scope="col">Status</th>
+              <th scope="col"><span class="sr-only">Open record</span></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for listed_patient in patients %}
+              <tr>
+                <td data-label="Patient">
+                  <div class="patient-table__person">
+                    <span class="console-patient-avatar" aria-hidden="true">{{ listed_patient.first_name|slice:":1"|upper }}{{ listed_patient.last_name|slice:":1"|upper }}</span>
+                    <span>{% if listed_patient.can_open_clinical_record %}<a class="record-text-link" href="{% url 'portal:staff-patient-record' listed_patient.pk %}">{{ listed_patient }}</a>{% elif listed_patient.in_current_practice %}<a class="record-text-link" href="{% url 'portal:patient-detail' listed_patient.pk %}">{{ listed_patient }}</a>{% else %}{{ listed_patient }}{% endif %}{% if listed_patient.user %}<small>{{ listed_patient.user.email }}</small>{% endif %}</span>
+                  </div>
+                </td>
+                <td data-label="Practice"><span class="console-status">{{ listed_patient.company.name }}</span></td>
+                <td data-label="ID and record">{{ listed_patient.id_number|default:"ID not recorded" }}<small>{{ listed_patient.medical_record_number|default:"Record number pending" }}</small></td>
+                <td data-label="Assigned clinician">{% if listed_patient.assigned_doctor %}{{ listed_patient.assigned_doctor.full_name }}{% else %}Unassigned{% endif %}</td>
+                <td data-label="Authorized for">{% if listed_patient.record_authorization %}{{ listed_patient.record_authorization.product }}<small>{{ listed_patient.record_authorization.max_dose }} · {{ listed_patient.record_authorization.get_status_display }}</small>{% else %}Not recorded{% endif %}</td>
+                <td data-label="Subscription">{% if listed_patient.record_subscription %}{{ listed_patient.record_subscription.get_status_display }}{% else %}Not enrolled{% endif %}</td>
+                <td data-label="Cycle">{{ listed_patient.record_subscription.cycle_number|default:"—" }}</td>
+                <td data-label="Next debit">{{ listed_patient.record_subscription.next_debit_on|date:"j M Y"|default:"—" }}</td>
+                <td data-label="Auth expires">{{ listed_patient.record_authorization.expires_on|date:"j M Y"|default:"—" }}</td>
+                <td data-label="Status">{% if listed_patient.is_active %}<span class="console-status console-status--active">Active</span>{% else %}<span class="console-status">Inactive</span>{% endif %}</td>
+                <td class="staff-patient-table__action-cell" data-label="Action">
+                  {% if listed_patient.in_current_practice %}<div class="record-directory-actions">
+                    {% if listed_patient.can_open_clinical_record %}<a class="patient-table__action" href="{% url 'portal:staff-patient-record' listed_patient.pk %}">Clinical record</a>{% endif %}
+                    <a class="patient-table__action" href="{% url 'portal:patient-detail' listed_patient.pk %}">Open record</a>
+                  </div>{% else %}
+                    <form class="record-directory-switch" method="post" action="{% url 'portal:activate-company' listed_patient.company.slug %}">{% csrf_token %}<input type="hidden" name="next" value="{% url 'portal:patient-list' %}"><button class="console-button console-button--quiet" type="submit">Switch to {{ listed_patient.company.name }}</button></form>
+                  {% endif %}
+                </td>
+              </tr>
+            {% empty %}
+              <tr><td class="staff-patient-table__empty" colspan="11"><div class="staff-empty-state"><p>No patient records match the selected filters.</p></div></td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% endif %}
+  </section>
+
+  {% if is_paginated %}
+    <nav class="staff-pagination" aria-label="Patient pages">
+      {% if page_obj.has_previous %}<a class="console-button console-button--quiet" href="?{{ pagination_query }}{% if pagination_query %}&amp;{% endif %}page={{ page_obj.previous_page_number }}">Previous</a>{% endif %}
+      <span>Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+      {% if page_obj.has_next %}<a class="console-button console-button--quiet" href="?{{ pagination_query }}{% if pagination_query %}&amp;{% endif %}page={{ page_obj.next_page_number }}">Next</a>{% endif %}
+    </nav>
+  {% endif %}
+{% endblock %}

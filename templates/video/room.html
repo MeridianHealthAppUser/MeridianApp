@@ -1,0 +1,75 @@
+{% load static %}
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#101f25">
+  <meta name="referrer" content="no-referrer">
+  <title>Consultation | Meridian</title>
+  <link rel="stylesheet" href="{% static 'css/video_room.css' %}">
+  <script src="{% static 'js/video_room.js' %}" defer></script>
+</head>
+<body>
+  {{ video_config|json_script:'video-room-config' }}
+  <form id="video-csrf" hidden>{% csrf_token %}</form>
+  <svg class="video-icons" aria-hidden="true" xmlns="http://www.w3.org/2000/svg"><defs>
+    <symbol id="icon-mic" viewBox="0 0 24 24"><rect x="9" y="2" width="6" height="13" rx="3"/><path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3M8 22h8"/></symbol>
+    <symbol id="icon-camera" viewBox="0 0 24 24"><rect x="2" y="5" width="14" height="14" rx="3"/><path d="m16 10 6-4v12l-6-4"/></symbol>
+    <symbol id="icon-screen" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4M8 10l4-4 4 4M12 6v8"/></symbol>
+    <symbol id="icon-phone" viewBox="0 0 24 24"><path d="M3 15v-4c5-5 13-5 18 0v4l-5-1v-3a14 14 0 0 0-8 0v3Z"/></symbol>
+    <symbol id="icon-arrow" viewBox="0 0 24 24"><path d="m10 5-7 7 7 7M3 12h18"/></symbol>
+    <symbol id="icon-move" viewBox="0 0 24 24"><path d="M12 2v20M2 12h20M8 6l4-4 4 4M8 18l4 4 4-4M6 8l-4 4 4 4M18 8l4 4-4 4"/></symbol>
+    <symbol id="icon-shield" viewBox="0 0 24 24"><path d="m12 2 8 3v6c0 5-8 11-8 11S4 16 4 11V5Z"/><path d="m8 11 3 3 5-6"/></symbol>
+  </defs></svg>
+  <main id="video-room" class="video-room" data-state="preflight" aria-label="Appointment video room">
+    <video id="remote-video" class="remote-video" autoplay playsinline aria-label="Other participant’s video"></video>
+    <div id="remote-placeholder" class="remote-placeholder" aria-hidden="true"><span id="peer-initial">M</span></div>
+
+    <header id="room-header" class="room-header room-chrome">
+      <div class="room-brand"><span class="room-brand-mark" aria-hidden="true">M</span><div><h1>Consultation</h1><p id="company-name">{{ video_config.companyName }}</p></div></div>
+      <div class="room-connection"><span id="connection-badge" class="connection-badge" data-state="preflight"><span aria-hidden="true"></span><span id="connection-label">Not joined</span></span><span id="call-timer" class="call-timer" role="timer" aria-label="Time connected" hidden>00:00</span></div>
+    </header>
+
+    <section id="room-overlay" class="room-overlay" aria-labelledby="room-status-heading">
+      <div id="preflight-panel" class="preflight-panel">
+        <p class="room-kicker">Your Meridian appointment</p>
+        <h2 id="room-status-heading">Ready for your consultation?</h2>
+        <p>With <strong id="peer-name">{{ video_config.peerName }}</strong></p>
+        <p id="appointment-time" class="appointment-time"></p>
+        <p id="room-status-detail">Your camera and microphone are off until you join. Choose a quiet, private place and check that you can hear clearly.</p>
+        <div id="join-actions" class="join-actions">
+          <button id="join-camera" class="room-button room-button--primary" type="button"><svg aria-hidden="true"><use href="#icon-camera"/></svg>Join with camera</button>
+          <button id="join-audio" class="room-button room-button--secondary" type="button">Join with audio only</button>
+        </div>
+        <a id="preflight-return" class="room-return" href="{{ video_config.returnUrl }}">Back to appointments</a>
+      </div>
+      <div id="waiting-panel" class="waiting-panel" hidden><span id="connection-spinner" class="connection-spinner" aria-hidden="true"></span><h2 id="waiting-heading">Connecting…</h2><p id="waiting-detail">Preparing your appointment room.</p></div>
+      <div id="error-panel" class="error-panel" hidden role="alert"><h2 id="error-heading">We couldn’t start your camera</h2><p id="error-detail"></p><div class="join-actions"><button id="retry-media" class="room-button room-button--primary" type="button">Try camera again</button><button id="fallback-audio" class="room-button room-button--secondary" type="button">Try audio only</button></div><a class="room-return" href="{{ video_config.returnUrl }}">Back to appointments</a></div>
+    </section>
+
+    <aside id="local-preview" class="local-preview" aria-label="Your preview" hidden>
+      <video id="local-video" autoplay playsinline muted aria-label="Your camera preview"></video>
+      <div id="local-camera-off" class="local-camera-off"><svg aria-hidden="true"><use href="#icon-camera"/></svg><span>Camera off</span></div>
+      <div class="preview-caption"><span id="preview-label">You</span><button id="move-preview" class="preview-move" type="button" aria-label="Move your preview" aria-describedby="preview-move-help"><svg aria-hidden="true"><use href="#icon-move"/></svg></button></div>
+      <span id="preview-move-help" class="sr-only">Drag to move. With this button focused, use arrow keys to move or Home to reset.</span>
+    </aside>
+
+    <div id="room-notice" class="room-notice" role="status" hidden></div>
+    <button id="play-remote" class="room-button room-button--secondary remote-play" type="button" hidden>Play call audio</button>
+    <div id="remote-caption" class="remote-caption" hidden><span id="remote-name">{{ video_config.peerName }}</span><span id="remote-media-state"></span></div>
+    <footer id="room-controls" class="room-controls room-chrome" hidden>
+      <p class="room-privacy"><svg aria-hidden="true"><use href="#icon-shield"/></svg>Private appointment room</p>
+      <div class="control-buttons" aria-label="Call controls">
+        <button id="toggle-mic" class="call-control" type="button" aria-label="Mute microphone" aria-pressed="false"><span class="control-icon"><svg aria-hidden="true"><use href="#icon-mic"/></svg></span><span id="mic-label">Mute</span></button>
+        <button id="toggle-camera" class="call-control" type="button" aria-label="Turn camera off" aria-pressed="false"><span class="control-icon"><svg aria-hidden="true"><use href="#icon-camera"/></svg></span><span id="camera-label">Camera off</span></button>
+        <button id="toggle-share" class="call-control" type="button" aria-label="Share your screen" aria-pressed="false"><span class="control-icon"><svg aria-hidden="true"><use href="#icon-screen"/></svg></span><span id="share-label">Share screen</span></button>
+        <button id="leave-call" class="call-control call-control--leave" type="button" aria-label="Leave call"><span class="control-icon"><svg aria-hidden="true"><use href="#icon-phone"/></svg></span><span>Leave</span></button>
+      </div>
+      <p id="relay-notice" class="relay-notice" hidden>Some networks may not connect until the practice configures a relay.</p>
+    </footer>
+    <p id="room-announcement" class="sr-only" role="status" aria-live="polite"></p>
+    <noscript><div class="video-noscript">JavaScript is needed to join this video appointment. <a href="{{ video_config.returnUrl }}">Back to appointments</a></div></noscript>
+  </main>
+</body>
+</html>

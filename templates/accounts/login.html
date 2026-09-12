@@ -1,0 +1,90 @@
+{% extends 'base.html' %}
+
+{% block title %}Sign in | Meridian Health{% endblock %}
+
+{% block extra_css %}
+  <style>
+    .site-header { background: transparent; border-bottom: 0; max-width: 75rem; margin: 0 auto; }
+    .page-shell { max-width: 75rem; min-height: calc(100vh - 4rem); padding-top: 2.5rem; }
+    .login-layout { align-items: stretch; display: grid; gap: 1.5rem; grid-template-columns: minmax(0, 1.15fr) minmax(22rem, .85fr); }
+    .login-intro { background: linear-gradient(140deg, #087b73, #109c90); border-radius: 1.5rem; color: #fff; display: flex; flex-direction: column; justify-content: space-between; min-height: 38rem; padding: clamp(2rem, 5vw, 4.5rem); }
+    .login-intro .eyebrow { color: #c5ebe5; }
+    .login-intro h1 { color: #fff; font-family: Georgia, 'Times New Roman', serif; font-size: clamp(2.5rem, 5vw, 4.5rem); line-height: 1; margin: .75rem 0 1.5rem; max-width: 10ch; }
+    .login-intro p { color: #d9f2ee; font-size: 1.05rem; line-height: 1.65; margin: 0; max-width: 38rem; }
+    .login-assurance { border-top: 1px solid rgba(255, 255, 255, .3); color: #d9f2ee; display: flex; font-size: .875rem; gap: .7rem; line-height: 1.5; margin-top: 2.5rem; padding-top: 1.25rem; }
+    .login-card { align-self: center; background: #fff; border: 1px solid #dce8e5; border-radius: 1.25rem; box-shadow: 0 18px 50px rgba(16, 61, 59, .08); padding: clamp(1.75rem, 4vw, 3rem); }
+    .login-card h2 { color: #153638; font-family: Georgia, 'Times New Roman', serif; font-size: 2.1rem; letter-spacing: -.035em; margin: .4rem 0 .65rem; }
+    .login-card > p { color: #5a7274; line-height: 1.55; margin: 0 0 1.75rem; }
+    .login-form p { margin: 0 0 1.1rem; }
+    .login-form label { color: #23484a; display: block; font-size: .875rem; font-weight: 700; margin-bottom: .45rem; }
+    .login-form input[type='email'], .login-form input[type='password'] { background: #fff; border: 1px solid #bfcecb; border-radius: .65rem; color: #183638; font: inherit; min-height: 3rem; padding: .7rem .85rem; width: 100%; }
+    .login-form input:focus { border-color: #0d9187; box-shadow: 0 0 0 3px rgba(13, 145, 135, .16); outline: none; }
+    .login-form .remember-row { align-items: center; display: flex; gap: .6rem; margin: .2rem 0 1.35rem; }
+    .login-form .remember-row label { color: #5a7274; font-size: .82rem; font-weight: 500; margin: 0; }
+    .login-form .remember-row input { accent-color: #0c968b; height: 1rem; margin: 0; width: 1rem; }
+    .login-submit { background: #0c968b; border: 1px solid #0c968b; border-radius: .7rem; color: #fff; cursor: pointer; font: inherit; font-weight: 750; min-height: 3.1rem; padding: .75rem 1rem; width: 100%; }
+    .login-submit:hover { background: #087e75; border-color: #087e75; }
+    .login-errors, .login-field-errors { color: #a3322b; font-size: .85rem; line-height: 1.45; list-style: none; margin: 0 0 1rem; padding: .75rem .85rem; }
+    .login-errors { background: #fff3f1; border: 1px solid #f1ccc6; border-radius: .65rem; }
+    .login-field-errors { margin: -.65rem 0 .85rem; padding: 0; }
+    .login-help { border-top: 1px solid #e5eeec; color: #5a7274; font-size: .875rem; line-height: 1.55; margin-top: 1.75rem; padding-top: 1.4rem; }
+    .login-help a { color: #087e75; font-weight: 700; text-decoration: none; }
+    .login-help a:hover { text-decoration: underline; }
+    @media (max-width: 780px) {
+      .site-header { min-height: 3.75rem; padding: 0 1.25rem; }
+      .page-shell { padding: 1rem 1.25rem 2.5rem; }
+      .login-layout { grid-template-columns: 1fr; }
+      .login-intro { min-height: auto; padding: 2rem; }
+      .login-intro h1 { font-size: 2.7rem; max-width: 13ch; }
+      .login-assurance { margin-top: 2rem; }
+    }
+  </style>
+{% endblock %}
+
+{% block content %}
+  <section class="login-layout" aria-labelledby="login-title">
+    <aside class="login-intro">
+      <div>
+        <p class="eyebrow">Meridian Health</p>
+        <h1>Care that stays connected.</h1>
+        <p>Sign in to access your care journey or the practice workspace for the company you are working in.</p>
+      </div>
+      <p class="login-assurance"><span aria-hidden="true">⌁</span> Your account is shared securely across the Meridian practices you are authorised to access.</p>
+    </aside>
+
+    <div class="login-card">
+      <p class="eyebrow">Secure sign in</p>
+      <h2 id="login-title">Welcome back</h2>
+      <p>Use the email address associated with your Meridian account.</p>
+
+      <form class="login-form" method="post" novalidate>
+        {% csrf_token %}
+        {% if form.non_field_errors %}
+          <ul class="login-errors" role="alert">
+            {% for error in form.non_field_errors %}<li>{{ error }}</li>{% endfor %}
+          </ul>
+        {% endif %}
+        {% for field in form %}
+          {% if field.name != 'remember_me' %}
+            <p>
+              {{ field.label_tag }}
+              {{ field }}
+            </p>
+            {% if field.errors %}
+              <ul class="login-field-errors" role="alert">
+                {% for error in field.errors %}<li>{{ error }}</li>{% endfor %}
+              </ul>
+            {% endif %}
+          {% endif %}
+        {% endfor %}
+        <div class="remember-row">{{ form.remember_me }} {{ form.remember_me.label_tag }}</div>
+        <input type="hidden" name="{{ redirect_field_name }}" value="{{ redirect_field_value }}">
+        <button class="login-submit" type="submit">Sign in</button>
+      </form>
+
+      <div class="login-help">
+        Need help accessing your account? Please contact your practice administrator or <a href="mailto:support@meridianhealth.co.za">email Meridian support</a>.
+      </div>
+    </div>
+  </section>
+{% endblock %}

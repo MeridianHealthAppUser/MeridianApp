@@ -1,0 +1,4 @@
+{% extends 'portal/staff_page_base.html' %}{% load static %}
+{% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/backoffice.css' %}">{% endblock %}
+{% block page_heading %}<header class="staff-page-header"><div><p class="console-kicker">Schedule · Appointment</p><h1>{{ appointment.patient }}</h1><p>{{ appointment.get_appointment_type_display }} · {{ appointment.starts_at|date:'j F Y, H:i' }} SAST</p></div><a class="console-button console-button--secondary" href="{% url 'portal:staff-schedule' %}?date={{ appointment.starts_at|date:'Y-m-d' }}">Back to schedule</a></header>{% endblock %}
+{% block page_content %}<div class="backoffice">{% include 'portal/includes/appointment_detail_content.html' %}</div>{% endblock %}

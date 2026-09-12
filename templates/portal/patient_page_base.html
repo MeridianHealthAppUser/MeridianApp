@@ -1,0 +1,25 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}{{ page_title|default:"Your care" }} | Meridian{% endblock %}
+{% block extra_css %}
+  <link rel="stylesheet" href="{% static 'css/console.css' %}">
+  <link rel="stylesheet" href="{% static 'css/patient_pages.css' %}">
+  {% block patient_extra_css %}{% endblock %}
+{% endblock %}
+
+{% block content %}
+  <div class="meridian-console patient-console patient-pages-console">
+    <div class="patient-page-topbar">
+      <div><span class="patient-page-topbar__label">Your care at</span><strong>{{ patient_company.name }}</strong></div>
+    </div>
+    {% include 'portal/includes/patient_navigation.html' %}
+    <div class="patient-console__content patient-page-content" id="patient-page-content">
+      {% block patient_heading %}{% endblock %}
+      {% block patient_content %}{% endblock %}
+      <aside class="patient-page-privacy">
+        <strong>Your care, in one place.</strong> You are viewing your patient record at {{ patient_company.name }}. Use the practice selector above to view care at another practice you belong to.
+      </aside>
+    </div>
+  </div>
+{% endblock %}

@@ -1,0 +1,127 @@
+<aside class="schedule-availability-panels" aria-label="Working pattern and time off">
+  {% if selected_clinician %}
+    <section class="staff-page-card schedule-working-pattern" aria-labelledby="working-pattern-heading">
+      <header class="staff-page-card__header">
+        <div><h2 id="working-pattern-heading">Working pattern</h2><p>{{ selected_clinician.full_name }} · {{ company.name }}</p></div>
+      </header>
+      <div class="schedule-panel-body">
+        <p class="schedule-panel-description">The standing week at this practice, in South Africa time (SAST). Saving these hours changes future booking availability, never an appointment already booked.</p>
+        {% if not working_pattern_configured %}
+          <p class="schedule-panel-notice">No weekly pattern has been saved yet. Existing manually recorded availability still applies until a pattern is saved.</p>
+        {% endif %}
+
+        {% if can_manage_availability %}
+          {% if working_pattern_error %}<div class="schedule-form-error" role="alert">{{ working_pattern_error }}</div>{% endif %}
+          <form class="console-form schedule-pattern-form" method="post" action="{{ working_pattern_url }}">
+            {% csrf_token %}
+            <input type="hidden" name="schedule_context" value="{{ schedule_context }}">
+            {{ working_pattern_formset.management_form }}
+            {{ working_pattern_formset.non_form_errors }}
+            <div class="schedule-working-week">
+              {% for day_form in working_pattern_formset %}
+                <fieldset class="schedule-pattern-day">
+                  <legend>{{ day_form.day_label }}</legend>
+                  {% for hidden in day_form.hidden_fields %}{{ hidden }}{% endfor %}
+                  {{ day_form.non_field_errors }}
+                  <label class="schedule-working-toggle" for="{{ day_form.is_working.id_for_label }}">
+                    {{ day_form.is_working }}
+                    <span>Working<span class="sr-only"> on {{ day_form.day_label }}</span></span>
+                  </label>
+                  {{ day_form.is_working.errors }}
+                  <div class="schedule-pattern-times">
+                    <div class="console-form__field">
+                      <label for="{{ day_form.starts_at.id_for_label }}">From<span class="sr-only"> on {{ day_form.day_label }} (SAST)</span></label>
+                      {{ day_form.starts_at }}
+                      {{ day_form.starts_at.errors }}
+                    </div>
+                    <div class="console-form__field">
+                      <label for="{{ day_form.ends_at.id_for_label }}">Until<span class="sr-only"> on {{ day_form.day_label }} (SAST)</span></label>
+                      {{ day_form.ends_at }}
+                      {{ day_form.ends_at.errors }}
+                    </div>
+                  </div>
+                </fieldset>
+              {% endfor %}
+            </div>
+            <p class="schedule-form-help">Turn Working off for a day you do not work here. Its time fields are ignored.</p>
+            <button class="console-button console-button--primary" type="submit">Save working pattern</button>
+          </form>
+        {% else %}
+          {% if working_pattern_configured %}
+            <dl class="schedule-readonly-week">
+              {% for day in weekly_pattern %}
+                <div><dt>{{ day.day_label }}</dt><dd>{% if day.is_working %}{{ day.starts_at|time:"H:i" }}–{{ day.ends_at|time:"H:i" }}{% else %}Not working{% endif %}</dd></div>
+              {% endfor %}
+            </dl>
+          {% endif %}
+          <p class="schedule-form-help">Read-only view. Doctors manage their own working hours.</p>
+        {% endif %}
+      </div>
+    </section>
+
+    <section class="staff-page-card schedule-time-off" aria-labelledby="time-off-heading">
+      <header class="staff-page-card__header"><div><h2 id="time-off-heading">Time off</h2><p>Leave, sickness and other time away.</p></div></header>
+      <div class="schedule-panel-body">
+        <p class="schedule-panel-description">Time off blocks this doctor's new bookings across all their practices. Only time off recorded at {{ company.name }} is shown here.</p>
+        {% if time_off_error %}<div class="schedule-form-error" role="alert">{{ time_off_error }}</div>{% endif %}
+        {% if can_manage_availability %}
+          <form class="console-form schedule-time-off-form" method="post" action="{{ time_off_create_url }}">
+            {% csrf_token %}
+            <input type="hidden" name="schedule_context" value="{{ schedule_context }}">
+            {{ time_off_form.non_field_errors }}
+            <div class="console-form__field">
+              <label for="{{ time_off_form.reason.id_for_label }}">{{ time_off_form.reason.label }}</label>
+              {{ time_off_form.reason }}
+              {{ time_off_form.reason.errors }}
+            </div>
+            <div class="console-form__field">
+              <label for="{{ time_off_form.starts_at.id_for_label }}">From (SAST)</label>
+              {{ time_off_form.starts_at }}
+              {{ time_off_form.starts_at.errors }}
+            </div>
+            <div class="console-form__field">
+              <label for="{{ time_off_form.ends_at.id_for_label }}">Until (SAST)</label>
+              {{ time_off_form.ends_at }}
+              {{ time_off_form.ends_at.errors }}
+            </div>
+            <button class="console-button console-button--primary" type="submit">Mark unavailable</button>
+          </form>
+        {% else %}
+          <p class="schedule-form-help">Read-only view. Doctors record and cancel their own time off.</p>
+        {% endif %}
+
+        <h3 class="schedule-panel-subheading">Time off recorded here</h3>
+        <ul class="schedule-time-off-list">
+          {% for entry in time_off_entries %}
+            <li>
+              <strong>{{ entry.get_reason_display }}</strong>
+              <div class="schedule-time-off-dates"><time datetime="{{ entry.starts_at|date:'c' }}">{{ entry.starts_at|date:"j M Y, H:i" }}</time><span>until</span><time datetime="{{ entry.ends_at|date:'c' }}">{{ entry.ends_at|date:"j M Y, H:i" }}</time></div>
+              {% if can_manage_availability and entry.cancel_url %}
+                <form method="post" action="{{ entry.cancel_url }}">
+                  {% csrf_token %}
+                  <input type="hidden" name="schedule_context" value="{{ schedule_context }}">
+                  <button class="console-button console-button--secondary" type="submit">Cancel time off<span class="sr-only"> starting {{ entry.starts_at|date:"j F Y, H:i" }}</span></button>
+                </form>
+              {% endif %}
+            </li>
+          {% empty %}
+            <li class="schedule-time-off-empty">No upcoming time off is recorded at this practice.</li>
+          {% endfor %}
+        </ul>
+        {% if time_off_page_obj.has_other_pages %}
+          <nav class="schedule-panel-pagination" aria-label="Time-off pages">
+            {% if time_off_previous_url %}<a href="{{ time_off_previous_url }}">Previous</a>{% endif %}
+            <span>Page {{ time_off_page_obj.number }} of {{ time_off_page_obj.paginator.num_pages }}</span>
+            {% if time_off_next_url %}<a href="{{ time_off_next_url }}">Next</a>{% endif %}
+          </nav>
+        {% endif %}
+        {% if can_manage_availability %}<p class="schedule-form-help">Cancelling time off makes those hours available again where your working pattern allows it. The original time-off record is kept.</p>{% endif %}
+      </div>
+    </section>
+  {% else %}
+    <section class="staff-page-card schedule-select-doctor" aria-labelledby="availability-doctor-heading">
+      <header class="staff-page-card__header"><div><h2 id="availability-doctor-heading">Working hours and time off</h2></div></header>
+      <div class="schedule-panel-body"><p class="schedule-panel-description">Choose a clinician in the schedule filter to view their weekly working pattern and time off for this practice.</p><p class="schedule-form-help">Doctors can edit their own hours and time off. Practice administrators and Super Admins have a read-only view.</p></div>
+    </section>
+  {% endif %}
+</aside>

@@ -1,0 +1,25 @@
+{% load workspace_ui %}
+{% account_identity as identity %}
+<details class="account-menu" data-account-menu>
+  <summary id="account-menu-trigger" class="account-menu__trigger" aria-controls="account-menu-panel" aria-expanded="false" aria-label="Account menu for {{ identity.name }}, {{ identity.role }}">
+    <span class="account-menu__avatar" aria-hidden="true">{{ identity.initials }}</span>
+    <span class="account-menu__identity"><strong>{{ identity.name }}</strong><span>{{ identity.role }}</span></span>
+    <svg class="account-menu__chevron" aria-hidden="true" viewBox="0 0 20 20"><path d="m6 8 4 4 4-4"/></svg>
+  </summary>
+  <div id="account-menu-panel" class="account-menu__panel" aria-labelledby="account-menu-trigger">
+    <div class="account-menu__heading"><strong>{{ identity.name }}</strong><span>{{ identity.role }}</span><span class="account-menu__email">{{ user.email }}</span></div>
+    <nav class="account-menu__links" aria-label="Your account">
+      {% url 'accounts:profile' as profile_url %}{% if profile_url %}<a href="{{ profile_url }}">My profile</a>{% endif %}
+      <a href="{% url 'accounts:password-change' %}">Change password</a>
+      {% if identity.is_patient %}
+        <a href="{% url 'portal:patient-account' %}">Care account details</a>
+        <a href="{% url 'portal:patient-privacy' %}">Privacy and preferences</a>
+        <a href="{% url 'portal:patient-data-requests' %}">My data requests</a>
+      {% elif active_company %}
+        <a href="{% url 'portal:account-access-history' %}">My access history</a>
+      {% endif %}
+    </nav>
+    {% if identity.is_patient and active_company %}<div class="account-menu__links account-menu__section"><a href="{% url 'portal:desktop-dashboard' %}">Switch to workspace</a></div>{% elif not identity.is_patient and active_patient %}<div class="account-menu__links account-menu__section"><a href="{% url 'portal:patient-dashboard' %}">Switch to my care</a></div>{% endif %}
+    <form class="account-menu__signout account-menu__section" method="post" action="{% url 'accounts:logout' %}">{% csrf_token %}<button type="submit">Sign out</button></form>
+  </div>
+</details>

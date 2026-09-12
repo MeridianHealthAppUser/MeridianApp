@@ -1,0 +1,76 @@
+/* The patient inbox has its own layout; no staff-navigation styles are shared. */
+.patient-inbox-heading { align-items: center; display: flex; gap: 1rem; justify-content: space-between; }
+.patient-inbox-heading > div { min-width: 0; }
+.patient-inbox-heading > .console-button { flex: 0 0 auto; }
+.patient-inbox-filter { align-items: end; display: flex; flex-wrap: wrap; gap: .65rem; margin-bottom: 1rem; padding: 0; }
+.patient-inbox-filter select { min-width: 11rem; }
+.patient-inbox-filter .console-button { min-height: 2.6rem; }
+
+.patient-inbox { background: var(--console-card); border: 1px solid var(--console-line); border-radius: 1rem; box-shadow: var(--console-shadow); display: grid; grid-template-columns: minmax(15rem, 28%) minmax(0, 1fr); overflow: hidden; }
+.patient-inbox-threads { background: #fbfdfc; border-right: 1px solid var(--console-line); min-width: 0; }
+.patient-inbox-threads__header { align-items: center; border-bottom: 1px solid var(--console-line); display: flex; gap: .5rem; justify-content: space-between; padding: 1.15rem; }
+.patient-inbox-threads__header h2 { font-size: .9rem; margin: 0; }
+.patient-inbox-threads__header > span { color: var(--console-muted); font-size: .8rem; }
+.patient-inbox-thread-list { list-style: none; margin: 0; padding: 0; }
+.patient-inbox-thread-list > li + li { border-top: 1px solid var(--console-soft-line); }
+.patient-inbox-thread { color: var(--console-ink); display: grid; gap: .45rem; padding: 1.1rem; text-decoration: none; }
+.patient-inbox-thread:hover { background: #eef7f4; }
+.patient-inbox-thread:focus-visible { outline: 2px solid var(--console-teal); outline-offset: -3px; }
+.patient-inbox-thread.is-selected { background: var(--console-teal-soft); box-shadow: inset .2rem 0 var(--console-teal); }
+.patient-inbox-thread > strong { font-size: .85rem; line-height: 1.45; overflow-wrap: anywhere; }
+.patient-inbox-thread__preview { color: var(--console-muted); font-size: .77rem; line-height: 1.5; overflow-wrap: anywhere; }
+.patient-inbox-thread__meta { align-items: center; display: flex; flex-wrap: wrap; gap: .4rem; }
+.patient-inbox-thread__meta time { color: var(--console-muted); font-size: .7rem; }
+.patient-inbox-pill { background: #edf4f2; border: 1px solid #dbe9e5; border-radius: 99rem; color: #527375; display: inline-block; font-size: .65rem; font-weight: 700; line-height: 1.35; padding: .2rem .5rem; white-space: nowrap; }
+.patient-inbox-pill--unread { background: #d9f0ea; border-color: #b9dfd5; color: var(--console-teal-dark); }
+.patient-inbox-pagination { align-items: center; border-top: 1px solid var(--console-line); display: flex; flex-wrap: wrap; gap: .7rem; justify-content: space-between; padding: 1rem; }
+.patient-inbox-pagination a { color: var(--console-teal-dark); font-size: .76rem; font-weight: 700; text-underline-offset: .2em; }
+.patient-inbox-pagination span { color: var(--console-muted); font-size: .72rem; }
+.patient-inbox-pagination--history { border-bottom: 1px solid var(--console-soft-line); border-top: 0; }
+
+.patient-conversation { display: flex; flex-direction: column; min-height: 27rem; min-width: 0; scroll-margin-top: 1rem; }
+.patient-conversation:focus { outline: none; }
+.patient-conversation__header { align-items: center; border-bottom: 1px solid var(--console-line); display: flex; flex-wrap: wrap; gap: .7rem; justify-content: space-between; padding: 1.15rem 1.25rem; }
+.patient-conversation__header > div { min-width: 0; }
+.patient-conversation__header p { color: var(--console-muted); font-size: .7rem; margin: 0 0 .25rem; }
+.patient-conversation__header h2 { font-size: 1rem; line-height: 1.4; margin: 0; overflow-wrap: anywhere; }
+.patient-conversation__timezone { color: var(--console-muted); font-size: .68rem; margin: .75rem 1.25rem 0; }
+.patient-conversation-messages { align-content: start; display: grid; flex: 1; gap: .9rem; list-style: none; margin: 0; padding: 1.25rem; }
+.patient-conversation-message { background: var(--console-teal-soft); border: 1px solid #c7e5df; border-radius: .8rem .8rem .8rem .15rem; justify-self: start; max-width: 90%; min-width: 0; padding: .8rem .9rem; }
+.patient-conversation-message--mine { background: #f0f5f3; border-color: var(--console-line); border-radius: .8rem .8rem .15rem .8rem; justify-self: end; }
+.patient-conversation-message__meta { align-items: baseline; display: flex; flex-wrap: wrap; gap: .35rem .85rem; justify-content: space-between; }
+.patient-conversation-message__meta strong { font-size: .72rem; overflow-wrap: anywhere; }
+.patient-conversation-message__meta time { color: #56777a; font-size: .65rem; }
+.patient-conversation-message p { font-size: .84rem; line-height: 1.65; margin: .4rem 0 0; overflow-wrap: anywhere; }
+.patient-conversation > .appointment-proposals { padding: 1.15rem 1.25rem; }
+.patient-conversation-reply { border-top: 1px solid var(--console-line); margin: 0; padding: 1.15rem 1.25rem; }
+.patient-conversation-reply__footer { align-items: center; display: flex; flex-wrap: wrap; gap: .75rem; justify-content: space-between; }
+.patient-conversation-reply__footer p { color: var(--console-muted); font-size: .72rem; margin: 0; }
+.patient-conversation-closed { background: #f8faf9; border-top: 1px solid var(--console-line); color: var(--console-muted); font-size: .8rem; line-height: 1.6; margin: 0; padding: 1.25rem; }
+.patient-conversation-closed a { color: var(--console-teal-dark); font-weight: 700; text-underline-offset: .15em; }
+.patient-conversation-empty { align-self: center; margin: auto 0; max-width: 30rem; padding: 2.5rem 1.5rem; text-align: center; }
+.patient-conversation-empty h2 { font-family: Georgia, 'Times New Roman', serif; font-size: 1.6rem; font-weight: 500; line-height: 1.25; margin: .6rem 0; }
+.patient-conversation-empty > p:last-child { color: var(--console-muted); font-size: .85rem; line-height: 1.6; }
+.patient-inbox-empty { color: var(--console-muted); font-size: .8rem; line-height: 1.6; padding: 1.25rem; }
+.patient-new-message { margin-top: 1.25rem; scroll-margin-top: 1rem; }
+.patient-new-message:focus { outline: none; }
+.patient-new-message .console-form > .console-button { justify-self: start; }
+.patient-inbox-notice { color: var(--console-muted); font-size: .77rem; line-height: 1.6; margin: 1rem 0 0; }
+
+@media (max-width: 52rem) {
+  .patient-inbox { grid-template-columns: minmax(0, 1fr); }
+  .patient-inbox-threads { border-bottom: 1px solid var(--console-line); border-right: 0; }
+  .patient-inbox-thread-list { max-height: 23rem; overflow-y: auto; }
+  .patient-conversation { min-height: 20rem; }
+}
+
+@media (max-width: 34rem) {
+  .patient-inbox-heading { align-items: flex-start; flex-direction: column; }
+  .patient-inbox-filter .console-form__field { flex: 1; }
+  .patient-inbox-filter select { min-width: 0; }
+  .patient-conversation__header, .patient-conversation-messages, .patient-conversation-reply, .patient-conversation > .appointment-proposals { padding-left: 1rem; padding-right: 1rem; }
+  .patient-conversation__timezone { margin-left: 1rem; margin-right: 1rem; }
+  .patient-conversation-message { max-width: 100%; padding: .7rem; }
+  .patient-conversation-reply__footer { align-items: stretch; flex-direction: column; }
+  .patient-conversation .appointment-proposal__times { grid-template-columns: minmax(0, 1fr); }
+}

@@ -1,0 +1,213 @@
+{% extends 'base.html' %}
+{% load static workspace_ui %}
+
+{% block title %}{{ active_company.name }} | Meridian{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{% static 'css/console.css' %}">{% endblock %}
+{% block content %}
+  <div class="meridian-console console-desktop workspace-overview">
+    <div class="console-shell">
+      <aside class="console-sidebar" aria-label="Practice navigation">
+        <div class="console-sidebar__practice">
+          <span class="console-practice-mark" aria-hidden="true">M</span>
+          <div>
+            <p>Active practice</p>
+            <strong>{{ active_company.name }}</strong>
+          </div>
+        </div>
+
+        {% include 'portal/includes/staff_navigation.html' with nav_section='overview' %}
+
+      </aside>
+
+      <div class="console-main">
+        <header class="console-topbar">
+          <div class="console-breadcrumb">
+            <span>Care workspace</span>
+            <span class="console-breadcrumb__dot" aria-hidden="true"></span>
+            <span>{{ active_company.name }}</span>
+          </div>
+          <div class="console-topbar__right">
+            <a class="console-icon-button" href="{% url 'portal:staff-inbox' %}" aria-label="View messages">
+              <span aria-hidden="true">●</span><span>Inbox</span>
+            </a>
+            <a class="console-icon-button" href="{% url 'portal:staff-tasks' %}" aria-label="View tasks">
+              <span aria-hidden="true">✓</span><span>Tasks</span>
+            </a>
+          </div>
+        </header>
+
+        <main class="console-content" id="overview">
+          <section class="console-welcome" aria-labelledby="workspace-heading">
+            <div>
+              <p class="console-kicker">Practice overview</p>
+              <h1 id="workspace-heading">Welcome, {{ user.first_name|default:user.full_name }}.</h1>
+              <p class="console-welcome__subtext">A focused view of your patients, clinical follow-ups, and conversations within {{ active_company.name }}.</p>
+            </div>
+            <div class="console-actions">
+              {% if active_membership %}<span class="console-role-badge">{{ active_membership.get_role_display }}</span>{% endif %}
+              <a class="console-button console-button--primary" href="{% url 'portal:patient-list' %}">View patients</a>
+              <a class="console-button console-button--secondary" href="{% url 'portal:staff-schedule' %}">View schedule</a>
+            </div>
+          </section>
+
+          <section class="console-metrics" aria-label="Practice metrics">
+            {% for metric_name, metric_value in metrics.items %}
+              <article class="metric-card">
+                <span class="metric-card__label">{{ metric_name|metric_label }}</span>
+                <strong class="metric-card__value">{{ metric_value }}</strong>
+              </article>
+            {% empty %}
+              <article class="metric-card">
+                <span class="metric-card__label">Practice activity</span>
+                <strong class="metric-card__value">—</strong>
+                <span class="metric-card__hint">Metrics will appear as care is recorded.</span>
+              </article>
+            {% endfor %}
+          </section>
+
+          <div class="console-grid" id="schedule">
+            <section class="console-card" aria-labelledby="appointments-heading">
+              <header class="console-card__header">
+                <div class="console-card__heading">
+                  <h2 id="appointments-heading">Upcoming appointments</h2>
+                  <p>Scheduled care at {{ active_company.name }}</p>
+                </div>
+                <a class="console-button console-button--quiet" href="{% url 'portal:staff-schedule' %}">Full schedule</a>
+              </header>
+              <div class="console-card__body">
+                <ul class="console-list">
+                  {% for appointment in upcoming_appointments %}
+                    <li class="console-list__item">
+                      <time class="console-time" datetime="{{ appointment.starts_at|date:'c' }}">{{ appointment.starts_at|date:"H:i" }}<span>{{ appointment.starts_at|date:"D, j M" }}</span></time>
+                      <div class="console-list__copy">
+                        <strong>{{ appointment.patient }}</strong>
+                        <span>{{ appointment.get_appointment_type_display }}{% if appointment.clinician %} · {{ appointment.clinician.full_name }}{% endif %}</span>
+                      </div>
+                      <span class="console-status console-status--{{ appointment.status }}">{{ appointment.get_status_display }}</span>
+                    </li>
+                  {% empty %}
+                    <li class="console-empty"><p>There are no upcoming appointments in this practice yet.</p></li>
+                  {% endfor %}
+                </ul>
+              </div>
+            </section>
+
+            <section class="console-card" id="tasks" aria-labelledby="tasks-heading">
+              <header class="console-card__header">
+                <div class="console-card__heading">
+                  <h2 id="tasks-heading">Open tasks</h2>
+                  <p>Keep follow-ups moving</p>
+                </div>
+                <a class="console-button console-button--quiet" href="{% url 'portal:staff-tasks' %}">See all</a>
+              </header>
+              <div class="console-card__body">
+                <ul class="console-list task-list">
+                  {% for task in open_tasks %}
+                    <li class="task-list__item">
+                      <div class="task-list__top">
+                        <div>
+                          <strong>{{ task.title }}</strong>
+                          <p class="task-list__meta">{{ task.patient|default:"General practice" }}{% if task.assigned_to %} · {{ task.assigned_to.full_name }}{% endif %}</p>
+                        </div>
+                        <span class="console-priority">{{ task.get_priority_display }}</span>
+                      </div>
+                      <div class="task-list__footer">
+                        {% if task.due_at %}<time datetime="{{ task.due_at|date:'c' }}">Due {{ task.due_at|date:"j M, H:i" }}</time>{% else %}<span></span>{% endif %}
+                        {% if task.is_clinical_workflow %}
+                          {% if task.workflow_url %}<a class="console-button console-button--quiet" href="{{ task.workflow_url }}">{{ task.workflow_label }}</a>{% else %}<span class="console-status">Clinical workflow</span>{% endif %}
+                        {% else %}<form class="console-inline-form" method="post" action="{% url 'portal:task-complete' task.pk %}">
+                          {% csrf_token %}
+                          <input type="hidden" name="next" value="{{ request.path }}">
+                          <button class="console-button console-button--quiet" type="submit">Complete</button>
+                        </form>{% endif %}
+                      </div>
+                    </li>
+                  {% empty %}
+                    <li class="console-empty"><p>No open clinical tasks. The care team is up to date.</p></li>
+                  {% endfor %}
+                </ul>
+              </div>
+            </section>
+          </div>
+
+          <section class="console-section console-card" id="patients" aria-labelledby="patients-heading">
+            <header class="console-card__header">
+              <div class="console-card__heading">
+                <h2 id="patients-heading">Patients</h2>
+                <p>People currently receiving care at {{ active_company.name }}</p>
+              </div>
+              <a class="console-button console-button--primary" href="{% url 'portal:patient-list' %}">Patient directory</a>
+            </header>
+            <div class="patient-table-wrap">
+              <table class="patient-table">
+                <thead>
+                  <tr>
+                    <th scope="col">Patient</th>
+                    <th scope="col">Record</th>
+                    <th scope="col">Assigned clinician</th>
+                    <th scope="col">Status</th>
+                    <th scope="col"><span class="sr-only">Open patient</span></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for listed_patient in patients %}
+                    <tr>
+                      <td>
+                        <div class="patient-table__person">
+                          <span class="console-patient-avatar" aria-hidden="true">{{ listed_patient.first_name|slice:":1"|upper }}{{ listed_patient.last_name|slice:":1"|upper }}</span>
+                          <span>{{ listed_patient }}<span class="patient-table__detail">{{ listed_patient.user.email|default:listed_patient.phone|default:"Contact details pending" }}</span></span>
+                        </div>
+                      </td>
+                      <td>{{ listed_patient.medical_record_number|default:"Record pending" }}</td>
+                      <td>{% if listed_patient.assigned_doctor %}{{ listed_patient.assigned_doctor.full_name }}{% else %}Unassigned{% endif %}</td>
+                      <td>{% if listed_patient.is_active %}<span class="console-status console-status--active">Active</span>{% else %}<span class="console-status">Inactive</span>{% endif %}</td>
+                      <td><a class="patient-table__action" href="{% url 'portal:patient-detail' listed_patient.pk %}">Open</a></td>
+                    </tr>
+                  {% empty %}
+                    <tr>
+                      <td colspan="5"><div class="console-empty"><p>There are no patient records in this practice yet. Add the first patient to begin a secure clinical record.</p></div></td>
+                    </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="console-section console-card" id="messages" aria-labelledby="messages-heading">
+            <header class="console-card__header">
+              <div class="console-card__heading">
+                <h2 id="messages-heading">Recent conversations</h2>
+                <p>Patient messages in this practice</p>
+              </div>
+              <a class="console-button console-button--quiet" href="{% url 'portal:staff-inbox' %}">Open inbox</a>
+            </header>
+            <div class="console-card__body">
+              <ul class="console-list message-list">
+                {% for message in recent_messages %}
+                  <li class="message-list__item message-list__item--thread">
+                    <span class="console-patient-avatar" aria-hidden="true">{{ message.patient.first_name|slice:":1"|upper }}{{ message.patient.last_name|slice:":1"|upper }}</span>
+                    <div class="message-list__copy">
+                      <strong>{{ message.subject|default:"Patient message" }}</strong>
+                      <span>{{ message.patient }}{% if message.is_closed %} · Conversation closed{% endif %}</span>
+                    </div>
+                    <div class="message-list__meta">
+                      {% if message.last_message_at %}<time class="message-list__time" datetime="{{ message.last_message_at|date:'c' }}">{{ message.last_message_at|timesince }} ago</time>{% endif %}
+                      <a class="message-list__action" href="{% url 'portal:patient-detail' message.patient_id %}?thread={{ message.pk }}#conversation-{{ message.pk }}">Open conversation<span class="sr-only"> with {{ message.patient }}</span></a>
+                    </div>
+                  </li>
+                {% empty %}
+                  <li class="console-empty"><p>No patient conversations have arrived. New secure messages will appear here.</p></li>
+                {% endfor %}
+              </ul>
+            </div>
+          </section>
+
+          <section id="insights" class="patient-summary">
+            <strong>Practice privacy.</strong> This workspace is filtered to {{ active_company.name }}. Switch practices from the header to view a different company’s records.
+          </section>
+        </main>
+      </div>
+    </div>
+    {% include 'portal/includes/staff_mobile_navigation.html' with nav_section='overview' %}
+  </div>
+{% endblock %}

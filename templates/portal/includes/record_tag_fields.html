@@ -1,0 +1,9 @@
+<fieldset class="tag-fields">
+  <legend>Free-form tags</legend>
+  <p>Choose existing labels or create any label you need. Labels are shared within this practice.</p>
+  {{ tag_form.tags }}{{ tag_form.tags.errors }}
+  <div class="console-form__field">
+    <label for="{{ tag_form.new_tag.id_for_label }}">Create a tag</label>
+    {{ tag_form.new_tag }}{{ tag_form.new_tag.errors }}
+  </div>
+</fieldset>

@@ -1,0 +1,5 @@
+<section class="privacy-card" aria-labelledby="privacy-request-heading"><p class="console-kicker">Submitted {{ data_request.created_at|date:"j M Y, H:i" }} SAST</p><h2 id="privacy-request-heading">{{ data_request.get_kind_display }}</h2><span class="console-status">{{ data_request.get_status_display }}</span><p class="privacy-copy">{{ data_request.description }}</p></section>
+<section class="privacy-card" aria-labelledby="privacy-responses-heading"><h2 id="privacy-responses-heading">Practice responses</h2>
+  <ol class="privacy-responses">{% for reply in page_obj %}<li><div class="privacy-response-meta"><strong>{{ reply.author.full_name }}</strong><time datetime="{{ reply.created_at|date:'c' }}">{{ reply.created_at|date:"j M Y, H:i" }} SAST</time><span class="console-status">{{ reply.get_status_display }}</span></div><p class="privacy-copy">{{ reply.body }}</p></li>{% empty %}<li>No response yet. Your request is available to the practice.</li>{% endfor %}</ol>
+  {% include 'portal/privacy_pagination.html' with pagination_label='Response history pages' %}
+</section>

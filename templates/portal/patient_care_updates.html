@@ -1,0 +1,30 @@
+{% extends 'portal/patient_page_base.html' %}
+{% load static %}
+{% block patient_extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/patient_care.css' %}">{% endblock %}
+
+{% block patient_heading %}
+  <header class="patient-page-heading"><div><p class="console-kicker">Your care · Updates</p><h1>Everything shared with you</h1><p>Appointments, messages and other care updates recorded for you at {{ patient_company.name }}.</p></div></header>
+{% endblock %}
+
+{% block patient_content %}
+  <div class="patient-care">
+    <section class="console-card" aria-labelledby="updates-filter-heading">
+      <header class="console-card__header"><div class="console-card__heading"><h2 id="updates-filter-heading">Find an update</h2><p>All dates and times are shown in South Africa time (SAST).</p></div></header>
+      <div class="console-card__body"><form method="get" action="{% url 'portal:patient-updates' %}" class="console-form patient-care-filters">
+        {{ filter_form.non_field_errors }}
+        {% for field in filter_form %}<div class="console-form__field"><label for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}{{ field.errors }}</div>{% endfor %}
+        <button type="submit" class="console-button console-button--secondary">Apply filters</button>
+      </form></div>
+    </section>
+    <section class="console-card patient-page-section" aria-labelledby="care-updates-heading">
+      <header class="console-card__header"><div class="console-card__heading"><h2 id="care-updates-heading">Care timeline</h2><p>{{ page_obj.paginator.count }} update{{ page_obj.paginator.count|pluralize }} in this view</p></div></header>
+      <div class="console-card__body">
+        <ol class="patient-care-timeline">
+          {% for event in events %}<li><div class="patient-care-timeline__meta"><span class="console-status">{{ event.get_category_display }}</span><time datetime="{{ event.occurred_at|date:'c' }}">{{ event.occurred_at|date:"j M Y, H:i" }} SAST</time></div><h3>{{ event.title }}</h3>{% if event.detail %}<p>{{ event.detail|linebreaksbr }}</p>{% endif %}</li>
+          {% empty %}<li class="patient-care-empty">{% if filter_form.errors %}Correct the filters above to view your updates.{% else %}There are no shared updates matching this view.{% endif %}</li>{% endfor %}
+        </ol>
+        {% include 'portal/includes/patient_pagination.html' with pagination_label='Care updates' %}
+      </div>
+    </section>
+  </div>
+{% endblock %}

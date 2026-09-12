@@ -1,0 +1,6 @@
+.dashboard-mobile { margin: 0 auto; max-width: 30rem; }
+.dashboard-mobile .empty-state { border-radius: 1.25rem; }
+
+@media (min-width: 48rem) {
+  .dashboard-mobile { box-shadow: 0 0 0 1px #dde8e5; min-height: 36rem; padding: 1.5rem; }
+}

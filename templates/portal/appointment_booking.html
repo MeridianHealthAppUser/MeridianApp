@@ -1,0 +1,14 @@
+{% extends 'portal/staff_page_base.html' %}{% load static %}
+{% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/backoffice.css' %}">{% endblock %}
+{% block page_heading %}<header class="staff-page-header"><div><p class="console-kicker">Schedule · Book appointment</p><h1>Book an appointment</h1><p>For an existing patient in {{ company.name }}. Working hours, time off and both participants’ other bookings are checked again when you save.</p></div><a class="console-button console-button--secondary" href="{% url 'portal:staff-schedule' %}">View schedule</a></header>{% endblock %}
+{% block page_content %}
+  <div class="backoffice"><section class="staff-page-card backoffice-panel">
+    <form class="console-form" method="post">
+      {% csrf_token %}<input type="hidden" name="workflow_context" value="{{ workflow_context }}">
+      {{ form.non_field_errors }}{% for field in form.hidden_fields %}{{ field }}{{ field.errors }}{% endfor %}
+      <div class="backoffice-fields">{% for field in form.visible_fields %}<div class="console-form__field"><label for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}{{ field.errors }}</div>{% endfor %}</div>
+      <p>Times are SAST. The native video room opens shortly before the appointment for its booked doctor and patient. No external meeting link is needed; no email or payment is created.</p>
+      <button class="console-button console-button--primary" type="submit">Confirm booking</button>
+    </form>
+  </section></div>
+{% endblock %}

@@ -1,0 +1,102 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Start your questionnaire | Meridian Health{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{% static 'css/questionnaire.css' %}?v=intake-20260912">{% endblock %}
+
+{% block content %}
+  <section class="questionnaire-layout" aria-labelledby="questionnaire-title">
+    <header class="questionnaire-heading">
+      <p class="questionnaire-step">Step 1 of 3 · Screening · Stage 1 of 2</p>
+      <h1 id="questionnaire-title">First, the questions that decide it</h1>
+      <p>Start with a few details and the screening questions below. Your answers help the practice understand whether a consultation may be suitable. Your doctor makes the final decision about treatment.</p>
+    </header>
+    <aside class="questionnaire-callout questionnaire-callout--warm">
+      <span class="questionnaire-badge questionnaire-badge--blue">Stage 2</span>
+      <div><strong>The rest of your medical profile comes after you book</strong><p>These first questions record your enquiry. The fuller medical profile and booking stages will follow in a later update.</p></div>
+    </aside>
+    <form method="post" class="questionnaire-form" id="screening-form" novalidate>
+      {% csrf_token %}
+      {{ form.submission_token }}
+      {% if form.non_field_errors %}<div class="form-errors" role="alert">{{ form.non_field_errors }}</div>{% endif %}
+      {% if form.submission_token.errors %}<div class="form-errors" role="alert">{{ form.submission_token.errors }}</div>{% endif %}
+      {% if form.errors %}<p class="form-errors" role="alert">Please check the highlighted fields below. Your questionnaire has not been submitted.</p>{% endif %}
+      <section class="questionnaire-card" aria-labelledby="practice-heading">
+        <h2 id="practice-heading">Choose your practice</h2>
+        <p>Your enquiry belongs to the practice you select. Its authorised team can follow up with you.</p>
+        <div class="question-field">{{ form.practice.label_tag }}{{ form.practice }}{% for error in form.practice.errors %}<small class="field-error">{{ error }}</small>{% endfor %}</div>
+        {% if editing %}<p class="questionnaire-legal">The practice cannot be changed on an existing enquiry.</p>{% endif %}
+      </section>
+      <section class="questionnaire-card" aria-labelledby="identity-heading">
+        <h2 id="identity-heading">Who you are</h2>
+        <p>We need this to contact you about your enquiry. Submitting the questionnaire records you as a lead, nothing more — an account with a login is only created after a successful consultation payment. Payment is a preview only for now.</p>
+        <div class="form-grid">
+          <div class="question-field">{{ form.first_name.label_tag }}{{ form.first_name }}{% for error in form.first_name.errors %}<small class="field-error">{{ error }}</small>{% endfor %}</div>
+          <div class="question-field">{{ form.last_name.label_tag }}{{ form.last_name }}{% for error in form.last_name.errors %}<small class="field-error">{{ error }}</small>{% endfor %}</div>
+          <div class="question-field">{{ form.email.label_tag }}{{ form.email }}{% for error in form.email.errors %}<small class="field-error">{{ error }}</small>{% endfor %}</div>
+          <div class="question-field">{{ form.phone.label_tag }}{{ form.phone }}{% for error in form.phone.errors %}<small class="field-error">{{ error }}</small>{% endfor %}</div>
+          <div class="question-field question-field-wide">{{ form.id_number.label_tag }}{{ form.id_number }}<small>Use your South African ID number, or your passport number if you do not have a South African ID.</small>{% for error in form.id_number.errors %}<small class="field-error">{{ error }}</small>{% endfor %}</div>
+        </div>
+      </section>
+      <section class="questionnaire-card" aria-labelledby="measurements-heading">
+        <h2 id="measurements-heading">Height and weight</h2>
+        <p>Used to calculate your BMI and give the practice a starting point.</p>
+        <div class="form-grid">
+          <div class="question-field">{{ form.height_cm.label_tag }}{{ form.height_cm }}{% for error in form.height_cm.errors %}<small class="field-error">{{ error }}</small>{% endfor %}</div>
+          <div class="question-field">{{ form.weight_kg.label_tag }}{{ form.weight_kg }}{% for error in form.weight_kg.errors %}<small class="field-error">{{ error }}</small>{% endfor %}</div>
+        </div>
+        <p class="questionnaire-bmi" id="bmi-summary" aria-live="polite"><span class="questionnaire-badge questionnaire-badge--blue" id="bmi-value">BMI —</span><span>BMI alone does not determine whether treatment is right for you.</span></p>
+      </section>
+      <fieldset class="questionnaire-card questionnaire-question" data-screening-question="adult">
+        <legend>Are you 18 or older?</legend>
+        <div class="questionnaire-options">{% for option in form.adult %}<label>{{ option.tag }}<span>{{ option.choice_label }}</span></label>{% endfor %}</div>
+        {% for error in form.adult.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+      </fieldset>
+      <fieldset class="questionnaire-card questionnaire-question" data-screening-question="weight_related_condition">
+        <legend>Do you have a weight-related condition?</legend>
+        <p>High blood pressure, type 2 diabetes, sleep apnoea, fatty liver, high cholesterol.</p>
+        <div class="questionnaire-options">{% for option in form.weight_related_condition %}<label>{{ option.tag }}<span>{{ option.choice_label }}</span></label>{% endfor %}</div>
+        {% for error in form.weight_related_condition.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+      </fieldset>
+      <fieldset class="questionnaire-card questionnaire-question" data-screening-question="pregnancy">
+        <legend>Are you pregnant, breastfeeding, or planning a pregnancy within a year?</legend>
+        <div class="questionnaire-options">{% for option in form.pregnancy %}<label>{{ option.tag }}<span>{{ option.choice_label }}</span></label>{% endfor %}</div>
+        {% for error in form.pregnancy.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+      </fieldset>
+      <fieldset class="questionnaire-card questionnaire-question" data-screening-question="thyroid_history">
+        <legend>Any personal or family history of medullary thyroid cancer or MEN2?</legend>
+        <div class="questionnaire-options">{% for option in form.thyroid_history %}<label>{{ option.tag }}<span>{{ option.choice_label }}</span></label>{% endfor %}</div>
+        {% for error in form.thyroid_history.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+      </fieldset>
+      <fieldset class="questionnaire-card questionnaire-question" data-screening-question="pancreatitis">
+        <legend>Have you ever had pancreatitis?</legend>
+        <div class="questionnaire-options">{% for option in form.pancreatitis %}<label>{{ option.tag }}<span>{{ option.choice_label }}</span></label>{% endfor %}</div>
+        {% for error in form.pancreatitis.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+      </fieldset>
+      <section class="questionnaire-card" aria-labelledby="medication-heading">
+        <h2 id="medication-heading">Chronic medication and allergies</h2>
+        <p>Include the names and doses of any regular medication, and any allergies. If none, say “None”.</p>
+        <div class="question-field"><label class="questionnaire-sr-only" for="{{ form.health_context.id_for_label }}">Chronic medication, allergies and other information</label>{{ form.health_context }}{% for error in form.health_context.errors %}<small class="field-error">{{ error }}</small>{% endfor %}</div>
+      </section>
+      <section class="questionnaire-card questionnaire-card--consent" aria-labelledby="consent-heading">
+        <h2 id="consent-heading">Before you submit</h2>
+        <p>Please read the selected practice’s service, privacy and telehealth information before accepting. This acceptance does not opt you into marketing emails.</p>
+        <div class="questionnaire-consent-documents" id="practice-consent-documents">
+          {% for practice_documents in consent_documents_by_practice %}
+            <div class="questionnaire-practice-consent" data-practice-id="{{ practice_documents.practice_id }}">
+              <h3>{{ practice_documents.name }}</h3>
+              {% for document in practice_documents.documents %}<details class="questionnaire-consent-document"><summary>{{ document.title }} <span>· {{ document.version }}</span></summary><div>{{ document.body|linebreaks }}</div></details>{% empty %}<p>Consent documents are not available for this practice. Submission is unavailable until they are configured.</p>{% endfor %}
+            </div>
+          {% empty %}
+            {% for document in consent_documents %}<details class="questionnaire-consent-document"><summary>{{ document.title }} <span>· {{ document.version }}</span></summary><div>{{ document.body|linebreaks }}</div></details>{% empty %}<p>The practice’s consent information must be available before you submit.</p>{% endfor %}
+          {% endfor %}
+        </div>
+        <div class="question-check">{{ form.service_consent }}<div><label for="{{ form.service_consent.id_for_label }}">I accept the selected practice’s service terms, privacy notice and telehealth information.</label><p>My acceptance is recorded against this enquiry with the document versions, time and source. A consultation does not guarantee a prescription.</p></div></div>
+        {% for error in form.service_consent.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+      </section>
+      <footer class="questionnaire-submit-row"><span class="questionnaire-progress" id="screening-progress" aria-live="polite">0 of 5 answered</span><button class="questionnaire-button" type="submit">{% if editing %}Update my answers{% else %}Check my eligibility{% endif %}</button></footer>
+      <p class="questionnaire-legal">This is an enquiry, not an account registration or a treatment decision. No payment is taken when you submit.</p>
+    </form>
+  </section>
+  <script src="{% static 'js/questionnaire.js' %}?v=intake-20260912" defer></script>
+{% endblock %}

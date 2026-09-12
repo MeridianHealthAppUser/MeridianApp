@@ -1,0 +1,17 @@
+.incoming-call[hidden] { display:none; }
+.incoming-call { align-items:center; background:#fff; border:1px solid #b6dcd5; border-radius:16px; box-shadow:0 16px 48px #103c3833; color:#153c3e; display:flex; gap:14px; max-width:calc(100vw - 32px); padding:18px; position:fixed; right:16px; top:80px; width:460px; z-index:95; }
+.incoming-call__icon { align-items:center; background:#e2f5f0; border-radius:50%; color:#07877f; display:flex; flex:0 0 40px; font-size:24px; height:40px; justify-content:center; }
+.incoming-call__copy { display:grid; gap:4px; min-width:0; }
+.incoming-call__copy strong { font-size:15px; line-height:1.4; overflow-wrap:anywhere; }
+.incoming-call__copy span { color:#527579; font-size:13px; overflow-wrap:anywhere; }
+.incoming-call__copy small { color:#6a8183; font-size:12px; line-height:1.45; }
+.incoming-call__actions { display:grid; flex:0 0 auto; gap:5px; }
+.incoming-call__actions :is(a,button) { align-items:center; border:0; border-radius:8px; cursor:pointer; display:flex; font:inherit; font-size:13px; font-weight:700; justify-content:center; min-height:44px; padding:8px 12px; text-decoration:none; }
+.incoming-call__actions .incoming-call__join { background:#07877f; color:#fff; }
+.incoming-call__actions button { background:#f0f6f4; color:#31595a; }
+.incoming-call :is(a,button):focus-visible { outline:3px solid #0a7771; outline-offset:3px; }
+@media(max-width:480px) {
+  .incoming-call { align-items:start; gap:10px; padding:14px; top:12px; }
+  .incoming-call__icon { display:none; }
+  .incoming-call__copy { flex:1 1 auto; }
+}

@@ -1,0 +1,25 @@
+{% extends 'portal/staff_page_base.html' %}
+{% load static %}
+{% block title %}Request blood tests | {{ patient }} | Meridian{% endblock %}
+{% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/clinical_workflow.css' %}">{% endblock %}
+{% block breadcrumb %}<span>Clinical · Blood tests</span><span class="console-breadcrumb__dot" aria-hidden="true"></span><span>{{ company.name }}</span>{% endblock %}
+
+{% block page_heading %}
+  <header class="staff-page-header"><div><p class="console-kicker">Clinical · New request</p><h1>Request blood tests</h1><p>{{ patient }} · {{ company.name }}</p></div><div class="clinical-heading-actions"><a class="console-button console-button--secondary" href="{% url 'portal:patient-detail' patient.pk %}">Open patient record</a><a class="console-button console-button--quiet" href="{% url 'portal:clinical-labs' %}">All requests</a></div></header>
+{% endblock %}
+
+{% block page_content %}
+  <div class="clinical-workflow clinical-workflow-grid">
+    <section class="staff-page-card" aria-labelledby="new-lab-request-heading">
+      <header class="staff-page-card__header"><div><h2 id="new-lab-request-heading">Request details</h2><p>Specify the tests you are requesting for this patient.</p></div></header>
+      <div class="clinical-panel-body"><form class="console-form" method="post" action="{{ request.path }}">
+        {% csrf_token %}<input type="hidden" name="clinical_context" value="{{ clinical_context }}">
+        {{ form.non_field_errors }}
+        <div class="console-form__field"><label for="{{ form.panel_name.id_for_label }}">{{ form.panel_name.label }}</label>{{ form.panel_name }}{{ form.panel_name.errors }}<span class="helptext">Enter the panel or individual tests you have decided to request.</span></div>
+        <div class="console-form__field"><label for="{{ form.due_on.id_for_label }}">{{ form.due_on.label }}</label>{{ form.due_on }}{{ form.due_on.errors }}<span class="helptext">Optional date for the patient to provide their report.</span></div>
+        <div class="clinical-form-actions"><button class="console-button console-button--primary" type="submit">Create request</button><a class="console-button console-button--quiet" href="{% url 'portal:clinical-labs' %}">Cancel</a></div>
+      </form></div>
+    </section>
+    <aside class="staff-page-card" aria-labelledby="lab-request-next-heading"><header class="staff-page-card__header"><div><h2 id="lab-request-next-heading">What happens next</h2></div></header><div class="clinical-panel-body"><p class="clinical-panel-description">The request appears in the patient's portal. The patient, or the requesting doctor, can upload one PDF report when it is ready.</p><p class="clinical-panel-description">Uploading a report raises a review task for the requesting doctor. Reports are not automatically interpreted.</p><p class="clinical-panel-description">This records a request in Meridian; it does not send an order to a laboratory or email a request form.</p></div></aside>
+  </div>
+{% endblock %}

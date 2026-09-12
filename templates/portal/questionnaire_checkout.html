@@ -1,0 +1,34 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Payment preview | {{ lead.company.name }}{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{% static 'css/questionnaire.css' %}?v=intake-20260912">{% endblock %}
+
+{% block content %}
+  <section class="questionnaire-checkout-layout" aria-labelledby="checkout-title">
+    <header class="questionnaire-result-heading">
+      <p class="questionnaire-step">Consultation · Payment preview</p>
+      <h1 id="checkout-title">Your initial consultation</h1>
+      <p>Review the consultation cost for {{ lead.company.name }}. No payment details are needed in this preview.</p>
+    </header>
+    <aside class="questionnaire-callout questionnaire-callout--warm"><span class="questionnaire-badge questionnaire-badge--blue">Dummy checkout</span><div><strong>No payment is taken. No account is created.</strong><p>You remain a lead. Real payment, appointment booking and account activation will be connected in a later checkpoint.</p></div></aside>
+    <section class="questionnaire-card questionnaire-checkout-summary" aria-labelledby="checkout-summary-heading">
+      <h2 class="questionnaire-kicker" id="checkout-summary-heading">Your enquiry</h2>
+      <dl class="questionnaire-review-list">
+        <div><dt>Name</dt><dd>{{ lead.first_name }} {{ lead.last_name }}</dd></div>
+        <div><dt>Practice</dt><dd>{{ lead.company.name }}</dd></div>
+        <div><dt>Email</dt><dd>{{ lead.email }}</dd></div>
+        <div><dt>Appointment</dt><dd>No appointment reserved</dd></div>
+      </dl>
+    </section>
+    <section class="questionnaire-card" aria-labelledby="checkout-cost-heading">
+      <h2 class="questionnaire-kicker" id="checkout-cost-heading">Consultation cost</h2>
+      <dl class="questionnaire-price-list"><div class="questionnaire-price-row"><dt>Initial consultation<span>30 minutes with a doctor, on Zoom</span></dt><dd>{% if pricing %}R{{ pricing.initial_consult_fee|floatformat:"-2" }}{% else %}<small>Price not configured</small>{% endif %}</dd></div></dl>
+      <p class="questionnaire-legal">This screen does not collect card details, process a charge or send a Zoom link. There is no paid consultation or subscription yet.</p>
+      <div class="questionnaire-checkout-actions">
+        <button class="questionnaire-button" type="button" disabled>Payment unavailable · preview only</button>
+        <a class="questionnaire-button questionnaire-button--secondary" href="{% url 'portal:questionnaire-result' %}">Back to my enquiry</a>
+      </div>
+    </section>
+  </section>
+{% endblock %}

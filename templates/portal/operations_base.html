@@ -1,0 +1,3 @@
+{% extends 'portal/staff_page_base.html' %}{% load static %}
+{% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/operations.css' %}">{% endblock %}
+{% block page_content %}<div class="ops-workspace">{% block operations_filters %}{% endblock %}{% block operations_content %}{% endblock %}</div>{% endblock %}

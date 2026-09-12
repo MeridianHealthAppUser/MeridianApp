@@ -1,0 +1,25 @@
+<section class="staff-page-card backoffice-panel" aria-labelledby="appointment-video-heading">
+  <h2 id="appointment-video-heading">Video consultation</h2>
+  <div class="backoffice-actions">{% include 'portal/includes/video_join_link.html' %}</div>
+  <p>Only the booked doctor and patient can enter the native video room during its join window. Opening the room is a preflight step: your camera and microphone stay off until you choose to join.</p>
+  <h3>Connection history</h3>
+  <p class="backoffice-muted">These are signalling connection records, not recordings or proof of consultation attendance. No audio, video, screen content or signalling payload is stored here.</p>
+  {% if call_sessions %}
+    <div class="backoffice-table-wrap">
+      <table>
+        <thead><tr><th scope="col">Started (SAST)</th><th scope="col">Connection ended (SAST)</th><th scope="col">Signalling duration</th><th scope="col">Booked doctor</th></tr></thead>
+        <tbody>{% for session in call_sessions %}<tr>
+          <td><time datetime="{{ session.started_at|date:'c' }}">{{ session.started_at|date:'j M Y, H:i:s' }}</time></td>
+          <td>{% if session.effective_ended_at %}<time datetime="{{ session.effective_ended_at|date:'c' }}">{{ session.effective_ended_at|date:'j M Y, H:i:s' }}</time>{% else %}Connection lease active{% endif %}</td>
+          <td>{{ session.signalling_duration_seconds }} seconds</td>
+          <td>{{ session.doctor.full_name }}</td>
+        </tr>{% endfor %}</tbody>
+      </table>
+    </div>
+    {% if call_history_page.has_other_pages %}<nav class="backoffice-actions" aria-label="Video connection history pages">
+      {% if call_history_page.has_previous %}<a class="console-button console-button--secondary" href="?call_page={{ call_history_page.previous_page_number }}#appointment-video-heading">Newer records</a>{% endif %}
+      <span>Page {{ call_history_page.number }} of {{ call_history_page.paginator.num_pages }}</span>
+      {% if call_history_page.has_next %}<a class="console-button console-button--secondary" href="?call_page={{ call_history_page.next_page_number }}#appointment-video-heading">Older records</a>{% endif %}
+    </nav>{% endif %}
+  {% else %}<p>No video connection history has been recorded for this appointment.</p>{% endif %}
+</section>

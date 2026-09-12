@@ -1,0 +1,61 @@
+{% extends 'portal/staff_page_base.html' %}
+{% load static %}
+
+{% block title %}Leads | {{ company.name }} | Meridian{% endblock %}
+{% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/leads.css' %}">{% endblock %}
+{% block breadcrumb %}<span>Leads</span><span class="console-breadcrumb__dot" aria-hidden="true"></span><span>{{ company.name }}</span>{% endblock %}
+
+{% block page_heading %}
+  <header class="staff-page-header"><div><p class="console-kicker">Practice enquiries</p><h1>Leads</h1><p>Questionnaire submissions for {{ company.name }}. A lead is not a patient account; viewing an enquiry does not convert it.</p></div></header>
+{% endblock %}
+
+{% block page_content %}
+  <section class="staff-metrics staff-metrics--four" aria-label="Lead summary">
+    <article><span>Total enquiries</span><strong>{{ metrics.total }}</strong></article>
+    <article><span>Cleared for consult</span><strong>{{ metrics.cleared }}</strong></article>
+    <article><span>Needs review</span><strong>{{ metrics.referred }}</strong></article>
+    <article><span>Converted</span><strong>{{ metrics.converted }}</strong></article>
+  </section>
+  <section class="staff-page-card" aria-labelledby="lead-filters-heading">
+    <header class="staff-page-card__header"><div><h2 id="lead-filters-heading">Find an enquiry</h2><p>Use the practice selector above to switch between practices you administer.</p></div></header>
+    <form class="staff-filter-form staff-filter-form--leads" method="get" action="{% url 'portal:staff-leads' %}">
+      {{ filter_form.non_field_errors }}
+      <div class="staff-filter-form__field">{{ filter_form.q.label_tag }}{{ filter_form.q }}{{ filter_form.q.errors }}</div>
+      <div class="staff-filter-form__field">{{ filter_form.screening_status.label_tag }}{{ filter_form.screening_status }}{{ filter_form.screening_status.errors }}</div>
+      <div class="staff-filter-form__field">{{ filter_form.stage.label_tag }}{{ filter_form.stage }}{{ filter_form.stage.errors }}</div>
+      <div class="staff-filter-form__field">{{ filter_form.follow_up.label_tag }}{{ filter_form.follow_up }}{{ filter_form.follow_up.errors }}</div>
+      <button class="console-button console-button--primary" type="submit">Apply filters</button>
+    </form>
+  </section>
+  <section class="staff-page-card staff-page-card--list" aria-labelledby="lead-list-heading">
+    <header class="staff-page-card__header"><div><h2 id="lead-list-heading">Enquiries</h2><p>Screening status is separate from payment and account activation.</p></div><span class="staff-page-card__count">{{ page_obj.paginator.count }} lead{{ page_obj.paginator.count|pluralize }}</span></header>
+    {% if filter_form.errors %}<div class="staff-filter-error" role="alert">Correct the filter fields above to view leads.</div>{% else %}
+      <div class="staff-lead-table-wrap">
+        <table class="staff-lead-table">
+          <thead><tr><th scope="col">Name</th><th scope="col">Contact</th><th scope="col">ID / passport</th><th scope="col">BMI</th><th scope="col">Screening</th><th scope="col">Stage</th><th scope="col">Submitted</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead>
+          <tbody>
+            {% for lead in leads %}
+              <tr>
+                <td data-label="Name"><a class="staff-lead-name" href="{% url 'portal:lead-detail' lead.pk %}">{{ lead.first_name }} {{ lead.last_name }}</a></td>
+                <td data-label="Contact"><span class="staff-lead-contact">{{ lead.email }}</span><span class="staff-lead-secondary">{{ lead.phone|default:"No phone provided" }}</span></td>
+                <td data-label="ID / passport">{{ lead.id_number|default:"Not provided" }}</td>
+                <td data-label="BMI">{% if lead.bmi %}{{ lead.bmi|floatformat:1 }}{% else %}—{% endif %}</td>
+                <td data-label="Screening"><span class="lead-status lead-status--{{ lead.screening_status }}">{{ lead.get_screening_status_display }}</span></td>
+                <td data-label="Stage">{{ lead.get_stage_display }}{% if lead.follow_up_status %}<span class="staff-lead-secondary">Follow-up: {{ lead.follow_up_status }}{% if lead.next_contact_on %} · {{ lead.next_contact_on|date:'j M' }}{% endif %}</span>{% endif %}</td>
+                <td data-label="Submitted"><time datetime="{{ lead.created_at|date:'c' }}">{{ lead.created_at|date:"j M Y, H:i" }} SAST</time></td>
+                <td data-label="Actions"><a class="console-button console-button--quiet" href="{% url 'portal:lead-detail' lead.pk %}">Open lead</a></td>
+              </tr>
+            {% empty %}<tr><td colspan="8"><div class="staff-empty-state"><p>No leads match these filters for {{ company.name }}.</p></div></td></tr>{% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% endif %}
+  </section>
+  {% if page_obj.has_other_pages %}
+    <nav class="staff-pagination" aria-label="Lead pages">
+      {% if page_obj.has_previous %}<a class="console-button console-button--quiet" href="?{{ pagination_query }}{% if pagination_query %}&amp;{% endif %}page={{ page_obj.previous_page_number }}">Previous</a>{% endif %}
+      <span>Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+      {% if page_obj.has_next %}<a class="console-button console-button--quiet" href="?{{ pagination_query }}{% if pagination_query %}&amp;{% endif %}page={{ page_obj.next_page_number }}">Next</a>{% endif %}
+    </nav>
+  {% endif %}
+{% endblock %}

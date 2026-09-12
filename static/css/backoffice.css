@@ -1,0 +1,21 @@
+.backoffice { display: grid; gap: 1.2rem; min-width: 0; }
+.backoffice-panel { padding: 1.5rem; min-width: 0; }
+.backoffice-grid { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 1.2rem; align-items: start; }
+.backoffice-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; }
+.backoffice .console-form textarea { width: 100%; resize: vertical; }
+.backoffice table { width: 100%; border-collapse: collapse; text-align: left; }
+.backoffice th, .backoffice td { padding: 1rem; border-bottom: 1px solid var(--border, #e3ecee); vertical-align: top; }
+.backoffice th { font-size: .72rem; text-transform: uppercase; letter-spacing: .08em; color: #78909a; }
+.backoffice td a { font-weight: 600; color: #0b7e76; }
+.backoffice-table-wrap { overflow-x: auto; }
+.backoffice-table-wrap table { min-width: 660px; }
+.backoffice-note { padding: 1.2rem; border-bottom: 1px solid #e3ecee; overflow-wrap: anywhere; }
+.backoffice-note p { white-space: normal; margin: .5rem 0; }
+.backoffice-note small, .backoffice-muted { color: #68828c; }
+.backoffice-actions { display: flex; flex-wrap: wrap; gap: .6rem; align-items: center; }
+.backoffice-metrics { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(165px, 1fr)); }
+.backoffice-metrics strong { display: block; font-size: 1.7rem; }
+.backoffice .console-button--primary { color: #fff; }
+.backoffice .errorlist { color: #a4302e; }
+@media (max-width: 760px) { .backoffice-grid { grid-template-columns: 1fr; } .backoffice-panel { padding: 1rem; } }
+@media print { .console-sidebar, .console-topbar, .mobile-bottom-nav, .site-header, .site-footer, .backoffice-actions, .backoffice form { display: none !important; } .console-shell, .console-main { display: block; margin: 0; padding: 0; } }

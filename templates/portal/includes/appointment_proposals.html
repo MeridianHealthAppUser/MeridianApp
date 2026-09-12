@@ -1,0 +1,117 @@
+{% comment %}
+  Included inside an open secure-conversation thread. The parent supplies
+  `thread`, `is_patient_portal`, `can_propose_appointments`, `failed_form`,
+  `reply_thread_id`, `proposal_error`, and `failed_proposal_id`.
+{% endcomment %}
+<section class="appointment-proposals" aria-labelledby="appointment-proposals-{{ thread.pk }}">
+  <div class="appointment-proposals__heading">
+    <div>
+      <h3 id="appointment-proposals-{{ thread.pk }}">Appointment suggestions</h3>
+      <p>Times shown in South Africa time (SAST).</p>
+    </div>
+  </div>
+
+  <div class="appointment-proposal-list">
+    {% for proposal in thread.appointment_proposals_list %}
+      <article class="appointment-proposal appointment-proposal--{{ proposal.status }}">
+        <div class="appointment-proposal__topline">
+          <span class="proposal-kind">{{ proposal.get_kind_display }}</span>
+          <span class="proposal-status proposal-status--{{ proposal.status }}">{{ proposal.get_status_display }}</span>
+        </div>
+        <div class="appointment-proposal__times">
+          <div>
+            <span>Suggested time</span>
+            <strong><time datetime="{{ proposal.proposed_starts_at|date:'c' }}">{{ proposal.proposed_starts_at|date:"D, j M Y · H:i" }} SAST</time></strong>
+          </div>
+          <div>
+            <span>Original time</span>
+            {% if proposal.original_starts_at %}
+              <strong><time datetime="{{ proposal.original_starts_at|date:'c' }}">{{ proposal.original_starts_at|date:"D, j M Y · H:i" }} SAST</time></strong>
+            {% else %}
+              <strong>No appointment booked</strong>
+            {% endif %}
+          </div>
+        </div>
+        <p class="appointment-proposal__people">
+          Suggested by {% if proposal.proposed_by %}{{ proposal.proposed_by.full_name }}{% else %}Meridian care team{% endif %}
+          {% if proposal.recipient %} for {{ proposal.recipient.full_name }}{% endif %}.
+        </p>
+        {% if proposal.note %}<p class="appointment-proposal__note">{{ proposal.note|linebreaksbr }}</p>{% endif %}
+
+        {% if proposal.status == 'pending' and proposal.proposed_by == user %}
+          <p class="appointment-proposal__waiting">Waiting for {% if proposal.recipient %}{{ proposal.recipient.full_name }}{% else %}the recipient{% endif %} to respond.</p>
+        {% endif %}
+
+        {% if proposal_error and failed_proposal_id == proposal.pk %}
+          <p class="proposal-error" role="alert">{{ proposal_error }}</p>
+        {% endif %}
+
+        {% if proposal.can_respond and proposal.proposed_by != user %}
+          {% if is_patient_portal %}
+            {% url 'portal:patient-appointment-respond' proposal.pk as appointment_response_url %}
+          {% else %}
+            {% url 'portal:staff-appointment-respond' proposal.pk as appointment_response_url %}
+          {% endif %}
+          <form class="proposal-actions" method="post" action="{{ appointment_response_url }}">
+            {% csrf_token %}
+            {% if is_staff_inbox %}<input type="hidden" name="return_to" value="inbox">{% endif %}
+            <button class="console-button console-button--primary" type="submit" name="decision" value="accept">Accept</button>
+            <button class="console-button console-button--secondary" type="submit" name="decision" value="decline">Decline</button>
+          </form>
+        {% endif %}
+
+        {% if proposal.can_withdraw %}
+          {% if is_patient_portal %}
+            {% url 'portal:patient-appointment-respond' proposal.pk as appointment_withdraw_url %}
+          {% else %}
+            {% url 'portal:staff-appointment-respond' proposal.pk as appointment_withdraw_url %}
+          {% endif %}
+          <form class="proposal-actions proposal-actions--withdraw" method="post" action="{{ appointment_withdraw_url }}">
+            {% csrf_token %}
+            {% if is_staff_inbox %}<input type="hidden" name="return_to" value="inbox">{% endif %}
+            <button class="console-button console-button--quiet" type="submit" name="decision" value="withdraw">Withdraw suggestion</button>
+          </form>
+        {% endif %}
+      </article>
+    {% empty %}
+      <p class="appointment-proposals__empty">No appointment suggestions have been made in this conversation.</p>
+    {% endfor %}
+  </div>
+
+  {% if not thread.is_closed and can_propose_appointments %}
+    <details class="proposal-create"{% if failed_form == 'proposal_form' and reply_thread_id == thread.pk %} open{% elif is_patient_portal and request.GET.appointment %} open{% endif %}>
+      <summary>Suggest a different appointment time</summary>
+      {% if thread.has_selectable_appointments or thread.proposal_form.is_bound %}
+        {% if is_patient_portal %}
+          {% url 'portal:patient-appointment-propose' thread.pk as appointment_proposal_url %}
+        {% else %}
+          {% url 'portal:staff-appointment-propose' thread.pk as appointment_proposal_url %}
+        {% endif %}
+        <form class="console-form proposal-create__form" method="post" action="{{ appointment_proposal_url }}">
+          {% csrf_token %}
+          {% if is_staff_inbox %}<input type="hidden" name="return_to" value="inbox">{% endif %}
+          {{ thread.proposal_form.non_field_errors }}
+          <div class="console-form__field">
+            <label for="{{ thread.proposal_form.appointment.id_for_label }}">{{ thread.proposal_form.appointment.label }}</label>
+            {{ thread.proposal_form.appointment }}
+            {{ thread.proposal_form.appointment.errors }}
+          </div>
+          <div class="console-form__field">
+            <label for="{{ thread.proposal_form.proposed_starts_at.id_for_label }}">{{ thread.proposal_form.proposed_starts_at.label }}</label>
+            {{ thread.proposal_form.proposed_starts_at }}
+            {{ thread.proposal_form.proposed_starts_at.errors }}
+          </div>
+          <div class="console-form__field">
+            <label for="{{ thread.proposal_form.note.id_for_label }}">{{ thread.proposal_form.note.label }}</label>
+            {{ thread.proposal_form.note }}
+            {{ thread.proposal_form.note.errors }}
+          </div>
+          <p class="proposal-create__note">The appointment changes only after the other person accepts. Suggested times are not reserved. Sending a new suggestion replaces any pending suggestion for this appointment.</p>
+          <button class="console-button console-button--primary" type="submit">Send suggestion</button>
+        </form>
+      {% else %}
+        <p class="proposal-create__empty">No appointments available to change in this conversation.</p>
+      {% endif %}
+    </details>
+  {% endif %}
+</section>

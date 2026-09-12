@@ -1,0 +1,40 @@
+{% extends 'portal/staff_page_base.html' %}
+{% load static %}
+{% block title %}Blood tests | {{ company.name }} | Meridian{% endblock %}
+{% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/clinical_workflow.css' %}">{% endblock %}
+{% block breadcrumb %}<span>Clinical · Blood tests</span><span class="console-breadcrumb__dot" aria-hidden="true"></span><span>{{ company.name }}</span>{% endblock %}
+
+{% block page_heading %}
+  <header class="staff-page-header"><div><p class="console-kicker">Clinical · Blood tests</p><h1>Blood-test requests</h1><p>Track requested tests, uploaded reports and clinician review at {{ company.name }}.</p></div>{% if can_create %}<div class="clinical-heading-actions">{% if filter_form.cleaned_data.patient %}<a class="console-button console-button--primary" href="{% url 'portal:clinical-lab-create' filter_form.cleaned_data.patient.pk %}">Request blood tests</a>{% else %}<a class="console-button console-button--primary" href="{% url 'portal:patient-list' %}">Choose a patient</a>{% endif %}</div>{% endif %}</header>
+{% endblock %}
+
+{% block page_content %}
+  <div class="clinical-workflow">
+    <section class="staff-page-card" aria-labelledby="lab-filters-heading">
+      <header class="staff-page-card__header"><div><h2 id="lab-filters-heading">Find a request</h2><p>Filter by patient and review status.</p></div></header>
+      <form class="staff-filter-form clinical-filter-form" method="get" action="{% url 'portal:clinical-labs' %}">
+        {{ filter_form.non_field_errors }}
+        <div class="staff-filter-form__field"><label for="{{ filter_form.status.id_for_label }}">{{ filter_form.status.label }}</label>{{ filter_form.status }}{{ filter_form.status.errors }}</div>
+        <div class="staff-filter-form__field"><label for="{{ filter_form.patient.id_for_label }}">{{ filter_form.patient.label }}</label>{{ filter_form.patient }}{{ filter_form.patient.errors }}</div>
+        <button class="console-button console-button--primary" type="submit">Apply filters</button>
+      </form>
+    </section>
+    <section class="staff-page-card" aria-labelledby="lab-list-heading">
+      <header class="staff-page-card__header"><div><h2 id="lab-list-heading">Blood-test requests</h2></div><span class="staff-page-card__count">{{ page_obj.paginator.count }} request{{ page_obj.paginator.count|pluralize }}</span></header>
+      {% if filter_form.errors %}<div class="staff-filter-error" role="alert">Correct the filter fields above to view requests.</div>{% else %}
+        <div class="clinical-table-wrap"><table class="clinical-table" aria-labelledby="lab-list-heading">
+          <thead><tr><th scope="col">Patient</th><th scope="col">Panel / tests</th><th scope="col">Requested by</th><th scope="col">Due</th><th scope="col">Status</th><th scope="col">Action</th></tr></thead>
+          <tbody>{% for lab_request in lab_requests %}<tr>
+            <td data-label="Patient"><span class="clinical-table__person">{{ lab_request.patient }}</span></td>
+            <td data-label="Panel / tests"><span class="clinical-table__panel">{{ lab_request.panel_name }}</span></td>
+            <td data-label="Requested by">{{ lab_request.requested_by.full_name }}</td>
+            <td data-label="Due">{% if lab_request.due_on %}<time datetime="{{ lab_request.due_on|date:'Y-m-d' }}">{{ lab_request.due_on|date:"j M Y" }}</time>{% else %}Not specified{% endif %}</td>
+            <td data-label="Status"><span class="console-status console-status--{{ lab_request.status }}">{{ lab_request.get_status_display }}</span></td>
+            <td data-label="Action"><a class="console-button console-button--secondary" href="{% url 'portal:clinical-lab-detail' lab_request.pk %}">Open request<span class="sr-only"> for {{ lab_request.patient }}</span></a></td>
+          </tr>{% empty %}<tr><td class="clinical-table__empty" colspan="6">No blood-test requests match this view.</td></tr>{% endfor %}</tbody>
+        </table></div>
+      {% endif %}
+    </section>
+    {% if page_obj.has_other_pages %}<nav class="clinical-pagination" aria-label="Blood-test request pages">{% if page_obj.has_previous %}<a class="console-button console-button--secondary" href="?{{ pagination_query }}{% if pagination_query %}&amp;{% endif %}page={{ page_obj.previous_page_number }}">Previous</a>{% endif %}<span>Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>{% if page_obj.has_next %}<a class="console-button console-button--secondary" href="?{{ pagination_query }}{% if pagination_query %}&amp;{% endif %}page={{ page_obj.next_page_number }}">Next</a>{% endif %}</nav>{% endif %}
+  </div>
+{% endblock %}

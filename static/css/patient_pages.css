@@ -1,0 +1,129 @@
+/* Shared patient shell. Each navigation item loads its own server-rendered page. */
+.site-header { gap: .75rem; min-height: 4rem; }
+.site-header .header-actions { flex-wrap: wrap; justify-content: flex-end; }
+.patient-pages-console { --patient-text: #526f74; }
+.patient-page-topbar { align-items: center; display: flex; gap: 1rem; justify-content: space-between; margin: 0 auto; max-width: 76rem; padding: 1.25rem 2.25rem; }
+.patient-page-topbar > div:first-child { display: grid; gap: .2rem; min-width: 0; }
+.patient-page-topbar__label { color: var(--patient-text); font-size: .75rem; }
+.patient-page-topbar strong { font-size: .9rem; overflow-wrap: anywhere; }
+.patient-page-topbar .patient-console__account { color: var(--patient-text); }
+.patient-navigation { background: #fff; border-block: 1px solid var(--console-line); }
+.patient-navigation__links { display: flex; flex-wrap: wrap; gap: .5rem; margin: 0 auto; max-width: 76rem; padding: .7rem 2.25rem; }
+.patient-navigation a { align-items: center; border: 1px solid transparent; border-radius: .65rem; color: var(--patient-text); display: inline-flex; flex: 0 0 auto; font-size: .84rem; font-weight: 700; gap: .55rem; justify-content: center; min-height: 2.8rem; padding: .6rem .85rem; text-decoration: none; }
+.patient-navigation a:hover { background: #f3f9f7; color: var(--console-teal-dark); }
+.patient-navigation a.is-active { background: var(--console-teal-soft); border-color: #b7dfd6; color: var(--console-teal-dark); }
+.patient-navigation a:focus-visible { outline: 3px solid var(--console-teal); outline-offset: 2px; }
+.patient-navigation svg { fill: none; flex-shrink: 0; height: 1.1rem; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.7; width: 1.1rem; }
+.patient-page-content { max-width: 76rem; min-width: 0; padding-top: 2rem; }
+.patient-page-heading { align-items: center; display: flex; flex-wrap: wrap; gap: 1rem; justify-content: space-between; margin-bottom: 1.5rem; }
+.patient-page-heading h1 { color: var(--console-ink); font-family: Georgia, 'Times New Roman', serif; font-size: clamp(1.9rem, 3vw, 2.65rem); font-weight: 500; letter-spacing: -.035em; line-height: 1.15; margin: .2rem 0 .65rem; }
+.patient-page-heading p:not(.console-kicker) { color: var(--patient-text); font-size: .9rem; line-height: 1.6; margin: 0; max-width: 49rem; }
+.patient-page-heading .console-kicker { margin-bottom: .45rem; }
+.patient-page-grid { align-items: start; display: grid; gap: 1.2rem; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.patient-page-grid > *, .patient-page-content .console-card { min-width: 0; }
+.patient-page-stack { display: grid; gap: 1.2rem; }
+.patient-page-section { margin-top: 1.2rem; }
+.patient-page-content .console-card__header { flex-wrap: wrap; gap: .8rem; }
+.patient-page-content .console-card__heading p { color: var(--patient-text); line-height: 1.5; }
+.patient-page-content .console-card__heading h2 { font-size: .98rem; }
+.patient-page-content .console-button { white-space: normal; }
+.patient-page-content .console-form label { font-size: .8rem; }
+.patient-page-content .console-form input, .patient-page-content .console-form textarea, .patient-page-content .console-form select { font-size: .9rem; }
+.patient-page-content .console-form .helptext { color: var(--patient-text); font-size: .78rem; line-height: 1.5; }
+.patient-page-content .console-form ul.errorlist { font-size: .8rem; }
+.patient-page-content .console-form > .console-button { justify-self: start; }
+.patient-page-content .console-list__copy { overflow-wrap: anywhere; }
+.patient-page-content .metric-card__value { font-size: clamp(1.35rem, 2vw, 1.85rem); overflow-wrap: anywhere; }
+.patient-page-content .metric-card__hint { color: var(--patient-text); }
+.patient-page-content .console-metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); margin-bottom: 1.2rem; }
+.patient-page-content .patient-hero { min-height: auto; }
+.patient-page-content .patient-hero h1 { color: #fff; }
+.patient-page-content .patient-hero .console-kicker { color: #d5f2ec; }
+.patient-page-content .patient-hero p { color: #e2f5f0; }
+.patient-page-privacy { border-top: 1px solid var(--console-line); color: var(--patient-text); font-size: .78rem; line-height: 1.6; margin-top: 1.8rem; padding-top: 1.2rem; }
+.patient-page-privacy strong { color: var(--console-ink); }
+.patient-inline-link { color: var(--console-teal-dark); font-weight: 700; text-underline-offset: .18em; }
+.patient-inline-link:focus-visible { outline: 2px solid var(--console-teal); outline-offset: 3px; }
+.patient-empty { color: var(--patient-text); font-size: .85rem; line-height: 1.65; margin: 0; padding: 1.1rem 0; }
+.patient-empty p { margin: 0 0 .8rem; }
+.patient-empty p:last-child { margin-bottom: 0; }
+.patient-filter-form { align-items: end; display: flex; flex-wrap: wrap; gap: .75rem; padding: 0; }
+.patient-filter-form .console-form__field { min-width: 11rem; }
+.patient-table-wrap { overflow-x: auto; }
+.patient-table { border-collapse: collapse; font-size: .84rem; min-width: 0; text-align: left; width: 100%; }
+.patient-table th { color: var(--patient-text); font-size: .68rem; font-weight: 750; letter-spacing: .07em; padding: .9rem 1.15rem; text-transform: uppercase; }
+.patient-table td { border-top: 1px solid var(--console-soft-line); color: var(--console-ink); font-size: .84rem; line-height: 1.55; padding: 1.15rem; vertical-align: top; }
+.patient-table tbody tr:hover { background: #fbfdfc; }
+.patient-table__date { display: grid; gap: .2rem; min-width: 8rem; }
+.patient-table__date time { font-weight: 750; }
+.patient-table__date span { color: var(--patient-text); font-size: .8rem; }
+.patient-table__actions { align-items: flex-start; display: flex; flex-direction: column; gap: .65rem; min-width: 7rem; }
+.patient-table__note { color: var(--patient-text); max-width: 23rem; overflow-wrap: anywhere; white-space: normal; }
+.patient-table__empty { color: var(--patient-text); text-align: center; }
+.patient-pagination { align-items: center; display: flex; flex-wrap: wrap; gap: .85rem; justify-content: center; margin-top: 1.2rem; }
+.patient-pagination > span { color: var(--patient-text); font-size: .8rem; }
+.patient-care-notice { background: var(--console-teal-soft); border: 1px solid #c4e7de; border-radius: .9rem; color: #32625e; font-size: .84rem; line-height: 1.6; margin-top: 1.2rem; padding: 1rem 1.15rem; }
+.patient-care-notice p { margin: 0; }
+.patient-care-notice strong { color: var(--console-ink); }
+.patient-account-facts { display: grid; gap: 0; margin: 0; }
+.patient-account-facts > div { align-items: start; border-bottom: 1px solid var(--console-soft-line); display: grid; gap: .8rem; grid-template-columns: minmax(6rem, .8fr) minmax(0, 1.2fr); padding: .85rem 0; }
+.patient-account-facts > div:last-child { border-bottom: 0; }
+.patient-account-facts dt { color: var(--patient-text); font-size: .8rem; }
+.patient-account-facts dd { font-size: .84rem; font-weight: 650; line-height: 1.5; margin: 0; overflow-wrap: anywhere; }
+.patient-consent-list { display: grid; list-style: none; margin: 0; padding: 0; }
+.patient-consent-list li { align-items: start; border-bottom: 1px solid var(--console-soft-line); display: flex; gap: 1rem; justify-content: space-between; padding: .9rem 0; }
+.patient-consent-list li:last-child { border-bottom: 0; }
+.patient-consent-list li > div { display: grid; font-size: .85rem; gap: .3rem; min-width: 0; }
+.patient-consent-list small { color: var(--patient-text); font-size: .77rem; line-height: 1.6; overflow-wrap: anywhere; }
+.patient-progress-list { list-style: none; margin: 0; padding: 0; }
+.patient-progress-list li { align-items: center; border-bottom: 1px solid var(--console-soft-line); display: flex; gap: 1rem; justify-content: space-between; padding: 1rem 0; }
+.patient-progress-list li:last-child { border-bottom: 0; }
+.patient-progress-list time { color: var(--patient-text); font-size: .85rem; }
+.patient-progress-list strong { font-size: 1rem; }
+
+@media (max-width: 52rem) {
+  .patient-page-grid { grid-template-columns: 1fr; }
+  .patient-navigation__links { gap: .35rem; padding-inline: 1rem; }
+  .patient-navigation a { font-size: .8rem; gap: .4rem; padding-inline: .65rem; }
+  .patient-page-topbar { padding-inline: 1.5rem; }
+}
+
+@media (max-width: 42rem) {
+  html { scroll-padding-bottom: 6.5rem; }
+  .site-header { padding: .85rem 1rem; }
+  .site-header .company-switcher select { max-width: 9rem; }
+  .site-header .header-actions { column-gap: .5rem; row-gap: .25rem; }
+  .patient-page-topbar { align-items: flex-start; padding: 1rem; }
+  .patient-page-topbar .patient-console__account > span:last-child { display: none; }
+  .patient-page-topbar .console-avatar { height: 2rem; width: 2rem; }
+  .patient-navigation { bottom: 0; box-shadow: 0 -5px 22px rgba(21, 59, 57, .06); left: 0; position: fixed; right: 0; z-index: 30; }
+  .patient-navigation__links { flex-wrap: nowrap; gap: .15rem; justify-content: flex-start; overflow-x: auto; overscroll-behavior-x: contain; padding: .5rem .35rem calc(.5rem + env(safe-area-inset-bottom)); scrollbar-color: #a7ccc4 #f3f8f6; scrollbar-width: thin; }
+  .patient-navigation a { border-radius: .5rem; flex: 0 0 5.2rem; flex-direction: column; font-size: .72rem; gap: .3rem; min-height: 3.4rem; min-width: 0; padding: .35rem .3rem; text-align: center; }
+  .patient-navigation svg { height: 1.1rem; width: 1.1rem; }
+  .patient-page-content { padding: 1.1rem 1rem calc(7rem + env(safe-area-inset-bottom)); }
+  .patient-page-content .console-metrics { gap: .6rem; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .patient-page-content .console-metrics > :last-child:nth-child(3) { grid-column: 1 / -1; }
+  .patient-page-content .metric-card { min-height: 6.5rem; }
+  .patient-page-content .console-card__header, .patient-page-content .console-card__body { padding-inline: 1rem; }
+  .patient-page-content .console-form input, .patient-page-content .console-form textarea, .patient-page-content .console-form select { font-size: 1rem; }
+  .patient-page-content .console-form__row { grid-template-columns: 1fr; }
+  .patient-page-content .console-list__item { align-items: start; }
+  .patient-page-content .console-list__item > .console-status { grid-column: 2; justify-self: start; }
+  .patient-filter-form, .patient-filter-form .console-form__field { width: 100%; }
+  .patient-table-wrap { overflow: visible; }
+  .patient-table, .patient-table tbody, .patient-table tr, .patient-table td { display: block; }
+  .patient-table thead { clip: rect(0 0 0 0); clip-path: inset(50%); height: 1px; overflow: hidden; position: absolute; white-space: nowrap; width: 1px; }
+  .patient-table tr { border-top: 1px solid var(--console-line); padding: .9rem 1rem; }
+  .patient-table td { border: 0; display: grid; gap: .75rem; grid-template-columns: minmax(5.25rem, .7fr) minmax(0, 1.3fr); padding: .45rem 0; }
+  .patient-table td::before { color: var(--patient-text); content: attr(data-label); font-size: .67rem; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; }
+  .patient-table td > .console-status { justify-self: start; }
+  .patient-table__date, .patient-table__actions { min-width: 0; }
+  .patient-table .patient-table__empty { display: block; padding: .75rem 0; }
+  .patient-table__empty::before { display: none; }
+  .patient-consent-list li { flex-wrap: wrap; gap: .6rem; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .patient-pages-console .console-button { transition: none; }
+  .patient-pages-console .console-button:hover { transform: none; }
+}

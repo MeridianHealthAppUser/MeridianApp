@@ -1,0 +1,178 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Patient messages | {{ company.name }} | Meridian{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{% static 'css/console.css' %}">{% endblock %}
+{% block content %}
+  <div class="meridian-console console-desktop inbox-console">
+    <div class="console-shell">
+      <aside class="console-sidebar" aria-label="Practice navigation">
+        <div class="console-sidebar__practice">
+          <span class="console-practice-mark" aria-hidden="true">M</span>
+          <div>
+            <p>Active practice</p>
+            <strong>{{ company.name }}</strong>
+          </div>
+        </div>
+
+        {% include 'portal/includes/staff_navigation.html' with nav_section='messages' %}
+
+      </aside>
+
+      <div class="console-main">
+        <header class="console-topbar">
+          <div class="console-breadcrumb">
+            <span>Patient messages</span>
+            <span class="console-breadcrumb__dot" aria-hidden="true"></span>
+            <span>{{ company.name }}</span>
+          </div>
+          <div class="console-topbar__right">
+            <a class="console-icon-button" href="{% url 'portal:desktop-dashboard' %}" aria-label="Back to overview"><span aria-hidden="true">←</span><span>Overview</span></a>
+          </div>
+        </header>
+
+        <main class="console-content inbox-content">
+          <header class="inbox-page-header">
+            <div>
+              <p class="console-kicker">Secure conversations</p>
+              <h1>Patient messages</h1>
+              <p>Review and reply to conversations in {{ company.name }}.</p>
+            </div>
+          </header>
+
+          <section class="inbox-metrics" aria-label="Message summary">
+            <article>
+              <span>Threads in view</span>
+              <strong>{{ metrics.total }}</strong>
+            </article>
+            <article>
+              <span>Awaiting a reply</span>
+              <strong>{{ metrics.awaiting }}</strong>
+            </article>
+            <article>
+              <span>Answered</span>
+              <strong>{{ metrics.answered }}</strong>
+            </article>
+          </section>
+
+          <nav class="inbox-filters" aria-label="Filter patient messages">
+            <a{% if filter_status == 'all' %} class="is-active" aria-current="page"{% endif %} href="{% url 'portal:staff-inbox' %}?status=all">Everything</a>
+            <a{% if filter_status == 'awaiting' %} class="is-active" aria-current="page"{% endif %} href="{% url 'portal:staff-inbox' %}?status=awaiting">Awaiting a reply</a>
+            <a{% if filter_status == 'answered' %} class="is-active" aria-current="page"{% endif %} href="{% url 'portal:staff-inbox' %}?status=answered">Answered</a>
+          </nav>
+
+          <section class="inbox-workspace" aria-label="Patient message workspace">
+            <aside class="inbox-thread-pane" aria-labelledby="inbox-thread-list-heading">
+              <div class="inbox-thread-pane__header">
+                <h2 id="inbox-thread-list-heading">Conversations</h2>
+                <span>{{ page_obj.paginator.count }}</span>
+              </div>
+
+              <ol class="inbox-thread-list">
+                {% for thread in threads %}
+                  <li class="inbox-thread-list__item{% if selected_thread and selected_thread.pk == thread.pk %} is-selected{% endif %}">
+                    <a class="inbox-thread"{% if selected_thread and selected_thread.pk == thread.pk %} aria-current="page"{% endif %} href="{% url 'portal:staff-inbox' %}?status={{ filter_status }}&amp;page={{ page_obj.number }}&amp;thread={{ thread.pk }}#inbox-conversation">
+                      <span class="console-patient-avatar" aria-hidden="true">{{ thread.patient.first_name|slice:":1"|upper }}{{ thread.patient.last_name|slice:":1"|upper }}</span>
+                      <span class="inbox-thread__copy">
+                        <strong>{{ thread.patient }}</strong>
+                        <span>{{ thread.subject|default:"Patient message" }}</span>
+                        {% if thread.latest_body %}<small>{{ thread.latest_body|truncatechars:64 }}</small>{% endif %}
+                        <span class="inbox-thread__meta">
+                          {% if thread.last_activity %}<time datetime="{{ thread.last_activity|date:'c' }}">{{ thread.last_activity|timesince }} ago</time>{% endif %}
+                          {% if thread.unread_count %}<span class="inbox-thread__unread">{{ thread.unread_count }} unread</span>{% endif %}
+                          {% if thread.is_closed %}
+                            <span class="inbox-thread__state">Closed</span>
+                          {% elif not thread.has_message %}
+                            <span class="inbox-thread__state">No messages yet</span>
+                          {% elif thread.is_awaiting_reply %}
+                            <span class="inbox-thread__state inbox-thread__state--awaiting">Awaiting reply</span>
+                          {% else %}
+                            <span class="inbox-thread__state">Answered</span>
+                          {% endif %}
+                        </span>
+                      </span>
+                    </a>
+                    <a class="inbox-thread__record" href="{% url 'portal:patient-detail' thread.patient_id %}?thread={{ thread.pk }}#conversation-{{ thread.pk }}">Open record<span class="sr-only"> for {{ thread.patient }}</span></a>
+                  </li>
+                {% empty %}
+                  <li class="inbox-thread-list__empty">No conversations match this filter.</li>
+                {% endfor %}
+              </ol>
+
+              {% if is_paginated %}
+                <nav class="inbox-pagination" aria-label="Conversation pages">
+                  {% if page_obj.has_previous %}
+                    <a class="console-button console-button--quiet" href="{% url 'portal:staff-inbox' %}?status={{ filter_status }}&amp;page={{ page_obj.previous_page_number }}">Previous</a>
+                  {% endif %}
+                  <span>Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+                  {% if page_obj.has_next %}
+                    <a class="console-button console-button--quiet" href="{% url 'portal:staff-inbox' %}?status={{ filter_status }}&amp;page={{ page_obj.next_page_number }}">Next</a>
+                  {% endif %}
+                </nav>
+              {% endif %}
+            </aside>
+
+            <section class="inbox-conversation" id="inbox-conversation" aria-live="polite">
+              {% if selected_thread %}
+                <header class="inbox-conversation__header">
+                  <div class="inbox-conversation__identity">
+                    <span class="console-patient-avatar" aria-hidden="true">{{ selected_thread.patient.first_name|slice:":1"|upper }}{{ selected_thread.patient.last_name|slice:":1"|upper }}</span>
+                    <div>
+                      <p>{{ selected_thread.patient }}</p>
+                      <h2>{{ selected_thread.subject|default:"Patient message" }}</h2>
+                    </div>
+                  </div>
+                  <div class="staff-schedule-header-actions"><a class="console-button console-button--quiet" href="{% url 'portal:conversation-manage' selected_thread.pk %}">Route / manage</a><a class="console-button console-button--quiet" href="{% if active_membership.role == 'doctor' or active_membership.role == 'super_admin' %}{% url 'portal:staff-patient-record' selected_thread.patient_id %}{% else %}{% url 'portal:patient-detail' selected_thread.patient_id %}{% endif %}">Open record</a></div>
+                </header>
+
+                <ol class="inbox-message-list" aria-label="Messages in {{ selected_thread.subject }}">
+                  {% for message in selected_thread.conversation_messages %}
+                    <li class="inbox-message{% if message.is_from_patient %} inbox-message--patient{% else %} inbox-message--staff{% endif %}">
+                      <div class="inbox-message__meta">
+                        <strong>{% if message.is_from_patient %}{{ selected_thread.patient }}{% elif message.sender %}{{ message.sender.full_name }}{% else %}Meridian care team{% endif %}</strong>
+                        <time datetime="{{ message.created_at|date:'c' }}">{{ message.created_at|date:"j M Y, H:i" }}</time>
+                      </div>
+                      <p>{{ message.body|linebreaksbr }}</p>
+                    </li>
+                  {% empty %}
+                    <li class="inbox-message-list__empty">There are no messages in this conversation yet.</li>
+                  {% endfor %}
+                </ol>
+
+                {% include 'portal/includes/appointment_proposals.html' with thread=selected_thread %}
+
+                {% if not selected_thread.is_closed %}
+                  <form class="console-form inbox-reply-form" method="post" action="{% url 'portal:staff-message-create' selected_thread.pk %}">
+                    {% csrf_token %}
+                    <input type="hidden" name="return_to" value="inbox">
+                    {{ message_form.non_field_errors }}
+                    <div class="console-form__field">
+                      <label for="{{ message_form.body.id_for_label }}">Reply</label>
+                      {{ message_form.body }}
+                      {{ message_form.body.errors }}
+                    </div>
+                    <div class="inbox-reply-form__footer">
+                      <p>Replies are timestamped and attributed in the patient record.</p>
+                      <button class="console-button console-button--primary" type="submit">Send reply</button>
+                    </div>
+                  </form>
+                {% else %}
+                  <p class="inbox-conversation__closed">This conversation is closed and remains available to read.</p>
+                {% endif %}
+              {% else %}
+                <div class="inbox-conversation__empty">
+                  <p class="console-kicker">No conversation selected</p>
+                  <h2>Choose a patient message</h2>
+                  <p>Select a conversation on the left to review its secure message history.</p>
+                </div>
+              {% endif %}
+            </section>
+          </section>
+
+          <p class="inbox-page-note">Administrators can handle administrative questions here. Appointment-time agreements remain between the booked doctor and patient.</p>
+        </main>
+      </div>
+    </div>
+    {% include 'portal/includes/staff_mobile_navigation.html' with nav_section='messages' %}
+  </div>
+{% endblock %}

@@ -1,0 +1,366 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}{{ patient }} | {{ company.name }} | Meridian{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{% static 'css/console.css' %}">{% endblock %}
+{% block content %}
+  <div class="meridian-console console-desktop patient-record-console">
+    <div class="console-shell">
+      <aside class="console-sidebar" aria-label="Practice navigation">
+        <div class="console-sidebar__practice">
+          <span class="console-practice-mark" aria-hidden="true">M</span>
+          <div>
+            <p>Active practice</p>
+            <strong>{{ company.name }}</strong>
+          </div>
+        </div>
+
+        {% include 'portal/includes/staff_navigation.html' with nav_section='record' %}
+
+      </aside>
+
+      <div class="console-main">
+        <header class="console-topbar">
+          <div class="console-breadcrumb">
+            <a class="console-breadcrumb__link" href="{% url 'portal:patient-list' %}">Patients</a>
+            <span class="console-breadcrumb__dot" aria-hidden="true"></span>
+            <span>{{ patient }}</span>
+          </div>
+          <div class="console-topbar__right">
+            <a class="console-icon-button" href="{% url 'portal:staff-inbox' %}"><span aria-hidden="true">●</span><span>Messages</span></a>
+            <a class="console-icon-button" href="#add-care"><span aria-hidden="true">+</span><span>Add care</span></a>
+          </div>
+        </header>
+
+        <main class="console-content" id="summary">
+          <section class="record-hero" aria-labelledby="patient-name">
+            <div class="record-identity">
+              <span class="record-avatar" aria-hidden="true">{{ patient.first_name|slice:":1"|upper }}{{ patient.last_name|slice:":1"|upper }}</span>
+              <div>
+                <p class="console-kicker">Clinical record</p>
+                <h1 id="patient-name">{{ patient }}</h1>
+                <p class="record-hero__subline">{% if patient.user %}{{ patient.user.email }}{% elif patient.phone %}{{ patient.phone }}{% else %}Contact details pending{% endif %}</p>
+              </div>
+            </div>
+            <div class="record-hero__actions">
+              {% if patient.is_active %}<span class="console-status console-status--active">Active patient</span>{% else %}<span class="console-status">Inactive record</span>{% endif %}
+              <a class="console-button console-button--secondary" href="#add-care">Add clinical activity</a>
+            </div>
+          </section>
+
+          {% if can_view_clinical_notes %}
+            <section class="console-section console-card" aria-label="Clinical workflows">
+              <div class="console-card__body record-hero__actions">
+                <a class="console-button console-button--secondary" href="{% url 'portal:clinical-consultations' %}?patient={{ patient.pk }}">Consultation notes</a>
+                <a class="console-button console-button--secondary" href="{% url 'portal:staff-patient-record' patient.pk %}">Full clinical record</a>
+                <a class="console-button console-button--secondary" href="{% url 'portal:clinical-labs' %}?patient={{ patient.pk }}">Blood tests</a>
+                <a class="console-button console-button--secondary" href="{% url 'portal:treatment-authorisations' %}?patient={{ patient.pk }}">Authorisations</a>
+                {% if can_add_clinical_note %}
+                  <a class="console-button console-button--primary" href="{% url 'portal:clinical-consultation-create' patient.pk %}">New consultation note</a>
+                  <a class="console-button console-button--primary" href="{% url 'portal:clinical-lab-create' patient.pk %}">Request blood tests</a>
+                  <a class="console-button console-button--primary" href="{% url 'portal:treatment-authorisation-create' patient.pk %}">Authorise treatment</a>
+                {% endif %}
+              </div>
+            </section>
+          {% endif %}
+
+          <section class="record-facts" aria-label="Patient details">
+            <article>
+              <span>Record number</span>
+              <strong>{{ patient.medical_record_number|default:"Pending" }}</strong>
+            </article>
+            <article>
+              <span>Date of birth</span>
+              <strong>{% if patient.date_of_birth %}{{ patient.date_of_birth|date:"j F Y" }}{% else %}Not recorded{% endif %}</strong>
+            </article>
+            <article>
+              <span>Assigned clinician</span>
+              <strong>{% if patient.assigned_doctor %}{{ patient.assigned_doctor.full_name }}{% else %}Unassigned{% endif %}</strong>
+            </article>
+            <article>
+              <span>Location</span>
+              <strong>{{ patient.city|default:"Not recorded" }}</strong>
+            </article>
+          </section>
+
+          <div class="console-grid" id="appointments">
+            <section class="console-card" aria-labelledby="record-appointments-heading">
+              <header class="console-card__header">
+                <div class="console-card__heading">
+                  <h2 id="record-appointments-heading">Appointments</h2>
+                  <p>Consultations and reviews for this patient</p>
+                </div>
+                <a class="console-button console-button--quiet" href="#add-care">Book appointment</a>
+              </header>
+              <div class="console-card__body">
+                <ul class="console-list">
+                  {% for appointment in appointments %}
+                    <li class="console-list__item">
+                      <time class="console-time" datetime="{{ appointment.starts_at|date:'c' }}">{{ appointment.starts_at|date:"H:i" }}<span>{{ appointment.starts_at|date:"j M Y" }}</span></time>
+                      <div class="console-list__copy">
+                        <strong>{{ appointment.get_appointment_type_display }}</strong>
+                        <span>{% if appointment.clinician %}{{ appointment.clinician.full_name }}{% else %}Clinician pending{% endif %} · {{ appointment.duration_minutes }} min</span>
+                        {% include 'portal/includes/video_join_link.html' %}
+                      </div>
+                      <span class="console-status console-status--{{ appointment.status }}">{{ appointment.get_status_display }}</span>
+                    </li>
+                  {% empty %}
+                    <li class="console-empty"><p>No appointments have been recorded for this patient yet.</p></li>
+                  {% endfor %}
+                </ul>
+              </div>
+            </section>
+
+            <section class="console-card" id="tasks" aria-labelledby="record-tasks-heading">
+              <header class="console-card__header">
+                <div class="console-card__heading">
+                  <h2 id="record-tasks-heading">Care tasks</h2>
+                  <p>Follow-ups for this patient</p>
+                </div>
+                <a class="console-button console-button--quiet" href="#add-care">New task</a>
+              </header>
+              <div class="console-card__body">
+                <ul class="console-list task-list">
+                  {% for task in tasks %}
+                    <li class="task-list__item">
+                      <div class="task-list__top">
+                        <div>
+                          <strong>{{ task.title }}</strong>
+                          <p class="task-list__meta">{% if task.assigned_to %}Assigned to {{ task.assigned_to.full_name }}{% else %}Unassigned{% endif %}{% if task.description %} · {{ task.description|truncatechars:90 }}{% endif %}</p>
+                          <div class="record-tags" aria-label="Task tags">{% for tag in task.tags.all %}<span class="record-tag">{{ tag.name }}</span>{% endfor %}</div>
+                        </div>
+                        <span class="console-priority">{{ task.get_priority_display }}</span>
+                      </div>
+                      <div class="task-list__footer">
+                        {% if task.due_at %}<time datetime="{{ task.due_at|date:'c' }}">Due {{ task.due_at|date:"j M, H:i" }}</time>{% else %}<time>No due date</time>{% endif %}
+                        {% if task.is_clinical_workflow %}
+                          {% if task.workflow_url %}<a class="console-button console-button--quiet" href="{{ task.workflow_url }}">{{ task.workflow_label }}</a>{% else %}<span class="console-status">{{ task.get_status_display }} · Clinical workflow</span>{% endif %}
+                        {% elif task.status == 'open' or task.status == 'in_progress' %}
+                          {% if active_membership.role != 'doctor' or task.assigned_to_id == user.pk or task.created_by_id == user.pk %}
+                          <form class="console-inline-form" method="post" action="{% url 'portal:task-complete' task.pk %}">
+                            {% csrf_token %}
+                            <input type="hidden" name="next" value="{{ request.path }}">
+                            <button class="console-button console-button--quiet" type="submit">Complete</button>
+                          </form>
+                          {% else %}<span class="console-status">{{ task.get_status_display }}</span>{% endif %}
+                        {% else %}
+                          <span class="console-status console-status--{{ task.status }}">{{ task.get_status_display }}</span>
+                        {% endif %}
+                      </div>
+                    </li>
+                  {% empty %}
+                    <li class="console-empty"><p>There are no care tasks in this patient’s record.</p></li>
+                  {% endfor %}
+                </ul>
+              </div>
+            </section>
+          </div>
+
+          {% if can_view_clinical_notes %}
+            <section class="console-section console-card" id="notes" aria-labelledby="record-notes-heading">
+              <header class="console-card__header">
+                <div class="console-card__heading">
+                  <h2 id="record-notes-heading">Clinical notes</h2>
+                  <p>Care-team documentation for this patient</p>
+                </div>
+                {% if can_add_clinical_note %}<a class="console-button console-button--quiet" href="#add-care">Add note</a>{% endif %}
+              </header>
+              <div class="console-card__body">
+                <ul class="console-list record-note-list">
+                  {% for note in notes %}
+                    <li class="record-note-list__item" id="note-{{ note.pk }}">
+                      <div class="record-note-list__meta">
+                        <span class="console-status">{{ note.get_note_type_display }}</span>
+                        <time datetime="{{ note.created_at|date:'c' }}">{{ note.created_at|date:"j M Y, H:i" }}</time>
+                      </div>
+                      <p>{{ note.body|linebreaksbr }}</p>
+                      <div class="record-tags" aria-label="Note tags">{% for tag in note.tags.all %}<span class="record-tag">{{ tag.name }}</span>{% endfor %}</div>
+                      <span class="record-note-list__author">{% if note.author %}{{ note.author.full_name }}{% else %}Care team{% endif %}{% if note.is_private %} · Only visible to you{% endif %}</span>
+                      {% if note.tags_form %}
+                        <details class="record-action"{% if failed_note_tag_id == note.pk %} open{% endif %}>
+                          <summary>Edit tags</summary>
+                          <form class="console-form" method="post" action="{% url 'portal:patient-note-tags' patient.pk note.pk %}">
+                            {% csrf_token %}
+                            {{ note.tags_form.non_field_errors }}
+                            {% include 'portal/includes/record_tag_fields.html' with tag_form=note.tags_form %}
+                            <button class="console-button console-button--primary" type="submit">Save tags</button>
+                          </form>
+                        </details>
+                      {% endif %}
+                    </li>
+                  {% empty %}
+                    <li class="console-empty"><p>No clinical notes have been added yet.</p></li>
+                  {% endfor %}
+                </ul>
+              </div>
+            </section>
+          {% endif %}
+
+          <div class="console-grid console-grid--equal console-section">
+            <section class="console-card" id="weights" aria-labelledby="record-weight-heading">
+              <header class="console-card__header">
+                <div class="console-card__heading">
+                  <h2 id="record-weight-heading">Weight history</h2>
+                  <p>Patient-recorded and team-recorded check-ins</p>
+                </div>
+              </header>
+              <div class="console-card__body">
+                <ul class="console-list record-weight-list">
+                  {% for weight in weights %}
+                    <li class="console-list__item">
+                      <time class="console-time" datetime="{{ weight.recorded_on|date:'c' }}">{{ weight.recorded_on|date:"j M" }}<span>{{ weight.recorded_on|date:"Y" }}</span></time>
+                      <div class="console-list__copy">
+                        <strong>{{ weight.weight_kg }} kg</strong>
+                        <span>{% if weight.note %}{{ weight.note }}{% elif weight.recorded_by %}Recorded by {{ weight.recorded_by.full_name }}{% else %}Check-in recorded{% endif %}</span>
+                      </div>
+                    </li>
+                  {% empty %}
+                    <li class="console-empty"><p>There are no weight entries in this record yet.</p></li>
+                  {% endfor %}
+                </ul>
+              </div>
+            </section>
+
+            <section class="console-card" id="messages" aria-labelledby="record-messages-heading">
+              <header class="console-card__header">
+                <div class="console-card__heading">
+                  <h2 id="record-messages-heading">Secure conversations</h2>
+                  <p>Patient message threads in this practice</p>
+                </div>
+                <a class="console-button console-button--quiet" href="#new-thread">New conversation</a>
+              </header>
+              <div class="console-card__body">
+                <div class="conversation-list record-thread-list">
+                  {% for thread in message_threads %}
+                    <details id="conversation-{{ thread.pk }}" class="conversation-thread record-thread"{% if selected_thread_id %}{% if selected_thread_id == thread.pk %} open{% endif %}{% elif forloop.first %} open{% endif %}{% if failed_form == 'message_form' and reply_thread_id == thread.pk %} open{% endif %}{% if failed_form == 'proposal_form' and reply_thread_id == thread.pk %} open{% endif %}{% if proposal_error and reply_thread_id == thread.pk %} open{% endif %}>
+                      <summary>
+                        <span>
+                          <strong>{{ thread.subject }}</strong>
+                          <small>{% if thread.last_message_at %}Last activity {{ thread.last_message_at|timesince }} ago{% else %}No messages yet{% endif %}</small>
+                        </span>
+                        {% if thread.is_closed %}<span class="console-status">Closed</span>{% else %}<span class="console-status console-status--active">Open</span>{% endif %}
+                      </summary>
+                      <ol class="thread-message-list" aria-label="Messages in {{ thread.subject }}">
+                        {% for message in thread.conversation_messages %}
+                          <li class="thread-message{% if message.sender == user %} thread-message--mine{% endif %}">
+                            <div class="thread-message__meta">
+                              <strong>{% if message.sender == user %}You{% elif message.sender %}{{ message.sender.full_name }}{% else %}Meridian care team{% endif %}</strong>
+                              <time datetime="{{ message.created_at|date:'c' }}">{{ message.created_at|date:"j M Y, H:i" }}</time>
+                            </div>
+                            <p>{{ message.body|linebreaksbr }}</p>
+                          </li>
+                        {% empty %}
+                          <li class="thread-message-empty">There are no messages in this conversation yet.</li>
+                        {% endfor %}
+                      </ol>
+                      {% include 'portal/includes/appointment_proposals.html' with thread=thread %}
+                      {% if not thread.is_closed %}
+                        <form class="console-form record-thread__form" method="post" action="{% url 'portal:staff-message-create' thread.pk %}">
+                          {% csrf_token %}
+                          {% if failed_form == 'message_form' and reply_thread_id == thread.pk %}{{ message_form.non_field_errors }}{% endif %}
+                          <div class="console-form__field">
+                            <label for="thread-message-{{ thread.pk }}">Message</label>
+                            <textarea id="thread-message-{{ thread.pk }}" name="body" rows="3" maxlength="5000" placeholder="Write a secure message…" required>{% if failed_form == 'message_form' and reply_thread_id == thread.pk %}{{ message_form.body.value|default_if_none:"" }}{% endif %}</textarea>
+                            {% if failed_form == 'message_form' and reply_thread_id == thread.pk %}{{ message_form.body.errors }}{% endif %}
+                          </div>
+                          <button class="console-button console-button--primary" type="submit">Send message</button>
+                        </form>
+                      {% else %}
+                        <p class="conversation-thread__closed">This conversation is closed and remains available to read.</p>
+                      {% endif %}
+                    </details>
+                  {% empty %}
+                    <div class="console-empty"><p>There are no secure conversation threads for this patient yet.</p></div>
+                  {% endfor %}
+                </div>
+                <details class="conversation-thread conversation-thread--new" id="new-thread" open>
+                  <summary>
+                    <span><strong>Start a new conversation</strong><small>Open a new secure thread for this patient</small></span>
+                  </summary>
+                  <form class="console-form" method="post" action="{% url 'portal:staff-thread-create' patient.pk %}">
+                    {% csrf_token %}
+                    {{ thread_form.non_field_errors }}
+                    <div class="console-form__field"><label for="{{ thread_form.subject.id_for_label }}">{{ thread_form.subject.label }}</label>{{ thread_form.subject }}{{ thread_form.subject.errors }}</div>
+                    <div class="console-form__field"><label for="{{ thread_form.body.id_for_label }}">{{ thread_form.body.label }}</label>{{ thread_form.body }}{{ thread_form.body.errors }}</div>
+                    <button class="console-button console-button--primary" type="submit">Start conversation</button>
+                  </form>
+                </details>
+              </div>
+            </section>
+          </div>
+
+          <section class="console-section console-card" id="add-care" aria-labelledby="record-actions-heading">
+            <header class="console-card__header">
+              <div class="console-card__heading">
+                <h2 id="record-actions-heading">Add clinical activity</h2>
+                <p>All updates are stored inside {{ company.name }} and recorded in the audit history.</p>
+              </div>
+            </header>
+            <div class="record-action-grid">
+              <details class="record-action" open>
+                <summary>Create care task</summary>
+                <form class="console-form" method="post" action="{% url 'portal:patient-task-create' patient.pk %}">
+                  {% csrf_token %}
+                  {{ task_form.non_field_errors }}
+                  {{ task_form.patient.as_hidden }}
+                  {{ task_form.patient.errors }}
+                  <div class="console-form__field"><label for="{{ task_form.title.id_for_label }}">{{ task_form.title.label }}</label>{{ task_form.title }}{{ task_form.title.errors }}</div>
+                  <div class="console-form__field"><label for="{{ task_form.description.id_for_label }}">{{ task_form.description.label }}</label>{{ task_form.description }}{{ task_form.description.errors }}</div>
+                  <div class="console-form__row">
+                    <div class="console-form__field"><label for="{{ task_form.assigned_to.id_for_label }}">{{ task_form.assigned_to.label }}</label>{{ task_form.assigned_to }}{{ task_form.assigned_to.errors }}</div>
+                    <div class="console-form__field"><label for="{{ task_form.priority.id_for_label }}">{{ task_form.priority.label }}</label>{{ task_form.priority }}{{ task_form.priority.errors }}</div>
+                  </div>
+                  <div class="console-form__field"><label for="{{ task_form.due_at.id_for_label }}">{{ task_form.due_at.label }}</label>{{ task_form.due_at }}{{ task_form.due_at.errors }}</div>
+                  {% include 'portal/includes/record_tag_fields.html' with tag_form=task_form %}
+                  <button class="console-button console-button--primary" type="submit">Create task</button>
+                </form>
+              </details>
+
+              <details class="record-action"{% if failed_form == 'appointment_form' %} open{% endif %}>
+                <summary>Book appointment</summary>
+                <form class="console-form" method="post" action="{% url 'portal:patient-appointment-create' patient.pk %}">
+                  {% csrf_token %}
+                  <input type="hidden" name="workflow_context" value="{{ legacy_appointment_context }}">
+                  {{ appointment_form.non_field_errors }}
+                  {{ appointment_form.patient.as_hidden }}
+                  {{ appointment_form.patient.errors }}
+                  <div class="console-form__row">
+                    <div class="console-form__field"><label for="{{ appointment_form.clinician.id_for_label }}">{{ appointment_form.clinician.label }}</label>{{ appointment_form.clinician }}{{ appointment_form.clinician.errors }}</div>
+                    <div class="console-form__field"><label for="{{ appointment_form.appointment_type.id_for_label }}">{{ appointment_form.appointment_type.label }}</label>{{ appointment_form.appointment_type }}{{ appointment_form.appointment_type.errors }}</div>
+                  </div>
+                  <div class="console-form__row">
+                    <div class="console-form__field"><label for="{{ appointment_form.starts_at.id_for_label }}">{{ appointment_form.starts_at.label }}</label>{{ appointment_form.starts_at }}{{ appointment_form.starts_at.errors }}</div>
+                    <div class="console-form__field"><label for="{{ appointment_form.duration_minutes.id_for_label }}">{{ appointment_form.duration_minutes.label }}</label>{{ appointment_form.duration_minutes }}{{ appointment_form.duration_minutes.errors }}</div>
+                  </div>
+                  <div class="console-form__field"><label for="{{ appointment_form.video_link.id_for_label }}">{{ appointment_form.video_link.label }}</label>{{ appointment_form.video_link }}{{ appointment_form.video_link.errors }}</div>
+                  <button class="console-button console-button--primary" type="submit">Book appointment</button>
+                </form>
+              </details>
+
+              {% if can_add_clinical_note %}
+                <details class="record-action"{% if failed_form == 'note_form' %} open{% endif %}>
+                  <summary>Add clinical note</summary>
+                  <form class="console-form" method="post" action="{% url 'portal:patient-note-create' patient.pk %}">
+                    {% csrf_token %}
+                    {{ note_form.non_field_errors }}
+                    <div class="console-form__field"><label for="{{ note_form.note_type.id_for_label }}">{{ note_form.note_type.label }}</label>{{ note_form.note_type }}{{ note_form.note_type.errors }}</div>
+                    <div class="console-form__field"><label for="{{ note_form.body.id_for_label }}">{{ note_form.body.label }}</label>{{ note_form.body }}{{ note_form.body.errors }}</div>
+                    <label class="console-form__check" for="{{ note_form.is_private.id_for_label }}">{{ note_form.is_private }}<span>Only visible to you</span></label>
+                    {{ note_form.is_private.errors }}
+                    {% include 'portal/includes/record_tag_fields.html' with tag_form=note_form %}
+                    <button class="console-button console-button--primary" type="submit">Save clinical note</button>
+                  </form>
+                </details>
+              {% endif %}
+            </div>
+          </section>
+
+          <aside class="patient-summary">
+            <strong>Record privacy.</strong> This record, its forms, and its audit history are limited to {{ company.name }}. Changing practice in the header does not reveal this patient in another company.
+          </aside>
+        </main>
+      </div>
+    </div>
+    {% include 'portal/includes/staff_mobile_navigation.html' with nav_section='record' %}
+  </div>
+{% endblock %}

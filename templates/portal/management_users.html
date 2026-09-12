@@ -1,0 +1,22 @@
+{% extends 'portal/staff_page_base.html' %}
+{% load static %}
+{% block title %}Users and roles | {{ company.name }} | Meridian{% endblock %}
+{% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/management.css' %}">{% endblock %}
+{% block breadcrumb %}<span>Setup · Users and roles</span><span class="console-breadcrumb__dot" aria-hidden="true"></span><span>{{ company.name }}</span>{% endblock %}
+{% block page_heading %}
+<header class="staff-page-header"><div><p class="console-kicker">Super Admin · Staff access</p><h1>Who has access to this practice</h1><p>One shared login, a role in each practice. Add and remove practice access without changing someone’s identity or their other memberships.</p></div><a class="console-button console-button--primary" href="{% url 'portal:management-user-create' %}">Add staff access</a></header>
+{% endblock %}
+{% block page_content %}
+  <section class="staff-page-card management-filter-card"><form method="get" class="management-filters">
+    {% for field in filter_form %}<div class="management-field">{{ field.label_tag }}{{ field }}{{ field.errors }}</div>{% endfor %}
+    <button class="console-button console-button--primary" type="submit">Filter</button><a class="console-button console-button--quiet" href="{% url 'portal:management-users' %}">Clear</a>
+  </form></section>
+  <section class="staff-page-card"><header class="staff-page-card__header"><div><h2>{{ company.name }}</h2><p>{{ page_obj.paginator.count }} staff membership{{ page_obj.paginator.count|pluralize }} in view</p></div></header>
+    <div class="management-table-wrap"><table class="management-table"><thead><tr><th scope="col">Name</th><th scope="col">Email</th><th scope="col">Practice role</th><th scope="col">Access</th><th scope="col">Action</th></tr></thead><tbody>
+      {% for member in memberships %}<tr><td><strong>{{ member.user.full_name }}</strong>{% if member.user_id == user.pk %}<span class="management-help">You</span>{% endif %}</td><td>{{ member.user.email }}</td><td>{{ member.get_role_display }}</td><td>{% if not member.user.is_active %}<span class="management-status management-status--inactive">Account disabled</span>{% elif member.is_active %}<span class="management-status">Active</span>{% else %}<span class="management-status management-status--inactive">Inactive in this practice</span>{% endif %}</td><td><a class="console-button console-button--quiet" href="{% url 'portal:management-membership-edit' member.pk %}">Edit access</a></td></tr>
+      {% empty %}<tr><td colspan="5">{% if filter_form.errors %}Correct the filters above.{% else %}No staff memberships match these filters.{% endif %}</td></tr>{% endfor %}
+    </tbody></table></div>
+  </section>
+  {% if page_obj.has_other_pages %}<nav class="staff-pagination" aria-label="Staff pages">{% if page_obj.has_previous %}<a class="console-button console-button--quiet" href="?{{ pagination_query }}{% if pagination_query %}&amp;{% endif %}page={{ page_obj.previous_page_number }}">Previous</a>{% endif %}<span>Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>{% if page_obj.has_next %}<a class="console-button console-button--quiet" href="?{{ pagination_query }}{% if pagination_query %}&amp;{% endif %}page={{ page_obj.next_page_number }}">Next</a>{% endif %}</nav>{% endif %}
+  <p class="management-help">Patient accounts and unpaid leads are not created or converted here. Access changes are audited; memberships are never deleted. There are no payment permissions or email invitations on this screen.</p>
+{% endblock %}

@@ -1,0 +1,143 @@
+{% extends 'portal/staff_page_base.html' %}
+
+{% block title %}{{ title|default:page_title }} | {{ company.name }} | Meridian{% endblock %}
+
+{% block breadcrumb %}
+  <span>Tasks</span>
+  <span class="console-breadcrumb__dot" aria-hidden="true"></span>
+  <span>{{ company.name }}</span>
+{% endblock %}
+
+{% block page_heading %}
+  <header class="staff-page-header">
+    <div>
+      <p class="console-kicker">Care coordination</p>
+      <h1>{{ page_title }}</h1>
+      <p>{% if active_membership.role == 'doctor' %}Tasks assigned to you or created by you in {{ company.name }}.{% else %}Care tasks for {{ company.name }}.{% endif %}</p>
+    </div>
+    <a class="console-button console-button--primary" href="{% url 'portal:task-create' %}">Create task</a>
+  </header>
+{% endblock %}
+
+{% block page_content %}
+  <section class="staff-metrics staff-metrics--three" aria-label="Task summary">
+    <article><span>Open</span><strong>{{ metrics.open }}</strong></article>
+    <article><span>Overdue</span><strong>{{ metrics.overdue }}</strong></article>
+    <article><span>Completed</span><strong>{{ metrics.completed }}</strong></article>
+  </section>
+
+  <section class="staff-page-card" aria-labelledby="task-filters-heading">
+    <header class="staff-page-card__header">
+      <div><h2 id="task-filters-heading">Filter tasks</h2><p>Filter by workflow, task type, patient, or free-form tag.</p></div>
+    </header>
+    <form class="staff-filter-form staff-filter-form--tasks" method="get" action="{% url 'portal:staff-tasks' %}">
+      {{ filter_form.non_field_errors }}
+      <div class="staff-filter-form__field">
+        <label for="{{ filter_form.status.id_for_label }}">{{ filter_form.status.label }}</label>
+        {{ filter_form.status }}
+        {{ filter_form.status.errors }}
+      </div>
+      <div class="staff-filter-form__field">
+        <label for="{{ filter_form.kind.id_for_label }}">{{ filter_form.kind.label }}</label>
+        {{ filter_form.kind }}
+        {{ filter_form.kind.errors }}
+      </div>
+      <div class="staff-filter-form__field">
+        <label for="{{ filter_form.patient.id_for_label }}">{{ filter_form.patient.label }}</label>
+        {{ filter_form.patient }}
+        {{ filter_form.patient.errors }}
+      </div>
+      <div class="staff-filter-form__field">
+        <label for="{{ filter_form.tag.id_for_label }}">Free-form tag</label>
+        {{ filter_form.tag }}
+        {{ filter_form.tag.errors }}
+      </div>
+      <button class="console-button console-button--primary" type="submit">Apply filters</button>
+    </form>
+  </section>
+
+  <section class="staff-page-card staff-page-card--list" aria-labelledby="task-list-heading">
+    <header class="staff-page-card__header">
+      <div><h2 id="task-list-heading">{{ page_title }}</h2><p>Workflow status and free-form tags are kept separate.</p></div>
+      <span class="staff-page-card__count">{{ page_obj.paginator.count }} task{{ page_obj.paginator.count|pluralize }}</span>
+    </header>
+    {% if filter_form.errors %}
+      <div class="staff-filter-error" role="alert">Correct the filter fields above to view tasks.</div>
+    {% else %}
+      <div class="staff-task-table-wrap">
+        <table class="staff-task-table">
+          <thead>
+            <tr>
+              <th scope="col">Priority</th>
+              <th scope="col">Task</th>
+              <th scope="col">Patient / general</th>
+              <th scope="col">Assigned to</th>
+              <th scope="col">Raised</th>
+              <th scope="col">Workflow status</th>
+              <th scope="col"><span class="sr-only">Task actions</span></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for task in tasks %}
+              <tr{% if task.is_overdue %} class="staff-task-table__row--overdue"{% endif %}>
+                <td data-label="Priority"><span class="staff-priority staff-priority--{{ task.priority }}">{{ task.get_priority_display }}</span></td>
+                <td data-label="Task" class="staff-task-table__task">
+                  <strong>{{ task.title }}</strong>
+                  {% if task.description %}
+                    <details class="staff-task-detail">
+                      <summary>View note</summary>
+                      <p>{{ task.description|linebreaksbr }}</p>
+                    </details>
+                  {% endif %}
+                  {% with tags=task.tags.all %}
+                    {% if tags %}
+                      <div class="staff-task-table__tags">
+                        <span>Tags</span>
+                        <ul class="record-tag-list" aria-label="Tags for {{ task.title }}">
+                          {% for tag in tags %}<li class="record-tag">{{ tag.name }}</li>{% endfor %}
+                        </ul>
+                      </div>
+                    {% endif %}
+                  {% endwith %}
+                  {% if task.due_at %}<p class="staff-task-table__due{% if task.is_overdue %} is-overdue{% endif %}">Due <time datetime="{{ task.due_at|date:'c' }}">{{ task.due_at|date:"j M Y, H:i" }} SAST</time>{% if task.is_overdue %} · Overdue{% endif %}</p>{% endif %}
+                </td>
+                <td data-label="Patient / general">
+                  {% if task.patient %}<a class="staff-task-table__patient" href="{% url 'portal:patient-detail' task.patient_id %}">{{ task.patient }}</a>{% else %}<span class="staff-task-table__general">General practice</span>{% endif %}
+                </td>
+                <td data-label="Assigned to">{% if task.assigned_to %}{{ task.assigned_to.full_name }}{% else %}Unassigned{% endif %}</td>
+                <td data-label="Raised" class="staff-task-table__raised">
+                  <time datetime="{{ task.created_at|date:'c' }}">{{ task.created_at|date:"j M Y, H:i" }} SAST</time>
+                  {% if task.created_by %}<span>by {{ task.created_by.full_name }}</span>{% endif %}
+                </td>
+                <td data-label="Workflow status"><span class="console-status console-status--{{ task.status }}">{{ task.get_status_display }}</span>{% if task.completed_at %}<span class="staff-task-table__completed">Completed {{ task.completed_at|date:"j M, H:i" }} SAST</span>{% endif %}</td>
+                <td class="staff-task-table__actions-cell" data-label="Actions">
+                  <div class="staff-task-table__actions">
+                    {% if task.workflow_url %}<a class="console-button console-button--quiet" href="{{ task.workflow_url }}">{{ task.workflow_label }}</a>{% elif task.is_clinical_workflow %}<span class="staff-task-table__due">Completed by the responsible doctor in the clinical workflow.</span>{% else %}<a class="console-button console-button--quiet" href="{% url 'portal:task-edit' task.pk %}">Edit task</a>{% endif %}
+                    {% if task.patient %}<a class="staff-row-link" href="{% url 'portal:patient-detail' task.patient_id %}">Open record<span class="sr-only"> for {{ task.patient }}</span></a>{% endif %}
+                    {% if task.is_actionable %}
+                      <form method="post" action="{% url 'portal:task-complete' task.pk %}">
+                        {% csrf_token %}
+                        <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                        <button class="console-button console-button--primary" type="submit">Complete</button>
+                      </form>
+                    {% endif %}
+                  </div>
+                </td>
+              </tr>
+            {% empty %}
+              <tr><td class="staff-task-table__empty" colspan="7"><div class="staff-empty-state"><p>No tasks match the selected filters.</p></div></td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% endif %}
+  </section>
+
+  {% if is_paginated %}
+    <nav class="staff-pagination" aria-label="Task pages">
+      {% if page_obj.has_previous %}<a class="console-button console-button--quiet" href="?{{ pagination_query }}{% if pagination_query %}&amp;{% endif %}page={{ page_obj.previous_page_number }}">Previous</a>{% endif %}
+      <span>Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+      {% if page_obj.has_next %}<a class="console-button console-button--quiet" href="?{{ pagination_query }}{% if pagination_query %}&amp;{% endif %}page={{ page_obj.next_page_number }}">Next</a>{% endif %}
+    </nav>
+  {% endif %}
+{% endblock %}

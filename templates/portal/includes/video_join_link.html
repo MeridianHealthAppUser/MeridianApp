@@ -1,0 +1,5 @@
+{% if appointment.video_room_url %}
+  <a class="console-button console-button--primary" href="{{ appointment.video_room_url }}">Join video consultation</a>
+{% elif appointment.video_join_message %}
+  <span class="backoffice-muted">{{ appointment.video_join_message }}{% if appointment.video_join_opens_at %} Join window: {{ appointment.video_join_opens_at|date:'j M, H:i' }}–{{ appointment.video_join_closes_at|date:'H:i' }} SAST.{% endif %}</span>
+{% endif %}

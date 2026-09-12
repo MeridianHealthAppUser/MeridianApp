@@ -1,0 +1,67 @@
+.patient-care { min-width: 0; }
+.patient-care > .patient-care-notice { margin: 0 0 1.2rem; }
+.patient-care .console-form { min-width: 0; }
+.patient-care .console-form__field { min-width: 0; }
+.patient-care .console-form input:not([type="checkbox"]):not([type="radio"]),
+.patient-care .console-form select,
+.patient-care .console-form textarea { min-width: 0; max-width: 100%; box-sizing: border-box; }
+.patient-care .console-form textarea { resize: vertical; min-height: 7.5rem; }
+.patient-care .console-form .errorlist { color: #9b2837; margin: .4rem 0 .75rem; padding-left: 1.1rem; overflow-wrap: anywhere; }
+.patient-care .console-form .errorlist.nonfield { padding: .9rem 1rem .9rem 2rem; border: 1px solid #edc6cc; border-radius: .65rem; background: #fff6f7; }
+.patient-care-filters { display: flex; flex-wrap: wrap; align-items: end; gap: 1rem; }
+.patient-care-filters .console-form__field { flex: 1 1 11rem; }
+.patient-care .patient-care-filters button { flex: 0 1 auto; margin-bottom: 0; }
+.patient-care-slots { margin: 0; padding: 0; border: 0; min-width: 0; }
+.patient-care-slots legend { font-weight: 650; color: var(--console-ink, #15363d); margin-bottom: .9rem; }
+.patient-care-slots__grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr)); gap: .75rem; max-height: 28rem; overflow-y: auto; overscroll-behavior-y: contain; padding: .25rem; }
+.patient-care-slot { display: flex; gap: .65rem; align-items: start; padding: 1rem; border: 1px solid #dce9eb; background: #fff; border-radius: .8rem; cursor: pointer; min-width: 0; }
+.patient-care-slot:hover, .patient-care-slot:has(input:checked) { border-color: #099b91; background: #e8f7f5; }
+.patient-care-slot:focus-within { outline: 2px solid #138f87; outline-offset: 3px; }
+.patient-care-slot input { width: 1.1rem; height: 1.1rem; margin: .15rem 0 0; flex: 0 0 auto; accent-color: #0c978d; }
+.patient-care-slot > span { display: grid; gap: .3rem; min-width: 0; overflow-wrap: anywhere; }
+.patient-care-slot strong { font-size: 1.16rem; color: #12353c; }
+.patient-care-slot span span, .patient-care-slot small { color: #55747e; }
+.patient-care-confirm { display: flex; gap: .75rem; align-items: start; margin-top: 1.5rem; cursor: pointer; }
+.patient-care-confirm input { flex: 0 0 auto; width: 1.15rem; height: 1.15rem; accent-color: #0c978d; margin: .1rem 0 0; }
+.patient-care-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 1rem; margin-top: 1.25rem; }
+.patient-care-empty { margin: 0 0 1rem; color: #55747e; line-height: 1.6; }
+.patient-care-profile-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.5rem; }
+.patient-care .helptext { color: #657f88; font-size: .82rem; line-height: 1.5; }
+.patient-care-profile-footer { border-top: 1px solid #e4edef; padding-top: 1.5rem; margin-top: 1.5rem; display: flex; justify-content: space-between; align-items: center; gap: 1.5rem; }
+.patient-care-profile-footer p { margin: 0; max-width: 44rem; color: #55747e; font-size: .875rem; }
+.patient-care-profile-footer button { flex: 0 0 auto; }
+.patient-care-caption { color: #55747e; font-size: .875rem; line-height: 1.65; margin: 1.3rem 0 0; }
+.patient-care-timeline { list-style: none; padding: 0; margin: 0; }
+.patient-care-timeline > li { position: relative; padding: 0 0 1.5rem 1.5rem; border-left: 1px solid #dce9eb; overflow-wrap: anywhere; }
+.patient-care-timeline > li::before { content: ""; position: absolute; left: -.35rem; top: .35rem; width: .6rem; height: .6rem; background: #e5f5f3; border: 1px solid #119b91; border-radius: 50%; }
+.patient-care-timeline > li:last-child { padding-bottom: 0; }
+.patient-care-timeline__meta { display: flex; gap: .75rem; align-items: center; flex-wrap: wrap; }
+.patient-care-timeline__meta time { color: #6a858e; font-size: .8rem; }
+.patient-care-timeline h3 { margin: .65rem 0 .5rem; font-size: 1rem; line-height: 1.45; }
+.patient-care-timeline p { color: #55747e; font-size: .875rem; line-height: 1.65; margin: 0; }
+.patient-care .console-button--primary { color: #fff; }
+.patient-progress-chart-section { margin-bottom: 1.2rem; }
+.patient-weight-chart { margin: 1.5rem 0 0; }
+.patient-weight-chart svg { display: block; width: 100%; height: auto; overflow: visible; }
+.patient-weight-chart text { fill: #597781; font-family: inherit; font-size: 12px; }
+.patient-weight-chart__grid { stroke: #e3eef0; stroke-width: 1; }
+.patient-weight-chart__line { stroke: #0c958b; stroke-width: 2.5; fill: none; }
+.patient-weight-chart__point { stroke: #0c958b; stroke-width: 1.5; fill: #fff; }
+.patient-weight-chart figcaption { color: #657f88; font-size: .8rem; line-height: 1.5; margin-top: .5rem; }
+.patient-weight-chart__range { display: none; }
+@media (max-width: 46rem) {
+  .patient-care-profile-fields { grid-template-columns: minmax(0, 1fr); gap: 1.2rem; }
+  .patient-care-profile-footer { flex-direction: column; align-items: stretch; gap: 1rem; }
+  .patient-care-profile-footer button { width: 100%; }
+  .patient-care-filters .console-form__field { flex-basis: 100%; }
+  .patient-care .patient-care-filters button { width: 100%; }
+  .patient-care-slots__grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .5rem; max-height: 26rem; }
+  .patient-care-slot { padding: .75rem .5rem; gap: .4rem; }
+  .patient-care-slot span span { font-size: .75rem; }
+  .patient-weight-chart svg { min-height: 8rem; }
+  .patient-weight-chart svg text { display: none; }
+  .patient-weight-chart__range { display: flex; flex-wrap: wrap; gap: .4rem 1rem; justify-content: space-between; color: #55747e; font-size: .75rem; line-height: 1.5; }
+  .patient-care-timeline > li { padding-left: 1rem; }
+  .patient-care-actions { align-items: stretch; flex-direction: column; }
+  .patient-care-actions button { width: 100%; }
+}

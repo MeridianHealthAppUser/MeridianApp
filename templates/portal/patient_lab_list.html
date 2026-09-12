@@ -1,0 +1,36 @@
+{% extends 'portal/patient_page_base.html' %}
+{% load static %}
+{% block title %}Your blood tests | Meridian{% endblock %}
+{% block patient_extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/clinical_workflow.css' %}">{% endblock %}
+
+{% block patient_heading %}
+  <header class="patient-page-heading"><div><p class="console-kicker">Your care · Blood tests</p><h1>Your blood tests</h1><p>See the tests your doctor has requested at {{ patient_company.name }} and upload your report when it is ready.</p></div></header>
+{% endblock %}
+
+{% block patient_content %}
+  <div class="clinical-workflow">
+    <section class="console-card" aria-labelledby="patient-lab-list-heading">
+      <header class="console-card__header"><div class="console-card__heading"><h2 id="patient-lab-list-heading">Blood-test requests</h2><p>{{ page_obj.paginator.count }} request{{ page_obj.paginator.count|pluralize }} in this view.</p></div>
+        <form class="console-form patient-filter-form clinical-patient-filter" method="get" action="{% url 'portal:patient-labs' %}">
+          {{ filter_form.non_field_errors }}
+          <div class="console-form__field"><label for="{{ filter_form.status.id_for_label }}">{{ filter_form.status.label }}</label>{{ filter_form.status }}{{ filter_form.status.errors }}</div>
+          <button class="console-button console-button--secondary" type="submit">View requests</button>
+        </form>
+      </header>
+      {% if filter_form.errors %}<div class="clinical-panel-body"><p class="clinical-panel-description" role="alert">Correct the status filter to view your requests.</p></div>{% else %}
+        <div class="clinical-table-wrap"><table class="clinical-table" aria-labelledby="patient-lab-list-heading">
+          <thead><tr><th scope="col">Panel / tests</th><th scope="col">Requested by</th><th scope="col">Due</th><th scope="col">Status</th><th scope="col">Action</th></tr></thead>
+          <tbody>{% for lab_request in lab_requests %}<tr>
+            <td data-label="Panel / tests"><span class="clinical-table__panel">{{ lab_request.panel_name }}</span></td>
+            <td data-label="Requested by">{{ lab_request.requested_by.full_name }}</td>
+            <td data-label="Due">{% if lab_request.due_on %}<time datetime="{{ lab_request.due_on|date:'Y-m-d' }}">{{ lab_request.due_on|date:"j M Y" }}</time>{% else %}Not specified{% endif %}</td>
+            <td data-label="Status"><span class="console-status console-status--{{ lab_request.status }}">{{ lab_request.get_status_display }}</span></td>
+            <td data-label="Action"><a class="console-button console-button--secondary" href="{% url 'portal:patient-lab-detail' lab_request.pk %}">Open request</a></td>
+          </tr>{% empty %}<tr><td class="clinical-table__empty" colspan="5">No blood-test requests match this view. Requests from your doctor will appear here.</td></tr>{% endfor %}</tbody>
+        </table></div>
+      {% endif %}
+    </section>
+    {% if page_obj.has_other_pages %}<nav class="clinical-pagination" aria-label="Your blood-test request pages">{% if page_obj.has_previous %}<a class="console-button console-button--secondary" href="?{{ pagination_query }}{% if pagination_query %}&amp;{% endif %}page={{ page_obj.previous_page_number }}">Previous</a>{% endif %}<span>Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>{% if page_obj.has_next %}<a class="console-button console-button--secondary" href="?{{ pagination_query }}{% if pagination_query %}&amp;{% endif %}page={{ page_obj.next_page_number }}">Next</a>{% endif %}</nav>{% endif %}
+    <aside class="clinical-notice clinical-notice--spaced"><p>Upload the PDF report to the matching request so your doctor can review it. If you have questions about a test or need to correct a report, <a class="clinical-link" href="{% url 'portal:patient-messages' %}">message your care team</a>.</p></aside>
+  </div>
+{% endblock %}

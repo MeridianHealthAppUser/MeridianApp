@@ -1,0 +1,3 @@
+<div class="privacy-table-wrap" role="region" aria-label="Your recorded access history" tabindex="0"><table class="privacy-table"><thead><tr><th scope="col">When</th><th scope="col">Practice</th><th scope="col">Activity</th><th scope="col">Record type</th></tr></thead><tbody>
+{% for row in access_rows %}<tr><td>{{ row.created_at|date:"j M Y, H:i" }}</td><td>{{ row.company_name }}</td><td>{{ row.label }}</td><td>{{ row.target_label }}</td></tr>{% empty %}<tr><td colspan="4">No recorded activity to show.</td></tr>{% endfor %}
+</tbody></table></div>

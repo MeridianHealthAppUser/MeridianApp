@@ -1,0 +1,110 @@
+{% extends 'portal/patient_page_base.html' %}
+{% load static %}
+{% block patient_extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/patient_care.css' %}">{% endblock %}
+
+{% block patient_heading %}
+  <header class="patient-page-heading">
+    <div>
+      <p class="console-kicker">Your care · Progress</p>
+      <h1>Your progress</h1>
+      <p>Record a weight check-in and look back at your progress with {{ patient_company.name }}.</p>
+    </div>
+  </header>
+{% endblock %}
+
+{% block patient_content %}
+  <section class="console-metrics" aria-label="Weight summary">
+    <article class="metric-card">
+      <span class="metric-card__label">First recorded weight</span>
+      <strong class="metric-card__value">{% if first_weight %}{{ first_weight.weight_kg }} kg{% else %}—{% endif %}</strong>
+      <span class="metric-card__hint">{% if first_weight %}{{ first_weight.recorded_on|date:"j M Y" }}{% else %}Add your first check-in{% endif %}</span>
+    </article>
+    <article class="metric-card">
+      <span class="metric-card__label">Latest weight</span>
+      <strong class="metric-card__value">{% if latest_weight %}{{ latest_weight.weight_kg }} kg{% else %}—{% endif %}</strong>
+      <span class="metric-card__hint">{% if latest_weight %}{{ latest_weight.recorded_on|date:"j M Y" }}{% else %}No check-ins yet{% endif %}</span>
+    </article>
+    <article class="metric-card">
+      <span class="metric-card__label">Change since first check-in</span>
+      <strong class="metric-card__value">{% if weight_change != None %}{% if weight_change > 0 %}+{% endif %}{{ weight_change }} kg{% else %}—{% endif %}</strong>
+      <span class="metric-card__hint">Your recorded weight difference</span>
+    </article>
+  </section>
+
+  <section class="console-card patient-care patient-progress-chart-section" aria-labelledby="weight-chart-heading">
+    <header class="console-card__header"><div class="console-card__heading"><h2 id="weight-chart-heading">Your recorded weights</h2><p>Choose a date range for the chart and the history below. The summary above covers all your check-ins.</p></div></header>
+    <div class="console-card__body">
+      <form method="get" action="{% url 'portal:patient-progress' %}" class="console-form patient-care-filters">
+        {{ weight_filter_form.non_field_errors }}
+        {% for field in weight_filter_form %}<div class="console-form__field"><label for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}{{ field.errors }}</div>{% endfor %}
+        <button class="console-button console-button--secondary" type="submit">View range</button><a class="patient-inline-link" href="{% url 'portal:patient-progress' %}">All dates</a>
+      </form>
+      {% if weight_chart %}
+        <figure class="patient-weight-chart">
+          <svg viewBox="0 0 720 250" role="img" aria-labelledby="weight-chart-title weight-chart-description">
+            <title id="weight-chart-title">Recorded weight in kilograms</title><desc id="weight-chart-description">{{ weight_chart.count }} check-ins from {{ weight_chart.start|date:"j M Y" }} to {{ weight_chart.end|date:"j M Y" }}. Exact dates, weights and notes are available in the weight history below.</desc>
+            {% for tick in weight_chart.ticks %}<line x1="62" x2="692" y1="{{ tick.y }}" y2="{{ tick.y }}" class="patient-weight-chart__grid"/><text x="10" y="{{ tick.y|add:'4' }}">{{ tick.label }}</text>{% endfor %}
+            <polyline points="{{ weight_chart.polyline }}" class="patient-weight-chart__line"/>
+            {% for point in weight_chart.points %}<circle cx="{{ point.x }}" cy="{{ point.y }}" r="3" class="patient-weight-chart__point"><title>{{ point.date|date:"j M Y" }}: {{ point.weight }} kg</title></circle>{% endfor %}
+            <text x="62" y="240">{{ weight_chart.start|date:"j M Y" }}</text><text x="692" y="240" text-anchor="end">{{ weight_chart.end|date:"j M Y" }}</text>
+          </svg>
+          <div class="patient-weight-chart__range"><span>{{ weight_chart.start|date:"j M Y" }} – {{ weight_chart.end|date:"j M Y" }}</span><span>{{ weight_chart.minimum }}–{{ weight_chart.maximum }} kg</span></div>
+          <figcaption>{% if chart_is_limited %}Chart shows the latest 300 check-ins in this range. All matching entries remain available in the paginated history below.{% else %}Recorded measurements only. This chart does not predict results or recommend a target.{% endif %}</figcaption>
+        </figure>
+      {% else %}<p class="patient-empty">{% if weight_filter_form.errors %}Correct the date range to see your chart.{% else %}No check-ins match this range. Add a weight below or choose another date range.{% endif %}</p>{% endif %}
+    </div>
+  </section>
+
+  <div class="patient-page-grid">
+    <section class="console-card" aria-labelledby="weight-checkin-heading">
+      <header class="console-card__header"><div class="console-card__heading"><h2 id="weight-checkin-heading">Add a weight check-in</h2><p>Save an update to your record at this practice.</p></div></header>
+      <div class="console-card__body">
+        <form class="console-form" method="post" action="{% url 'portal:patient-weight-add' %}">
+          {% csrf_token %}
+          <input type="hidden" name="patient_context" value="{{ patient_context }}">
+          {{ weight_form.non_field_errors }}
+          <div class="console-form__row">
+            <div class="console-form__field">
+              <label for="{{ weight_form.recorded_on.id_for_label }}">{{ weight_form.recorded_on.label }}</label>
+              {{ weight_form.recorded_on }}
+              {{ weight_form.recorded_on.errors }}
+            </div>
+            <div class="console-form__field">
+              <label for="{{ weight_form.weight_kg.id_for_label }}">{{ weight_form.weight_kg.label }}</label>
+              {{ weight_form.weight_kg }}
+              {{ weight_form.weight_kg.errors }}
+            </div>
+          </div>
+          <div class="console-form__field">
+            <label for="{{ weight_form.note.id_for_label }}">{{ weight_form.note.label }}</label>
+            {{ weight_form.note }}
+            {{ weight_form.note.errors }}
+            <span class="helptext">Optional: anything you would like your care team to know about this check-in.</span>
+          </div>
+          <button class="console-button console-button--primary" type="submit">Save check-in</button>
+        </form>
+      </div>
+    </section>
+
+    <section class="console-card" aria-labelledby="weight-history-heading">
+      <header class="console-card__header"><div class="console-card__heading"><h2 id="weight-history-heading">Your weight history</h2><p>{{ page_obj.paginator.count }} check-in{{ page_obj.paginator.count|pluralize }} recorded at this practice.</p></div></header>
+      <div class="patient-table-wrap">
+        <table class="patient-table" aria-labelledby="weight-history-heading">
+          <thead><tr><th scope="col">Date</th><th scope="col">Weight</th><th scope="col">Note</th></tr></thead>
+          <tbody>
+            {% for weight in weights %}
+              <tr>
+                <td data-label="Date"><time datetime="{{ weight.recorded_on|date:'Y-m-d' }}">{{ weight.recorded_on|date:"j M Y" }}</time></td>
+                <td data-label="Weight"><strong>{{ weight.weight_kg }} kg</strong></td>
+                <td data-label="Note"><span class="patient-table__note">{{ weight.note|default:"—"|linebreaksbr }}</span></td>
+              </tr>
+            {% empty %}
+              <tr><td class="patient-table__empty" colspan="3">Your check-ins will appear here once you save your first update.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="console-card__body">{% include 'portal/includes/patient_pagination.html' with pagination_label='Weight history' %}</div>
+    </section>
+  </div>
+{% endblock %}

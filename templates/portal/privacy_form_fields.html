@@ -1,0 +1,8 @@
+{{ form.non_field_errors }}
+{% for field in form %}
+  <div class="privacy-field{% if field.field.widget.input_type == 'checkbox' %} privacy-field--checkbox{% endif %}">
+    {% if field.field.widget.input_type == 'checkbox' %}<label for="{{ field.id_for_label }}">{{ field }}<span>{{ field.label }}</span></label>{% else %}<label for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}{% endif %}
+    {% if field.help_text %}<p class="privacy-help" id="{{ field.auto_id }}_helptext">{{ field.help_text }}</p>{% endif %}
+    {{ field.errors }}
+  </div>
+{% endfor %}

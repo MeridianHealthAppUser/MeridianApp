@@ -1,0 +1,199 @@
+{% extends 'base.html' %}
+{% load static workspace_ui %}
+
+{% block title %}{{ active_company.name }} | Meridian Mobile{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{% static 'css/console.css' %}">{% endblock %}
+{% block content %}
+  <div class="meridian-console console-mobile workspace-overview">
+    <header class="mobile-console__top">
+      <div>
+        <div class="mobile-console__practice">{{ active_company.name|default:"Meridian Health" }}</div>
+        <div class="mobile-console__role">{% if active_membership %}{{ active_membership.get_role_display }}{% elif is_patient_portal %}Patient portal{% else %}Care workspace{% endif %}</div>
+      </div>
+      {% if is_patient_portal %}
+        <a class="console-icon-button" href="#messages" aria-label="Open messages"><span aria-hidden="true">●</span><span>Inbox</span></a>
+      {% else %}
+        <a class="console-icon-button" href="{% url 'portal:staff-inbox' %}" aria-label="Open messages"><span aria-hidden="true">●</span><span>Inbox</span></a>
+      {% endif %}
+    </header>
+
+    <main class="mobile-console__content">
+      {% if is_patient_portal %}
+        <section class="mobile-console__welcome" aria-labelledby="mobile-heading">
+          <p class="console-kicker">Your care</p>
+          <h1 id="mobile-heading">Hello, {{ user.first_name|default:user.full_name }}.</h1>
+          <p>Keep track of your appointments, care plan, and messages in one secure place.</p>
+        </section>
+      {% else %}
+        <section class="mobile-console__welcome" aria-labelledby="mobile-heading">
+          <p class="console-kicker">Today at {{ active_company.name }}</p>
+          <h1 id="mobile-heading">Welcome, {{ user.first_name|default:user.full_name }}.</h1>
+          <p>Your focused mobile view for care that needs attention.</p>
+        </section>
+      {% endif %}
+
+      <section class="mobile-metrics" aria-label="Practice metrics">
+        {% for metric_name, metric_value in metrics.items %}
+          <article class="metric-card">
+            <span class="metric-card__label">{{ metric_name|metric_label }}</span>
+            <strong class="metric-card__value">{{ metric_value }}</strong>
+          </article>
+        {% empty %}
+          <article class="metric-card">
+            <span class="metric-card__label">Care activity</span>
+            <strong class="metric-card__value">—</strong>
+            <span class="metric-card__hint">New activity will show here.</span>
+          </article>
+        {% endfor %}
+      </section>
+
+      <nav class="mobile-quick-actions" aria-label="Quick actions">
+        {% if is_patient_portal %}
+          <a class="console-button console-button--primary" href="#schedule">View appointments</a>
+          <a class="console-button console-button--secondary" href="#messages">Message care team</a>
+        {% else %}
+          <a class="console-button console-button--primary" href="{% url 'portal:patient-list' %}">Find patient</a>
+          <a class="console-button console-button--secondary" href="{% url 'portal:staff-tasks' %}">Open tasks</a>
+        {% endif %}
+      </nav>
+
+      <section class="console-card mobile-card" id="schedule" aria-labelledby="mobile-appointments-heading">
+        <header class="console-card__header">
+          <div class="console-card__heading">
+            <h2 id="mobile-appointments-heading">Upcoming appointments</h2>
+            <p>{% if is_patient_portal %}Your scheduled care{% else %}Your practice schedule{% endif %}</p>
+          </div>
+          {% if is_patient_portal %}<a class="console-button console-button--quiet" href="#schedule">All</a>{% else %}<a class="console-button console-button--quiet" href="{% url 'portal:staff-schedule' %}">All</a>{% endif %}
+        </header>
+        <div class="console-card__body">
+          <ul class="console-list">
+            {% for appointment in upcoming_appointments %}
+              <li class="console-list__item">
+                <time class="console-time" datetime="{{ appointment.starts_at|date:'c' }}">{{ appointment.starts_at|date:"H:i" }}<span>{{ appointment.starts_at|date:"j M" }}</span></time>
+                <div class="console-list__copy">
+                  <strong>{% if is_patient_portal %}{{ appointment.get_appointment_type_display }}{% else %}{{ appointment.patient }}{% endif %}</strong>
+                  <span>{% if is_patient_portal %}{% if appointment.clinician %}{{ appointment.clinician.full_name }}{% else %}Your Meridian care team{% endif %}{% else %}{{ appointment.get_appointment_type_display }}{% endif %}</span>
+                </div>
+                <span class="console-status console-status--{{ appointment.status }}">{{ appointment.get_status_display }}</span>
+              </li>
+            {% empty %}
+              <li class="console-empty"><p>{% if is_patient_portal %}You have no upcoming appointments. Your next booking will appear here.{% else %}No appointments are scheduled for this practice yet.{% endif %}</p></li>
+            {% endfor %}
+          </ul>
+        </div>
+      </section>
+
+      <section class="console-card mobile-card" id="tasks" aria-labelledby="mobile-tasks-heading">
+        <header class="console-card__header">
+          <div class="console-card__heading">
+            <h2 id="mobile-tasks-heading">{% if is_patient_portal %}Care reminders{% else %}Open tasks{% endif %}</h2>
+            <p>{% if is_patient_portal %}Things to keep on track{% else %}Follow-ups needing attention{% endif %}</p>
+          </div>
+          {% if is_patient_portal %}<a class="console-button console-button--quiet" href="#tasks">All</a>{% else %}<a class="console-button console-button--quiet" href="{% url 'portal:staff-tasks' %}">All</a>{% endif %}
+        </header>
+        <div class="console-card__body">
+          <ul class="console-list task-list">
+            {% for task in open_tasks %}
+              <li class="task-list__item">
+                <div class="task-list__top">
+                  <div>
+                    <strong>{{ task.title }}</strong>
+                    <p class="task-list__meta">{% if is_patient_portal %}{{ task.description|default:"Your care team has added a reminder." }}{% else %}{{ task.patient|default:"General practice" }}{% if task.assigned_to %} · {{ task.assigned_to.full_name }}{% endif %}{% endif %}</p>
+                  </div>
+                  {% if not is_patient_portal %}<span class="console-priority">{{ task.get_priority_display }}</span>{% endif %}
+                </div>
+                {% if task.due_at or task.workflow_url %}
+                  <div class="task-list__footer">
+                    {% if task.due_at %}<time datetime="{{ task.due_at|date:'c' }}">Due {{ task.due_at|date:"j M" }}</time>{% endif %}
+                    {% if not is_patient_portal %}
+                      {% if task.is_clinical_workflow %}
+                        {% if task.workflow_url %}<a class="console-button console-button--quiet" href="{{ task.workflow_url }}">{{ task.workflow_label }}</a>{% else %}<span class="console-status">Clinical workflow</span>{% endif %}
+                      {% else %}<form class="console-inline-form" method="post" action="{% url 'portal:task-complete' task.pk %}">
+                        {% csrf_token %}
+                        <input type="hidden" name="next" value="{{ request.path }}">
+                        <button class="console-button console-button--quiet" type="submit">Complete</button>
+                      </form>{% endif %}
+                    {% else %}
+                      <a class="console-button console-button--quiet" href="#tasks">View</a>
+                    {% endif %}
+                  </div>
+                {% endif %}
+              </li>
+            {% empty %}
+              <li class="console-empty"><p>{% if is_patient_portal %}There are no care reminders at the moment.{% else %}No open tasks are assigned to this practice.{% endif %}</p></li>
+            {% endfor %}
+          </ul>
+        </div>
+      </section>
+
+      <section class="console-card mobile-card" id="messages" aria-labelledby="mobile-messages-heading">
+        <header class="console-card__header">
+          <div class="console-card__heading">
+            <h2 id="mobile-messages-heading">Messages</h2>
+            <p>{% if is_patient_portal %}Your secure conversation with Meridian{% else %}Recent patient conversations{% endif %}</p>
+          </div>
+          {% if is_patient_portal %}
+            <a class="console-button console-button--quiet" href="#messages">Open</a>
+          {% else %}
+            <a class="console-button console-button--quiet" href="{% url 'portal:staff-inbox' %}">Open inbox</a>
+          {% endif %}
+        </header>
+        <div class="console-card__body">
+          <ul class="console-list message-list">
+            {% for message in recent_messages %}
+              <li class="message-list__item{% if not is_patient_portal %} message-list__item--thread{% endif %}">
+                <span class="console-patient-avatar" aria-hidden="true">{% if message.thread %}{% if message.sender %}{{ message.sender.first_name|default:message.sender.email|slice:":1"|upper }}{% else %}M{% endif %}{% else %}{{ message.patient.first_name|slice:":1"|upper }}{{ message.patient.last_name|slice:":1"|upper }}{% endif %}</span>
+                <div class="message-list__copy">
+                  <strong>{% if message.thread %}{{ message.thread.subject|default:"Patient message" }}{% else %}{{ message.subject|default:"Patient message" }}{% endif %}</strong>
+                  <span>{% if message.thread %}{{ message.body|default:"New message"|truncatechars:56 }}{% else %}{{ message.patient }}{% endif %}</span>
+                  {% if not is_patient_portal %}
+                    <a class="message-list__action" href="{% url 'portal:patient-detail' message.patient_id %}?thread={{ message.pk }}#conversation-{{ message.pk }}">Open conversation<span class="sr-only"> with {{ message.patient }}</span></a>
+                  {% endif %}
+                </div>
+                {% if message.thread %}
+                  {% if message.created_at %}<time class="message-list__time" datetime="{{ message.created_at|date:'c' }}">{{ message.created_at|timesince }} ago</time>{% endif %}
+                {% elif message.last_message_at %}
+                  <time class="message-list__time" datetime="{{ message.last_message_at|date:'c' }}">{{ message.last_message_at|timesince }} ago</time>
+                {% endif %}
+              </li>
+            {% empty %}
+              <li class="console-empty"><p>No secure messages yet.</p></li>
+            {% endfor %}
+          </ul>
+        </div>
+      </section>
+
+      {% if not is_patient_portal %}
+        <section class="console-card mobile-card" id="patients" aria-labelledby="mobile-patients-heading">
+          <header class="console-card__header">
+            <div class="console-card__heading">
+              <h2 id="mobile-patients-heading">Patients</h2>
+              <p>Recently active records</p>
+            </div>
+            <a class="console-button console-button--quiet" href="{% url 'portal:patient-list' %}">Directory</a>
+          </header>
+          <div class="console-card__body">
+            <ul class="console-list">
+              {% for listed_patient in patients %}
+                <li class="console-list__item">
+                  <span class="console-patient-avatar" aria-hidden="true">{{ listed_patient.first_name|slice:":1"|upper }}{{ listed_patient.last_name|slice:":1"|upper }}</span>
+                  <div class="console-list__copy"><strong>{{ listed_patient }}</strong><span>{% if listed_patient.assigned_doctor %}{{ listed_patient.assigned_doctor.full_name }}{% else %}Unassigned clinician{% endif %}</span></div>
+                  <a class="console-button console-button--quiet" href="{% url 'portal:patient-detail' listed_patient.pk %}">Open</a>
+                </li>
+              {% empty %}
+                <li class="console-empty"><p>No patient records are available yet.</p></li>
+              {% endfor %}
+            </ul>
+          </div>
+        </section>
+      {% endif %}
+    </main>
+
+    {% if is_patient_portal %}<nav class="mobile-bottom-nav" aria-label="Mobile navigation">
+      <a class="is-active" href="#schedule">Home</a>
+      <a href="#patients">{% if is_patient_portal %}Care{% else %}Patients{% endif %}</a>
+      <a href="#tasks">Tasks</a>
+      {% if is_patient_portal %}<a href="#messages">Inbox</a>{% else %}<a href="{% url 'portal:staff-inbox' %}">Inbox</a>{% endif %}
+    </nav>{% else %}{% include 'portal/includes/staff_mobile_navigation.html' with nav_section='overview' %}{% endif %}
+  </div>
+{% endblock %}
