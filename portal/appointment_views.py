@@ -65,7 +65,8 @@ class AppointmentProposalActionMixin:
             return patient_messages_redirect(thread)
         if self.is_staff_inbox():
             return staff_inbox_redirect(thread)
-        return redirect('portal:patient-detail', pk=thread.patient_id)
+        from .patient_workspace import workspace_url
+        return redirect(workspace_url(thread.patient, 'messages', thread=thread.pk))
 
 
 class ProposeAppointmentMixin(AppointmentProposalActionMixin):

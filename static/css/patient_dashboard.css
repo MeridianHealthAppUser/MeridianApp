@@ -1,0 +1,139 @@
+/* Compact patient overview only; detailed care pages keep their own layouts. */
+.workspace-page .meridian-console .patient-home {
+  max-width: 76rem;
+  padding: 1.5rem clamp(1rem, 3vw, 2.25rem) 2rem;
+}
+.patient-home__heading {
+  align-items: center;
+  display: flex;
+  gap: 1rem 1.5rem;
+  justify-content: space-between;
+  margin-bottom: 1.25rem;
+}
+.patient-home__heading > div { min-width: 0; }
+.workspace-page .meridian-console .patient-home__heading h1 {
+  color: var(--console-ink);
+  font-family: inherit;
+  font-size: clamp(1.5rem, 2.2vw, 1.85rem);
+  font-weight: 600;
+  letter-spacing: -.035em;
+  line-height: 1.2;
+  margin: .3rem 0 .4rem;
+  overflow-wrap: anywhere;
+}
+.patient-home__heading p:not(.console-kicker) {
+  color: #526f74;
+  font-size: .84rem;
+  line-height: 1.55;
+  margin: 0;
+}
+.patient-home__heading .console-kicker { margin: 0; }
+.patient-home__heading > a { flex-shrink: 0; }
+.workspace-page .meridian-console .patient-home .console-metrics {
+  gap: .8rem;
+  margin-bottom: 1rem;
+}
+.workspace-page .meridian-console .patient-home .metric-card {
+  min-height: 0;
+  padding: 1rem 1.1rem;
+}
+.workspace-page .meridian-console .patient-home .metric-card::after { display: none; }
+.workspace-page .meridian-console .patient-home .metric-card__label {
+  color: #526f74;
+  font-size: .76rem;
+  font-weight: 500;
+  letter-spacing: 0;
+  line-height: 1.4;
+  max-width: none;
+  text-transform: none;
+}
+.workspace-page .meridian-console .patient-home .metric-card__value {
+  font-size: 1.65rem;
+  font-weight: 600;
+  letter-spacing: -.025em;
+  line-height: 1.2;
+  margin-top: .35rem;
+}
+.workspace-page .meridian-console .patient-home .patient-home__plan .metric-card__value {
+  font-size: 1.08rem;
+  letter-spacing: -.01em;
+  line-height: 1.45;
+}
+.workspace-page .meridian-console .patient-home .metric-card__hint {
+  font-size: .75rem;
+  line-height: 1.5;
+  margin-top: .35rem;
+}
+.workspace-page .meridian-console .patient-home .patient-inline-link { font-weight: 600; }
+.workspace-page .meridian-console .patient-home .patient-page-grid { gap: 1rem; }
+.workspace-page .meridian-console .patient-home .patient-page-section { margin-top: 1rem; }
+.workspace-page .meridian-console .patient-home .console-card__header {
+  gap: .65rem;
+  min-height: 0;
+  padding: .85rem 1rem;
+}
+.workspace-page .meridian-console .patient-home .console-card__heading h2 {
+  font-size: .95rem;
+  font-weight: 600;
+  letter-spacing: -.015em;
+  line-height: 1.4;
+}
+.workspace-page .meridian-console .patient-home .console-card__heading p {
+  font-size: .75rem;
+  margin-top: .2rem;
+}
+.workspace-page .meridian-console .patient-home .console-card__body { padding: .1rem 1rem; }
+.workspace-page .meridian-console .patient-home .console-list__item {
+  gap: .9rem;
+  min-height: 0;
+  padding: .85rem 0;
+}
+.workspace-page .meridian-console .patient-home .console-list__copy strong {
+  font-size: .85rem;
+  font-weight: 600;
+  line-height: 1.45;
+  white-space: normal;
+}
+.workspace-page .meridian-console .patient-home .console-list__copy span {
+  font-size: .78rem;
+  line-height: 1.55;
+  white-space: normal;
+}
+.workspace-page .meridian-console .patient-home .console-time { font-size: .85rem; font-weight: 600; }
+.workspace-page .meridian-console .patient-home .console-time span { font-size: .73rem; font-weight: 400; }
+.workspace-page .meridian-console .patient-home .console-status { font-size: .7rem; font-weight: 600; padding: .3rem .55rem; }
+.workspace-page .meridian-console .patient-home .patient-progress-list li { padding: .75rem 0; }
+.workspace-page .meridian-console .patient-home .patient-progress-list time { font-size: .8rem; }
+.workspace-page .meridian-console .patient-home .patient-progress-list strong { font-size: .9rem; font-weight: 600; }
+.workspace-page .meridian-console .patient-home .patient-empty { font-size: .8rem; padding: .85rem 0; }
+.workspace-page .meridian-console .patient-home .console-button {
+  border-radius: .5rem;
+  font-size: .78rem;
+  font-weight: 600;
+  line-height: 1.4;
+  min-height: 2.5rem;
+  padding: .55rem .8rem;
+}
+.workspace-page .meridian-console .patient-home .console-button--primary { background: #087f77; color: #fff; }
+.workspace-page .meridian-console .patient-home .console-button--primary:hover { background: #066b64; }
+.workspace-page .meridian-console .patient-home .patient-page-privacy { font-size: .73rem; margin-top: 1.2rem; padding-top: .85rem; }
+.workspace-page .meridian-console .patient-home .patient-page-privacy strong { font-weight: 600; }
+@media (max-width: 52rem) {
+  .patient-home__heading { align-items: flex-start; flex-direction: column; gap: .85rem; }
+  .workspace-page .meridian-console .patient-home .console-button { min-height: 2.75rem; }
+}
+@media (max-width: 42rem) {
+  .workspace-page .meridian-console .patient-home { padding-top: 1.2rem; }
+  .workspace-page .meridian-console .patient-home .console-metrics { gap: .65rem; grid-template-columns: minmax(0, 1fr); }
+  .workspace-page .meridian-console .patient-home .metric-card {
+    align-items: center;
+    column-gap: 1rem;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    padding: .85rem 1rem;
+  }
+  .workspace-page .meridian-console .patient-home .metric-card__value { grid-column: 2; grid-row: 1 / span 2; margin: 0; }
+  .workspace-page .meridian-console .patient-home .metric-card__hint { grid-column: 1; }
+  .workspace-page .meridian-console .patient-home .patient-home__plan { display: block; }
+  .workspace-page .meridian-console .patient-home .patient-home__plan .metric-card__value { display: block; margin-top: .25rem; }
+}

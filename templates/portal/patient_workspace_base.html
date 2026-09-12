@@ -1,0 +1,15 @@
+{% extends 'portal/staff_page_base.html' %}
+{% load static %}
+{% block title %}{{ patient }} · {{ page_title|default:'Patient workspace' }} | Meridian{% endblock %}
+{% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/patient_workspace.css' %}">{% endblock %}
+{% block breadcrumb %}<a class="console-breadcrumb__link" href="{% url 'portal:patient-list' %}">Patients</a><span class="console-breadcrumb__dot" aria-hidden="true"></span><span>{{ company.name }}</span>{% endblock %}
+{% block page_heading %}
+  <header class="patient-workspace-heading">
+    <div><p class="console-kicker">Patient workspace · {{ company.name }}</p><h1>{{ patient }}</h1><p>{{ patient.medical_record_number|default:'Record number pending' }}{% if patient.user %} · {{ patient.user.email }}{% endif %}{% if patient.phone %} · {{ patient.phone }}{% endif %}</p></div>
+    <div class="patient-workspace-actions">{% block patient_workspace_heading_actions %}{% endblock %}</div>
+  </header>
+  <nav class="patient-workspace-tabs" aria-label="Patient sections">
+    {% for tab in workspace_tabs %}<a href="{{ tab.url }}"{% if tab.active %} class="is-active" aria-current="page"{% endif %}>{{ tab.label }}</a>{% endfor %}
+  </nav>
+{% endblock %}
+{% block page_content %}<div class="patient-workspace-content" data-patient-section="{{ workspace_tab }}">{% block patient_workspace_content %}{% endblock %}</div>{% endblock %}

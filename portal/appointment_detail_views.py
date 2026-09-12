@@ -99,6 +99,11 @@ class AppointmentDetailMixin:
             workflow_context=request.POST.get('workflow_context', '') if request.method == 'POST' else make_workflow_context(request, company, 'appointment-status', appointment, patient=self.patient if self.patient_portal else None))
         allowed_role = 'patient' if self.patient_portal else ('doctor' if self.membership.role == 'doctor' else None)
         context.update(appointment_video_context(request, appointment, allowed_role=allowed_role))
+        if not self.patient_portal:
+            from .patient_workspace import patient_workspace_context
+
+            context.update(patient_workspace_context(request, company, self.membership, appointment.patient, 'appointments'))
+            context['page_title'] = 'Appointment details'
         return render(request, 'portal/patient_appointment_detail.html' if self.patient_portal else 'portal/appointment_detail.html', context, status=status)
 
     def get(self, request, pk):

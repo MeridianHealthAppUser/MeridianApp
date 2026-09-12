@@ -1,6 +1,7 @@
 from django.urls import include, path
 
 from . import appointment_views, availability_views, clinical_views, intake_views, lead_views, message_management_views, patient_views, staff_views, task_views, views
+from .patient_workspace import PatientWorkspaceView
 
 app_name = 'portal'
 
@@ -52,7 +53,7 @@ urlpatterns = [
     path('patient/messages/<int:pk>/', views.PatientMessageCreateView.as_view(), name='patient-message-create'),
     path('patient/messages/', patient_views.PatientMessagesView.as_view(), name='patient-messages'),
     path('patient/messages/new/', views.PatientThreadCreateView.as_view(), name='patient-thread-create'),
-    path('patients/<int:pk>/', views.PatientDetailView.as_view(), name='patient-detail'),
+    path('patients/<int:pk>/', PatientWorkspaceView.as_view(), name='patient-detail'),
     path('patients/<int:patient_pk>/tasks/', views.PatientTaskCreateView.as_view(), name='patient-task-create'),
     path('patients/<int:patient_pk>/appointments/', views.PatientAppointmentCreateView.as_view(), name='patient-appointment-create'),
     path('patients/<int:patient_pk>/notes/', views.PatientNoteCreateView.as_view(), name='patient-note-create'),

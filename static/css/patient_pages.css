@@ -2,11 +2,6 @@
 .site-header { gap: .75rem; min-height: 4rem; }
 .site-header .header-actions { flex-wrap: wrap; justify-content: flex-end; }
 .patient-pages-console { --patient-text: #526f74; }
-.patient-page-topbar { align-items: center; display: flex; gap: 1rem; justify-content: space-between; margin: 0 auto; max-width: 76rem; padding: 1.25rem 2.25rem; }
-.patient-page-topbar > div:first-child { display: grid; gap: .2rem; min-width: 0; }
-.patient-page-topbar__label { color: var(--patient-text); font-size: .75rem; }
-.patient-page-topbar strong { font-size: .9rem; overflow-wrap: anywhere; }
-.patient-page-topbar .patient-console__account { color: var(--patient-text); }
 .patient-navigation { background: #fff; border-block: 1px solid var(--console-line); }
 .patient-navigation__links { display: flex; flex-wrap: wrap; gap: .5rem; margin: 0 auto; max-width: 76rem; padding: .7rem 2.25rem; }
 .patient-navigation a { align-items: center; border: 1px solid transparent; border-radius: .65rem; color: var(--patient-text); display: inline-flex; flex: 0 0 auto; font-size: .84rem; font-weight: 700; gap: .55rem; justify-content: center; min-height: 2.8rem; padding: .6rem .85rem; text-decoration: none; }
@@ -85,7 +80,6 @@
   .patient-page-grid { grid-template-columns: 1fr; }
   .patient-navigation__links { gap: .35rem; padding-inline: 1rem; }
   .patient-navigation a { font-size: .8rem; gap: .4rem; padding-inline: .65rem; }
-  .patient-page-topbar { padding-inline: 1.5rem; }
 }
 
 @media (max-width: 42rem) {
@@ -93,9 +87,6 @@
   .site-header { padding: .85rem 1rem; }
   .site-header .company-switcher select { max-width: 9rem; }
   .site-header .header-actions { column-gap: .5rem; row-gap: .25rem; }
-  .patient-page-topbar { align-items: flex-start; padding: 1rem; }
-  .patient-page-topbar .patient-console__account > span:last-child { display: none; }
-  .patient-page-topbar .console-avatar { height: 2rem; width: 2rem; }
   .patient-navigation { bottom: 0; box-shadow: 0 -5px 22px rgba(21, 59, 57, .06); left: 0; position: fixed; right: 0; z-index: 30; }
   .patient-navigation__links { flex-wrap: nowrap; gap: .15rem; justify-content: flex-start; overflow-x: auto; overscroll-behavior-x: contain; padding: .5rem .35rem calc(.5rem + env(safe-area-inset-bottom)); scrollbar-color: #a7ccc4 #f3f8f6; scrollbar-width: thin; }
   .patient-navigation a { border-radius: .5rem; flex: 0 0 5.2rem; flex-direction: column; font-size: .72rem; gap: .3rem; min-height: 3.4rem; min-width: 0; padding: .35rem .3rem; text-align: center; }

@@ -1,0 +1,43 @@
+.patient-workspace-heading { align-items: start; display: flex; flex-wrap: wrap; gap: 1rem; justify-content: space-between; margin-bottom: 1.25rem; }
+.patient-workspace-heading h1 { color: var(--console-ink); font-family: Georgia, serif; font-size: clamp(1.8rem, 3vw, 2.5rem); font-weight: 500; line-height: 1.1; margin: 0; }
+.patient-workspace-heading p:last-child { color: var(--console-muted); font-size: .8rem; line-height: 1.6; margin: .6rem 0 0; overflow-wrap: anywhere; }
+.patient-workspace-heading > div { min-width: 0; }
+.patient-workspace-actions { align-items: center; display: flex; flex-wrap: wrap; gap: .65rem; }
+.patient-workspace-tabs { border-bottom: 1px solid var(--console-line); display: flex; flex-wrap: wrap; gap: .3rem; margin-bottom: 1.3rem; padding-bottom: .75rem; }
+.patient-workspace-tabs a { align-items: center; border: 1px solid transparent; border-radius: .55rem; color: var(--console-muted); display: inline-flex; font-size: .8rem; font-weight: 650; min-height: 44px; padding: .55rem .75rem; text-decoration: none; }
+.patient-workspace-tabs a.is-active { background: var(--console-teal-soft); border-color: #acd8cb; color: var(--console-teal-dark); }
+.patient-workspace-tabs a:hover { background: #edf6f2; }
+.patient-workspace-content { min-width: 0; }
+.patient-workspace-toolbar { align-items: center; display: flex; flex-wrap: wrap; gap: .7rem; justify-content: space-between; margin-bottom: 1rem; }
+.patient-workspace-toolbar h2 { color: var(--console-ink); font-size: 1.15rem; margin: 0; }
+.patient-workspace-filter { align-items: center; display: flex; flex-wrap: wrap; gap: .5rem; }
+.patient-workspace-filter label { font-size: .8rem; }
+.patient-workspace-panel { background: #fff; border: 1px solid var(--console-line); border-radius: .85rem; margin-bottom: 1rem; overflow: hidden; }
+.patient-workspace-panel__body { padding: 1rem 1.2rem; }
+.patient-workspace-table-wrap { overflow-x: auto; }
+.patient-workspace-table { border-collapse: collapse; font-size: .8rem; width: 100%; }
+.patient-workspace-table th, .patient-workspace-table td { border-bottom: 1px solid var(--console-soft-line); line-height: 1.55; padding: .8rem 1rem; text-align: left; vertical-align: top; }
+.patient-workspace-table th { font-size: .68rem; }
+.patient-workspace-table tr:last-child td { border-bottom: 0; }
+.patient-workspace-table small { color: var(--console-muted); display: block; margin-top: .2rem; }
+.patient-workspace-empty, .patient-workspace-notice { color: var(--console-muted); font-size: .85rem; line-height: 1.6; margin: 0; padding: 1.1rem; }
+.patient-workspace-notice { background: #edf6f2; border: 1px solid #cce2d7; border-radius: .75rem; margin-bottom: 1rem; }
+.patient-workspace-pagination { align-items: center; display: flex; flex-wrap: wrap; font-size: .8rem; gap: .6rem; justify-content: space-between; padding: 1rem; }
+.patient-workspace-summary { display: grid; gap: .8rem; grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); margin-bottom: 1rem; }
+.patient-workspace-summary a { background: #fff; border: 1px solid var(--console-line); border-radius: .85rem; color: var(--console-muted); font-size: .8rem; padding: 1rem; text-decoration: none; }
+.patient-workspace-summary strong { color: var(--console-ink); display: block; font-size: 1.7rem; margin-top: .4rem; }
+.patient-workspace-facts { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr)); margin: 0; }
+.patient-workspace-facts dt { color: var(--console-muted); font-size: .75rem; }
+.patient-workspace-facts dd { color: var(--console-ink); font-size: .85rem; margin: .35rem 0 0; overflow-wrap: anywhere; }
+.patient-workspace-editor { margin-top: 1rem; }
+.patient-workspace-editor > summary { color: var(--console-teal-dark); cursor: pointer; font-size: .85rem; font-weight: 700; padding: 1rem; }
+.patient-workspace-editor .console-form { max-width: 48rem; padding: 0 1rem 1rem; }
+.patient-workspace-note { border-bottom: 1px solid var(--console-soft-line); padding: 1rem 1.2rem; }
+.patient-workspace-note p { font-size: .85rem; line-height: 1.6; overflow-wrap: anywhere; }
+.patient-workspace-note small { color: var(--console-muted); }
+.patient-workspace-message-grid { align-items: start; display: grid; gap: 1rem; grid-template-columns: minmax(12rem, .35fr) minmax(0, 1fr); }
+.patient-workspace-threads { list-style: none; margin: 0; padding: 0; }
+.patient-workspace-threads a { border-bottom: 1px solid var(--console-soft-line); color: var(--console-ink); display: block; font-size: .85rem; overflow-wrap: anywhere; padding: 1rem; text-decoration: none; }
+.patient-workspace-threads a[aria-current] { background: var(--console-teal-soft); }
+@media (max-width: 48rem) { .patient-workspace-message-grid { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 36rem) { .patient-workspace-tabs a { font-size: .74rem; padding: .5rem .6rem; } .patient-workspace-table th, .patient-workspace-table td { padding: .65rem .75rem; } }

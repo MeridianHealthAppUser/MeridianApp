@@ -1,0 +1,10 @@
+{% load tz %}{% timezone 'Africa/Johannesburg' %}{% for entry in timeline_entries %}
+  <li class="record-timeline__entry record-timeline__entry--{{ entry.category }}" data-entry-key="{{ entry.kind }}:{{ entry.id }}">
+    <div class="record-timeline__meta"><time datetime="{{ entry.at|date:'c' }}">{{ entry.at|date:"j M Y · H:i" }}</time><span class="console-status">{{ entry.company_name }}</span><span>{{ entry.category_label }}</span></div>
+    <h3>{{ entry.title }}</h3>
+    {% if entry.actor %}<p class="record-timeline__actor">{{ entry.actor }}{% if entry.signed_at %} · Signed {{ entry.signed_at|date:"j M Y · H:i" }}{% endif %}</p>{% endif %}
+    {% if entry.detail %}<p class="record-timeline__detail">{{ entry.detail }}</p>{% endif %}
+    {% if entry.answers %}<details class="record-profile"><summary>Read this version of the self-reported history</summary><dl>{% for answer in entry.answers %}<dt>{{ answer.label }}</dt><dd>{{ answer.answer }}</dd>{% endfor %}</dl></details>{% endif %}
+    {% if entry.url %}<a class="record-text-link" href="{{ entry.url }}">Open entry <span aria-hidden="true">→</span></a>{% endif %}
+  </li>
+{% empty %}<li class="staff-empty-state" data-timeline-empty><p>No entries match this record scope and date range.</p></li>{% endfor %}{% endtimezone %}

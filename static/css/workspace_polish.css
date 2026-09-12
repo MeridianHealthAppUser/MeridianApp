@@ -37,7 +37,6 @@
 .workspace-page .meridian-console .patient-page-actions { align-items:center; display:flex; flex-wrap:wrap; gap:.65rem; }
 .workspace-page .meridian-console .patient-navigation__links { gap:.25rem .4rem; }
 .workspace-page .meridian-console .patient-navigation a { font-size:.8rem; font-weight:650; min-height:2.6rem; padding:.5rem .75rem; }
-.workspace-page .meridian-console .patient-page-topbar { padding-block:1rem; }
 .workspace-page .meridian-console .record-directory-filters { grid-template-columns:minmax(0,1.3fr) minmax(0,1fr) minmax(0,1fr) auto; }
 .workspace-page .meridian-console .record-directory-filters > button { width:auto; }
 

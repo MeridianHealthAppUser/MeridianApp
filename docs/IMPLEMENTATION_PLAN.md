@@ -2,7 +2,7 @@
 
 Reference: local `meridian-health-app-mock-rev2.6__12_09_2026_.html` and the user's later corrections.
 
-Scope confirmed 12 September 2026: complete the in-app functionality without approval pauses. Payment processing and email delivery are excluded. Every primary navigation destination is a separate Django page; the overview remains a summary. No live external services, deployments or transactions are implied by local status changes. Existing data must not be reset.
+Scope confirmed 12 September 2026: complete the in-app functionality without approval pauses. Payment processing and email delivery are excluded. Every practice-wide navigation destination is a separate Django page; opening a patient uses one patient-bound workspace with separate tabs, not a stacked collection of sections. Overview remains a summary. No live external services, deployments or transactions are implied by local status changes. Existing data must not be reset.
 
 ## Completed foundation
 
@@ -23,6 +23,10 @@ Scope confirmed 12 September 2026: complete the in-app functionality without app
 - [x] **Final visual refinement** — compact overview metric cards, naturally sized summary panels, clearer labels, grouped independently scrolling desktop navigation, consistent tables/forms/buttons and responsive layouts. Public landing and questionnaire styling is isolated from workspace refinements.
 - [x] **Native video consultations** — private appointment-bound WebRTC rooms, explicit device joining, microphone/camera/screen controls, in-app invitations, reconnect handling, shared Redis presence and temporary TURN credentials. Real two-browser media and local relay-only calls verified; external HTTPS/Redis/TURN deployment remains separate.
 - [x] **Shared account menu** — a single top-right avatar/name/role menu, a dedicated own-profile page, read-only practice access, password changes, personal history/preferences and CSRF-protected sign-out. Duplicate staff Account sidebar links are removed; patient care account details remain separate from shared login details.
+- [x] **Weight and reporting visuals** — compact patient weight charts/history, four summary measures, real daily activity lines, appointment breakdown, monthly cohort bars and paired recorded-weight distributions. Empty states and exact-value tables remain available; no invented metrics or payment activity.
+- [x] **Unified staff patient workspace** — canonical `/patients/<id>/` with separate Overview, History, Appointments, Consultations, Blood tests, Notes, Weight, Messages, Tasks, Payments, Treatment and Deliveries tabs. Only the selected tab renders, with one patient header and role-filtered access. Practice-wide lists remain separate. Existing booking, note, task and conversation actions return to the patient's relevant section, retaining invalid drafts.
+- [x] **Incremental patient history and spreadsheet export** — 20-event initial timeline, stable signed older-event loading, SAST dates, no-JavaScript pagination and a filtered `.xlsx` snapshot download. Scope and permissions are rechecked; private drafts/notes, arbitrary audit metadata and attachment bytes stay excluded. Over 10,000 events requires narrower filters. Protected JSON export remains separate.
+- [x] **Compact patient portal overview** — one greeting, content-sized summaries and panels, no duplicate practice strip, and links to dedicated appointments, progress, messages and updates pages. Overview does not mark conversations read or perform workflow writes.
 
 The current route map and practical workflows are in [USER_GUIDE.md](USER_GUIDE.md). Deployment preparation and remaining live-use prerequisites are in [DEPLOYMENT.md](DEPLOYMENT.md). Verification results are recorded in [VERIFICATION.md](VERIFICATION.md).
 
@@ -31,6 +35,7 @@ The current route map and practical workflows are in [USER_GUIDE.md](USER_GUIDE.
 - Preserve the three requested staff roles and two existing demo practices. A practice Super Admin is not Django's site-wide superuser.
 - Practice Administrators retain Leads access as explicitly requested, despite the prototype's inconsistent role matrix.
 - Cross-practice views may combine only records the signed-in user is authorised to read. Actions always target a specific practice and recheck permissions.
+- Patient tab navigation stays bound to that patient; the global navigation is the explicit exit to practice-wide pages. Practice Administrators get operational patient history, never clinical bodies. Local payment records are read-only and do not verify funds received.
 - A patient never gains an account by merely submitting a questionnaire. Since payment functionality is excluded, that existing checkout remains a preview; staff-user administration does not convert leads.
 - Do not collect real card/bank details, mark money paid, send emails, dispense externally or contact couriers. Local orders/subscriptions/dispatch logs are auditable in-app records.
 - Generated prescribing documents, automatic clinical decisions and live clinical deployment require separately validated governance. The prototype is not clinical or legal authority.

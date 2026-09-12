@@ -150,7 +150,7 @@ class PortalWorkflowTests(TestCase):
         self.assertEqual((event.company_id, event.patient_id, event.actor_id),
                          (self.company.pk, self.patient.pk, self.doctor.pk))
         self.assertEqual(event.target_id, str(self.patient.pk))
-        self.assertEqual(event.metadata, {})
+        self.assertEqual(event.metadata, {'section': 'overview'})
 
     def test_only_active_practice_doctor_can_create_clinical_notes(self):
         url = reverse('portal:patient-note-create', args=[self.patient.pk])
@@ -161,7 +161,7 @@ class PortalWorkflowTests(TestCase):
                 self.assertEqual(self.client.post(url, data).status_code, 403)
         self.assertFalse(ClinicalNote.objects.exists())
         self.login(self.doctor)
-        self.assertRedirects(self.client.post(url, data), self.patient_url(), fetch_redirect_response=False)
+        self.assertRedirects(self.client.post(url, data), self.patient_url() + '?tab=notes', fetch_redirect_response=False)
         note = ClinicalNote.objects.get()
         self.assertEqual((note.company_id, note.patient_id, note.author_id),
                          (self.company.pk, self.patient.pk, self.doctor.pk))
@@ -179,7 +179,7 @@ class PortalWorkflowTests(TestCase):
         for user in (self.doctor, self.second_doctor, self.super_admin, self.administrator):
             with self.subTest(user=user.email):
                 self.login(user)
-                response = self.client.get(self.patient_url())
+                response = self.client.get(self.patient_url(), {'tab': 'overview' if user == self.administrator else 'notes'})
                 self.assertEqual(response.status_code, 200)
                 if user == self.doctor:
                     self.assertContains(response, private_body)
@@ -187,6 +187,7 @@ class PortalWorkflowTests(TestCase):
                     self.assertNotContains(response, private_body)
                 if user == self.administrator:
                     self.assertNotContains(response, shared_body)
+                    self.assertEqual(self.client.get(self.patient_url(), {'tab': 'notes'}).status_code, 403)
                 else:
                     self.assertContains(response, shared_body)
 
@@ -197,7 +198,7 @@ class PortalWorkflowTests(TestCase):
             'title': 'Arrange follow-up', 'description': 'Contact about appointment availability.',
             'assigned_to': self.administrator.pk, 'priority': ClinicalTask.Priority.NORMAL,
         })
-        self.assertRedirects(response, self.patient_url(), fetch_redirect_response=False)
+        self.assertRedirects(response, self.patient_url() + '?tab=tasks', fetch_redirect_response=False)
         task = ClinicalTask.objects.get(title='Arrange follow-up')
         self.assertEqual((task.company_id, task.patient_id), (self.company.pk, self.patient.pk))
 
@@ -235,7 +236,7 @@ class PortalWorkflowTests(TestCase):
             'starts_at': (timezone.now() + timedelta(days=3)).isoformat(), 'duration_minutes': 30,
             'video_link': 'https://example.test/consult',
         })
-        self.assertRedirects(response, self.patient_url(), fetch_redirect_response=False)
+        self.assertRedirects(response, self.patient_url() + '?tab=appointments', fetch_redirect_response=False)
         appointment = Appointment.objects.get()
         self.assertEqual((appointment.company_id, appointment.patient_id, appointment.clinician_id),
                          (self.company.pk, self.patient.pk, self.doctor.pk))
@@ -357,7 +358,7 @@ class PortalWorkflowTests(TestCase):
         url = reverse('portal:staff-message-create', args=[self.thread.pk])
         self.assertRedirects(
             self.client.post(url, {'body': 'Your appointment details are ready.'}),
-            self.patient_url(), fetch_redirect_response=False,
+            self.patient_url() + f'?tab=messages&thread={self.thread.pk}', fetch_redirect_response=False,
         )
         message = PatientMessage.objects.get()
         self.assertEqual((message.company_id, message.sender_id), (self.company.pk, self.administrator.pk))
@@ -377,7 +378,7 @@ class PortalWorkflowTests(TestCase):
                 self.login(user)
                 response = self.client.get(reverse('portal:desktop-dashboard'))
                 self.assertEqual(response.context['metrics']['unread_messages'], 1)
-        self.client.get(self.patient_url())
+        self.client.get(self.patient_url(), {'tab': 'messages', 'thread': self.thread.pk})
         incoming.refresh_from_db()
         other_practice.refresh_from_db()
         self.assertIsNotNone(incoming.read_at)
@@ -391,7 +392,7 @@ class PortalWorkflowTests(TestCase):
         outbound = self.add_message(sender=self.doctor)
         another_patient = self.add_message(thread=self.other_patient_thread, sender=self.other_patient_user)
         self.login(self.doctor)
-        self.client.get(self.patient_url())
+        self.client.get(self.patient_url(), {'tab': 'messages', 'thread': self.thread.pk})
         for message in (incoming, outbound, another_patient):
             message.refresh_from_db()
         self.assertIsNotNone(incoming.read_at)

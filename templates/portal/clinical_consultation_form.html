@@ -1,17 +1,15 @@
-{% extends 'portal/staff_page_base.html' %}
+{% extends 'portal/patient_workspace_base.html' %}
 {% load static %}
 {% block title %}{% if encounter %}Consultation note{% else %}New consultation{% endif %} | {{ patient }} | Meridian{% endblock %}
 {% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/clinical_workflow.css' %}">{% endblock %}
-{% block breadcrumb %}<span>Clinical · Consultations</span><span class="console-breadcrumb__dot" aria-hidden="true"></span><span>{{ company.name }}</span>{% endblock %}
-
-{% block page_heading %}
-  <header class="staff-page-header"><div><p class="console-kicker">Clinical · Consultation note</p><h1>{% if encounter %}Consultation note{% else %}New consultation{% endif %}</h1><p>{{ patient }} · {{ company.name }}</p></div><div class="clinical-heading-actions"><a class="console-button console-button--secondary" href="{% url 'portal:patient-detail' patient.pk %}">Open patient record</a><a class="console-button console-button--quiet" href="{% url 'portal:clinical-consultations' %}">All consultations</a></div></header>
+{% block patient_workspace_heading_actions %}
+  <a class="console-button console-button--quiet" href="{% url 'portal:patient-detail' patient.pk %}?tab=consultations">Back to consultations</a>
 {% endblock %}
 
-{% block page_content %}
+{% block patient_workspace_content %}
   <div class="clinical-workflow clinical-workflow-grid">
     <section class="staff-page-card" aria-labelledby="consultation-note-heading">
-      <header class="staff-page-card__header"><div><h2 id="consultation-note-heading">Consultation note</h2><p>{% if can_edit %}Save a draft or sign the final record.{% else %}Read-only clinical record.{% endif %}</p></div>{% if encounter %}<span class="console-status{% if encounter.status == 'signed' %} console-status--active{% endif %}">{{ encounter.get_status_display }}</span>{% endif %}</header>
+      <header class="staff-page-card__header"><div><h2 id="consultation-note-heading">{% if encounter %}Consultation note{% else %}New consultation{% endif %}</h2><p>{% if can_edit %}Save a draft or sign the final record.{% else %}Read-only clinical record.{% endif %}</p></div>{% if encounter %}<span class="console-status{% if encounter.status == 'signed' %} console-status--active{% endif %}">{{ encounter.get_status_display }}</span>{% endif %}</header>
       <div class="clinical-panel-body">
         {% if can_edit %}
           <form class="console-form" method="post" action="{{ request.path }}">

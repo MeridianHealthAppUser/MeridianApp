@@ -2,6 +2,7 @@
 (() => {
   document.querySelectorAll('[data-account-menu]').forEach(menu => {
     const trigger = menu.querySelector('summary');
+    trigger.setAttribute('aria-expanded', String(menu.open));
     const items = () => [...menu.querySelectorAll('a,button')].filter(item => !item.disabled);
     const close = restoreFocus => { menu.open = false; trigger.setAttribute('aria-expanded', 'false'); if (restoreFocus) trigger.focus(); };
     menu.addEventListener('toggle', () => { trigger.setAttribute('aria-expanded', String(menu.open)); });

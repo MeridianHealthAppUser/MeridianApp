@@ -302,7 +302,9 @@ def _attach_appointment_proposals(context, request, company, patient, *, actor_r
     open_thread_ids = {thread.pk for thread in threads if not thread.is_closed}
     proposals = AppointmentProposal.objects.for_company(company).filter(
         patient=patient, thread_id__in=[thread.pk for thread in threads],
-    ).select_related('proposed_by', 'recipient', 'appointment', 'original_clinician', 'resulting_appointment')
+        thread__company=company, thread__patient=patient,
+        appointment__company=company, appointment__patient=patient,
+    ).filter(Q(resulting_appointment__isnull=True) | Q(resulting_appointment__company=company, resulting_appointment__patient=patient)).select_related('proposed_by', 'recipient', 'appointment', 'original_clinician', 'resulting_appointment')
     by_thread = {}
     for proposal in proposals:
         pending = proposal.status == AppointmentProposal.Status.PENDING
@@ -338,6 +340,7 @@ def _attach_appointment_proposals(context, request, company, patient, *, actor_r
 def _patient_record_context(request, company, membership, patient, **overrides):
     from video.access import attach_video_join
     from .clinical_tasks import attach_clinical_task_links
+    from .record_weight import record_weight_context
     from .video_links import safe_video_link
     from .workflow_context import make_workflow_context
 
@@ -372,7 +375,6 @@ def _patient_record_context(request, company, membership, patient, **overrides):
             'assigned_to', 'encounter_signing', 'lab_review_request',
         ).prefetch_related('tags')[:8]), request.user, membership),
         'notes': notes,
-        'weights': WeightEntry.objects.for_company(company).filter(patient=patient)[:8],
         'message_threads': _conversation_threads(company, patient, patient_view=False, mark_read=request.method == 'GET'),
         'task_form': ClinicalTaskForm(company=company, patient=patient),
         'appointment_form': AppointmentForm(company=company, patient=patient),
@@ -384,6 +386,7 @@ def _patient_record_context(request, company, membership, patient, **overrides):
         'message_form': PatientMessageForm(),
         'thread_form': PatientThreadForm(auto_id='thread_%s'),
     }
+    context.update(record_weight_context(request, company, patient))
     requested_thread = request.GET.get('thread')
     context['selected_thread_id'] = next(
         (thread.pk for thread in context['message_threads'] if str(thread.pk) == requested_thread),
@@ -415,8 +418,8 @@ def _invalid_patient_form(request, company, patient, name, form, **extra):
 
 
 def _invalid_staff_form(request, company, membership, patient, name, form, **extra):
-    context = _patient_record_context(request, company, membership, patient, **{name: form, 'failed_form': name}, **extra)
-    return render(request, 'portal/patient_detail.html', context)
+    from .patient_workspace import render_workspace_form_error
+    return render_workspace_form_error(request, company, membership, patient, name, form, **extra)
 
 
 class StaffPatientActionMixin(LoginRequiredMixin, StaffCompanyRequiredMixin):
@@ -426,7 +429,10 @@ class StaffPatientActionMixin(LoginRequiredMixin, StaffCompanyRequiredMixin):
         return get_object_or_404(Patient, pk=self.kwargs['patient_pk'], company=self.company, is_active=True)
 
     def patient_detail_redirect(self, patient):
-        return redirect('portal:patient-detail', pk=patient.pk)
+        from .patient_workspace import workspace_url
+        tab = {'patient-task-create': 'tasks', 'patient-appointment-create': 'appointments',
+               'patient-note-create': 'notes', 'staff-thread-create': 'messages'}.get(self.request.resolver_match.url_name, 'overview')
+        return redirect(workspace_url(patient, tab))
 
     def invalid_form(self, patient, name, form):
         return _invalid_staff_form(self.request, self.company, self.membership, patient, name, form)
@@ -531,7 +537,8 @@ class StaffMessageCreateView(LoginRequiredMixin, StaffCompanyRequiredMixin, View
                 messages.success(request, 'Secure message sent.')
                 if from_inbox:
                     return staff_inbox_redirect(thread)
-                return redirect('portal:patient-detail', pk=thread.patient_id)
+                from .patient_workspace import workspace_url
+                return redirect(workspace_url(thread.patient, 'messages', thread=thread.pk))
         if from_inbox:
             return render(request, 'portal/staff_inbox.html', staff_inbox_context(
                 request, self.company, self.membership, selected_thread_id=thread.pk,
@@ -636,7 +643,8 @@ class StaffThreadCreateView(StaffPatientActionMixin, View):
             thread.save()
             post_patient_message(thread=thread, sender=request.user, body=form.cleaned_data['body'], request=request)
         messages.success(request, 'Secure conversation started.')
-        return self.patient_detail_redirect(patient)
+        from .patient_workspace import workspace_url
+        return redirect(workspace_url(patient, 'messages', thread=thread.pk))
 
 
 def _task_redirect(request, task):
@@ -648,5 +656,6 @@ def _task_redirect(request, task):
     ):
         return HttpResponseRedirect(next_url)
     if task.patient_id:
-        return redirect('portal:patient-detail', pk=task.patient_id)
+        from .patient_workspace import workspace_url
+        return redirect(workspace_url(task.patient, 'tasks'))
     return redirect('portal:staff-tasks')

@@ -94,6 +94,8 @@ class MetricsView(ReportingView):
                         ('Mean recorded weight change (%)', results['weight_stats']['mean'])]
                 rows.extend((f"Patient record cohort {item['month']:%Y-%m}", item['records']) for item in results['cohorts'])
                 return _csv_response('meridian-operational-metrics.csv', ('Metric', 'Value'), rows)
+            from .reporting_presentation import metrics_dashboard
+            results['dashboard'] = metrics_dashboard(results)
         return render(request, 'portal/reporting_metrics.html', self.context(form=form, **results), status=400 if self.export else 200)
 
 

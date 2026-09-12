@@ -378,7 +378,7 @@ class ClinicalPortalTests(TestCase):
     def test_other_doctors_patient_record_does_not_reveal_private_draft_task_links(self):
         encounter = self.encounter(summary='Private unsaved assessment details.')
         self.login(self.colleague)
-        response = self.client.get(reverse('portal:patient-detail', args=[self.patient.pk]))
+        response = self.client.get(reverse('portal:patient-detail', args=[self.patient.pk]), {'tab': 'tasks'})
         self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, 'Private unsaved assessment details.')
         self.assertNotContains(response, f'href="{reverse("portal:clinical-consultation-detail", args=[encounter.pk])}"')

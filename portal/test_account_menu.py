@@ -52,7 +52,7 @@ class AccountMenuPresentationTests(TestCase):
         self.login(self.doctor)
         response = self.client.get(reverse('portal:staff-tasks'))
         self.assertContains(response, '<span class="account-menu__avatar" aria-hidden="true">SM</span>', html=True)
-        self.assertContains(response, 'aria-controls="account-menu-panel" aria-expanded="false"')
+        self.assertContains(response, 'aria-controls="account-menu-panel"')
         self.assertContains(response, 'aria-label="Your account"')
         self.assertContains(response, 'account_menu.js')
 

@@ -2,7 +2,7 @@
 {% load static %}
 
 {% block title %}{{ patient }} | {{ company.name }} | Meridian{% endblock %}
-{% block extra_css %}<link rel="stylesheet" href="{% static 'css/console.css' %}">{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{% static 'css/console.css' %}"><link rel="stylesheet" href="{% static 'css/record_weight.css' %}">{% endblock %}
 {% block content %}
   <div class="meridian-console console-desktop patient-record-console">
     <div class="console-shell">
@@ -197,29 +197,7 @@
           {% endif %}
 
           <div class="console-grid console-grid--equal console-section">
-            <section class="console-card" id="weights" aria-labelledby="record-weight-heading">
-              <header class="console-card__header">
-                <div class="console-card__heading">
-                  <h2 id="record-weight-heading">Weight history</h2>
-                  <p>Patient-recorded and team-recorded check-ins</p>
-                </div>
-              </header>
-              <div class="console-card__body">
-                <ul class="console-list record-weight-list">
-                  {% for weight in weights %}
-                    <li class="console-list__item">
-                      <time class="console-time" datetime="{{ weight.recorded_on|date:'c' }}">{{ weight.recorded_on|date:"j M" }}<span>{{ weight.recorded_on|date:"Y" }}</span></time>
-                      <div class="console-list__copy">
-                        <strong>{{ weight.weight_kg }} kg</strong>
-                        <span>{% if weight.note %}{{ weight.note }}{% elif weight.recorded_by %}Recorded by {{ weight.recorded_by.full_name }}{% else %}Check-in recorded{% endif %}</span>
-                      </div>
-                    </li>
-                  {% empty %}
-                    <li class="console-empty"><p>There are no weight entries in this record yet.</p></li>
-                  {% endfor %}
-                </ul>
-              </div>
-            </section>
+            {% include 'portal/includes/record_weight.html' %}
 
             <section class="console-card" id="messages" aria-labelledby="record-messages-heading">
               <header class="console-card__header">

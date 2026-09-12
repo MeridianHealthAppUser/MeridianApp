@@ -223,12 +223,12 @@ class StaffInboxTests(TestCase):
         })
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.context['selected_thread_id'], self.older_thread.pk)
-        self.assertNotEqual(response.context['message_threads'][0].pk, self.older_thread.pk)
-        conversations = self.parse(response).conversations
-        self.assertTrue(conversations[f'conversation-{self.older_thread.pk}'])
-        self.assertFalse(conversations[f'conversation-{self.recent_thread.pk}'])
+        self.assertEqual(response.context['workspace_tab'], 'messages')
+        self.assertEqual([thread.pk for thread in response.context['message_threads']], [self.older_thread.pk])
+        self.assertEqual(response.context['selected_thread'].pk, self.older_thread.pk)
+        self.assertContains(response, 'id="patient-conversation"')
 
-    def test_invalid_or_out_of_scope_thread_selection_is_ignored(self):
+    def test_invalid_or_out_of_scope_thread_selection_is_rejected(self):
         other_patient_thread = MessageThread.objects.create(
             company=self.company, patient=self.second_patient, subject='Different patient conversation',
         )
@@ -236,11 +236,9 @@ class StaffInboxTests(TestCase):
         for selection in ('not-an-id', '99999999', self.other_practice_thread.pk, other_patient_thread.pk):
             with self.subTest(selection=selection):
                 response = self.client.get(reverse('portal:patient-detail', args=[self.patient.pk]), {'thread': selection})
-                self.assertEqual(response.status_code, 200)
+                self.assertEqual(response.status_code, 404)
                 self.assertIsNone(response.context.get('selected_thread_id'))
-                conversations = self.parse(response).conversations
-                self.assertNotIn(f'conversation-{selection}', conversations)
-                self.assertTrue(conversations[f'conversation-{self.recent_thread.pk}'])
+                self.assertNotContains(response, self.recent_thread.subject, status_code=404)
 
     def test_inbox_marks_only_selected_thread_patient_messages_read(self):
         recent_message = self.add_message()

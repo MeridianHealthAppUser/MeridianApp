@@ -1,0 +1,53 @@
+<section class="console-card record-weight-card" id="weights" aria-labelledby="record-weight-heading">
+  <header class="console-card__header">
+    <div class="console-card__heading">
+      <h2 id="record-weight-heading">Weight history</h2>
+      <p>Patient-recorded and team-recorded check-ins</p>
+    </div>
+    <span class="record-weight-count">{{ record_weight_total }} check-in{{ record_weight_total|pluralize }}</span>
+  </header>
+  <div class="record-weight-card__body">
+    {% if record_weight_chart %}
+      <dl class="record-weight-summary" aria-label="Recorded weight summary">
+        <div><dt>Starting weight</dt><dd>{{ record_weight_first.weight_kg }} <span>kg</span><small>{{ record_weight_first.recorded_on|date:"j M Y" }}</small></dd></div>
+        <div><dt>Latest weight</dt><dd>{{ record_weight_latest.weight_kg }} <span>kg</span><small>{{ record_weight_latest.recorded_on|date:"j M Y" }}</small></dd></div>
+        <div><dt>Change</dt><dd>{% if record_weight_change > 0 %}+{% endif %}{{ record_weight_change }} <span>kg</span><small>Since first check-in</small></dd></div>
+      </dl>
+      <figure class="record-weight-chart">
+        <div class="record-weight-chart__label">Weight (kg) by check-in date</div>
+        <svg viewBox="0 0 720 250" role="img" aria-labelledby="record-weight-chart-title record-weight-chart-description">
+          <title id="record-weight-chart-title">Recorded weight over time</title>
+          <desc id="record-weight-chart-description">{{ record_weight_chart.count }} recorded check-in{{ record_weight_chart.count|pluralize }} from {{ record_weight_chart.start|date:"j M Y" }} to {{ record_weight_chart.end|date:"j M Y" }}. Points are spaced by their actual dates, not equally. Exact values are in the paginated history table below. The vertical scale follows the recorded weight range.</desc>
+          {% for tick in record_weight_chart.ticks %}<line x1="62" x2="692" y1="{{ tick.y }}" y2="{{ tick.y }}" class="record-weight-chart__grid"/><text x="10" y="{{ tick.y|add:'4' }}">{{ tick.label }}</text>{% endfor %}
+          {% if record_weight_chart.count > 1 %}<polyline points="{{ record_weight_chart.polyline }}" class="record-weight-chart__line"/>{% endif %}
+          {% for point in record_weight_chart.points %}<circle cx="{{ point.x }}" cy="{{ point.y }}" r="4" class="record-weight-chart__point"><title>{{ point.date|date:"j M Y" }}: {{ point.weight }} kg</title></circle>{% endfor %}
+          {% if record_weight_chart.start == record_weight_chart.end %}<text x="377" y="240" text-anchor="middle">{{ record_weight_chart.start|date:"j M Y" }}</text>{% else %}<text x="62" y="240">{{ record_weight_chart.start|date:"j M Y" }}</text><text x="692" y="240" text-anchor="end">{{ record_weight_chart.end|date:"j M Y" }}</text>{% endif %}
+        </svg>
+        <div class="record-weight-chart__range"><span>{{ record_weight_chart.start|date:"j M Y" }}{% if record_weight_chart.start != record_weight_chart.end %} – {{ record_weight_chart.end|date:"j M Y" }}{% endif %}</span><span>{{ record_weight_chart.minimum }}–{{ record_weight_chart.maximum }} kg</span></div>
+        <figcaption>{% if record_weight_chart_limited %}Latest 300 check-ins shown. The summary covers all check-ins, and every entry remains available below.{% elif record_weight_chart.count == 1 %}One check-in recorded. A trend line appears after the next check-in.{% else %}Recorded measurements only; the line connects check-ins, not daily measurements.{% endif %}</figcaption>
+      </figure>
+      <table class="record-weight-table" aria-labelledby="record-weight-heading">
+        <caption>Exact check-in history · newest first</caption>
+        <thead><tr><th scope="col">Date</th><th scope="col">Weight</th><th scope="col">Check-in note</th></tr></thead>
+        <tbody>
+          {% for weight in weights %}
+            <tr>
+              <td><time datetime="{{ weight.recorded_on|date:'Y-m-d' }}">{{ weight.recorded_on|date:"j M Y" }}</time></td>
+              <td><strong>{{ weight.weight_kg }} kg</strong></td>
+              <td>{% if weight.note|length > 120 %}<details class="record-weight-note"><summary>View note</summary><p>{{ weight.note|linebreaksbr }}</p></details>{% else %}{{ weight.note|default:"—"|linebreaksbr }}{% endif %}{% if weight.recorded_by %}<small>Recorded by {{ weight.recorded_by.full_name }}</small>{% endif %}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% if record_weight_page.has_other_pages %}
+        <nav class="record-weight-pagination" aria-label="Weight history pages">
+          {% if record_weight_previous_url %}<a class="console-button console-button--quiet" href="{{ record_weight_previous_url }}">Newer check-ins</a>{% endif %}
+          <span>Page {{ record_weight_page.number }} of {{ record_weight_page.paginator.num_pages }}</span>
+          {% if record_weight_next_url %}<a class="console-button console-button--quiet" href="{{ record_weight_next_url }}">Older check-ins</a>{% endif %}
+        </nav>
+      {% endif %}
+    {% else %}
+      <p class="record-weight-empty">There are no weight entries in this record yet. The chart will appear after the first check-in.</p>
+    {% endif %}
+  </div>
+</section>

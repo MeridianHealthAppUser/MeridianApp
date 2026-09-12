@@ -10,11 +10,8 @@
 
 {% block content %}
   <div class="meridian-console patient-console patient-pages-console">
-    <div class="patient-page-topbar">
-      <div><span class="patient-page-topbar__label">Your care at</span><strong>{{ patient_company.name }}</strong></div>
-    </div>
     {% include 'portal/includes/patient_navigation.html' %}
-    <div class="patient-console__content patient-page-content" id="patient-page-content">
+    <div class="patient-console__content patient-page-content {% block patient_content_class %}{% endblock %}" id="patient-page-content">
       {% block patient_heading %}{% endblock %}
       {% block patient_content %}{% endblock %}
       <aside class="patient-page-privacy">

@@ -297,13 +297,18 @@ class ShipmentDetailView(OperationsView):
     nav_section, page_title = 'shipping', 'Shipment'
 
     def display(self, request, shipment, form=None, status=200):
+        from .patient_action_context import patient_action_context
+
         context = self.context(shipment=shipment, items=list(shipment.items.select_related('product', 'batch')),
                                form=form if form is not None else ShipmentActionForm(),
                                workflow_context=self.token('shipment', shipment),
                                current_hold_reason=shipment_hold_reason(shipment) if shipment.status in UNDISPATCHED else '')
         if shipment.status in (Shipment.Status.CANCELLED, Shipment.Status.DELIVERED):
             context['can_edit'] = False
-        return render(request, 'portal/operations_shipment_detail.html', context, status=status)
+        context.update(patient_action_context(self, shipment.patient, 'deliveries',
+            content_template='portal/includes/shipment_detail_content.html', stylesheets=('css/operations.css',),
+            title=f'Shipment {shipment.pk}'))
+        return render(request, 'portal/patient_workspace_action.html' if context.get('patient_workspace') else 'portal/operations_shipment_detail.html', context, status=status)
 
     def get(self, request, pk):
         return self.display(request, get_object_or_404(self.shipments(), pk=pk))
@@ -328,7 +333,8 @@ class ShipmentDetailView(OperationsView):
                 elif action == 'deliver':
                     mark_delivered(shipment=shipment, actor=request.user, confirm=True, request=request)
                 messages.success(request, 'Shipment action recorded. No courier API was called.')
-                return redirect('portal:ops-shipment-detail', pk=pk)
+                from .patient_action_context import workspace_redirect
+                return workspace_redirect(request, 'portal:ops-shipment-detail', pk=pk)
         except ValidationError as error:
             _errors(request, form, error)
         return self.display(request, shipment, form, status=400)

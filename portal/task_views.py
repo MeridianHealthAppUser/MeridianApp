@@ -17,6 +17,7 @@ from .task_forms import TaskEditorForm
 from .clinical_tasks import attach_clinical_task_links
 from .views import StaffCompanyRequiredMixin, _patient_record_context
 from .workflow_context import make_workflow_context, validate_workflow_context
+from .patient_action_context import patient_action_context, uses_patient_workspace, workspace_destination, workspace_redirect
 
 
 @method_decorator(never_cache, name='dispatch')
@@ -32,22 +33,32 @@ class TaskEditorView(LoginRequiredMixin, StaffCompanyRequiredMixin, View):
         )
 
     def render_form(self, form, task):
-        return render(self.request, 'portal/staff_task_form.html', {
+        context = {
             'company': self.company, 'active_membership': self.membership, 'nav_section': 'tasks',
             'page_title': 'Edit task' if task else 'Create task', 'task': task, 'form': form,
             'workflow_context': self.request.POST.get('workflow_context', '') if self.request.method == 'POST' else make_workflow_context(self.request, self.company, 'task-editor', task),
-        })
+        }
+        context.update(patient_action_context(self, task.patient if task and task.patient_id else None, 'tasks',
+            content_template='portal/includes/task_editor_content.html', title=context['page_title']))
+        return render(self.request, 'portal/patient_workspace_action.html' if context.get('patient_workspace') else 'portal/staff_task_form.html', context)
+
+    def scope_patient_field(self, form, task):
+        if task and task.patient_id and uses_patient_workspace(self.request):
+            # This editor is inside one patient's workspace. Moving the task
+            # between patients remains an explicit action in the global editor.
+            form.fields['patient'].disabled = True
+        return form
 
     def get(self, request, *args, **kwargs):
         task = self.get_task()
         if task:
             attach_clinical_task_links([task], request.user, self.membership)
             if task.workflow_url:
-                return redirect(task.workflow_url)
+                return redirect(workspace_destination(request, task.workflow_url))
             if task.is_clinical_workflow:
                 raise PermissionDenied('This task is managed by its responsible doctor in the clinical workflow.')
         form = TaskEditorForm(company=self.company, instance=task, initial={'assigned_to': request.user.pk} if task is None else None)
-        return self.render_form(form, task)
+        return self.render_form(self.scope_patient_field(form, task), task)
 
     @transaction.atomic
     def post(self, request, *args, **kwargs):
@@ -57,7 +68,7 @@ class TaskEditorView(LoginRequiredMixin, StaffCompanyRequiredMixin, View):
             attach_clinical_task_links([task], request.user, self.membership)
             if task.is_clinical_workflow:
                 raise PermissionDenied('Complete this task through its clinical workflow, not the task editor.')
-        form = TaskEditorForm(request.POST, company=self.company, instance=task)
+        form = self.scope_patient_field(TaskEditorForm(request.POST, company=self.company, instance=task), task)
         valid = form.is_valid()
         try:
             validate_workflow_context(request, self.company, 'task-editor', task)
@@ -65,7 +76,10 @@ class TaskEditorView(LoginRequiredMixin, StaffCompanyRequiredMixin, View):
                 saved = save_task(company=self.company, actor=request.user, form=form, request=request)
                 messages.success(request, 'Task saved.')
                 if visible_tasks(self.company, request.user, self.membership).filter(pk=saved.pk).exists():
-                    return redirect('portal:task-edit', pk=saved.pk)
+                    return workspace_redirect(request, 'portal:task-edit', pk=saved.pk)
+                if uses_patient_workspace(request) and saved.patient_id:
+                    from .patient_workspace import workspace_url
+                    return redirect(workspace_url(saved.patient, 'tasks'))
                 return redirect('portal:staff-tasks')
         except ValidationError as error:
             form.add_error(None, ' '.join(error.messages))
@@ -93,8 +107,8 @@ class ClinicalNoteTagsView(LoginRequiredMixin, StaffCompanyRequiredMixin, View):
                 form.add_error(None, ' '.join(error.messages))
             else:
                 messages.success(request, 'Note tags updated.')
-                return redirect(f'{reverse("portal:patient-detail", args=[note.patient_id])}#note-{note.pk}')
-        return render(request, 'portal/patient_detail.html', _patient_record_context(
-            request, self.company, self.membership, note.patient,
-            failed_note_tag_id=note.pk, note_tags_form=form,
-        ))
+                from .patient_workspace import workspace_url
+                return redirect(workspace_url(note.patient, 'notes') + f'#note-{note.pk}')
+        from .patient_workspace import render_workspace_form_error
+        return render_workspace_form_error(request, self.company, self.membership, note.patient,
+            'note_tags_form', form, failed_note_tag_id=note.pk)

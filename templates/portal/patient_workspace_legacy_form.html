@@ -1,0 +1,9 @@
+<details class="patient-workspace-panel patient-workspace-editor"{% if failed_form == form_name %} open{% endif %}>
+  <summary>{{ form_title }}</summary>
+  <form class="console-form" method="post" action="{% url form_url_name patient.pk %}">
+    {% csrf_token %}{% if form_name == 'appointment_form' %}<input type="hidden" name="workflow_context" value="{{ legacy_appointment_context }}">{% endif %}
+    {{ section_form.non_field_errors }}
+    {% for field in section_form %}<div class="console-form__field">{% if field.is_hidden %}{{ field }}{% else %}<label for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}{% if field.help_text %}<span class="helptext">{{ field.help_text }}</span>{% endif %}{% endif %}{{ field.errors }}</div>{% endfor %}
+    <button class="console-button console-button--primary" type="submit">Save</button>
+  </form>
+</details>

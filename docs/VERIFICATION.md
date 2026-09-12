@@ -1,5 +1,16 @@
 # Local verification — 12 September 2026
 
+## Patient workspace and final UI verification
+
+- The canonical patient workspace passed 32 role-permitted tab clicks across Doctor, Practice Administrator and Super Admin accounts. Every tab retained the selected patient and was checked at 1440px, 390px and 320px, with no document overflow or JavaScript errors. Mobile patient-section targets are at least 44px high.
+- Dedicated consultation, blood-test and appointment detail/forms retain the same patient header and current tab; invalid values remain in context. Practice-wide navigation remains separate, and clinical access is not granted by selecting a tab.
+- Eighteen adversarial workspace tests cover tenant/role boundaries, malformed imported relations, oversized identifiers, private/unsigned clinical content, selected-message receipts and retention of invalid off-page note-tag edits.
+- History starts with 20 events and loads older entries inside the bounded timeline panel. Browser checks cover scroll-triggered loading, stable event ordering, duplicate suppression, manual fallback, retry/end states and expired or changed access. The signed cursor and spreadsheet export recheck current permissions and the selected snapshot/filter scope.
+- Real `.xlsx` files were independently opened using openpyxl 3.1.5, in both normal and read-only modes, without warnings. Empty sheets, Unicode, long text split across continuation rows, SAST timestamps and leading-zero identifiers round-tripped correctly. Formula-like text remained string cells, never executable formulas. The independent reader was installed only in a temporary external directory and is not a runtime dependency.
+- Weight history uses real date-spaced values with exact paginated measurements; empty, single-point and constant-weight states were checked. Reporting charts retain exact aggregate tables and distinguish current snapshots from the selected reporting period. The reporting verification included 56 checks with six desktop/mobile chart layouts.
+- The compact patient overview passed 60 focused patient-page/navigation/account tests, including six rendered empty/populated overview layouts. An independent live-clone browser review visited all 12 patient sections at 1440px, 768px, 390px and 320px (48 layouts): no overflow or JavaScript errors. The duplicate practice strip is removed, overview styling stays isolated, and mobile navigation leaves the final content accessible.
+- The top-right profile menu and own-profile page were checked across all four roles on desktop and mobile. Profile edits remain limited to the signed-in user's shared name; password, access history and POST sign-out retain their existing protected routes.
+
 ## Core application checks (before native video)
 
 - Final PostgreSQL 16 regression run: **797 tests passed, no skips**, with optional Chrome tests enabled. This includes two real simultaneous-booking tests using separate database connections: competing bookings cannot double-book one doctor or one patient across practices.

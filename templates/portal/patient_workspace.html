@@ -1,0 +1,67 @@
+{% extends 'portal/patient_workspace_base.html' %}
+{% load static %}
+{% block extra_css %}{{ block.super }}{% if workspace_tab == 'weights' %}<link rel="stylesheet" href="{% static 'css/record_weight.css' %}">{% endif %}{% endblock %}
+{% block patient_workspace_content %}
+  {% if workspace_tab == 'overview' %}
+    <section class="patient-workspace-summary" aria-label="Patient overview">
+      {% for card in overview_cards %}<a href="{{ card.url }}">{{ card.label }}<strong>{{ card.count }}</strong></a>{% endfor %}
+    </section>
+    <section class="patient-workspace-panel"><div class="patient-workspace-panel__body"><h2>Patient details</h2><dl class="patient-workspace-facts">
+      <div><dt>Record number</dt><dd>{{ patient.medical_record_number|default:'Not recorded' }}</dd></div>
+      <div><dt>Date of birth</dt><dd>{{ patient.date_of_birth|date:'j M Y'|default:'Not recorded' }}</dd></div>
+      <div><dt>Contact number</dt><dd>{{ patient.phone|default:'Not recorded' }}</dd></div>
+      <div><dt>Location</dt><dd>{{ patient.city|default:'Not recorded' }}</dd></div>
+      <div><dt>Assigned clinician</dt><dd>{{ patient.assigned_doctor.full_name|default:'Unassigned' }}</dd></div>
+      <div><dt>Practice</dt><dd>{{ company.name }}</dd></div>
+    </dl></div><p class="patient-workspace-empty">Choose a patient section above. Each section shows only this patient’s records at this practice; clinical History can include other permitted practices when a care purpose is selected.</p></section>
+  {% elif workspace_tab == 'weights' %}
+    {% include 'portal/includes/record_weight.html' %}
+  {% elif workspace_tab == 'messages' %}
+    {% include 'portal/patient_workspace_messages.html' %}
+  {% else %}
+    <div class="patient-workspace-toolbar"><h2>{{ page_title }}</h2><div class="patient-workspace-actions">
+      {% if workspace_tab == 'consultations' and is_doctor %}<a class="console-button console-button--primary" href="{% url 'portal:clinical-consultation-create' patient.pk %}">New consultation note</a>{% endif %}
+      {% if workspace_tab == 'blood-tests' and is_doctor %}<a class="console-button console-button--primary" href="{% url 'portal:clinical-lab-create' patient.pk %}">Request blood tests</a>{% endif %}
+      {% if workspace_tab == 'treatment' and is_doctor %}<a class="console-button console-button--primary" href="{% url 'portal:treatment-authorisation-create' patient.pk %}?workspace=patient">Authorise treatment</a>{% endif %}
+      {% if workspace_filter %}<form class="patient-workspace-filter" method="get" action="{% url 'portal:patient-detail' patient.pk %}"><input type="hidden" name="tab" value="{{ workspace_tab }}"><label for="{{ workspace_filter.status.id_for_label }}">Status</label>{{ workspace_filter.status }}<button class="console-button console-button--secondary" type="submit">Filter</button>{{ workspace_filter.errors }}</form>{% endif %}
+    </div></div>
+    {% if workspace_tab == 'payments' %}<p class="patient-workspace-notice">Read-only local payment records. Live payment processing is not enabled: no charges, refunds or payment-provider checks happen here. Imported or demo statuses are not proof that funds were received.</p>{% endif %}
+    {% if workspace_tab == 'history' %}<p class="patient-workspace-notice">Administrative activity only. Clinical notes, results, private profiles and internal audit details are restricted to authorised clinical roles.</p>{% endif %}
+    {% if workspace_tab == 'consultations' %}<p class="patient-workspace-notice">Consultations for {{ patient }} only. {% if is_doctor %}Your drafts and signed records are available; another doctor’s unsigned notes are not shown.{% else %}Only signed consultations are shown.{% endif %}</p>{% endif %}
+    <section class="patient-workspace-panel">
+      {% if workspace_tab == 'notes' %}
+        {% for note in notes %}<article class="patient-workspace-note" id="note-{{ note.pk }}"><strong>{{ note.get_note_type_display }}</strong><small> · {{ note.created_at|date:'j M Y, H:i' }} · {{ note.author.full_name }}{% if note.is_private %} · Only visible to you{% endif %}</small><p>{{ note.body|linebreaksbr }}</p><div class="record-tags">{% for tag in note.tags.all %}<span class="record-tag">{{ tag.name }}</span>{% endfor %}</div>
+          {% if note.tags_form %}<details class="patient-workspace-editor"{% if failed_note_tag_id == note.pk %} open{% endif %}><summary>Edit tags</summary><form class="console-form" method="post" action="{% url 'portal:patient-note-tags' patient.pk note.pk %}">{% csrf_token %}{{ note.tags_form.non_field_errors }}{% include 'portal/includes/record_tag_fields.html' with tag_form=note.tags_form %}<button class="console-button console-button--primary" type="submit">Save tags</button></form></details>{% endif %}
+        </article>{% empty %}<p class="patient-workspace-empty">No notes are available in this section.</p>{% endfor %}
+      {% else %}
+      <div class="patient-workspace-table-wrap"><table class="patient-workspace-table">
+        <caption>{{ page_title }} for {{ patient }}</caption>
+        <thead><tr>
+          {% if workspace_tab == 'appointments' %}<th scope="col">Date and time</th><th scope="col">Appointment</th><th scope="col">Doctor</th><th scope="col">Status</th><th scope="col">Actions</th>
+          {% elif workspace_tab == 'consultations' %}<th scope="col">Date</th><th scope="col">Doctor</th><th scope="col">Status</th><th scope="col">Action</th>
+          {% elif workspace_tab == 'blood-tests' %}<th scope="col">Requested</th><th scope="col">Panel</th><th scope="col">Doctor</th><th scope="col">Status</th><th scope="col">Action</th>
+          {% elif workspace_tab == 'tasks' %}<th scope="col">Task</th><th scope="col">Assigned to</th><th scope="col">Due</th><th scope="col">Status</th><th scope="col">Action</th>
+          {% elif workspace_tab == 'payments' %}<th scope="col">Due date</th><th scope="col">Amount</th><th scope="col">Stored status</th><th scope="col">Recorded paid date</th>
+          {% elif workspace_tab == 'treatment' %}<th scope="col">Medication</th><th scope="col">Doctor</th><th scope="col">Valid dates</th><th scope="col">Status</th><th scope="col">Action</th>
+          {% elif workspace_tab == 'deliveries' %}<th scope="col">Scheduled</th><th scope="col">Cycle</th><th scope="col">Status</th><th scope="col">Tracking</th><th scope="col">Action</th>
+          {% elif workspace_tab == 'history' %}<th scope="col">Date and time</th><th scope="col">Administrative activity</th>{% endif %}
+        </tr></thead><tbody>
+          {% for row in rows %}<tr>
+            {% if workspace_tab == 'appointments' %}<td>{{ row.starts_at|date:'j M Y, H:i' }}<small>SAST</small></td><td>{{ row.get_appointment_type_display }}<small>{{ row.duration_minutes }} minutes</small></td><td>{{ row.clinician.full_name }}</td><td>{{ row.get_status_display }}</td><td><a class="console-button console-button--quiet" href="{% url 'portal:appointment-detail' row.pk %}">Open appointment</a>{% include 'portal/includes/video_join_link.html' with appointment=row %}</td>
+            {% elif workspace_tab == 'consultations' %}<td>{{ row.occurred_at|date:'j M Y, H:i' }}</td><td>{{ row.clinician.full_name }}</td><td>{{ row.get_status_display }}</td><td><a class="console-button console-button--quiet" href="{% url 'portal:clinical-consultation-detail' row.pk %}">Open consultation</a></td>
+            {% elif workspace_tab == 'blood-tests' %}<td>{{ row.requested_on|date:'j M Y' }}</td><td>{{ row.panel_name }}</td><td>{{ row.requested_by.full_name }}</td><td>{{ row.get_status_display }}</td><td><a class="console-button console-button--quiet" href="{% url 'portal:clinical-lab-detail' row.pk %}">Open request</a></td>
+            {% elif workspace_tab == 'tasks' %}<td><strong>{{ row.title }}</strong>{% if not row.is_clinical_workflow %}<small>{{ row.description|truncatechars:140 }}</small>{% endif %}<div class="record-tags">{% for tag in row.tags.all %}<span class="record-tag">{{ tag.name }}</span>{% endfor %}</div></td><td>{{ row.assigned_to.full_name|default:'Unassigned' }}</td><td>{{ row.due_at|date:'j M Y, H:i'|default:'No due date' }}</td><td>{{ row.get_status_display }}</td><td>{% if row.workflow_url %}<a class="console-button console-button--quiet" href="{{ row.workspace_workflow_url }}">{{ row.workflow_label }}</a>{% elif not row.is_clinical_workflow and row.workspace_can_edit %}<a class="console-button console-button--quiet" href="{% url 'portal:task-edit' row.pk %}?workspace=patient">Open task</a>{% else %}Read-only{% endif %}</td>
+            {% elif workspace_tab == 'payments' %}<td>{{ row.due_on|date:'j M Y' }}</td><td>R{{ row.amount }}</td><td>{{ row.get_status_display }}</td><td>{{ row.paid_at|date:'j M Y, H:i'|default:'Not recorded' }}</td>
+            {% elif workspace_tab == 'treatment' %}<td>{{ row.product.name }}</td><td>{{ row.prescribed_by.full_name }}</td><td>{{ row.starts_on|date:'j M Y' }} – {{ row.expires_on|date:'j M Y' }}</td><td>{{ row.get_status_display }}</td><td><a class="console-button console-button--quiet" href="{% url 'portal:treatment-authorisation-detail' row.pk %}?workspace=patient">Open authorisation</a></td>
+            {% elif workspace_tab == 'deliveries' %}<td>{{ row.scheduled_for|date:'j M Y' }}</td><td>{{ row.cycle_number }}</td><td>{{ row.get_status_display }}</td><td>{{ row.tracking_number|default:'Not dispatched' }}</td><td><a class="console-button console-button--quiet" href="{% url 'portal:ops-shipment-detail' row.pk %}?workspace=patient">Open delivery</a></td>
+            {% elif workspace_tab == 'history' %}<td>{{ row.created_at|date:'j M Y, H:i' }}</td><td>{{ row.workspace_label }}</td>{% endif %}
+          </tr>{% empty %}<tr><td colspan="5" class="patient-workspace-empty">No records match this patient and section.</td></tr>{% endfor %}
+        </tbody></table></div>
+      {% endif %}
+      {% include 'portal/patient_workspace_pagination.html' %}
+    </section>
+    {% if workspace_tab == 'appointments' %}{% include 'portal/patient_workspace_legacy_form.html' with section_form=appointment_form form_name='appointment_form' form_title='Book an appointment' form_url_name='portal:patient-appointment-create' %}{% endif %}
+    {% if workspace_tab == 'tasks' %}{% include 'portal/patient_workspace_legacy_form.html' with section_form=task_form form_name='task_form' form_title='Create a task for this patient' form_url_name='portal:patient-task-create' %}{% endif %}
+    {% if workspace_tab == 'notes' and is_doctor %}{% include 'portal/patient_workspace_legacy_form.html' with section_form=note_form form_name='note_form' form_title='Add a general clinical note' form_url_name='portal:patient-note-create' %}{% endif %}
+  {% endif %}
+{% endblock %}

@@ -1,26 +1,18 @@
-{% extends 'portal/staff_page_base.html' %}
+{% extends 'portal/patient_workspace_base.html' %}
 {% load static %}
 
 {% block title %}Clinical record | {{ company.name }} | Meridian{% endblock %}
-{% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/record_pages.css' %}">{% endblock %}
-{% block breadcrumb %}<span>Clinical</span><span class="console-breadcrumb__dot" aria-hidden="true"></span><span>Patient record</span>{% endblock %}
-{% block page_heading %}
-  <header class="staff-page-header record-heading">
-    <div><p class="console-kicker">Clinical record · {{ company.name }}</p><h1>{{ patient }}</h1>
-      <p>{{ patient.medical_record_number|default:"Record number pending" }}{% if patient.date_of_birth %} · Born {{ patient.date_of_birth|date:"j M Y" }}{% endif %}{% if patient.city %} · {{ patient.city }}{% endif %}</p>
-    </div>
-    <div class="record-actions">
-      <a class="console-button console-button--quiet" href="{% url 'portal:patient-detail' patient.pk %}">Patient details</a>
-      {% if export_url %}<a class="console-button console-button--primary" href="{{ export_url }}">Export clinical record</a>{% endif %}
-    </div>
-  </header>
+{% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/record_pages.css' %}"><script src="{% static 'js/record_timeline.js' %}" defer></script>{% endblock %}
+{% block patient_workspace_heading_actions %}
+  {% if export_url %}<a class="console-button console-button--quiet" href="{{ export_url }}">Export clinical record</a>{% endif %}
 {% endblock %}
-{% block page_content %}
+{% block patient_workspace_content %}
   <section class="staff-page-card record-scope" aria-labelledby="record-scope-heading">
     <div><h2 id="record-scope-heading">One person, a clearly scoped record</h2>
       <p>Only records linked to this same sign-on can be combined, and only in active practices where you are a doctor or Super Admin. Your care purpose and access are recorded in each included practice.</p>
     </div>
     <form method="get" class="record-filters">
+      <input type="hidden" name="tab" value="history">
       {{ filter_form.non_field_errors }}
       {% for field in filter_form %}{% if not field.is_hidden %}<div><label for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}{{ field.errors }}</div>{% else %}{{ field.errors }}{% endif %}{% endfor %}
       <button class="console-button console-button--primary" type="submit">Apply filters</button>
@@ -33,25 +25,26 @@
 
   {% if filter_form.errors %}<div class="staff-filter-error" role="alert">Correct the filters above. No clinical timeline or export is shown until the scope and care purpose are valid.</div>{% else %}
     <div class="record-layout">
-      <section class="staff-page-card record-timeline-card" aria-labelledby="record-timeline-heading">
-        <header class="staff-page-card__header"><div><h2 id="record-timeline-heading">Event log and audit trail</h2><p>Signed consultations and shared notes. Drafts and private notes stay outside this record.</p></div><span class="staff-page-card__count">{{ page_obj.paginator.count }} entries</span></header>
-        <ol class="record-timeline">
-          {% for entry in timeline_entries %}
-            <li class="record-timeline__entry record-timeline__entry--{{ entry.category }}">
-              <div class="record-timeline__meta"><time datetime="{{ entry.at|date:'c' }}">{{ entry.at|date:"j M Y · H:i" }}</time><span class="console-status">{{ entry.company_name }}</span><span>{{ entry.category_label }}</span></div>
-              <h3>{{ entry.title }}</h3>
-              {% if entry.actor %}<p class="record-timeline__actor">{{ entry.actor }}{% if entry.signed_at %} · Signed {{ entry.signed_at|date:"j M Y · H:i" }}{% endif %}</p>{% endif %}
-              {% if entry.detail %}<p class="record-timeline__detail">{{ entry.detail }}</p>{% endif %}
-              {% if entry.answers %}<details class="record-profile"><summary>Read this version of the self-reported history</summary><dl>{% for answer in entry.answers %}<dt>{{ answer.label }}</dt><dd>{{ answer.answer }}</dd>{% endfor %}</dl></details>{% endif %}
-              {% if entry.url %}<a class="record-text-link" href="{{ entry.url }}">Open entry <span aria-hidden="true">→</span></a>{% endif %}
-            </li>
-          {% empty %}<li class="staff-empty-state"><p>No entries match this record scope and date range.</p></li>{% endfor %}
-        </ol>
-        {% if is_paginated %}<nav class="staff-pagination record-pagination" aria-label="Clinical timeline pages">
-          {% if page_obj.has_previous %}<a class="console-button console-button--quiet" href="?{{ pagination_query }}&amp;page={{ page_obj.previous_page_number }}">Previous</a>{% endif %}
+      <section class="staff-page-card record-timeline-card" aria-labelledby="record-timeline-heading" data-record-timeline data-next-url="{{ timeline_next_url }}">
+        <header class="staff-page-card__header record-timeline-header">
+          <div><h2 id="record-timeline-heading">Event log and audit trail</h2><p>Signed consultations and shared notes. Drafts and private notes stay outside this record.</p></div>
+          <div class="record-timeline-tools"><span class="staff-page-card__count">{{ page_obj.paginator.count }} entries</span>{% if timeline_download_url %}<a class="console-button console-button--quiet" href="{{ timeline_download_url }}" aria-describedby="record-excel-help">Download Excel</a>{% endif %}</div>
+        </header>
+        <p class="record-scroll-help" id="record-scroll-help">Scroll within this panel to read older entries.</p>
+        <div class="record-timeline-scroll" id="record-timeline-scroll" tabindex="0" role="region" aria-labelledby="record-timeline-heading" aria-describedby="record-scroll-help" data-timeline-scroll>
+          <ol class="record-timeline" data-timeline-entries>{% include 'portal/includes/record_timeline_entries.html' %}</ol>
+          <div class="record-timeline-loader" data-timeline-loader>
+            <span class="record-timeline-sentinel" data-timeline-sentinel aria-hidden="true"></span>
+            <p class="record-small" role="status" aria-live="polite" aria-atomic="true" data-timeline-status>{% if timeline_next_url %}Older entries load as you scroll.{% else %}End of matching history.{% endif %}</p>
+            <button class="console-button console-button--quiet" type="button" data-timeline-load hidden>Load older entries</button>
+            <a class="record-text-link" href="{{ request.get_full_path }}" data-timeline-reload hidden>Reload this record</a>
+          </div>
+        {% if is_paginated %}<noscript><nav class="staff-pagination record-pagination" aria-label="Clinical timeline pages">
+          {% if page_obj.has_previous %}<a class="console-button console-button--quiet" href="?{{ pagination_query }}&amp;tab=history&amp;page={{ page_obj.previous_page_number }}">Previous</a>{% endif %}
           <span>Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
-          {% if page_obj.has_next %}<a class="console-button console-button--quiet" href="?{{ pagination_query }}&amp;page={{ page_obj.next_page_number }}">Next</a>{% endif %}
-        </nav>{% endif %}
+          {% if page_obj.has_next %}<a class="console-button console-button--quiet" href="?{{ pagination_query }}&amp;tab=history&amp;page={{ page_obj.next_page_number }}">Next</a>{% endif %}
+        </nav></noscript>{% endif %}
+        </div>
       </section>
 
       <aside class="record-sidebar" aria-label="Current practice care summary">
@@ -76,12 +69,13 @@
         {% if is_doctor %}<section class="staff-page-card record-summary"><p class="console-kicker">Self-reported medical profile</p><p class="record-small">{{ company.name }} only. Patient-provided history, not a clinical assessment.</p>
           {% if profile_answers %}<details class="record-profile"><summary>Read current profile · version {{ medical_profile.revision }}</summary><dl>{% for answer in profile_answers %}<dt>{{ answer.label }}</dt><dd>{{ answer.answer }}</dd>{% endfor %}</dl></details>{% else %}<p>No medical profile has been completed here yet.</p>{% endif %}
         </section>{% endif %}
-        <section class="staff-page-card record-summary"><p class="console-kicker">Continue in a dedicated page</p><nav class="record-care-links" aria-label="Patient care actions">
+        <section class="staff-page-card record-summary"><p class="console-kicker">More for this patient</p><nav class="record-care-links" aria-label="Patient care actions">
           {% if is_doctor %}<a href="{% url 'portal:clinical-consultation-create' patient.pk %}">New consultation</a><a href="{% url 'portal:clinical-lab-create' patient.pk %}">Request a blood test</a>{% endif %}
-          <a href="{% url 'portal:clinical-consultations' %}?patient={{ patient.pk }}">Consultations</a><a href="{% url 'portal:clinical-labs' %}?patient={{ patient.pk }}">Blood tests</a><a href="{{ messages_url }}">Messages</a><a href="{% url 'portal:staff-schedule' %}">Schedule and appointments</a><a href="{% url 'portal:patient-list' %}">Patient directory</a>
+          <a href="{% url 'portal:patient-detail' patient.pk %}?tab=consultations">Consultations</a><a href="{% url 'portal:patient-detail' patient.pk %}?tab=blood-tests">Blood tests</a><a href="{% url 'portal:patient-detail' patient.pk %}?tab=messages">Messages</a><a href="{% url 'portal:patient-detail' patient.pk %}?tab=appointments">Appointments</a><a href="{% url 'portal:patient-list' %}">Back to patients</a>
         </nav></section>
       </aside>
     </div>
     <p class="record-footnote">The export contains the permitted, filtered timeline and the current-practice summary. It excludes private notes, unsigned consultations, report attachment bytes and raw audit metadata. Store any downloaded record securely.</p>
+    {% if timeline_download_url %}<p class="record-footnote" id="record-excel-help">Excel downloads the event trail using these same filters and practice permissions, up to 10,000 entries. Narrow the date range for larger records.</p>{% endif %}
   {% endif %}
 {% endblock %}

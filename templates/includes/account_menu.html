@@ -1,7 +1,7 @@
 {% load workspace_ui %}
 {% account_identity as identity %}
 <details class="account-menu" data-account-menu>
-  <summary id="account-menu-trigger" class="account-menu__trigger" aria-controls="account-menu-panel" aria-expanded="false" aria-label="Account menu for {{ identity.name }}, {{ identity.role }}">
+  <summary id="account-menu-trigger" class="account-menu__trigger" aria-controls="account-menu-panel" aria-label="Account menu for {{ identity.name }}, {{ identity.role }}">
     <span class="account-menu__avatar" aria-hidden="true">{{ identity.initials }}</span>
     <span class="account-menu__identity"><strong>{{ identity.name }}</strong><span>{{ identity.role }}</span></span>
     <svg class="account-menu__chevron" aria-hidden="true" viewBox="0 0 20 20"><path d="m6 8 4 4 4-4"/></svg>

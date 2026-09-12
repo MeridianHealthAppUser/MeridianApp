@@ -128,6 +128,8 @@ class ConsultationEditorView(StaffClinicalView):
         return self.patient_for(patient_pk), None
 
     def display(self, request, patient, encounter, form=None, status=200):
+        from .patient_workspace import patient_workspace_context
+
         can_edit = self.is_doctor and (encounter is None or (
             encounter.clinician_id == request.user.pk and encounter.status != ClinicalEncounter.Status.SIGNED
         ))
@@ -135,6 +137,7 @@ class ConsultationEditorView(StaffClinicalView):
             form = ConsultationForm(company=self.company, patient=patient, actor=request.user, encounter=encounter)
         context = self.context(patient=patient, encounter=encounter, form=form, can_edit=can_edit, can_sign=can_edit,
                                clinical_context=_form_context(request, self.company, patient, 'consultation', encounter))
+        context.update(patient_workspace_context(request, self.company, self.membership, patient, 'consultations'))
         return render(request, 'portal/clinical_consultation_form.html', context, status=status)
 
     def get(self, request, patient_pk=None, pk=None):
@@ -190,9 +193,13 @@ class LabCreateView(StaffClinicalView):
     page_title = 'Request blood tests'
 
     def display(self, request, patient, form, status=200):
-        return render(request, 'portal/clinical_lab_form.html', self.context(
+        from .patient_workspace import patient_workspace_context
+
+        context = self.context(
             patient=patient, form=form, clinical_context=_form_context(request, self.company, patient, 'lab'),
-        ), status=status)
+        )
+        context.update(patient_workspace_context(request, self.company, self.membership, patient, 'blood-tests'))
+        return render(request, 'portal/clinical_lab_form.html', context, status=status)
 
     def get(self, request, patient_pk):
         self.require_doctor()
@@ -226,9 +233,11 @@ class LabDetailView(StaffClinicalView):
     page_title = 'Blood-test request'
 
     def display(self, request, lab_request, upload_form=None, review_form=None, status=200):
+        from .patient_workspace import patient_workspace_context
+
         result = _result_metadata(lab_request)
         owner = self.is_doctor and lab_request.requested_by_id == request.user.pk
-        return render(request, 'portal/clinical_lab_detail.html', self.context(
+        context = self.context(
             lab_request=lab_request, patient=lab_request.patient, result=result,
             can_upload=owner and result is None and lab_request.status == LabRequest.Status.REQUESTED,
             can_review=owner and result is not None and lab_request.status == LabRequest.Status.UPLOADED,
@@ -236,7 +245,9 @@ class LabDetailView(StaffClinicalView):
             review_form=review_form if review_form is not None else LabReviewForm(),
             clinical_context=_form_context(request, self.company, lab_request.patient, 'lab', lab_request),
             report_download_url=reverse('portal:clinical-lab-result-download', args=[lab_request.pk]) if result else '',
-        ), status=status)
+        )
+        context.update(patient_workspace_context(request, self.company, self.membership, lab_request.patient, 'blood-tests'))
+        return render(request, 'portal/clinical_lab_detail.html', context, status=status)
 
     def get(self, request, pk):
         return self.display(request, get_object_or_404(self.labs(), pk=pk))

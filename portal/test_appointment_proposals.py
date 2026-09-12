@@ -220,7 +220,7 @@ class AppointmentProposalPortalTests(TestCase):
         self.login(self.doctor)
         response = self.client.post(self.respond_url(proposal, 'staff'), {'decision': 'accept'})
         self.assertRedirects(
-            response, reverse('portal:patient-detail', args=[self.patient.pk]), fetch_redirect_response=False,
+            response, reverse('portal:patient-detail', args=[self.patient.pk]) + f'?tab=messages&thread={self.thread.pk}', fetch_redirect_response=False,
         )
         self.appointment.refresh_from_db()
         proposal.refresh_from_db()
@@ -414,7 +414,7 @@ class AppointmentProposalPortalTests(TestCase):
     def test_proposal_cards_show_recipient_actions_and_south_african_time(self):
         proposal = self.make_proposal()
         for role, user, page, expected in (
-            ('staff', self.doctor, reverse('portal:patient-detail', args=[self.patient.pk]), {'withdraw'}),
+            ('staff', self.doctor, reverse('portal:patient-detail', args=[self.patient.pk]) + f'?tab=messages&thread={self.thread.pk}', {'withdraw'}),
             ('patient', self.patient_user, f'{reverse("portal:patient-messages")}?thread={self.thread.pk}', {'accept', 'decline'}),
         ):
             with self.subTest(role=role):
@@ -433,7 +433,7 @@ class AppointmentProposalPortalTests(TestCase):
         self.thread.is_closed = True
         self.thread.save(update_fields=['is_closed'])
         for role, user, page in (
-            ('staff', self.doctor, reverse('portal:patient-detail', args=[self.patient.pk])),
+            ('staff', self.doctor, reverse('portal:patient-detail', args=[self.patient.pk]) + f'?tab=messages&thread={self.thread.pk}'),
             ('patient', self.patient_user, f'{reverse("portal:patient-messages")}?thread={self.thread.pk}'),
         ):
             with self.subTest(role=role):

@@ -9,6 +9,7 @@ deliberately absent, including from the export.
 from datetime import datetime, time, timedelta
 from itertools import islice
 from urllib.parse import urlencode
+from zoneinfo import ZoneInfo
 
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.exceptions import PermissionDenied
@@ -36,6 +37,7 @@ from .views import StaffCompanyRequiredMixin
 
 
 CLINICAL_ROLES = (CompanyMembership.Role.DOCTOR, CompanyMembership.Role.SUPER_ADMIN)
+RECORD_TIMEZONE = ZoneInfo('Africa/Johannesburg')
 AUDIT_LABELS = {
     'patient.record_viewed': 'Patient record viewed',
     'patient.clinical_record_viewed': 'Clinical record viewed',
@@ -174,7 +176,7 @@ class RecordTimeline:
             'audit': (scoped_source(AuditEvent, patients).filter(action__in=AUDIT_LABELS).select_related('actor').defer('metadata', 'ip_address'), 'created_at', Value('system')),
         }
 
-    def index(self):
+    def index(self, *, before=None):
         querysets = []
         for kind, (queryset, date_field, category) in self.sources.items():
             # Viewing a record itself adds an audit entry. Retaining this cutoff
@@ -183,13 +185,24 @@ class RecordTimeline:
                 timeline_at=F(date_field), timeline_kind=Value(kind, output_field=CharField()),
                 timeline_id=F('pk'), timeline_category=category,
             )
+            # Rows created earlier can become visible only after a later sign or
+            # review. Do not let those later transitions enter an older snapshot.
+            if kind == 'consultation':
+                queryset = queryset.filter(Q(signed_at__lte=self.filters['snapshot']) | Q(signed_at__isnull=True))
+            elif kind == 'lab_review':
+                queryset = queryset.filter(reviewed_at__lte=self.filters['snapshot'])
+            if before is not None:
+                older = Q(**{f'{date_field}__lt': before['at']}) | Q(**{date_field: before['at'], 'pk__lt': before['id']})
+                if kind > before['kind']:
+                    older |= Q(**{date_field: before['at'], 'pk': before['id']})
+                queryset = queryset.filter(older)
             if self.filters['category'] != 'all':
                 queryset = queryset.filter(timeline_category=self.filters['category'])
             if self.filters.get('date_from'):
-                start = timezone.make_aware(datetime.combine(self.filters['date_from'], time.min))
+                start = timezone.make_aware(datetime.combine(self.filters['date_from'], time.min), RECORD_TIMEZONE)
                 queryset = queryset.filter(**{f'{date_field}__gte': start})
             if self.filters.get('date_to'):
-                end = timezone.make_aware(datetime.combine(self.filters['date_to'] + timedelta(days=1), time.min))
+                end = timezone.make_aware(datetime.combine(self.filters['date_to'] + timedelta(days=1), time.min), RECORD_TIMEZONE)
                 queryset = queryset.filter(**{f'{date_field}__lt': end})
             querysets.append(queryset.values('timeline_at', 'timeline_kind', 'timeline_id', 'timeline_category'))
         return querysets[0].union(*querysets[1:], all=True).order_by('-timeline_at', '-timeline_id', 'timeline_kind')
@@ -268,14 +281,14 @@ class RecordTimeline:
 class ClinicalRecordAccessMixin(LoginRequiredMixin, StaffCompanyRequiredMixin):
     http_method_names = ('get', 'head', 'options')
 
-    def resolve_record(self):
+    def resolve_record(self, filter_data=None):
         if self.membership.role not in CLINICAL_ROLES:
             raise PermissionDenied('Clinical records are available to doctors and Super Admins only.')
         self.patient = get_object_or_404(
             Patient.objects.select_related('user', 'company', 'assigned_doctor'),
             pk=self.kwargs['pk'], company=self.company, is_active=True,
         )
-        data = self.request.GET.copy()
+        data = self.request.GET.copy() if filter_data is None else filter_data.copy()
         data.setdefault('scope', 'current')
         data.setdefault('category', 'all')
         self.filter_form = ClinicalRecordFilterForm(data)
@@ -346,7 +359,11 @@ class ClinicalRecordView(ClinicalRecordAccessMixin, TemplateView):
                        messages_url=f'{reverse("portal:staff-inbox")}?{urlencode({"thread": thread.pk})}' if thread else reverse('portal:staff-inbox'),
                        is_doctor=self.membership.role == CompanyMembership.Role.DOCTOR)
         if self.valid_filters:
+            from .record_history import timeline_links
+            context.update(timeline_links(self, list(page.object_list), has_next=page.has_next()))
             context.update(self.sidebar())
+        from .patient_workspace import patient_workspace_context
+        context.update(patient_workspace_context(self.request, self.company, self.membership, self.patient, 'history'))
         self.audit_access('patient.clinical_record_viewed')
         return context
 

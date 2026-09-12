@@ -1,14 +1,12 @@
-{% extends 'portal/staff_page_base.html' %}
+{% extends 'portal/patient_workspace_base.html' %}
 {% load static %}
 {% block title %}Blood-test request | {{ patient }} | Meridian{% endblock %}
 {% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/clinical_workflow.css' %}">{% endblock %}
-{% block breadcrumb %}<span>Clinical · Blood tests</span><span class="console-breadcrumb__dot" aria-hidden="true"></span><span>{{ company.name }}</span>{% endblock %}
-
-{% block page_heading %}
-  <header class="staff-page-header"><div><p class="console-kicker">Clinical · Blood-test request</p><h1>Blood-test request</h1><p>{{ patient }} · {{ company.name }}</p></div><div class="clinical-heading-actions"><a class="console-button console-button--secondary" href="{% url 'portal:patient-detail' patient.pk %}">Open patient record</a><a class="console-button console-button--quiet" href="{% url 'portal:clinical-labs' %}">All requests</a></div></header>
+{% block patient_workspace_heading_actions %}
+  <a class="console-button console-button--quiet" href="{% url 'portal:patient-detail' patient.pk %}?tab=blood-tests">Back to blood tests</a>
 {% endblock %}
 
-{% block page_content %}
+{% block patient_workspace_content %}
   <div class="clinical-workflow clinical-workflow-grid">
     <div class="clinical-workflow-stack">
       <section class="staff-page-card" aria-labelledby="clinical-report-heading">

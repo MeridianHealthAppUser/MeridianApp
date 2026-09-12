@@ -7,7 +7,7 @@ from zoneinfo import ZoneInfo
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
 from django.db.models import Avg, Count, ExpressionWrapper, F, FloatField, OuterRef, Q, Subquery, Sum
-from django.db.models.functions import Cast, TruncMonth
+from django.db.models.functions import Cast, TruncDate, TruncMonth
 from django.utils import timezone
 
 from practices.models import Company, CompanyMembership, Patient
@@ -53,11 +53,47 @@ def report_companies(actor, company, scope):
     raise ValidationError('Choose current practice or all permitted practices.')
 
 
+def _daily_record_counts(queryset, field):
+    """Aggregate in SAST regardless of a worker or request's active timezone."""
+    rows = queryset.order_by().annotate(day=TruncDate(field, tzinfo=REPORT_TIMEZONE)).values('day').annotate(count=Count('pk'))
+    return {row['day']: row['count'] for row in rows}
+
+
+def _status_counts(queryset, choices):
+    counts = dict(queryset.order_by().values('status').annotate(count=Count('pk')).values_list('status', 'count'))
+    rows = [{'key': key, 'label': str(label), 'count': counts.pop(key, 0)} for key, label in choices]
+    # Preserve totals even for malformed imports without displaying raw imported
+    # text or treating an unknown value as a clinically valid status.
+    if counts:
+        rows.append({'key': 'other', 'label': 'Other recorded status', 'count': sum(counts.values())})
+    return rows
+
+
+def _operational_analytics(*, new_patients, appointments, shipments, plans, weight_distribution, start, end):
+    """Bounded aggregate-only chart data; never names, record IDs or lead data."""
+    series = {
+        'new_patients': _daily_record_counts(new_patients, 'created_at'),
+        'appointments': _daily_record_counts(appointments, 'starts_at'),
+        'dispatches': _daily_record_counts(shipments, 'dispatched_at'),
+    }
+    daily = []
+    for offset in range((end - start).days + 1):
+        day = start + timedelta(days=offset)
+        daily.append({'date': day, **{key: counts.get(day, 0) for key, counts in series.items()}})
+    return {
+        'daily': daily,
+        'appointment_status': _status_counts(appointments, Appointment.Status.choices),
+        'plan_status': _status_counts(plans, PatientSubscription.Status.choices),
+        'weight_distribution': weight_distribution,
+    }
+
+
 def operational_metrics(*, actor, company, scope, start, end):
     lower, upper = period_bounds(start, end)
     company_ids = report_companies(actor, company, scope)
     all_patients = Patient.objects.filter(company_id__in=company_ids)
     patients = all_patients.filter(is_active=True)
+    new_patients = all_patients.filter(created_at__gte=lower, created_at__lt=upper)
     appointments = Appointment.objects.filter(company_id__in=company_ids, patient__company_id=F('company_id'), starts_at__gte=lower, starts_at__lt=upper)
     shipments = Shipment.objects.filter(company_id__in=company_ids, patient__company_id=F('company_id'), dispatched_at__gte=lower, dispatched_at__lt=upper, status__in=('dispatched', 'delivered'))
     plans = PatientSubscription.objects.filter(company_id__in=company_ids, patient__company_id=F('company_id'))
@@ -67,7 +103,7 @@ def operational_metrics(*, actor, company, scope, start, end):
         Q(product__requires_cold_chain=False) | Q(cold_chain_confirmed=True)).aggregate(value=Sum('quantity_on_hand'))['value'] or 0
     rows = [
         ('Active patient records now', patients.count()),
-        ('New patient records in period', all_patients.filter(created_at__gte=lower, created_at__lt=upper).count()),
+        ('New patient records in period', new_patients.count()),
         ('Active local plans now', plans.filter(status='active').count()),
         ('Paused plans now', plans.filter(status='paused').count()),
         ('Plans cancelled in period', plans.filter(cancelled_at__gte=lower, cancelled_at__lt=upper).count()),
@@ -93,10 +129,16 @@ def operational_metrics(*, actor, company, scope, start, end):
                                last_weight_date=Subquery(weights.order_by('-recorded_on', '-pk').values('recorded_on')[:1]))
     paired = paired.filter(first_weight__gt=0, last_weight__isnull=False).exclude(first_weight_date=F('last_weight_date')).annotate(
         recorded_change=ExpressionWrapper((Cast(F('last_weight'), FloatField()) - Cast(F('first_weight'), FloatField())) * 100.0 / Cast(F('first_weight'), FloatField()), output_field=FloatField()))
-    weight_stats = paired.aggregate(count=Count('pk'), mean=Avg('recorded_change'))
-    cohorts = list(all_patients.filter(created_at__gte=lower, created_at__lt=upper).annotate(month=TruncMonth('created_at', tzinfo=REPORT_TIMEZONE)).values('month').annotate(records=Count('pk')).order_by('month'))
+    weight_summary = paired.aggregate(count=Count('pk'), mean=Avg('recorded_change'),
+        decrease=Count('pk', filter=Q(last_weight__lt=F('first_weight'))),
+        unchanged=Count('pk', filter=Q(last_weight=F('first_weight'))),
+        increase=Count('pk', filter=Q(last_weight__gt=F('first_weight'))))
+    weight_stats = {key: weight_summary[key] for key in ('count', 'mean')}
+    cohorts = list(new_patients.annotate(month=TruncMonth('created_at', tzinfo=REPORT_TIMEZONE)).values('month').annotate(records=Count('pk')).order_by('month'))
+    analytics = _operational_analytics(new_patients=new_patients, appointments=appointments, shipments=shipments, plans=plans,
+        weight_distribution={key: weight_summary[key] for key in ('decrease', 'unchanged', 'increase', 'count')}, start=start, end=end)
     return dict(metrics=rows, company_ids=company_ids, practices=Company.objects.filter(pk__in=company_ids).order_by('name'),
-                cohorts=cohorts, weight_stats=weight_stats, start=start, end=end, scope=scope)
+                cohorts=cohorts, weight_stats=weight_stats, analytics=analytics, start=start, end=end, scope=scope)
 
 
 def doctor_activity(*, company, doctor, start, end):

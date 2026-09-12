@@ -2,7 +2,7 @@
   <a{% if nav_section == 'overview' %} class="is-active" aria-current="page"{% endif %} href="{% url 'portal:desktop-dashboard' %}">Overview</a>
   <span class="console-nav__label">Care</span>
   <a{% if nav_section == 'tasks' %} class="is-active" aria-current="page"{% endif %} href="{% url 'portal:staff-tasks' %}">{% if active_membership.role == 'doctor' %}My tasks{% else %}Tasks{% endif %}</a>
-  {% if patient %}<a{% if nav_section == 'record' %} class="is-active" aria-current="page"{% endif %} href="{% if active_membership.role == 'doctor' or active_membership.role == 'super_admin' %}{% url 'portal:staff-patient-record' patient.pk %}{% else %}{% url 'portal:patient-detail' patient.pk %}{% endif %}">Patient record</a>{% endif %}
+  {% if patient %}<a{% if nav_section == 'record' %} class="is-active" aria-current="page"{% endif %} href="{% url 'portal:patient-detail' patient.pk %}">Patient record</a>{% endif %}
   <a{% if nav_section == 'patients' %} class="is-active" aria-current="page"{% endif %} href="{% url 'portal:patient-list' %}">Patients</a>
   {% if active_membership.role == 'doctor' or active_membership.role == 'super_admin' %}
     <a{% if nav_section == 'consultations' %} class="is-active" aria-current="page"{% endif %} href="{% url 'portal:clinical-consultations' %}">Consultations</a>

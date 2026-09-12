@@ -34,7 +34,8 @@ def weight_chart(rows):
     days = max(1, (end - start).days)
     points = []
     for row in rows:
-        x = Decimal('62') + Decimal((row.recorded_on - start).days) / Decimal(days) * Decimal('630')
+        x = (Decimal('377') if start == end else
+             Decimal('62') + Decimal((row.recorded_on - start).days) / Decimal(days) * Decimal('630'))
         y = Decimal('212') - (row.weight_kg - low) / (high - low) * Decimal('180')
         points.append({'x': f'{x:.2f}', 'y': f'{y:.2f}', 'date': row.recorded_on, 'weight': row.weight_kg})
     return dict(points=points, polyline=' '.join(f'{point["x"]},{point["y"]}' for point in points),

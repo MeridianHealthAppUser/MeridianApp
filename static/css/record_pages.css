@@ -12,8 +12,25 @@
 .record-filters input:focus-visible, .record-filters select:focus-visible { outline:2px solid var(--console-teal); outline-offset:2px; }
 .record-filters .errorlist { color:#a33030; font-size:.8rem; margin:.4rem 0 0; padding-left:1.1rem; }
 .record-filters > .errorlist { grid-column:1/-1; }
-.record-layout { display:grid; grid-template-columns:minmax(0,2fr) minmax(17rem,1fr); gap:1rem; align-items:start; }
+.record-layout { display:grid; grid-template-columns:minmax(0,2fr) minmax(17rem,1fr); gap:1rem; align-items:start; margin-top:1rem; }
 .record-timeline-card, .record-sidebar, .record-summary { min-width:0; }
+.record-layout .staff-page-card { margin-top:0; }
+/* Size the row from the care summary, never from the loaded timeline entries. */
+.record-layout .record-timeline-card { align-self:stretch; contain:size; display:flex; flex-direction:column; min-height:0; }
+.record-timeline-header { flex:0 0 auto; flex-wrap:wrap; }
+.record-timeline-header > div:first-child { flex:1 1 16rem; }
+.record-timeline-tools { align-items:center; display:flex; flex-wrap:wrap; gap:.6rem; }
+.record-timeline-tools .console-button { min-height:2.75rem; white-space:nowrap; }
+.record-scroll-help { border-bottom:1px solid var(--console-soft-line); color:var(--console-muted); flex:0 0 auto; font-size:.72rem; line-height:1.5; margin:0; padding:.65rem 1.15rem; }
+.record-timeline-scroll { flex:1 1 auto; min-height:0; overflow-y:auto; overscroll-behavior-y:contain; scrollbar-color:#a9c8c5 transparent; scrollbar-gutter:stable; }
+.record-timeline-scroll:focus-visible { outline:2px solid var(--console-teal); outline-offset:-3px; }
+.record-timeline-loader { border-top:1px solid var(--console-soft-line); padding:.8rem 1rem 1rem; position:relative; text-align:center; }
+.record-timeline-loader p { margin:0 0 .6rem; }
+.record-timeline-loader p:last-child { margin-bottom:0; }
+.record-timeline-loader [hidden] { display:none !important; }
+.record-timeline-loader button { min-height:2.75rem; }
+.record-timeline-sentinel { height:1px; left:0; position:absolute; top:0; width:100%; }
+.record-timeline-loader[data-state="error"] p { color:#9b3737; }
 .record-timeline { list-style:none; margin:0; padding:1.4rem 1.5rem 1rem 2rem; }
 .record-timeline__entry { border-left:1px solid var(--console-line); padding:0 0 1.5rem 1rem; position:relative; overflow-wrap:anywhere; }
 .record-timeline__entry::before { background:#fff; border:2px solid #8299a1; border-radius:50%; content:""; height:.65rem; left:-.39rem; position:absolute; top:.18rem; width:.65rem; }
@@ -52,7 +69,11 @@
 .record-directory-switch button { white-space:normal; }
 .record-directory-filters { flex-wrap:wrap; }
 .record-directory-filters .staff-filter-form__field { flex:1 1 12rem; min-width:0; }
-@media (max-width:1100px) { .record-layout { grid-template-columns:minmax(0,1fr); } .record-sidebar { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+@media (max-width:1100px) {
+  .record-layout { grid-template-columns:minmax(0,1fr); }
+  .record-layout .record-timeline-card { contain:none; height:min(46rem,76svh); min-height:26rem; }
+  .record-sidebar { grid-template-columns:repeat(2,minmax(0,1fr)); }
+}
 @media (max-width:680px) {
   .record-filters, .record-sidebar { grid-template-columns:minmax(0,1fr); }
   .record-scope, .record-summary { padding:1rem; }

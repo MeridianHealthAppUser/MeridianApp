@@ -38,7 +38,8 @@ The overview is still a summary. Primary staff navigation opens separate Django 
 - `/tasks/`: a task table showing tasks assigned to or created by the doctor, or all practice tasks for administrators; filter by workflow status, patient/general type, patient, or free-form tag. Complete a task without leaving the list.
 - `/tasks/new/` and `/tasks/<id>/`: create and edit patient-linked or general practice tasks, assign practice staff, record a note, set a due time, and manage reusable labels.
 - `/patients/`: the active practice's patient directory, with name/ID/email/record search and doctor filtering.
-- `/patients/<id>/record/`: the selected patient's clinical timeline, filters and protected export. The original `/patients/<id>/` remains a compatibility care-summary/form page.
+- `/patients/<id>/`: one patient workspace with separate Overview, History, Appointments, Consultations, Blood tests, Notes, Weight, Messages, Tasks, Payments, Treatment and Deliveries tabs, subject to the current role. Each tab renders only its own content and keeps the same patient header.
+- `/patients/<id>/?tab=history`: the selected patient's filtered history. Doctors and practice Super Admins receive the protected clinical timeline and exports; Practice Administrators receive a limited operational history without clinical bodies. The old `/patients/<id>/record/` remains a clinical History alias, not a second patient-detail layout.
 - `/schedule/`: switch between a daily appointment table and a month calendar. The date and doctor selection carry across views. Select a calendar day to see its appointment table and available times. Doctors see and manage their own working hours/time off, while administrators can inspect practice doctors. **Offer a new time** opens the correct conversation with the appointment selected.
 - `/messages/`: the dedicated secure conversation inbox.
 - `/consultations/`: doctor-owned draft notes and practice-visible signed consultations; available to doctors and practice Super Admins (signed records only for Super Admins).
@@ -46,6 +47,16 @@ The overview is still a summary. Primary staff navigation opens separate Django 
 - `/leads/`: enquiries for the selected practice, available only to Practice Administrators and practice Super Admins. Open a lead for its contact details, screening answers and consent history. Switching practice clears the previous list filters.
 
 Desktop and mobile use the same section routes and permissions. Practice switching stays on the selected section but clears its previous practice's filters; switching from a patient record returns to the overview. Primary navigation is not implemented with dashboard fragment links. In-page links to a specific form or conversation remain appropriate within a record.
+
+### Unified patient workspace
+
+Open a patient from `/patients/`, then use the tabs beneath their name. For example, `/patients/<id>/?tab=appointments` contains only that patient's appointment table and booking form; `?tab=messages` contains only their conversations. Tabs never redirect to an app-wide list with a patient filter. The global Schedule, Messages, Consultations and other navigation destinations remain separate practice-wide pages. Overview contains summaries only and never marks conversations read. A submitted form returns to its patient section; invalid forms keep the submitted values there.
+
+Clinical History starts with 20 events and loads older entries inside its scrollable panel, with explicit **Load older entries** and pagination fallbacks. Dates are shown in South Africa time. Activity, date and permitted cross-practice filters apply to both the displayed timeline and **Download Excel**. The `.xlsx` download includes the selected history snapshot, not just the currently loaded rows; exports over 10,000 entries require narrower filters rather than silently truncating. Export cells are text, and private notes, unsigned consultations, attachment bytes and arbitrary audit metadata are excluded. The existing protected JSON clinical-record export remains separate. Expiring history links recheck the active practice and permissions; reload after changing practice or access.
+
+The Weight tab shows an actual date-spaced line chart, first/latest/change summaries and exact recorded values in a compact paginated table. Empty and single-check-in states are supported. Charts use at most the latest 300 entries; earlier entries remain available in the table. The Payments tab displays existing local records only: a saved status is not confirmation that money was collected, and no charge action is available.
+
+The top-right account menu opens `/accounts/profile/` for your own shared name and read-only access details. The patient portal's `/patient/account/` remains the separate practice-specific contact/preferences page. Neither screen lets you grant roles or change someone else's identity.
 
 ### Doctor working hours and time off checkpoint
 
@@ -63,7 +74,7 @@ Test this batch on a future appointment day: save working hours, add time off ac
 
 ### Consultation notes and blood-test review checkpoint
 
-As Sam, open **Patients → Nadia → New consultation note**. Choose an optional appointment, enter the actual consultation time and save a draft. A **Sign consultation note** task appears under My tasks. Open it, check the final wording, tick the signing confirmation and sign. The signed record is locked, the signing task is completed, and a snapshot appears in the patient's staff clinical record. Only the author can access an unsigned draft or sign it. Other practice doctors and practice Super Admins can read signed records; Practice Administrators and patient accounts cannot open these clinical-note pages. Signing never changes a booking, prescription, payment or treatment decision.
+As Sam, open **Patients → Nadia → Consultations → New consultation note**. Choose an optional appointment, enter the actual consultation time and save a draft. A **Sign consultation note** task appears under My tasks. Open it, check the final wording, tick the signing confirmation and sign. The signed record is locked, the signing task is completed, and a snapshot appears in the patient's staff clinical record. Only the author can access an unsigned draft or sign it. Other practice doctors and practice Super Admins can read signed records; Practice Administrators and patient accounts cannot open these clinical-note pages. Signing never changes a booking, prescription, payment or treatment decision.
 
 From the same patient record choose **Request blood tests**, enter the tests you have decided to request and optionally a due date. This makes an in-app request only: no laboratory order, email or external request form is sent. As Nadia, open **Tests** (`/patient/blood-tests/`) and upload one PDF report, up to 5 MB. The requesting doctor can also upload on the patient's behalf. Uploading creates a **Review laboratory results** task for the requesting doctor. As Sam, open that task, read the report and record an internal review note. Completing the review closes the task. Nadia sees the reviewed status, not the internal review wording; communicate any clinical advice separately through the established care workflow.
 
@@ -75,10 +86,10 @@ Signed, expiring user/practice/patient/record contexts protect all clinical writ
 
 ## Separate patient pages checkpoint
 
-Sign in as Nadia and open `/patient/`. The overview contains brief summaries only; each navigation item opens its own page on desktop and mobile:
+Sign in as Nadia and open `/patient/`. The compact overview contains care-plan, latest-weight and unread-message summaries, upcoming appointments, recent check-ins and care updates. Panels fit their content instead of forcing large empty areas, and there is no duplicate “Your care at” practice strip above the greeting. Each navigation item opens its own page on desktop and mobile:
 
 - `/patient/blood-tests/`: own practice's requests, PDF upload/download and review status, with 20 requests per page. Internal clinician review notes are not displayed.
-- `/patient/appointments/`: upcoming, past/cancelled or all appointments, paginated in groups of 20. **Suggest a new time** opens Messages with that appointment selected. Video links are shown only for HTTPS URLs.
+- `/patient/appointments/`: upcoming, past/cancelled or all appointments, paginated in groups of 20. **Suggest a new time** opens Messages with that appointment selected. Eligible booked participants can open the native appointment-bound video room during its join window.
 - `/patient/messages/`: secure inbox with open/closed filters, 20 conversations per list page and 50 messages per history page. Only incoming messages actually opened are marked read. Replies, new conversations and appointment-change actions return to the selected conversation. The overview never marks messages read.
 - `/patient/progress/`: weight check-in form, first/latest/change summaries and paginated weight history. Invalid entries keep their submitted values beside the errors.
 - `/patient/account/`: edit the phone number and city for the selected practice only; identity, sign-in email, assigned doctor and recorded consents are read-only. Updates audit the changed field names, not their values.
@@ -109,11 +120,11 @@ Test this checkpoint in two browser sessions: submit an enquiry, then sign in as
 
 ## Patient workflow checkpoint
 
-As Sam, open Nadia from the patient list. Add a clinical note, book a future appointment, create and complete a task, and send a message. As Nadia, open **Messages** to read or reply to a conversation, and **Progress** to record a weight check-in. Change practice to see the separate record.
+As Sam, open Nadia from the patient list. Use **Notes** to add a clinical note, **Appointments** to book a future appointment, **Tasks** to create or open a task, and **Messages** to send a message. Each action stays within Nadia's patient context. As Nadia, open **Messages** to read or reply to a conversation, and **Progress** to record a weight check-in. Change practice to see the separate record.
 
 Invalid forms retain submitted values and show errors alongside the field. Appointment times are checked across a clinician’s practices to prevent overlaps. A completed task keeps its original completion time if submitted again. A cancelled task cannot be completed.
 
-Doctors can add clinical notes. Doctors and practice Super Admins can read shared clinical notes; a private note is only shown to its author in the portal. Practice Administrators manage appointments, tasks and conversations without viewing clinical note bodies. Django technical superusers remain separate privileged accounts.
+Doctors can add clinical notes. Doctors and practice Super Admins can read shared clinical notes; a private note is only shown to its author while that person has the Doctor role in the practice. The combined clinical timeline excludes private notes. Practice Administrators manage appointments, tasks and conversations without viewing clinical note bodies. Django technical superusers remain separate privileged accounts.
 
 The staff unread badge is a shared team inbox count of patient-origin messages. Viewing a patient conversation marks those displayed messages as read for the team. Messages and clinical changes are recorded with their practice and audit metadata.
 

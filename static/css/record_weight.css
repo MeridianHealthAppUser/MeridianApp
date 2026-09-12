@@ -1,0 +1,41 @@
+/* Only this card opts out of the neighbouring conversation panel's height. */
+.record-weight-card { align-self: start; }
+.record-weight-card .console-card__header { align-items: flex-start; flex-wrap: wrap; gap: .4rem .75rem; }
+.record-weight-count { color: var(--console-muted); font-size: .7rem; line-height: 1.5; white-space: nowrap; }
+.record-weight-card__body { padding: 1rem 1.2rem; }
+.record-weight-summary { display: grid; gap: .8rem; grid-template-columns: repeat(3, minmax(0, 1fr)); margin: 0; }
+.record-weight-summary > div { min-width: 0; }
+.record-weight-summary dt { color: var(--console-muted); font-size: .7rem; line-height: 1.5; }
+.record-weight-summary dd { color: var(--console-ink); font-size: clamp(1rem, 1.6vw, 1.35rem); font-weight: 750; letter-spacing: -.025em; line-height: 1.4; margin: .2rem 0 0; }
+.record-weight-summary dd > span { font-size: .7em; font-weight: 500; }
+.record-weight-summary small { color: var(--console-muted); display: block; font-size: .65rem; font-weight: 400; letter-spacing: 0; margin-top: .2rem; }
+.record-weight-chart { margin: 1.2rem 0 1rem; }
+.record-weight-chart__label { color: var(--console-muted); font-size: .72rem; margin-bottom: .3rem; }
+.record-weight-chart svg { display: block; height: auto; width: 100%; }
+.record-weight-chart text { fill: var(--console-muted); font-family: inherit; font-size: 15px; }
+.record-weight-chart__grid { stroke: var(--console-line); stroke-width: 1; }
+.record-weight-chart__line { fill: none; stroke: var(--console-teal); stroke-linecap: round; stroke-linejoin: round; stroke-width: 2; vector-effect: non-scaling-stroke; }
+.record-weight-chart__point { fill: #fff; stroke: var(--console-teal); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+.record-weight-chart__range { color: var(--console-muted); display: none; flex-wrap: wrap; font-size: .7rem; gap: .35rem .7rem; justify-content: space-between; }
+.record-weight-chart figcaption { color: var(--console-muted); font-size: .7rem; line-height: 1.5; margin-top: .4rem; }
+.record-weight-table { border-collapse: collapse; font-size: .75rem; table-layout: fixed; width: 100%; }
+.record-weight-table caption { color: var(--console-muted); font-size: .7rem; padding-bottom: .65rem; text-align: left; }
+.record-weight-table th, .record-weight-table td { border-bottom: 1px solid var(--console-soft-line); line-height: 1.5; overflow-wrap: anywhere; padding: .65rem .45rem; text-align: left; vertical-align: top; }
+.record-weight-table th { font-size: .65rem; font-weight: 650; }
+.record-weight-table th:first-child { width: 25%; }
+.record-weight-table th:nth-child(2) { width: 22%; }
+.record-weight-table tbody tr:last-child td { border-bottom: 0; }
+.record-weight-table small { color: var(--console-muted); display: block; font-size: .65rem; margin-top: .2rem; }
+.record-weight-note summary { color: var(--console-teal-dark); cursor: pointer; min-height: 1.5rem; }
+.record-weight-note p { margin: .35rem 0 0; }
+.record-weight-pagination { align-items: center; border-top: 1px solid var(--console-soft-line); color: var(--console-muted); display: flex; flex-wrap: wrap; font-size: .7rem; gap: .65rem; justify-content: space-between; margin-top: .5rem; padding-top: .8rem; }
+.record-weight-empty { color: var(--console-muted); font-size: .85rem; line-height: 1.6; margin: 0; }
+@media (max-width: 36rem) {
+  .record-weight-card__body { padding: .85rem; }
+  .record-weight-summary { gap: .45rem; }
+  .record-weight-summary dd { font-size: 1rem; }
+  .record-weight-chart svg text { display: none; }
+  .record-weight-chart__range { display: flex; }
+  .record-weight-table { font-size: .7rem; }
+  .record-weight-table th, .record-weight-table td { padding: .55rem .3rem; }
+}

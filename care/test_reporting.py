@@ -1,5 +1,7 @@
 """Saved-data metrics and activity statements: no inferred outcomes or payouts."""
 
+import json
+
 from datetime import date, datetime, time, timedelta
 from decimal import Decimal
 from zoneinfo import ZoneInfo
@@ -13,7 +15,7 @@ from django.utils import timezone
 
 from practices.models import Company, CompanyMembership, Patient
 from .models import (Appointment, AuditEvent, DoctorActivityStatement, LabRequest, Lead, MedicationBatch,
-                     MessageThread, PatientMessage, PatientSubscription, Payment, WeightEntry)
+                     MessageThread, PatientMessage, PatientSubscription, Payment, Shipment, WeightEntry)
 from .reporting import (approve_activity_statement, create_activity_statement, doctor_activity,
                         operational_metrics, period_bounds, refresh_activity_statement, report_companies)
 from .test_operations import OperationsFixture
@@ -170,6 +172,179 @@ class ReportCalculationTests(ReportingFixture):
             result = self.metrics()
             list(result['practices'])
         self.assertEqual(len(larger), len(small))
+
+
+class ReportAnalyticsTests(ReportingFixture):
+    def daily(self, report):
+        return {row['date']: row for row in report['analytics']['daily']}
+
+    def status_counts(self, report, key):
+        return {row['key']: row['count'] for row in report['analytics'][key]}
+
+    def dispatch(self, when, **extra):
+        values = dict(company=self.company, patient=self.patient, scheduled_for=self.start,
+                      dispatched_at=when, status='dispatched')
+        values.update(extra)
+        return Shipment.objects.create(**values)
+
+    def test_daily_totals_match_existing_metrics_and_cohorts_with_zero_filled_days(self):
+        start, end = self.start, self.start + timedelta(days=3)
+        Patient.objects.filter(company=self.company).update(created_at=self.at(start - timedelta(days=1)))
+        Patient.objects.filter(pk=self.patient.pk).update(created_at=self.at(start))
+        inactive = Patient.objects.create(company=self.company, first_name='Recorded', last_name='Inactive', is_active=False)
+        Patient.objects.filter(pk=inactive.pk).update(created_at=self.at(end))
+        self.appointment(starts_at=self.at(start), status='booked')
+        self.appointment(starts_at=self.at(end), status='completed')
+        self.dispatch(self.at(start + timedelta(days=1)))
+        self.dispatch(self.at(end), status='delivered')
+        report = self.metrics(start=start, end=end)
+        daily, metrics = self.daily(report), dict(report['metrics'])
+        self.assertEqual(list(daily), [start + timedelta(days=number) for number in range(4)])
+        self.assertEqual(daily[start + timedelta(days=2)], {'date': start + timedelta(days=2), 'new_patients': 0, 'appointments': 0, 'dispatches': 0})
+        for key, label in (('new_patients', 'New patient records in period'),
+                           ('appointments', 'Appointments scheduled in period'),
+                           ('dispatches', 'Dispatches recorded in period')):
+            self.assertEqual(sum(row[key] for row in daily.values()), 2)
+            self.assertEqual(sum(row[key] for row in daily.values()), metrics[label])
+        self.assertEqual(sum(row['new_patients'] for row in daily.values()), sum(row['records'] for row in report['cohorts']))
+        self.assertEqual(sum(row['count'] for row in report['analytics']['appointment_status']), metrics['Appointments scheduled in period'])
+
+    def test_series_buckets_use_inclusive_sast_boundaries_even_when_request_timezone_is_utc(self):
+        lower, upper = period_bounds(self.start, self.end)
+        moments = (lower - timedelta(microseconds=1), lower, upper - timedelta(microseconds=1), upper)
+        Patient.objects.filter(company=self.company).update(created_at=lower - timedelta(days=2))
+        for index, moment in enumerate(moments):
+            patient = Patient.objects.create(company=self.company, first_name='Boundary', last_name=str(index))
+            Patient.objects.filter(pk=patient.pk).update(created_at=moment)
+            self.appointment(starts_at=moment)
+            self.dispatch(moment)
+        with timezone.override('UTC'):
+            report = self.metrics()
+        daily = self.daily(report)
+        for key in ('new_patients', 'appointments', 'dispatches'):
+            self.assertEqual(daily[self.start][key], 1)
+            self.assertEqual(daily[self.end][key], 1)
+            self.assertEqual(sum(row[key] for row in daily.values()), 2)
+        self.assertEqual(len(daily), (self.end - self.start).days + 1)
+
+    def test_empty_practice_has_zero_series_all_statuses_and_no_imputed_weights(self):
+        empty = Company.objects.create(name='Empty reports', slug='empty-reports')
+        CompanyMembership.objects.create(company=empty, user=self.admin, role='practice_admin')
+        report = self.metrics(company=empty, start=self.start, end=self.start)
+        self.assertEqual(report['analytics']['daily'], [{'date': self.start, 'new_patients': 0, 'appointments': 0, 'dispatches': 0}])
+        self.assertEqual(self.status_counts(report, 'appointment_status'), dict.fromkeys(Appointment.Status.values, 0))
+        self.assertEqual(self.status_counts(report, 'plan_status'), dict.fromkeys(PatientSubscription.Status.values, 0))
+        self.assertEqual(report['analytics']['weight_distribution'], {'decrease': 0, 'unchanged': 0, 'increase': 0, 'count': 0})
+        self.assertEqual(report['weight_stats'], {'count': 0, 'mean': None})
+        self.assertEqual(report['cohorts'], [])
+
+    def test_maximum_daily_payload_is_367_dates_and_invalid_periods_still_fail_before_queries(self):
+        report = self.metrics(start=self.start, end=self.start + timedelta(days=366))
+        self.assertEqual(len(report['analytics']['daily']), 367)
+        self.assertEqual(report['analytics']['daily'][-1]['date'], self.start + timedelta(days=366))
+        for start, end in ((self.start, self.start + timedelta(days=367)), (self.end, self.start),
+                           (date.max, date.max), (None, self.end)):
+            with self.subTest(start=start, end=end), self.assertNumQueries(0), self.assertRaises(ValidationError):
+                self.metrics(start=start, end=end)
+
+    def test_status_breakdowns_use_stored_appointment_states_and_current_local_plan_states(self):
+        for status in Appointment.Status.values:
+            self.appointment(status=status)
+        for status in PatientSubscription.Status.values:
+            PatientSubscription.objects.create(company=self.company, patient=self.other_patient,
+                plan_name='Recorded local plan', monthly_amount=0, status=status, starts_on=self.end + timedelta(days=50))
+        report = self.metrics()
+        self.assertEqual(self.status_counts(report, 'appointment_status'), dict.fromkeys(Appointment.Status.values, 1))
+        self.assertEqual(self.status_counts(report, 'plan_status'), {'active': 2, 'payment_retry': 1, 'paused': 1, 'cancelled': 1})
+        metrics = dict(report['metrics'])
+        self.assertEqual(self.status_counts(report, 'plan_status')['active'], metrics['Active local plans now'])
+        self.assertEqual(self.status_counts(report, 'plan_status')['paused'], metrics['Paused plans now'])
+        # Stored statuses are not proof of a financial transaction or receipt.
+        self.assertFalse(Payment.objects.exists())
+
+    def test_unknown_imported_status_keeps_total_without_exposing_stored_text(self):
+        self.appointment(status='PRIVATE_STATUS')
+        PatientSubscription.objects.filter(pk=self.plan.pk).update(status='PRIVATE_STATUS')
+        report = self.metrics()
+        for key in ('appointment_status', 'plan_status'):
+            self.assertEqual(report['analytics'][key][-1], {'key': 'other', 'label': 'Other recorded status', 'count': 1})
+        self.assertEqual(sum(row['count'] for row in report['analytics']['appointment_status']), dict(report['metrics'])['Appointments scheduled in period'])
+        self.assertNotIn('PRIVATE_STATUS', json.dumps(report['analytics'], default=str))
+
+    def test_weight_distribution_uses_same_dated_positive_pairs_as_existing_mean(self):
+        stable = Patient.objects.create(company=self.company, first_name='Stable', last_name='Record')
+        for patient, first, last in ((self.patient, 100, 90), (self.other_patient, 200, 220), (stable, 80, 80)):
+            WeightEntry.objects.create(company=self.company, patient=patient, recorded_on=self.start, weight_kg=first)
+            WeightEntry.objects.create(company=self.company, patient=patient, recorded_on=self.end, weight_kg=last)
+        single = Patient.objects.create(company=self.company, first_name='Single', last_name='Measurement')
+        WeightEntry.objects.create(company=self.company, patient=single, recorded_on=self.start, weight_kg=100)
+        inactive = Patient.objects.create(company=self.company, first_name='Inactive', last_name='Record', is_active=False)
+        for day, weight in ((self.start, 100), (self.end, 50)):
+            WeightEntry.objects.create(company=self.company, patient=inactive, recorded_on=day, weight_kg=weight)
+            WeightEntry.objects.create(company=self.beta, patient=self.beta_patient, recorded_on=day, weight_kg=weight)
+        WeightEntry.objects.create(company=self.company, patient=self.patient, recorded_on=self.start - timedelta(days=1), weight_kg=150)
+        WeightEntry.objects.create(company=self.company, patient=self.patient, recorded_on=self.end + timedelta(days=1), weight_kg=50)
+        report = self.metrics()
+        self.assertEqual(report['analytics']['weight_distribution'], {'decrease': 1, 'unchanged': 1, 'increase': 1, 'count': 3})
+        self.assertEqual(report['weight_stats']['count'], 3)
+        self.assertAlmostEqual(report['weight_stats']['mean'], 0.0)
+        self.assertEqual(set(report['weight_stats']), {'count', 'mean'})
+
+    def test_cross_practice_imports_are_excluded_from_every_analytic_group(self):
+        self.appointment(patient=self.beta_patient)
+        self.dispatch(self.at(self.start), patient=self.beta_patient)
+        PatientSubscription.objects.create(company=self.company, patient=self.beta_patient, plan_name='Wrong tenant', monthly_amount=0)
+        for day, weight in ((self.start, 100), (self.end, 90)):
+            WeightEntry.objects.create(company=self.beta, patient=self.patient, recorded_on=day, weight_kg=weight)
+        report = self.metrics()
+        self.assertEqual(sum(row['appointments'] for row in report['analytics']['daily']), 0)
+        self.assertEqual(sum(row['dispatches'] for row in report['analytics']['daily']), 0)
+        self.assertEqual(sum(row['count'] for row in report['analytics']['appointment_status']), 0)
+        self.assertEqual(sum(row['count'] for row in report['analytics']['plan_status']), 1)
+        self.assertEqual(report['analytics']['weight_distribution']['count'], 0)
+
+    def test_all_scope_adds_only_permitted_practices_and_revocation_removes_them(self):
+        self.appointment()
+        self.appointment(company=self.beta, patient=self.beta_patient)
+        self.dispatch(self.at(self.start))
+        self.dispatch(self.at(self.start), company=self.beta, patient=self.beta_patient)
+        Patient.objects.all().update(created_at=self.at(self.start))
+        PatientSubscription.objects.create(company=self.beta, patient=self.beta_patient, plan_name='Beta local plan', monthly_amount=0)
+        current = self.metrics(actor=self.doctor)
+        combined = self.metrics(actor=self.doctor, scope='all')
+        for key in ('appointments', 'dispatches'):
+            self.assertEqual(sum(row[key] for row in current['analytics']['daily']), 1)
+            self.assertEqual(sum(row[key] for row in combined['analytics']['daily']), 2)
+        self.assertEqual(sum(row['new_patients'] for row in combined['analytics']['daily']), 3)
+        self.assertEqual(sum(row['count'] for row in combined['analytics']['plan_status']), 2)
+        CompanyMembership.objects.filter(company=self.beta, user=self.doctor).update(is_active=False)
+        self.assertEqual(self.metrics(actor=self.doctor, scope='all')['analytics'], current['analytics'])
+        with self.assertRaises(PermissionDenied):
+            self.metrics(actor=self.beta_admin)
+
+    def test_analytics_contains_only_aggregates_and_never_lead_identities_or_medical_text(self):
+        lead = Lead.objects.create(company=self.company, first_name='PRIVATE_LEAD_NAME', last_name='PRIVATE_LEAD_SURNAME', email='private-lead@example.test')
+        Lead.objects.filter(pk=lead.pk).update(created_at=self.at(self.start))
+        self.appointment(outcome_notes='PRIVATE_CLINICAL_TEXT')
+        admin_report, doctor_report = self.metrics(), self.metrics(actor=self.doctor)
+        self.assertEqual(admin_report['analytics'], doctor_report['analytics'])
+        payload = json.dumps(admin_report['analytics'], default=str)
+        for value in ('PRIVATE_LEAD_NAME', 'PRIVATE_LEAD_SURNAME', 'private-lead@example.test', 'PRIVATE_CLINICAL_TEXT', 'patient_id', 'company_id', 'user_id', 'lead'):
+            self.assertNotIn(value, payload)
+        self.assertIn('New enquiries in practices you administer', dict(admin_report['metrics']))
+        self.assertNotIn('New enquiries in practices you administer', dict(doctor_report['metrics']))
+
+    def test_report_analytics_does_not_write_or_grow_queries_per_record(self):
+        with CaptureQueriesContext(connection) as first:
+            self.metrics()
+        for number in range(20):
+            self.appointment(starts_at=self.at(self.start + timedelta(days=number)))
+            self.dispatch(self.at(self.start + timedelta(days=number)))
+        with CaptureQueriesContext(connection) as larger:
+            self.metrics()
+        self.assertEqual(len(first), len(larger))
+        self.assertFalse(AuditEvent.objects.exists())
+        self.assertFalse(Payment.objects.exists())
 
 
 class ActivityStatementTests(ReportingFixture):

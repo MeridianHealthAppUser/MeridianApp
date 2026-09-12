@@ -17,6 +17,7 @@ from .clinical_views import StaffClinicalView, _error, _listing
 from .compounding_forms import CompoundingCancelForm, CompoundingDraftForm, CompoundingReviewForm, CompoundingSubmissionForm, ReviewRunForm
 from .review_forms import validate_review_context
 from .review_views import ReviewRuleListView
+from .patient_action_context import patient_action_context, workspace_redirect
 
 
 class CompoundingBase(StaffClinicalView):
@@ -58,10 +59,14 @@ class CompoundingCreateView(CompoundingBase):
         ).select_related('patient', 'product'), pk=pk)
 
     def display(self, request, authorization, form, status=200):
-        return render(request, 'portal/compounding_create.html', self.context(
+        context = self.context(
             authorization=authorization, patient=authorization.patient, form=form,
             clinical_context=self.token(request, authorization.patient, f'compounding-create:{authorization.pk}'),
-        ), status=status)
+        )
+        context.update(patient_action_context(self, authorization.patient, 'treatment',
+            content_template='portal/includes/compounding_create_content.html',
+            stylesheets=('css/operations.css', 'css/compounding.css'), title='Start a compounding tracking record'))
+        return render(request, 'portal/patient_workspace_action.html' if context.get('patient_workspace') else 'portal/compounding_create.html', context, status=status)
 
     def get(self, request, authorization_pk):
         return self.display(request, self.authorization(authorization_pk), CompoundingDraftForm())
@@ -75,7 +80,7 @@ class CompoundingCreateView(CompoundingBase):
                 record = create_compounding_record(company=self.company, authorization=authorization, actor=request.user,
                                                      submission_key=token['submission_key'], request=request, **form.cleaned_data)
                 messages.success(request, 'Manual compounding tracking draft saved. No prescription or external submission was created.')
-                return redirect('portal:compounding-detail', pk=record.pk)
+                return workspace_redirect(request, 'portal:compounding-detail', pk=record.pk)
         except ValidationError as error:
             _error(form, error)
         return self.display(request, authorization, form, status=400)
@@ -89,10 +94,17 @@ class CompoundingDetailView(CompoundingBase):
         key = {'save': 'draft_form', 'review': 'review_form', 'submit': 'submission_form', 'cancel': 'cancel_form'}.get(failed_action)
         if key:
             forms[key] = failed_form
-        return render(request, 'portal/compounding_detail.html', self.context(
+        context = self.context(
             record=record, patient=record.patient, can_edit=self.is_doctor and record.clinician_id == request.user.pk,
             clinical_context=self.token(request, record.patient, 'compounding-record', record), failed_form=failed_form, **forms,
-        ), status=status)
+        )
+        context.update(patient_action_context(self, record.patient, 'treatment',
+            content_template='portal/includes/compounding_detail_content.html',
+            stylesheets=('css/operations.css', 'css/compounding.css'), title=f'Compounding tracking record {record.pk}'))
+        if context.get('patient_workspace') and context['can_edit']:
+            from django.urls import reverse
+            context['workspace_print_url'] = reverse('portal:compounding-print', args=[record.pk])
+        return render(request, 'portal/patient_workspace_action.html' if context.get('patient_workspace') else 'portal/compounding_detail.html', context, status=status)
 
     def get(self, request, pk):
         return self.display(request, get_object_or_404(self.records(), pk=pk))
@@ -116,7 +128,7 @@ class CompoundingDetailView(CompoundingBase):
             if valid:
                 services[action](record=record, actor=request.user, expected_revision=token['revision'], request=request, **form.cleaned_data)
                 messages.success(request, 'Manual compounding workflow updated. Nothing was emailed or submitted by the app.')
-                return redirect('portal:compounding-detail', pk=record.pk)
+                return workspace_redirect(request, 'portal:compounding-detail', pk=record.pk)
         except ValidationError as error:
             _error(form, error)
         return self.display(request, record, form, action, status=400)

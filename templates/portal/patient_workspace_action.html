@@ -1,0 +1,8 @@
+{% extends 'portal/patient_workspace_base.html' %}{% load static %}
+{% block title %}{{ workspace_action_title }} · {{ patient }} | Meridian{% endblock %}
+{% block extra_css %}{{ block.super }}{% for stylesheet in action_stylesheets %}<link rel="stylesheet" href="{% static stylesheet %}">{% endfor %}{% endblock %}
+{% block patient_workspace_heading_actions %}<a class="console-button console-button--quiet" href="{{ workspace_return_url }}">{{ workspace_return_label }}</a>{% endblock %}
+{% block patient_workspace_content %}
+  <div class="patient-workspace-toolbar"><h2>{{ workspace_action_title }}</h2>{% if workspace_print_url %}<a class="console-button console-button--quiet" href="{{ workspace_print_url }}" target="_blank" rel="noopener">Printable tracking summary <span class="record-small">Opens in a new tab</span></a>{% endif %}</div>
+  {% include action_content_template %}
+{% endblock %}

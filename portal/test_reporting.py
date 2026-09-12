@@ -15,7 +15,7 @@ from django.urls import reverse
 
 from care.followups import append_follow_up
 from care.models import AdministrativeFollowUp, AuditEvent, DoctorActivityStatement, Lead, PatientSubscription, Payment
-from care.reporting import approve_activity_statement
+from care.reporting import approve_activity_statement, operational_metrics
 from care.test_reporting import RATES, ReportingFixture
 from practices.models import CompanyMembership
 from practices.services import ACTIVE_COMPANY_SESSION_KEY
@@ -62,6 +62,7 @@ class MetricsPortalTests(ReportingPortalFixture):
             self.assertEqual(response.status_code, 200)
             self.assertTemplateUsed(response, 'portal/reporting_metrics.html')
             self.assertEqual(response.context['company_ids'], [self.company.pk])
+            self.assertEqual(len(response.context['analytics']['daily']), (self.end - self.start).days + 1)
             self.assertIn('no-store', response['Cache-Control'])
             self.assertNotContains(response, 'name="summary"')
             self.assertNotContains(response, 'name="body"')
@@ -96,6 +97,7 @@ class MetricsPortalTests(ReportingPortalFixture):
                 self.assertEqual(response.status_code, 200)
                 self.assertTrue(response.context['form'].errors)
                 self.assertNotIn('metrics', response.context)
+                self.assertNotIn('analytics', response.context)
                 export = self.get('metrics-export', **params)
                 self.assertEqual(export.status_code, 400)
                 self.assertNotIn('attachment', export.get('Content-Disposition', ''))
@@ -127,6 +129,20 @@ class MetricsPortalTests(ReportingPortalFixture):
         self.assertEqual(AuditEvent.objects.count(), before)
         self.assertEqual(self.client.post(self.url('metrics'), {}).status_code, 405)
         self.assertEqual(self.client.post(self.url('metrics-export'), {}).status_code, 405)
+
+    def test_chart_data_does_not_change_the_existing_csv_contract(self):
+        self.appointment()
+        result = operational_metrics(actor=self.super_admin, company=self.company, scope='current', start=self.start, end=self.end)
+        self.assertIn('analytics', result)
+        response = self.get('metrics-export', start=self.start, end=self.end)
+        actual = list(csv.reader(io.StringIO(response.content.decode())))
+        expected = [
+            ('Metric', 'Value'), ('Period start', self.start), ('Period end', self.end), ('Scope', self.company.name),
+            *result['metrics'], ('Weight records with two dated measurements', result['weight_stats']['count']),
+            ('Mean recorded weight change (%)', result['weight_stats']['mean']),
+            *((f"Patient record cohort {item['month']:%Y-%m}", item['records']) for item in result['cohorts']),
+        ]
+        self.assertEqual(actual, [[str(value) if value is not None else '' for value in row] for row in expected])
 
     def test_revoked_membership_cannot_read_or_export_metrics(self):
         CompanyMembership.objects.filter(company=self.company, user=self.super_admin).update(is_active=False)

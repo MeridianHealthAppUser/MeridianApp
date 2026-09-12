@@ -21,6 +21,7 @@ from .clinical_views import StaffClinicalView, _error, _listing
 from .patient_views import patient_page_context
 from .treatment_forms import AuthorizationForm, ConfirmTreatmentForm, EnrollmentForm, make_treatment_context, validate_treatment_context
 from .views import PatientPortalRequiredMixin, StaffCompanyRequiredMixin
+from .patient_action_context import patient_action_context, workspace_redirect
 
 
 def _authorizations(company, patient=None):
@@ -65,10 +66,14 @@ class AuthorizationEditorView(StaffClinicalView):
         return previous.patient, previous
 
     def display(self, request, patient, previous, form, status=200):
-        return render(request, 'portal/treatment_authorisation_form.html', self.context(
+        context = self.context(
             patient=patient, previous=previous, form=form,
             treatment_context=_token(request, self.company, patient, 'authorization-renew' if previous else 'authorization-create', previous),
-        ), status=status)
+        )
+        context.update(patient_action_context(self, patient, 'treatment',
+            content_template='portal/includes/authorisation_form_content.html', stylesheets=('css/treatment.css',),
+            title='Review and renew' if previous else 'Authorise treatment'))
+        return render(request, 'portal/patient_workspace_action.html' if context.get('patient_workspace') else 'portal/treatment_authorisation_form.html', context, status=status)
 
     def get(self, request, patient_pk=None, pk=None):
         patient, previous = self.records(patient_pk, pk)
@@ -87,7 +92,7 @@ class AuthorizationEditorView(StaffClinicalView):
                 authorization = create_authorization(company=self.company, patient=patient, actor=request.user,
                                                      renews=previous, submission_key=token['submission_key'], request=request, **values)
                 messages.success(request, 'Treatment authorisation recorded. No payment or dispatch was triggered.')
-                return redirect('portal:treatment-authorisation-detail', pk=authorization.pk)
+                return workspace_redirect(request, 'portal:treatment-authorisation-detail', pk=authorization.pk)
         except ValidationError as error:
             _error(form, error)
         return self.display(request, patient, previous, form, status=400)
@@ -105,13 +110,16 @@ class AuthorizationDetailView(StaffClinicalView):
         replacement = None
         if replacement_event:
             replacement = _authorizations(self.company).filter(pk=replacement_event.target_id, patient=authorization.patient).first()
-        return render(request, 'portal/treatment_authorisation_detail.html', self.context(
+        context = self.context(
             authorization=authorization, patient=authorization.patient, replacement=replacement,
             is_current=authorization_is_current(authorization),
             can_change=self.is_doctor and authorization.prescribed_by_id == request.user.pk,
             form=form if form is not None else ConfirmTreatmentForm(),
             treatment_context=_token(request, self.company, authorization.patient, 'authorization-status', authorization),
-        ), status=status)
+        )
+        context.update(patient_action_context(self, authorization.patient, 'treatment',
+            content_template='portal/includes/authorisation_detail_content.html', stylesheets=('css/treatment.css',)))
+        return render(request, 'portal/patient_workspace_action.html' if context.get('patient_workspace') else 'portal/treatment_authorisation_detail.html', context, status=status)
 
     def get(self, request, pk):
         return self.display(request, get_object_or_404(_authorizations(self.company), pk=pk))
@@ -130,7 +138,7 @@ class AuthorizationStatusView(AuthorizationDetailView):
             if valid:
                 change_authorization_status(authorization=authorization, actor=request.user, action=request.POST.get('action'), request=request)
                 messages.success(request, 'Authorisation status updated. Affected undispatched parcels are held.')
-                return redirect('portal:treatment-authorisation-detail', pk=pk)
+                return workspace_redirect(request, 'portal:treatment-authorisation-detail', pk=pk)
         except ValidationError as error:
             _error(form, error)
         return self.display(request, authorization, form, status=400)

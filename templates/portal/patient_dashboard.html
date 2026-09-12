@@ -1,21 +1,24 @@
 {% extends 'portal/patient_page_base.html' %}
+{% load static %}
 
 {% block title %}Your care overview | Meridian{% endblock %}
+{% block patient_extra_css %}<link rel="stylesheet" href="{% static 'css/patient_dashboard.css' %}">{% endblock %}
+{% block patient_content_class %}patient-home{% endblock %}
 
 {% block patient_heading %}
-  <section class="patient-hero" aria-labelledby="patient-dashboard-heading">
-    <div class="patient-hero__content">
-      <p class="console-kicker">Your care · Overview</p>
+  <section class="patient-home__heading" aria-labelledby="patient-dashboard-heading">
+    <div>
+      <p class="console-kicker">Your care overview</p>
       <h1 id="patient-dashboard-heading">Hello, {{ user.first_name|default:user.full_name }}.</h1>
-      <p>A quick look at your care with {{ patient_company.name }}. Use the navigation to open your appointments, conversations, progress or account details.</p>
-      <a class="console-button console-button--secondary" href="{% url 'portal:patient-messages' %}">Message your care team</a>
+      <p>Your appointments, progress and latest updates with {{ patient_company.name }}.</p>
     </div>
+    <a class="console-button console-button--primary" href="{% url 'portal:patient-messages' %}">Message your care team</a>
   </section>
 {% endblock %}
 
 {% block patient_content %}
   <section class="console-metrics" aria-label="Your care at a glance">
-    <article class="metric-card">
+    <article class="metric-card patient-home__plan">
       <span class="metric-card__label">Care plan</span>
       <strong class="metric-card__value">{{ active_subscription.plan_name|default:"Not started" }}</strong>
       <span class="metric-card__hint">{% if active_subscription %}{{ active_subscription.get_status_display }}{% else %}Your care team will guide your next steps{% endif %}</span>
@@ -71,7 +74,7 @@
   </div>
 
   <section class="console-card patient-page-section" aria-labelledby="patient-recent-updates-heading">
-    <header class="console-card__header"><div class="console-card__heading"><h2 id="patient-recent-updates-heading">Recent care updates</h2><p>Updates shared with you by your care team</p></div></header>
+    <header class="console-card__header"><div class="console-card__heading"><h2 id="patient-recent-updates-heading">Recent care updates</h2><p>Updates shared with you by your care team</p></div><a class="console-button console-button--quiet" href="{% url 'portal:patient-updates' %}">All updates</a></header>
     <div class="console-card__body">
       <ul class="console-list patient-event-list">
         {% for event in patient_events %}

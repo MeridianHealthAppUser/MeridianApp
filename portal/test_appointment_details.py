@@ -227,7 +227,7 @@ class AppointmentDetailPageTests(AppointmentLifecycleFixture):
         unsafe = self.appointment(video_link='javascript:alert(1)')
         self.appointment(video_link='https://[', starts_at=self.starts_at + timedelta(hours=1))
         self.appointment(video_link='https://example.test/valid-video', starts_at=self.starts_at + timedelta(hours=2))
-        response = self.client.get(self.url('patient-detail', self.patient.pk))
+        response = self.client.get(self.url('patient-detail', self.patient.pk), {'tab': 'appointments'})
         self.assertNotContains(response, 'javascript:')
         self.assertNotContains(response, 'https://[')
         self.assertNotContains(response, 'https://example.test/valid-video')
