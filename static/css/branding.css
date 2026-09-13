@@ -1,0 +1,11 @@
+.platform-logo { display: block; width: 220px; max-width: 100%; height: auto; }
+.site-header > .brand, .landing-nav > .landing-logo { display: block; flex-shrink: 0; }
+.room-brand .platform-logo { background: #fff; border-radius: 8px; flex-shrink: 0; padding: 6px; width: 170px; }
+@media (max-width: 700px) {
+  .platform-logo { width: 160px; }
+  .site-header--authenticated .platform-logo { width: 120px; }
+  .room-brand .platform-logo { width: 100px; }
+}
+@media (max-width: 380px) {
+  .site-header--authenticated .platform-logo { width: 100px; }
+}

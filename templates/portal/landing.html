@@ -10,17 +10,18 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="{% static 'css/landing.css' %}">
+    <link rel="stylesheet" href="{% static 'css/landing.css' %}?v=20260913-concerns">
+    <link rel="stylesheet" href="{% static 'css/branding.css' %}?v=20260913-logo">
   </head>
   <body class="landing-body">
     <a class="skip-link" href="#main-content">Skip to content</a>
     <header class="landing-header">
       <div class="landing-nav">
-        <a class="landing-logo" href="#top" aria-label="Meridian Health home">Meridian <em>Health</em></a>
+        <a class="landing-logo" href="#top" aria-label="Meridian Health home">{% include "includes/brand_logo.html" %}</a>
         <nav class="landing-links" aria-label="Main navigation">
-          <a href="#about">About us</a>
-          <a href="#how-it-works">How it works</a>
-          <a href="#team">Our team</a>
+          <a href="#about">About Us</a>
+          <a href="#how-it-works">How It Works</a>
+          <a href="#team">Our Team</a>
           <a href="#faqs">F.A.Qs</a>
         </nav>
         <div class="landing-actions">
@@ -33,30 +34,24 @@
     <main id="main-content">
       <section class="hero-section" id="top">
         <div class="landing-container hero-grid">
+          <div class="hero-heading">
+            <p class="eyebrow">Online medical weight loss practice · South Africa</p>
+            <h1>Start the countdown to your <span class="teal-text">goal weight</span>.</h1>
+          </div>
           <div class="hero-copy">
-            <p class="eyebrow">Medical weight loss · fully online · South Africa</p>
-            <h1>Your path to lasting weight loss, managed by a doctor.</h1>
-            <p class="lead">Meridian was created for people facing ongoing weight challenges, with a focus on sustainable results rather than quick fixes. A holistic plan, expert guidance, and medication couriered to your door.</p>
+            <p class="lead">Efficient, effective weight loss through personalised care and innovative weight management tools.</p>
             <div class="button-row">
               <a class="button button-primary" href="{% url 'portal:questionnaire' %}">Start the questionnaire</a>
               <a class="button button-secondary" href="{% url 'accounts:login' %}">I’m already a patient</a>
             </div>
-            <div class="hero-notes" aria-label="Service summary">
-              <span>R630 initial consult · 30 min</span>
-              <span aria-hidden="true">·</span>
-              <span>Subscription from R1 995 / month</span>
-              <span aria-hidden="true">·</span>
-              <span>Follow-ups included</span>
-              <span aria-hidden="true">·</span>
-              <span>Couriered every 4 weeks</span>
-            </div>
+            <img class="hero-image" src="{% static 'images/home-page-waist.webp' %}" alt="Person measuring their waist with a measuring tape" decoding="async">
           </div>
 
           <aside class="at-a-glance" aria-label="Pricing and service at a glance">
             <p class="eyebrow">At a glance</p>
             <dl>
               <div><dt>Initial virtual consult</dt><dd>R630</dd></div>
-              <div><dt>Length</dt><dd>30 minutes, on Zoom</dd></div>
+              <div><dt>Length</dt><dd>30 minutes</dd></div>
               <div><dt>Follow-up consults</dt><dd class="teal-text">Included</dd></div>
               <div><dt>Subscription, first 2 months</dt><dd>R1 995 / month</dd></div>
               <div><dt>Subscription, thereafter</dt><dd>R3 295 / month</dd></div>
@@ -71,21 +66,55 @@
 
       <section class="content-section about-section" id="about">
         <div class="landing-container about-layout">
-          <div>
-            <p class="eyebrow">About us</p>
-            <h2>Meridian Health</h2>
+          <div class="about-heading">
+            <p class="eyebrow">About Us</p>
+            <h2>Meridian <span class="teal-text">Health</span></h2>
           </div>
           <div class="about-copy">
             <p>Meridian was created to support people facing ongoing weight challenges, with a focus on sustainable results and improved wellbeing. As a fully online service, we offer a holistic weight support plan that includes expert guidance and innovative tools to help you reach your goals safely and confidently.</p>
-            <p>Our doctors are based in Cape Town, but the practice is entirely online — we treat patients anywhere within South Africa, and every consultation happens over Zoom.</p>
+            <p>Our doctors are based in Cape Town, but the practice is entirely online. We treat patients anywhere within South Africa, and every consultation happens over online video call.</p>
             <a class="button button-primary" href="{% url 'portal:questionnaire' %}">Get started</a>
           </div>
+          <img class="section-photo about-image" src="{% static 'images/about-pens.webp' %}" alt="Injection pens and a measuring tape on a wooden board" width="1000" height="667" loading="lazy" decoding="async">
         </div>
         <div class="landing-container fact-grid">
-          <div class="fact"><p class="eyebrow">Consults</p><p>Zoom, from home</p></div>
+          <div class="fact"><p class="eyebrow">Consults</p><p>Online, from home</p></div>
           <div class="fact"><p class="eyebrow">Medication</p><p>Hand-delivered</p></div>
           <div class="fact"><p class="eyebrow">Follow-ups</p><p>No extra charge</p></div>
           <div class="fact"><p class="eyebrow">Typical loss</p><p>15–23% at 12 months</p></div>
+        </div>
+      </section>
+
+      <section class="content-section reviews-section" aria-labelledby="reviews-heading">
+        <div class="landing-container split-heading">
+          <div>
+            <p class="eyebrow">Client Reviews</p>
+            <h2>Our <span class="teal-text">Success Stories</span></h2>
+          </div>
+        </div>
+        <div class="landing-container reviews-grid">
+          <div class="reviews-intro">
+            <img class="reviews-logo" src="{% static 'images/google-reviews-logo.webp' %}" alt="Google reviews" width="300" height="185" loading="lazy" decoding="async">
+            <a class="button button-primary" href="https://search.google.com/local/reviews?placeid=ChIJ2fLk_opDzB0REL1ukXgnw0U" target="_blank" rel="noopener noreferrer">Read More Reviews</a>
+          </div>
+          <article class="review-card" aria-labelledby="review-liz-title">
+            <h3 id="review-liz-title">Genuine Care</h3>
+            <blockquote><p>"The service was exceptional. Information was provided transparently, all my questions were answered in detail and with such patience and care. I felt genuinely cared for and the service was professional. I would 100% recommend!"</p></blockquote>
+            <div class="review-header">
+              <p class="review-author">- Liz</p>
+              <img class="review-stars" src="{% static 'images/google-reviews-stars.png' %}" alt="5 out of 5 stars" width="178" height="46" loading="lazy" decoding="async">
+            </div>
+            <p class="review-source">Google review</p>
+          </article>
+          <article class="review-card" aria-labelledby="review-charmaine-title">
+            <h3 id="review-charmaine-title">Expectional Service</h3>
+            <blockquote><p>"Had an amazing experience with Dr Joshua who explained everything clearly and addressed all my questions including offering email follow up with any additional questions. The service itself was prompt and efficient with the medication delivered to my door the very next day. Would highly recommend."</p></blockquote>
+            <div class="review-header">
+              <p class="review-author">- Charmaine</p>
+              <img class="review-stars" src="{% static 'images/google-reviews-stars.png' %}" alt="5 out of 5 stars" width="178" height="46" loading="lazy" decoding="async">
+            </div>
+            <p class="review-source">Google review</p>
+          </article>
         </div>
       </section>
 
@@ -93,81 +122,121 @@
         <div class="landing-container split-heading">
           <div>
             <p class="eyebrow">Our process</p>
-            <h2>How it works</h2>
+            <h2>How It <span class="teal-text">Works</span></h2>
           </div>
-          <div class="section-copy"><p>Four steps from first click to medication at your door, with a doctor making every clinical decision along the way.</p></div>
         </div>
         <div class="landing-container process-layout">
           <div>
             <ol class="steps-list">
               <li><span>1</span><div><h3>Complete the online assessment</h3><p>Submit your basic details and answer a few questions so we can tell whether you’re likely to be a candidate for medical weight loss.</p></div></li>
-              <li><span>2</span><div><h3>Virtual appointment</h3><p>Book a secure session with one of our doctors. After payment you receive a link for your 30-minute initial consultation, which takes place over Zoom.</p></div></li>
+              <li><span>2</span><div><h3>Virtual appointment</h3><p>Book a secure session with one of our doctors. After payment you receive a link for your 30-minute initial consultation, which takes place over online video call.</p></div></li>
               <li><span>3</span><div><h3>Initiate treatment</h3><p>If your doctor prescribes treatment, sign up to start receiving your medication couriered to your door. Your plan and its cost are set out in full before your first payment. Cancel at any time.</p></div></li>
-              <li><span>4</span><div><h3>Virtual follow-ups</h3><p>Book follow-up appointments <strong>at no additional charge</strong>. A review over Zoom at least every six months is needed to continue treatment.</p></div></li>
+              <li><span>4</span><div><h3>Virtual follow-ups</h3><p>Book follow-up appointments <strong>at no additional charge</strong>. A review over online video call at least every six months is needed to continue treatment.</p></div></li>
             </ol>
             <div class="knowledge-card"><p class="eyebrow">Worth knowing</p><p>A prescription is never guaranteed. The questionnaire predicts suitability accurately, but your doctor decides at the consultation whether medication is appropriate and in your best interests.</p></div>
           </div>
           <aside class="consult-card" id="start">
             <p class="eyebrow">Initial consultation</p>
-            <p class="consult-price"><strong>R630</strong> · 30 minutes on Zoom</p>
+            <p class="consult-price"><strong>R630</strong> · 30 minutes · Online</p>
             <hr>
             <ul class="benefit-list">
               <li><span>✚</span><p><strong>A doctor decides, not a form.</strong> Your consultation determines whether medication is appropriate for you.</p></li>
               <li><span>↗</span><p><strong>Medication hand-delivered.</strong> Straight to your door, if it is prescribed.</p></li>
               <li><span>✓</span><p><strong>Follow-ups included.</strong> All follow-up consultations come with your subscription.</p></li>
             </ul>
-            <a class="button button-primary button-full" href="{% url 'portal:questionnaire' %}">Start your journey today <span aria-hidden="true">→</span></a>
+            <a class="button button-primary button-full" href="{% url 'portal:questionnaire' %}">Start your journey today</a>
             <p class="card-note">Treatment pricing is shown in full once the questionnaire confirms you are a candidate.</p>
           </aside>
         </div>
       </section>
 
-      <section class="guide-section">
-        <div class="landing-container guide-panel">
-          <div class="guide-copy">
-            <p class="eyebrow teal-text">Let us guide you</p>
-            <h2>Don’t be held back</h2>
-            <p>Whether it’s struggling to keep up with family, feeling self-conscious in social settings, or fighting an endless cycle of diets that don’t work — we understand the frustration, the setbacks and the emotional toll.</p>
-            <p>At Meridian we offer a solution that goes beyond quick fixes. With a plan tailored to you, effective treatments and a supportive team beside you, we’re here to help you take back control of your health and your confidence.</p>
+      <section class="content-section concerns-section" aria-labelledby="concerns-heading">
+        <div class="landing-container">
+          <p class="eyebrow teal-text">We can help</p>
+          <h2 id="concerns-heading">We Understand <span class="teal-text">Your Concerns</span></h2>
+          <div class="concerns-grid">
+            <article class="concern-item">
+              <svg class="concern-icon" viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+                <rect x="14" y="13" width="36" height="44" rx="6"/><rect x="23" y="7" width="18" height="12" rx="4" fill="var(--surface)"/><path d="m22 32 3 3 5-6M35 32h7m-20 13 3 3 5-6m5 3h7"/>
+              </svg>
+              <h3>Personalised Treatment Plan</h3>
+              <p>Get a tailored weight management plan just for you.</p>
+            </article>
+            <article class="concern-item">
+              <svg class="concern-icon" viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+                <path d="m37 12 15 15M34 15l15 15-24 24H10V39Zm-21 36-6 6m24-32 6 6m-13 1 6 6m-13 1 6 6M40 9l3-3a5 5 0 0 1 7 0l8 8a5 5 0 0 1 0 7l-3 3"/>
+              </svg>
+              <h3>Innovative Weight Management</h3>
+              <p>Clinically guided support specifically tailored to your goals.</p>
+            </article>
+            <article class="concern-item">
+              <svg class="concern-icon" viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+                <path d="M33 27 21 15a7 7 0 0 1 12-7 7 7 0 0 1 12 7Z"/><path d="M7 40h10l9-7h12a5 5 0 0 1 0 10H27m16-3 10-7a5 5 0 0 1 6 8L41 55H17L7 58Zm0 0v18"/>
+              </svg>
+              <h3>Ongoing Support &amp; Guidance</h3>
+              <p>Regular check-ins to help you stay on track and work towards your goals.</p>
+            </article>
           </div>
-          <div class="sunrise-art" role="img" aria-label="Abstract sunrise over rolling hills">
-            <div class="sun"></div><div class="hill hill-back"></div><div class="hill hill-front"></div><div class="path"></div>
+          <div class="concerns-action">
+            <a class="button button-primary" href="{% url 'portal:questionnaire' %}">Get Your Personalised Plan</a>
           </div>
         </div>
       </section>
 
       <section class="content-section" id="team">
         <div class="landing-container split-heading">
-          <div><p class="eyebrow">Our team</p><h2>Meet our medical team</h2></div>
-          <div class="section-copy"><p>Five doctors and a registered dietitian. You’ll see one of the doctors for your initial consultation and stay with them for your reviews, so nobody has to read your history cold.</p></div>
+          <div><p class="eyebrow">Our Team</p><h2>Meet Our <span class="teal-text">Medical Team</span></h2></div>
+        </div>
+        <div class="landing-container faq-help">
+          <p>Dedicated to guiding you on your weight loss journey with personalised, professional care.</p>
         </div>
         <div class="landing-container team-grid">
-          <article class="team-card"><div class="portrait portrait-mint">KD</div><h3>Dr Keisha De Gouveia</h3><p class="credentials">MBChB, BSc Med Sci (Hons)</p><p>Keisha holds an MBChB and BSc Med Sci (Hons) from the University of Cape Town, and a Master of Public Health from Brown University in the USA. She works in both research — currently running a multi-year clinical trial — and clinical medicine, combining an academically rigorous, evidence-based approach with real-world experience in weight management and metabolic health. She finds surfing a good way to stay balanced after a busy day.</p></article>
-          <article class="team-card"><div class="portrait portrait-blue">NJ</div><h3>Dr Nicola Jooste</h3><p class="credentials">MBChB (UFS), DA (SA)</p><p>Nicola holds an MBChB from the University of the Free State and a Diploma in Anaesthesiology. Her interests are preventative health, lifestyle medicine and supporting patients toward sustainable, long-term weight management. She focuses on practical, evidence-based care delivered with empathy. Outside the clinic: running, photography, and time outdoors with her two dogs.</p></article>
-          <article class="team-card"><div class="portrait portrait-mint">SM</div><h3>Dr Sam Marchant</h3><p class="credentials">MBChB, BSc (Hons)</p><p>Sam holds an MBChB and a B(Med)Sc Hons in Physiology from the University of Cape Town. As a medical officer in general surgery she gained firsthand insight into the challenges of weight-related illness and the benefits of effective weight management. She combines clinical empathy with a love of running and kettlebell training, has climbed Kilimanjaro and trekked to Everest Base Camp, and shares more local adventures with her rescue Great Dane, Oupa.</p></article>
-          <article class="team-card"><div class="portrait portrait-blue">JB</div><h3>Dr James Beningfield</h3><p class="credentials">MBChB, DipPEC</p><p>James brings clinical experience across emergency medicine, sports medicine, in-hospital care and general practice. A graduate of the University of Pretoria, where he established a journal club exploring plant-based diets and medications, he combines acute care expertise with a focus on lifestyle optimisation in chronic conditions. Golf, strength training, running and family time fill the rest.</p></article>
-          <article class="team-card"><div class="portrait portrait-mint">JC</div><h3>Dr Joshua Czech</h3><p class="credentials">MBChB</p><p>A graduate of the University of Cape Town with experience in emergency medicine and general practice. He loves the blend of science and humanity he meets every day in his work, and is drawn to medicine’s potential to help people not just survive but thrive. That ethos, with a special interest in performance medicine, led him to make GLP-1 agonists an integral part of his practice. Outside work: his dogs, the mountains, and oil painting.</p></article>
-          <article class="team-card"><div class="portrait portrait-blue">MB</div><h3>Maxine Botha</h3><p class="credentials">BSc (Dietetics)</p><p>Maxine is a registered dietitian with over nine years of clinical experience supporting South African and international clients. She holds a BSc in Dietetics from Stellenbosch University and is certified by the US-based National Academy of Sports Medicine as a GLP-1 Metabolic Health Specialist. Known for her warmth and client-centred approach. An avid runner training for her next marathon, an experimental cook and a dedicated reader.</p></article>
+          <article class="team-card"><img class="portrait" src="{% static 'images/team/keisha-de-gouveia.webp' %}" alt="Dr Keisha De Gouveia" width="216" height="216" loading="lazy" decoding="async"><h3>Dr Keisha De Gouveia</h3><p class="credentials">MBChB, BSc Med Sci (Hons)</p><p>Keisha holds an MBChB and BSc Med Sci (Hons) from the University of Cape Town, and a Master of Public Health from Brown University in the USA. She works in both research, currently running a multi-year clinical trial, and clinical medicine, combining an academically rigorous, evidence-based approach with real-world experience in weight management and metabolic health. She finds surfing a good way to stay balanced after a busy day.</p></article>
+          <article class="team-card"><img class="portrait" src="{% static 'images/team/nicola-jooste.webp' %}" alt="Dr Nicola Jooste" width="216" height="216" loading="lazy" decoding="async"><h3>Dr Nicola Jooste</h3><p class="credentials">MBChB (UFS), DA (SA)</p><p>Nicola holds an MBChB from the University of the Free State and a Diploma in Anaesthesiology. Her interests are preventative health, lifestyle medicine and supporting patients toward sustainable, long-term weight management. She focuses on practical, evidence-based care delivered with empathy. Outside the clinic: running, photography, and time outdoors with her two dogs.</p></article>
+          <article class="team-card"><img class="portrait" src="{% static 'images/team/sam-marchant.webp' %}" alt="Dr Sam Marchant" width="216" height="216" loading="lazy" decoding="async"><h3>Dr Sam Marchant</h3><p class="credentials">MBChB, BSc (Hons)</p><p>Sam holds an MBChB and a B(Med)Sc Hons in Physiology from the University of Cape Town. As a medical officer in general surgery she gained firsthand insight into the challenges of weight-related illness and the benefits of effective weight management. She combines clinical empathy with a love of running and kettlebell training, has climbed Kilimanjaro and trekked to Everest Base Camp, and shares more local adventures with her rescue Great Dane, Oupa.</p></article>
+          <article class="team-card"><img class="portrait" src="{% static 'images/team/james-beningfield.webp' %}" alt="Dr James Beningfield" width="216" height="216" loading="lazy" decoding="async"><h3>Dr James Beningfield</h3><p class="credentials">MBChB, DipPEC</p><p>James brings clinical experience across emergency medicine, sports medicine, in-hospital care and general practice. A graduate of the University of Pretoria, where he established a journal club exploring plant-based diets and medications, he combines acute care expertise with a focus on lifestyle optimisation in chronic conditions. Golf, strength training, running and family time fill the rest.</p></article>
+          <article class="team-card"><img class="portrait" src="{% static 'images/team/joshua-czech.webp' %}" alt="Dr Joshua Czech" width="216" height="216" loading="lazy" decoding="async"><h3>Dr Joshua Czech</h3><p class="credentials">MBChB</p><p>A graduate of the University of Cape Town with experience in emergency medicine and general practice. He loves the blend of science and humanity he meets every day in his work, and is drawn to medicine’s potential to help people not just survive but thrive. That ethos, with a special interest in performance medicine, led him to make GLP-1 agonists an integral part of his practice. Outside work: his dogs, the mountains, and oil painting.</p></article>
+          <article class="team-card"><img class="portrait" src="{% static 'images/team/maxine-botha.webp' %}" alt="Maxine Botha" width="216" height="216" loading="lazy" decoding="async"><h3>Maxine Botha</h3><p class="credentials">BSc (Dietetics)</p><p>Maxine is a registered dietitian with over nine years of clinical experience supporting South African and international clients. She holds a BSc in Dietetics from Stellenbosch University and is certified by the US-based National Academy of Sports Medicine as a GLP-1 Metabolic Health Specialist. Known for her warmth and client-centred approach. An avid runner training for her next marathon, an experimental cook and a dedicated reader.</p></article>
         </div>
       </section>
 
       <section class="content-section faq-section" id="faqs">
-        <div class="landing-container split-heading">
-          <div><p class="eyebrow">F.A.Qs</p><h2>Do you have any questions?</h2></div>
-          <div class="section-copy"><p>Browse the questions below. If you can’t find the answer you’re looking for, email <strong>support@meridianhealth.co.za</strong> and we’ll be happy to assist.</p></div>
+        <div class="landing-container">
+          <div><p class="eyebrow">Do you have any questions?</p><h2>Frequently Asked <span class="teal-text">Questions</span></h2></div>
         </div>
-        <div class="landing-container faq-list">
-          <details open><summary>What are GLP-1 agonists?</summary><p>Originally developed to manage blood sugar, GLP-1 treatments have also been shown to produce average weight loss of 15–23% of starting body weight in clinical studies. They reduce appetite through their effects on stomach emptying and hunger regulation in the brain, and are usually taken once a week using a pen-like device.</p></details>
-          <details><summary>How much weight will I lose?</summary><p>Studies involving thousands of patients have shown average weight loss of 15–23% of total body weight after one year. Depending on your goals and starting point, it is generally possible to lose more or less than this.</p></details>
-          <details><summary>Are these weight support methods safe?</summary><p>Under expert supervision, GLP-1 treatments are considered generally safe. Some people experience nausea, constipation, diarrhoea or abdominal discomfort. More serious effects are rare, which is why close medical supervision matters.</p></details>
-          <details><summary>How much does it cost? Do you accept medical aid?</summary><p>The initial virtual consultation is R630. If treatment is prescribed, subscriptions start at R1 995 a month for the first two months and R3 295 thereafter. An invoice can be issued for you to submit for the initial consult; medical aids generally do not cover GLP-1 medication.</p></details>
-          <details><summary>If I stop the medication, will I regain the weight?</summary><p>It varies from person to person. Building good eating and exercise habits while on treatment gives you the best chance of keeping the weight off if you stop.</p></details>
-          <details><summary>Am I guaranteed to qualify for medication after my consult?</summary><p>No. The doctor must decide during your consultation whether weight loss medication is appropriate and in your best interests.</p></details>
-          <details><summary>Where is the practice located?</summary><p>Our doctors are based in Cape Town, but Meridian is a fully online practice serving patients anywhere within South Africa. Consultations take place virtually, on Zoom.</p></details>
+        <div class="landing-container faq-layout">
+          <div class="faq-list">
+            <details open><summary>What are GLP-1 agonists?</summary><p>Originally developed to manage blood sugar, GLP-1 treatments have also been shown to produce average weight loss of 15–23% of starting body weight in clinical studies. They reduce appetite through their effects on stomach emptying and hunger regulation in the brain, and are usually taken once a week using a pen-like device.</p></details>
+            <details><summary>How much weight will I lose?</summary><p>Studies involving thousands of patients have shown average weight loss of 15–23% of total body weight after one year. Depending on your goals and starting point, it is generally possible to lose more or less than this.</p></details>
+            <details><summary>Are these weight support methods safe?</summary><p>Under expert supervision, GLP-1 treatments are considered generally safe. Some people experience nausea, constipation, diarrhoea or abdominal discomfort. More serious effects are rare, which is why close medical supervision matters.</p></details>
+            <details><summary>How much does it cost? Do you accept medical aid?</summary><p>The initial virtual consultation is R630. If treatment is prescribed, subscriptions start at R1 995 a month for the first two months and R3 295 thereafter. An invoice can be issued for you to submit for the initial consult; medical aids generally do not cover GLP-1 medication.</p></details>
+            <details><summary>If I stop the medication, will I regain the weight?</summary><p>It varies from person to person. Building good eating and exercise habits while on treatment gives you the best chance of keeping the weight off if you stop.</p></details>
+            <details><summary>Am I guaranteed to qualify for medication after my consult?</summary><p>No. The doctor must decide during your consultation whether weight loss medication is appropriate and in your best interests.</p></details>
+            <details><summary>Where is the practice located?</summary><p>Our doctors are based in Cape Town, but Meridian is a fully online practice serving patients anywhere within South Africa. Consultations take place virtually.</p></details>
+          </div>
+          <div class="faq-images">
+            <img class="section-photo faq-image" src="{% static 'images/faq-food.webp' %}" alt="A plate of salmon, eggs, avocado and leafy greens" width="1000" height="667" loading="lazy" decoding="async">
+            <img class="section-photo faq-image" src="{% static 'images/faq-male-waist.webp' %}" alt="Man measuring his waist with a measuring tape" width="768" height="699" loading="lazy" decoding="async">
+          </div>
+        </div>
+        <div class="landing-container faq-help">
+          <p>If you can’t find the answer you’re looking for, email <strong>support@meridianhealth.co.za</strong> and we’ll be happy to assist.</p>
         </div>
       </section>
 
-      <section class="landing-container closing-panel">
+      <section class="guide-section">
+        <div class="landing-container guide-panel">
+          <img class="guide-image" src="{% static 'images/guide-sunset.webp' %}" alt="Two people jumping beside the water at sunset" width="1000" height="741" loading="lazy" decoding="async">
+          <div class="guide-copy">
+            <p class="eyebrow teal-text">Let us guide you</p>
+            <h2>Don’t be held back</h2>
+            <p>Whether it’s struggling to keep up with family, feeling self-conscious in social settings, or fighting an endless cycle of diets that don’t work, we understand the frustration, the setbacks and the emotional toll.</p>
+            <p>At Meridian we offer a solution that goes beyond quick fixes. With a plan tailored to you, effective treatments and a supportive team beside you, we’re here to help you take back control of your health and your confidence.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- <section class="landing-container closing-panel">
         <p class="eyebrow">In short</p>
         <h2>Medical weight loss, properly supervised.</h2>
         <p>A questionnaire tells you quickly whether you’re likely to be a candidate. A 30-minute consult with a doctor decides it. If medication is right for you it arrives every four weeks, follow-ups are included, and a review every six months keeps your prescription current.</p>
@@ -176,12 +245,12 @@
           <div><span>Initial consult</span><strong>R630 · 30 minutes</strong></div><div><span>Subscription</span><strong>R1 995 then R3 295 / month</strong></div><div><span>Follow-up consults</span><strong>Included</strong></div><div><span>Medication</span><strong>Couriered every 4 weeks</strong></div><div><span>Cancel</span><strong>Any time</strong></div>
         </div>
         <p class="closing-note">We don’t claim directly from medical aids, but we’ll issue an invoice you can submit for the initial consult. Medical aids generally do not cover the cost of GLP-1 medication.</p>
-      </section>
+      </section> -->
     </main>
 
     <footer class="landing-footer">
       <div class="landing-container footer-grid">
-        <div><a class="landing-logo footer-logo" href="#top">Meridian <em>Medical Weight Loss</em></a><p>Your trusted partner in personalised medical weight loss. Start your journey to better health today.</p><span class="certification"><i></i> LegitScript Certified</span><small>Copyright 2026 Meridian Health · All rights reserved</small></div>
+        <div><a class="landing-logo footer-logo" href="#top">Meridian <em>Medical Weight Loss</em></a><p>Your trusted partner in personalised medical weight loss. Start your journey to better health today.</p><img class="certification" src="{% static 'images/legitscript-medallion-1.webp' %}" alt="LegitScript Certified" width="292" height="316" loading="lazy" decoding="async"><small>Copyright 2026 Meridian Health · All rights reserved</small></div>
         <div><p class="eyebrow">Important links</p><a href="{% url 'portal:public-terms' %}">→ Terms and conditions</a><a href="{% url 'portal:public-privacy' %}">→ Privacy policy</a><a href="#faqs">→ FAQs</a><a href="{% url 'portal:public-contact' %}">→ Contact</a></div>
         <div><p class="eyebrow">Contact info</p><p class="footer-label">Email</p><strong>support@meridianhealth.co.za</strong><p class="footer-label">Address</p><strong>6 Harfield Road, Claremont<br>Cape Town, South Africa, 7708</strong></div>
       </div>

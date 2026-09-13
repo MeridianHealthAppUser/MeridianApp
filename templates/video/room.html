@@ -9,7 +9,8 @@
   <title>Consultation | Meridian</title>
   <link rel="stylesheet" href="{% static 'css/video_room.css' %}">
   <script src="{% static 'js/video_room.js' %}" defer></script>
-</head>
+  <link rel="stylesheet" href="{% static 'css/branding.css' %}?v=20260913-logo">
+  </head>
 <body>
   {{ video_config|json_script:'video-room-config' }}
   <form id="video-csrf" hidden>{% csrf_token %}</form>
@@ -27,7 +28,7 @@
     <div id="remote-placeholder" class="remote-placeholder" aria-hidden="true"><span id="peer-initial">M</span></div>
 
     <header id="room-header" class="room-header room-chrome">
-      <div class="room-brand"><span class="room-brand-mark" aria-hidden="true">M</span><div><h1>Consultation</h1><p id="company-name">{{ video_config.companyName }}</p></div></div>
+      <div class="room-brand">{% include "includes/brand_logo.html" %}<div><h1>Consultation</h1><p id="company-name">{{ video_config.companyName }}</p></div></div>
       <div class="room-connection"><span id="connection-badge" class="connection-badge" data-state="preflight"><span aria-hidden="true"></span><span id="connection-label">Not joined</span></span><span id="call-timer" class="call-timer" role="timer" aria-label="Time connected" hidden>00:00</span></div>
     </header>
 

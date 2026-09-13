@@ -12,18 +12,19 @@
     {% if is_workspace_page %}<link rel="stylesheet" href="{% static 'css/workspace_polish.css' %}"><script src="{% static 'js/workspace_polish.js' %}" defer></script>{% endif %}
     {% if user.is_authenticated %}<link rel="stylesheet" href="{% static 'css/account_menu.css' %}"><script src="{% static 'js/account_menu.js' %}" defer></script>{% endif %}
     {% if video_notifications_enabled %}<link rel="stylesheet" href="{% static 'css/call_notifications.css' %}"><script src="{% static 'js/call_notifications.js' %}" defer></script>{% endif %}
+    <link rel="stylesheet" href="{% static 'css/branding.css' %}?v=20260913-logo">
   </head>
   <body{% if is_workspace_page %} class="workspace-page"{% endif %}>
     {% if is_workspace_page %}<a class="workspace-skip-link" href="#workspace-content">Skip to content</a>{% endif %}
     <header class="site-header{% if user.is_authenticated %} site-header--authenticated{% endif %}">
       {% if user.is_authenticated and is_patient_portal %}
-        <a class="brand" href="{% url 'portal:patient-dashboard' %}">Meridian</a>
+        <a class="brand" href="{% url 'portal:patient-dashboard' %}">{% include "includes/brand_logo.html" %}</a>
       {% elif user.is_authenticated and active_company %}
-        <a class="brand" href="{% url 'portal:desktop-dashboard' %}">Meridian</a>
+        <a class="brand" href="{% url 'portal:desktop-dashboard' %}">{% include "includes/brand_logo.html" %}</a>
       {% elif user.is_authenticated and active_patient %}
-        <a class="brand" href="{% url 'portal:patient-dashboard' %}">Meridian</a>
+        <a class="brand" href="{% url 'portal:patient-dashboard' %}">{% include "includes/brand_logo.html" %}</a>
       {% else %}
-        <a class="brand" href="{% url 'landing' %}">Meridian</a>
+        <a class="brand" href="{% url 'landing' %}">{% include "includes/brand_logo.html" %}</a>
       {% endif %}
       {% if user.is_authenticated %}
         <div class="header-actions">
