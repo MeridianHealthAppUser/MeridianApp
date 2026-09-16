@@ -8,6 +8,7 @@ from django.core.exceptions import ValidationError
 
 from .management_services import manageable_practices
 from .models import Company, CompanyMembership
+from .tenancy import multi_practice_enabled, require_multi_practice
 
 MANAGEMENT_CONTEXT_SALT = 'practices.management-context.v1'
 MANAGEMENT_CONTEXT_MAX_AGE = 12 * 60 * 60
@@ -55,6 +56,9 @@ class StaffUserForm(forms.Form):
         super().__init__(*args, **kwargs)
         self.fields['practices'].queryset = manageable_practices(actor)
         self.initial.setdefault('practices', [company.pk])
+        if not multi_practice_enabled():
+            self.fields['practices'].widget = forms.MultipleHiddenInput()
+            self.fields['practices'].help_text = ''
 
     def clean(self):
         data = super().clean()
@@ -83,8 +87,17 @@ class MembershipForm(forms.Form):
     is_active = forms.BooleanField(required=False, label='Active in this practice',
         help_text='Turning this off removes only this practice’s staff access. The shared login and other practices stay unchanged.')
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if not multi_practice_enabled():
+            self.fields['is_active'].help_text = 'Turning this off removes staff access to this practice without deleting the account.'
+
 
 class PracticeForm(forms.ModelForm):
+    def clean(self):
+        require_multi_practice()
+        return super().clean()
+
     class Meta:
         model = Company
         fields = ('name', 'slug')

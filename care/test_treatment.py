@@ -1,5 +1,6 @@
 """Treatment changes require a doctor; local plans never process payments."""
 
+from django.test import override_settings
 import uuid
 from datetime import timedelta
 
@@ -17,6 +18,7 @@ from .treatment import (
 )
 
 
+@override_settings(MULTI_PRACTICE_ENABLED=True)
 class TreatmentLifecycleTests(TestCase):
     @classmethod
     def setUpTestData(cls):

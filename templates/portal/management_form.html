@@ -10,11 +10,13 @@
       {% csrf_token %}<input type="hidden" name="management_context" value="{{ management_context }}">
       {% if form.non_field_errors %}<div class="management-errors" role="alert">{{ form.non_field_errors }}</div>{% endif %}
       {% for field in form %}
+        {% if field.is_hidden %}{{ field }}{{ field.errors }}{% else %}
         <div class="management-field{% if field.name == 'is_active' %} management-field--check{% endif %}">
           {{ field.label_tag }}{{ field }}
           {% if field.help_text %}<div class="management-help" id="{{ field.auto_id }}_helptext">{{ field.help_text }}</div>{% endif %}
           {% if field.errors %}<div class="management-errors" role="alert">{{ field.errors }}</div>{% endif %}
         </div>
+        {% endif %}
       {% endfor %}
       <div class="management-actions"><button class="console-button console-button--primary" type="submit">{{ submit_label }}</button><a class="console-button console-button--quiet" href="{{ cancel_url }}">Cancel</a></div>
     </form>

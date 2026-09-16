@@ -1,5 +1,6 @@
 """Explicit booking/status rules, including shared-identity collision checks."""
 
+from django.test import override_settings
 from datetime import timedelta
 from unittest.mock import patch
 
@@ -19,6 +20,7 @@ from .models import Appointment, AuditEvent, AvailabilitySlot, ClinicalNote, Mes
 from .scheduling import propose_appointment_time, respond_to_appointment_proposal
 
 
+@override_settings(MULTI_PRACTICE_ENABLED=True)
 class AppointmentLifecycleFixture(TestCase):
     @classmethod
     def setUpTestData(cls):

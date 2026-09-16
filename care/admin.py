@@ -1,11 +1,12 @@
 from django.contrib import admin
 from django.core.exceptions import PermissionDenied
 from django.db.models import Q
+from practices.admin_scope import SinglePracticeAdminScope
 
 from . import models
 
 
-class CompanyScopedAdmin(admin.ModelAdmin):
+class CompanyScopedAdmin(SinglePracticeAdminScope, admin.ModelAdmin):
     list_filter = ('company',)
     autocomplete_fields = ('company',)
     # A universal fallback keeps every company-scoped record usable as an

@@ -1,5 +1,6 @@
 """Exact, compact weight histories retain the staff record's practice boundary."""
 
+from django.test import override_settings
 import json
 import os
 import shutil
@@ -42,6 +43,7 @@ class WeightChartGeometryTests(SimpleTestCase):
         self.assertNotIn('Infinity', chart['polyline'])
 
 
+@override_settings(MULTI_PRACTICE_ENABLED=True)
 class RecordWeightTests(TestCase):
     @classmethod
     def setUpTestData(cls):

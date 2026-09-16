@@ -1,3 +1,4 @@
+from django.test import override_settings
 from django.urls import reverse
 from django.test import TestCase
 
@@ -6,6 +7,7 @@ from care.models import ReviewRule
 from . import test_treatment as treatment_fixtures
 
 
+@override_settings(MULTI_PRACTICE_ENABLED=True)
 class ReviewRulePageTests(TestCase):
     setUpTestData = classmethod(treatment_fixtures.TreatmentPageTests.setUpTestData.__func__)
     login = treatment_fixtures.TreatmentPageTests.login

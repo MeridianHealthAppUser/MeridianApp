@@ -6,7 +6,7 @@
 <div class="metrics-dashboard">
   <section class="metrics-panel metrics-filters" aria-label="Report filters"><form method="get" class="console-form" novalidate>
     {% if form.non_field_errors %}<div class="metrics-errors" role="alert">{{ form.non_field_errors }}</div>{% endif %}
-    <div class="metrics-filter-row">{% for field in form %}<div class="console-form__field"><label for="{{ field.id_for_label }}">{% if field.name == 'scope' %}Practices{% else %}{{ field.label }} date{% endif %}</label>{{ field }}{% if field.errors %}<div class="metrics-errors" role="alert">{{ field.errors }}</div>{% endif %}</div>{% endfor %}
+    <div class="metrics-filter-row">{% for field in form %}{% if field.is_hidden %}{{ field }}{{ field.errors }}{% else %}<div class="console-form__field"><label for="{{ field.id_for_label }}">{% if field.name == 'scope' %}Practices{% else %}{{ field.label }} date{% endif %}</label>{{ field }}{% if field.errors %}<div class="metrics-errors" role="alert">{{ field.errors }}</div>{% endif %}</div>{% endif %}{% endfor %}
       <div class="metrics-filter-actions"><button class="console-button console-button--primary" type="submit">Update report</button>{% if metrics %}<a class="console-button console-button--secondary" href="{% url 'portal:metrics-export' %}?start={{ start|date:'Y-m-d' }}&amp;end={{ end|date:'Y-m-d' }}&amp;scope={{ scope }}">Export CSV <span aria-hidden="true">↗</span></a>{% endif %}</div>
     </div>
   </form></section>
@@ -35,7 +35,7 @@
   <div class="metrics-lower-grid">
     <section class="metrics-panel" aria-labelledby="cohort-title"><header class="metrics-panel__heading"><div><p class="metrics-eyebrow">Patient record cohorts</p><h2 id="cohort-title">When your patients joined</h2></div><span class="metrics-chip">{{ dashboard.cohort_total }} new records</span></header><p class="metrics-description">New practice records grouped by creation month, within the selected dates.</p>
       <ul class="metrics-cohort-bars">{% for item in dashboard.cohorts %}<li><span>{{ item.month|date:'M Y' }}</span><div class="metrics-bar-track" aria-hidden="true"><span style="width:{{ item.width|unlocalize }}%"></span></div><strong>{{ item.records }}</strong></li>{% empty %}<li class="metrics-cohort-empty">No new patient records in this period.</li>{% endfor %}</ul>
-      <p class="metrics-footnote">This is not a retention or payment-success estimate. Combined views count practice records, not unique people.</p>
+      <p class="metrics-footnote">This is not a retention or payment-success estimate.{% if multi_practice_enabled %} Combined views count practice records, not unique people.{% endif %}</p>
     </section>
     <section class="metrics-panel metrics-weight" aria-labelledby="weight-change-title"><header class="metrics-panel__heading"><div><p class="metrics-eyebrow">Recorded progress</p><h2 id="weight-change-title">Weight change</h2></div><span class="metrics-chip">{{ weight_stats.count }} paired records</span></header>
       {% if weight_stats.mean != None %}<div class="metrics-weight-mean"><strong>{% if weight_stats.mean > 0 %}+{% endif %}{{ weight_stats.mean|floatformat:1 }}<small>%</small></strong><span>mean recorded change</span></div><ul class="metrics-weight-distribution">{% for item in dashboard.weight_rows %}<li class="metrics-tone--{{ item.tone }}"><div><span>{{ item.label }}</span><strong>{{ item.count }}</strong></div><div class="metrics-bar-track" aria-hidden="true"><span style="width:{{ item.width|unlocalize }}%"></span></div></li>{% endfor %}</ul>

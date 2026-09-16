@@ -1,5 +1,6 @@
 """Inventory conservation, clinical gates and tenant boundaries for local dispatch."""
 
+from django.test import override_settings
 from datetime import timedelta
 from decimal import Decimal
 
@@ -16,6 +17,7 @@ from .operations import (allowance_window, change_batch, dispatch_shipment, hold
     lock_shipping_week, mark_delivered, prepare_shipment, product_allowance, receive_stock, shipment_hold_reason)
 
 
+@override_settings(MULTI_PRACTICE_ENABLED=True)
 class OperationsFixture(TestCase):
     @classmethod
     def setUpTestData(cls):

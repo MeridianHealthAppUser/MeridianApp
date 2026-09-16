@@ -1,5 +1,6 @@
 """Practice-scoped task editing and free-form labels, using isolated records."""
 
+from django.test import override_settings
 from django.contrib.auth import get_user_model
 from django.test import Client, TestCase
 from django.urls import reverse
@@ -9,6 +10,7 @@ from practices.models import Company, CompanyMembership, Patient
 from practices.services import ACTIVE_COMPANY_SESSION_KEY
 
 
+@override_settings(MULTI_PRACTICE_ENABLED=True)
 class TaskManagementTests(TestCase):
     @classmethod
     def setUpTestData(cls):

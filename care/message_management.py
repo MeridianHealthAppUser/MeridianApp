@@ -6,6 +6,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from practices.models import Company, CompanyMembership
+from practices.tenancy import require_enabled_company
 from .models import AppointmentProposal, AuditEvent, ClinicalTask, MessageThread
 from .services import record_audit
 
@@ -13,6 +14,7 @@ from .services import record_audit
 @transaction.atomic
 def manage_conversation(*, thread, actor, action, expected_updated, doctor=None, priority='normal', note='', confirm=False, request=None):
     company = Company.objects.select_for_update().get(pk=thread.company_id)
+    require_enabled_company(company)
     actor = get_user_model().objects.get(pk=actor.pk)
     membership = CompanyMembership.objects.filter(company=company, user=actor, user__is_active=True, company__is_active=True, is_active=True).first()
     if membership is None:

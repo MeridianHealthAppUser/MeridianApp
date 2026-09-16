@@ -1,5 +1,6 @@
 """Privacy writes preserve consent/history and tenant/account boundaries."""
 
+from django.test import override_settings
 import hashlib
 import uuid
 from datetime import timedelta
@@ -20,6 +21,7 @@ from practices.models import Company, CompanyMembership, Patient
 from practices.services import ACTIVE_COMPANY_SESSION_KEY, ACTIVE_PATIENT_COMPANY_SESSION_KEY
 
 
+@override_settings(MULTI_PRACTICE_ENABLED=True)
 class PrivacyTests(TestCase):
     @classmethod
     def setUpTestData(cls):

@@ -8,17 +8,17 @@
 {% endblock %}
 {% block patient_workspace_content %}
   <section class="staff-page-card record-scope" aria-labelledby="record-scope-heading">
-    <div><h2 id="record-scope-heading">One person, a clearly scoped record</h2>
-      <p>Only records linked to this same sign-on can be combined, and only in active practices where you are a doctor or Super Admin. Your care purpose and access are recorded in each included practice.</p>
+    <div><h2 id="record-scope-heading">{% if multi_practice_enabled %}One person, a clearly scoped record{% else %}Patient history{% endif %}</h2>
+      <p>{% if multi_practice_enabled %}Only records linked to this same sign-on can be combined, and only in active practices where you are a doctor or Super Admin. Your care purpose and access are recorded in each included practice.{% else %}Filter this patient’s recorded care by event type or date. Access to this record is recorded in the audit trail.{% endif %}</p>
     </div>
     <form method="get" class="record-filters">
       <input type="hidden" name="tab" value="history">
       {{ filter_form.non_field_errors }}
-      {% for field in filter_form %}{% if not field.is_hidden %}<div><label for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}{{ field.errors }}</div>{% else %}{{ field.errors }}{% endif %}{% endfor %}
+      {% for field in filter_form %}{% if not field.is_hidden %}<div><label for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}{{ field.errors }}</div>{% else %}{% if field.name != 'snapshot' %}{{ field }}{% endif %}{{ field.errors }}{% endif %}{% endfor %}
       <button class="console-button console-button--primary" type="submit">Apply filters</button>
     </form>
     {% if not filter_form.errors %}
-      <div class="record-practices" aria-label="Included practices">{% for record in records %}<span class="console-status">{{ record.company.name }}</span>{% endfor %}</div>
+      {% if multi_practice_enabled %}<div class="record-practices" aria-label="Included practices">{% for record in records %}<span class="console-status">{{ record.company.name }}</span>{% endfor %}</div>{% endif %}
       {% if care_purpose %}<p class="record-small">Care purpose: {{ care_purpose }}. Other practices remain read-only here; switch practice before taking an action.</p>{% endif %}
     {% endif %}
   </section>

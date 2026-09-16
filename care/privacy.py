@@ -7,6 +7,7 @@ from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
 
 from practices.models import Company, CompanyMembership, Patient
+from practices.tenancy import require_enabled_company
 from .models import ConsentDocument, PatientCommunicationPreference, PatientDataRequest, PatientDataRequestReply
 from .services import record_audit
 
@@ -15,6 +16,7 @@ ADMIN_ROLES = (CompanyMembership.Role.PRACTICE_ADMIN, CompanyMembership.Role.SUP
 
 
 def require_privacy_admin(actor, company, *, policies=False):
+    require_enabled_company(company)
     if not getattr(actor, 'is_active', False) or not company.is_active or not CompanyMembership.objects.filter(
         user=actor, user__is_active=True, company=company, is_active=True,
         role__in=(CompanyMembership.Role.SUPER_ADMIN,) if policies else ADMIN_ROLES,
@@ -23,6 +25,7 @@ def require_privacy_admin(actor, company, *, policies=False):
 
 
 def own_patient(actor, company, patient):
+    require_enabled_company(company)
     if not getattr(actor, 'is_active', False) or not company.is_active or not patient.is_active or patient.company_id != company.pk or patient.user_id != actor.pk or not patient.user.is_active:
         raise PermissionDenied('This patient record is not yours in the selected active practice.')
 

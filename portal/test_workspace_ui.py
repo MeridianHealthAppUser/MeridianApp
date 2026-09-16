@@ -1,4 +1,5 @@
 """Shared styling remains an authenticated workspace concern."""
+from django.test import override_settings
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
@@ -7,6 +8,7 @@ from practices.models import Company, CompanyMembership, Patient
 from practices.services import ACTIVE_COMPANY_SESSION_KEY, ACTIVE_PATIENT_COMPANY_SESSION_KEY
 
 
+@override_settings(MULTI_PRACTICE_ENABLED=True)
 class WorkspacePresentationTests(TestCase):
     @classmethod
     def setUpTestData(cls):

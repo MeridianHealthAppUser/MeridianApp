@@ -341,9 +341,15 @@ class EligibilityQuestionnaireForm(forms.Form):
     service_consent = forms.BooleanField(label='I accept the terms of service, privacy notice and telehealth consent for my selected practice.')
 
     def __init__(self, *args, bound_practice=None, **kwargs):
+        from practices.tenancy import enabled_companies, multi_practice_enabled
+
         self.bound_practice = bound_practice
         super().__init__(*args, **kwargs)
-        self.fields['practice'].queryset = Company.objects.filter(is_active=True).order_by('name')
+        self.fields['practice'].queryset = enabled_companies().order_by('name')
+        if not multi_practice_enabled():
+            self.fields['practice'].widget = forms.HiddenInput()
+            self.initial.setdefault('practice', self.fields['practice'].queryset.values_list('pk', flat=True).first())
+            self.fields['service_consent'].label = 'I accept the practice’s terms of service, privacy notice and telehealth consent.'
         if bound_practice:
             self.initial['practice'] = bound_practice.pk
             self.fields['practice'].queryset = self.fields['practice'].queryset.filter(pk=bound_practice.pk)

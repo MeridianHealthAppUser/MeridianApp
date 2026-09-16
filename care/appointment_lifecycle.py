@@ -9,12 +9,14 @@ from django.db import transaction
 from django.utils import timezone
 
 from practices.models import Company, CompanyMembership, Patient
+from practices.tenancy import require_enabled_company
 from .models import Appointment, AppointmentProposal, AvailabilitySlot, ClinicalEncounter, PatientEvent
 from .scheduling import ensure_clinician_available, ensure_patient_available
 from .services import record_audit
 
 
 def _membership(company, actor):
+    require_enabled_company(company)
     return CompanyMembership.objects.filter(company=company, company__is_active=True, user=actor, user__is_active=True, is_active=True).first()
 
 
@@ -74,6 +76,7 @@ def change_appointment_status(*, appointment, actor, status, expected_updated, c
     users = {user.pk: user for user in get_user_model().objects.select_for_update().filter(pk__in=user_ids).order_by('pk')}
     actor = users.get(actor.pk)
     appointment = Appointment.objects.select_for_update().select_related('company', 'patient').get(pk=original.pk)
+    require_enabled_company(appointment.company)
     if (appointment.clinician_id != original.clinician_id or appointment.patient_id != original.patient_id
             or appointment.patient.user_id != original.patient.user_id):
         raise ValidationError('Appointment participants changed. Reload before updating.')

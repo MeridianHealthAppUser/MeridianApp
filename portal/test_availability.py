@@ -1,5 +1,6 @@
 """Availability editing is a signed, self-doctor action in the selected practice."""
 
+from django.test import override_settings
 from datetime import datetime, time, timedelta
 from unittest.mock import patch
 from urllib.parse import parse_qs, urlsplit
@@ -15,6 +16,7 @@ from practices.models import Company, CompanyMembership, Patient
 from practices.services import ACTIVE_COMPANY_SESSION_KEY
 
 
+@override_settings(MULTI_PRACTICE_ENABLED=True)
 class AvailabilityPortalTests(TestCase):
     @classmethod
     def setUpTestData(cls):

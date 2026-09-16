@@ -1,6 +1,6 @@
 # Meridian Health
 
-Multi-practice Django care application with separate staff and patient pages, role-scoped records, clinical workflows, scheduling, messaging, pharmacy operations and reporting.
+Django care application for **Meridian Health**, with separate staff and patient pages, role-scoped records, clinical workflows, scheduling, messaging, pharmacy operations and reporting. The default deployment is single-practice; practice switching, creation, management and combined reporting are disabled.
 
 The in-app workflows are implemented for local testing. Payment processing, outbound email and other live external integrations are intentionally excluded. Questionnaire submissions remain leads; the dummy checkout does not create a login. Clinical and production governance review is still required before real patient use.
 
@@ -20,18 +20,20 @@ python3 -m venv .venv
 
 Open `/` for the public landing page. Sign in at `/accounts/login/`, then use `/desktop/` or `/mobile/` for staff and `/patient/` for your own care portal. Accounts with both staff and patient records can use the header to move between their workspace and care portal.
 
-The local demo contains Meridian Health and Orion Men’s Health. Demo accounts share password `MeridianDemo!2026`:
+The local demo creates Meridian Health only. Demo accounts share password `MeridianDemo!2026`:
 
 | Account | Email | Practice access |
 | --- | --- | --- |
-| Joshua, Super Admin | joshua.czech@meridianhealth.co.za | Both practices |
-| Sam, Doctor | sam.marchant@meridianhealth.co.za | Both practices |
+| Joshua, Super Admin | joshua.czech@meridianhealth.co.za | Meridian Health |
+| Sam, Doctor | sam.marchant@meridianhealth.co.za | Meridian Health |
 | Lindiwe, Practice Administrator | lindiwe.mahlangu@meridianhealth.co.za | Meridian Health |
-| Nadia, Patient | nadia.m@example.co.za | Own patient record in both practices |
+| Nadia, Patient | nadia.m@example.co.za | Own Meridian Health patient record |
 
 `seed_demo` is a development-only demonstration command. Existing passwords are preserved unless you explicitly pass `--reset-passwords`; example records can be refreshed, so do not rerun it against a working database just to obtain new screens. It refuses to run with `DEBUG=False`. Use a separate account created with `manage.py createsuperuser` for Django's site-wide technical administration.
 
 ## Separate staff pages checkpoint
+
+**Current deployment:** `MULTI_PRACTICE_ENABLED=false` and `SINGLE_PRACTICE_SLUG=meridian-health` are the defaults, including on PostgreSQL/DigitalOcean. No migration, password reset or reseed is needed. Other-practice records cannot be reached through old sessions, direct links, report filters, intake forms or video rooms. Existing other-practice data is not automatically deleted or merged. The historical multi-practice workflows described below are retained in code only and require explicitly enabling the environment flag. See [single-practice operation](docs/SINGLE_PRACTICE.md).
 
 The overview is still a summary. Primary staff navigation opens separate Django views and templates:
 

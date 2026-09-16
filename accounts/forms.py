@@ -75,6 +75,13 @@ class EmailAuthenticationForm(forms.Form):
     def confirm_login_allowed(self, user):
         if not user.is_active:
             raise ValidationError(self.error_messages['inactive'], code='inactive')
+        from practices.services import available_companies_for, available_patient_companies_for
+        from practices.tenancy import multi_practice_enabled
+
+        if not multi_practice_enabled() and not (
+            available_companies_for(user).exists() or available_patient_companies_for(user).exists()
+        ):
+            raise ValidationError(self.error_messages['invalid_login'], code='invalid_login')
 
     def get_user(self):
         return self.user_cache

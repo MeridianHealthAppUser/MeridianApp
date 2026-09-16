@@ -10,6 +10,7 @@ from django.utils import timezone
 
 from care.models import Appointment
 from practices.models import CompanyMembership
+from practices.tenancy import scope_queryset
 
 
 class VideoAccessDenied(PermissionDenied):
@@ -75,7 +76,7 @@ def _authorized_appointments(user_id):
     )
     # Both identities must still be active, even when only one is connecting.
     # No session-selected practice or staff override grants room access.
-    return Appointment.objects.filter(
+    return scope_queryset(Appointment.objects.filter(
         status=Appointment.Status.BOOKED, company__is_active=True,
         patient__is_active=True, patient__company_id=F('company_id'),
         clinician__is_active=True, patient__user__is_active=True,
@@ -84,7 +85,7 @@ def _authorized_appointments(user_id):
         clinician_id=F('patient__user_id'),
     ).annotate(video_doctor_active=Exists(active_doctor)).filter(
         video_doctor_active=True,
-    ).select_related('company', 'clinician', 'patient__user')
+    ).select_related('company', 'clinician', 'patient__user'))
 
 
 def _access_from_appointment(appointment, user_id, *, now, require_window):

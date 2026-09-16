@@ -31,6 +31,7 @@ from care.models import (
 )
 from care.services import record_audit
 from practices.models import CompanyMembership, Patient
+from practices.tenancy import scope_queryset
 from .patient_care_forms import PROFILE_FIELDS
 from .record_forms import ClinicalRecordFilterForm, RECORD_CATEGORIES, RECORD_PURPOSES, ScopedPatientDirectoryFilterForm
 from .views import StaffCompanyRequiredMixin
@@ -69,13 +70,13 @@ def staff_memberships(actor, *, clinical=False):
         user=actor, user__is_active=True, is_active=True, company__is_active=True,
         role__in=CLINICAL_ROLES if clinical else CompanyMembership.Role.values,
     ).select_related('company')
-    return {membership.company_id: membership for membership in queryset}
+    return {membership.company_id: membership for membership in scope_queryset(queryset)}
 
 
 def scoped_source(model, patients):
     """Checking both IDs also rejects malformed imported cross-tenant rows."""
-    return model.objects.filter(patient_id__in=[patient.pk for patient in patients],
-                                company_id=F('patient__company_id'))
+    return scope_queryset(model.objects.filter(patient_id__in=[patient.pk for patient in patients],
+                                                company_id=F('patient__company_id')))
 
 
 def safe_profile_answers(answers):

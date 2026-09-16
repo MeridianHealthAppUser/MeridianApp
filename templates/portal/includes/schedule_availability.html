@@ -62,7 +62,7 @@
     <section class="staff-page-card schedule-time-off" aria-labelledby="time-off-heading">
       <header class="staff-page-card__header"><div><h2 id="time-off-heading">Time off</h2><p>Leave, sickness and other time away.</p></div></header>
       <div class="schedule-panel-body">
-        <p class="schedule-panel-description">Time off blocks this doctor's new bookings across all their practices. Only time off recorded at {{ company.name }} is shown here.</p>
+        <p class="schedule-panel-description">Time off blocks this doctor's new bookings{% if multi_practice_enabled %} across all their practices. Only time off recorded at {{ company.name }} is shown here{% endif %}.</p>
         {% if time_off_error %}<div class="schedule-form-error" role="alert">{{ time_off_error }}</div>{% endif %}
         {% if can_manage_availability %}
           <form class="console-form schedule-time-off-form" method="post" action="{{ time_off_create_url }}">

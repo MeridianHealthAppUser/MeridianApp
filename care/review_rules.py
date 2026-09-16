@@ -4,6 +4,7 @@ from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
 
 from practices.models import Company, CompanyMembership
+from practices.tenancy import require_enabled_company
 
 from .clinical import _active_actor
 from .models import MedicationProduct, PracticeSettings, ReviewRule
@@ -11,6 +12,7 @@ from .services import record_audit
 
 
 def _lock_practice(company, actor):
+    require_enabled_company(company)
     company = Company.objects.select_for_update().filter(pk=company.pk, is_active=True).first()
     _active_actor(actor)
     if company is None or not CompanyMembership.objects.filter(

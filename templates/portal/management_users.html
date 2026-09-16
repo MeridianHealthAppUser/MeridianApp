@@ -4,7 +4,7 @@
 {% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/management.css' %}">{% endblock %}
 {% block breadcrumb %}<span>Setup · Users and roles</span><span class="console-breadcrumb__dot" aria-hidden="true"></span><span>{{ company.name }}</span>{% endblock %}
 {% block page_heading %}
-<header class="staff-page-header"><div><p class="console-kicker">Super Admin · Staff access</p><h1>Who has access to this practice</h1><p>One shared login, a role in each practice. Add and remove practice access without changing someone’s identity or their other memberships.</p></div><a class="console-button console-button--primary" href="{% url 'portal:management-user-create' %}">Add staff access</a></header>
+<header class="staff-page-header"><div><p class="console-kicker">Super Admin · Staff access</p><h1>Who has access to this practice</h1><p>{% if multi_practice_enabled %}One shared login, a role in each practice. Add and remove practice access without changing someone’s identity or their other memberships.{% else %}Manage your team's roles and access to Meridian Health without changing their account details.{% endif %}</p></div><a class="console-button console-button--primary" href="{% url 'portal:management-user-create' %}">Add staff access</a></header>
 {% endblock %}
 {% block page_content %}
   <section class="staff-page-card management-filter-card"><form method="get" class="management-filters">

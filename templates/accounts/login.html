@@ -49,7 +49,7 @@
         <h1>Care that stays connected.</h1>
         <p>Sign in to access your care journey or the practice workspace for the company you are working in.</p>
       </div>
-      <p class="login-assurance"><span aria-hidden="true">⌁</span> Your account is shared securely across the Meridian practices you are authorised to access.</p>
+      <p class="login-assurance"><span aria-hidden="true">⌁</span> {% if multi_practice_enabled %}Your account is shared securely across the Meridian practices you are authorised to access.{% else %}Secure access to your Meridian Health account.{% endif %}</p>
     </aside>
 
     <div class="login-card">

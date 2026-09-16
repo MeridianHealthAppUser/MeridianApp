@@ -24,7 +24,7 @@
 {% block page_content %}
   <section class="staff-page-card" aria-labelledby="patient-filters-heading">
     <header class="staff-page-card__header">
-      <div><h2 id="patient-filters-heading">Find a patient</h2><p>Search this practice or all your active practices. Switch practice explicitly before opening a record held elsewhere.</p></div>
+      <div><h2 id="patient-filters-heading">Find a patient</h2><p>{% if multi_practice_enabled %}Search this practice or all your active practices. Switch practice explicitly before opening a record held elsewhere.{% else %}Search your patient directory by name or record details, or filter by clinician.{% endif %}</p></div>
     </header>
     <form class="staff-filter-form staff-filter-form--directory record-directory-filters" method="get" action="{% url 'portal:patient-list' %}">
       {{ filter_form.non_field_errors }}
@@ -38,10 +38,10 @@
         {{ filter_form.clinician }}
         {{ filter_form.clinician.errors }}
       </div>
-      <div class="staff-filter-form__field">
+      {% if filter_form.scope.is_hidden %}{{ filter_form.scope }}{{ filter_form.scope.errors }}{% else %}<div class="staff-filter-form__field">
         <label for="{{ filter_form.scope.id_for_label }}">{{ filter_form.scope.label }}</label>
         {{ filter_form.scope }}{{ filter_form.scope.errors }}
-      </div>
+      </div>{% endif %}
       <button class="console-button console-button--primary" type="submit">Search</button>
     </form>
   </section>

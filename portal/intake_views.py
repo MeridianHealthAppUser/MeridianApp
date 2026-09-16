@@ -13,7 +13,7 @@ from django.views.decorators.cache import never_cache
 from care.forms import EligibilityQuestionnaireForm
 from care.intake import notice_fingerprint, practice_notices, save_intake
 from care.models import Lead, PracticeSettings, ScreeningQuestionnaire
-from practices.models import Company
+from practices.tenancy import enabled_companies, multi_practice_enabled, scope_queryset
 
 
 TOKEN_SALT = 'meridian.public-intake.v1'
@@ -38,7 +38,8 @@ class PrivateIntakeView(View):
         lead_id = self.request.session.get(LEAD_KEY)
         if not lead_id:
             raise Http404('There is no questionnaire in this browser session.')
-        return get_object_or_404(Lead, pk=lead_id, company__is_active=True, submission_key__isnull=False)
+        return get_object_or_404(scope_queryset(Lead.objects.all()), pk=lead_id,
+                                 company__is_active=True, submission_key__isnull=False)
 
 
 class QuestionnaireView(PrivateIntakeView):
@@ -46,7 +47,7 @@ class QuestionnaireView(PrivateIntakeView):
 
     def notice_context(self):
         return [{'practice_id': company.pk, 'name': company.name, 'documents': practice_notices(company)}
-                for company in Company.objects.filter(is_active=True).order_by('name')]
+                for company in enabled_companies().order_by('name')]
 
     def make_token(self, key, notices):
         owner = self.request.session.setdefault(OWNER_KEY, secrets.token_urlsafe(32))
@@ -78,7 +79,10 @@ class QuestionnaireView(PrivateIntakeView):
         else:
             choices = {str(item['practice_id']) for item in notices}
             requested = request.GET.get('practice')
-            default = Company.objects.filter(slug='meridian-health', is_active=True).first()
+            if not multi_practice_enabled() and requested is not None and requested not in choices:
+                raise Http404('This practice is not available.')
+            default = (enabled_companies().filter(slug='meridian-health').first()
+                       if multi_practice_enabled() else enabled_companies().first())
             initial['practice'] = requested if requested in choices else default.pk if default else None
         initial['submission_token'] = self.make_token(lead.submission_key if lead else uuid.uuid4(), notices)
         form = EligibilityQuestionnaireForm(initial=initial, bound_practice=lead.company if lead else None)

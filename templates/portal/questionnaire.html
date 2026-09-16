@@ -21,12 +21,12 @@
       {% if form.non_field_errors %}<div class="form-errors" role="alert">{{ form.non_field_errors }}</div>{% endif %}
       {% if form.submission_token.errors %}<div class="form-errors" role="alert">{{ form.submission_token.errors }}</div>{% endif %}
       {% if form.errors %}<p class="form-errors" role="alert">Please check the highlighted fields below. Your questionnaire has not been submitted.</p>{% endif %}
-      <section class="questionnaire-card" aria-labelledby="practice-heading">
+      {% if multi_practice_enabled %}<section class="questionnaire-card" aria-labelledby="practice-heading">
         <h2 id="practice-heading">Choose your practice</h2>
         <p>Your enquiry belongs to the practice you select. Its authorised team can follow up with you.</p>
         <div class="question-field">{{ form.practice.label_tag }}{{ form.practice }}{% for error in form.practice.errors %}<small class="field-error">{{ error }}</small>{% endfor %}</div>
         {% if editing %}<p class="questionnaire-legal">The practice cannot be changed on an existing enquiry.</p>{% endif %}
-      </section>
+      </section>{% else %}{{ form.practice }}{% if form.practice.errors %}<div class="form-errors" role="alert">This questionnaire is not available for that practice. Please reload the page.</div>{% endif %}{% endif %}
       <section class="questionnaire-card" aria-labelledby="identity-heading">
         <h2 id="identity-heading">Who you are</h2>
         <p>We need this to contact you about your enquiry. Submitting the questionnaire records you as a lead, nothing more — an account with a login is only created after a successful consultation payment. Payment is a preview only for now.</p>
@@ -80,7 +80,7 @@
       </section>
       <section class="questionnaire-card questionnaire-card--consent" aria-labelledby="consent-heading">
         <h2 id="consent-heading">Before you submit</h2>
-        <p>Please read the selected practice’s service, privacy and telehealth information before accepting. This acceptance does not opt you into marketing emails.</p>
+        <p>Please read the{% if multi_practice_enabled %} selected{% endif %} practice’s service, privacy and telehealth information before accepting. This acceptance does not opt you into marketing emails.</p>
         <div class="questionnaire-consent-documents" id="practice-consent-documents">
           {% for practice_documents in consent_documents_by_practice %}
             <div class="questionnaire-practice-consent" data-practice-id="{{ practice_documents.practice_id }}">
@@ -91,7 +91,7 @@
             {% for document in consent_documents %}<details class="questionnaire-consent-document"><summary>{{ document.title }} <span>· {{ document.version }}</span></summary><div>{{ document.body|linebreaks }}</div></details>{% empty %}<p>The practice’s consent information must be available before you submit.</p>{% endfor %}
           {% endfor %}
         </div>
-        <div class="question-check">{{ form.service_consent }}<div><label for="{{ form.service_consent.id_for_label }}">I accept the selected practice’s service terms, privacy notice and telehealth information.</label><p>My acceptance is recorded against this enquiry with the document versions, time and source. A consultation does not guarantee a prescription.</p></div></div>
+        <div class="question-check">{{ form.service_consent }}<div><label for="{{ form.service_consent.id_for_label }}">I accept the{% if multi_practice_enabled %} selected{% endif %} practice’s service terms, privacy notice and telehealth information.</label><p>My acceptance is recorded against this enquiry with the document versions, time and source. A consultation does not guarantee a prescription.</p></div></div>
         {% for error in form.service_consent.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
       </section>
       <footer class="questionnaire-submit-row"><span class="questionnaire-progress" id="screening-progress" aria-live="polite">0 of 5 answered</span><button class="questionnaire-button" type="submit">{% if editing %}Update my answers{% else %}Check my eligibility{% endif %}</button></footer>

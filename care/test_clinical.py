@@ -1,5 +1,6 @@
 """Clinical signing and results review require the responsible clinician."""
 
+from django.test import override_settings
 import hashlib
 import uuid
 from datetime import timedelta
@@ -25,6 +26,7 @@ from .services import complete_task
 PDF = b'%PDF-1.4\n1 0 obj << /Type /Catalog >> endobj\n%%EOF'
 
 
+@override_settings(MULTI_PRACTICE_ENABLED=True)
 class ClinicalWorkflowTests(TestCase):
     @classmethod
     def setUpTestData(cls):

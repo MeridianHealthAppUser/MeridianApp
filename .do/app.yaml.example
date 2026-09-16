@@ -18,6 +18,12 @@ services:
     health_check:
       http_path: /health/
     envs:
+      - key: MULTI_PRACTICE_ENABLED
+        value: 'false'
+        scope: RUN_TIME
+      - key: SINGLE_PRACTICE_SLUG
+        value: meridian-health
+        scope: RUN_TIME
       - key: DJANGO_DEBUG
         value: 'false'
         scope: RUN_TIME
@@ -38,6 +44,12 @@ jobs:
     source_dir: /
     run_command: python manage.py migrate --noinput
     envs:
+      - key: MULTI_PRACTICE_ENABLED
+        value: 'false'
+        scope: RUN_TIME
+      - key: SINGLE_PRACTICE_SLUG
+        value: meridian-health
+        scope: RUN_TIME
       - key: DJANGO_DEBUG
         value: 'false'
         scope: RUN_TIME

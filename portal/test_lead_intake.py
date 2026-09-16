@@ -18,6 +18,7 @@ from practices.services import ACTIVE_COMPANY_SESSION_KEY
 
 
 @override_settings(DEBUG=True)
+@override_settings(MULTI_PRACTICE_ENABLED=True)
 class PublicLeadIntakeTests(TestCase):
     @classmethod
     def setUpTestData(cls):
@@ -375,6 +376,7 @@ class PublicLeadIntakeTests(TestCase):
         self.assertEqual(Lead.objects.count(), 1)
 
 
+@override_settings(MULTI_PRACTICE_ENABLED=True)
 class StaffLeadWorkspaceTests(TestCase):
     @classmethod
     def setUpTestData(cls):

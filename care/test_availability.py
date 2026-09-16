@@ -1,5 +1,6 @@
 """Working hours and leave constrain new bookings without changing existing ones."""
 
+from django.test import override_settings
 from datetime import datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
@@ -23,6 +24,7 @@ from .models import (
 from .scheduling import propose_appointment_time, respond_to_appointment_proposal
 
 
+@override_settings(MULTI_PRACTICE_ENABLED=True)
 class DoctorAvailabilityTests(TestCase):
     @classmethod
     def setUpTestData(cls):

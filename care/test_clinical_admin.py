@@ -1,5 +1,6 @@
 """The technical admin cannot bypass signing, review or report retention."""
 
+from django.test import override_settings
 from datetime import timedelta
 from uuid import uuid4
 
@@ -16,6 +17,7 @@ from .clinical import create_lab_request, review_lab_request, save_consultation,
 from .models import Appointment, AuditEvent, AvailabilitySlot, ClinicalEncounter, ClinicalNote, ClinicalTask, LabRequest, LabResult, PatientEvent
 
 
+@override_settings(MULTI_PRACTICE_ENABLED=True)
 class ClinicalAdminSafeguardTests(TestCase):
     @classmethod
     def setUpTestData(cls):

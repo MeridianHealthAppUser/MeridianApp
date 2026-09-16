@@ -6,6 +6,7 @@ from django.db.models import Q
 from django.utils import timezone
 
 from practices.models import Company, CompanyMembership, Patient
+from practices.tenancy import require_enabled_company
 
 from .models import ClinicalNote, ClinicalNoteTagAssignment, ClinicalTask, RecordTag, TaskTagAssignment
 from .services import record_audit
@@ -21,6 +22,7 @@ def visible_tasks(company, actor, membership):
 
 
 def _staff_membership(company, actor):
+    require_enabled_company(company)
     if not getattr(actor, 'is_active', False):
         raise PermissionDenied('An active practice staff account is required.')
     membership = CompanyMembership.objects.filter(company=company, company__is_active=True, user=actor,

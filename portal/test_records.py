@@ -1,5 +1,6 @@
 """The merged record is permission-scoped, not a name-based patient search."""
 
+from django.test import override_settings
 from datetime import timedelta
 
 from django.contrib.auth import get_user_model
@@ -16,6 +17,7 @@ from practices.models import Company, CompanyMembership, Patient
 from practices.services import ACTIVE_COMPANY_SESSION_KEY
 
 
+@override_settings(MULTI_PRACTICE_ENABLED=True)
 class ClinicalRecordTests(TestCase):
     @classmethod
     def setUpTestData(cls):

@@ -1,5 +1,6 @@
 """Adversarial patient-workspace reads keep existing role and tenant boundaries."""
 
+from django.test import override_settings
 from datetime import timedelta
 
 from django.test import TestCase
@@ -13,6 +14,7 @@ from practices.models import CompanyMembership, Patient
 from . import test_records
 
 
+@override_settings(MULTI_PRACTICE_ENABLED=True)
 class PatientWorkspaceSecurityTests(TestCase):
     setUpTestData = classmethod(test_records.ClinicalRecordTests.setUpTestData.__func__)
     event = classmethod(test_records.ClinicalRecordTests.event.__func__)

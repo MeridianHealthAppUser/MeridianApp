@@ -1,5 +1,6 @@
 """Calendar and day-table views share one authorised, read-only diary."""
 
+from django.test import override_settings
 from datetime import date, datetime, time, timedelta, timezone as datetime_timezone
 from html.parser import HTMLParser
 from urllib.parse import parse_qs, urlsplit
@@ -25,6 +26,7 @@ class ScheduleMarkupParser(HTMLParser):
         self.elements.append((tag, dict(attrs)))
 
 
+@override_settings(MULTI_PRACTICE_ENABLED=True)
 class ScheduleCalendarTests(TestCase):
     @classmethod
     def setUpTestData(cls):

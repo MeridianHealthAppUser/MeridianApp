@@ -1,6 +1,6 @@
 # Meridian local application guide
 
-The application has separate URLs for each practice-wide page and one tabbed workspace per selected patient. Overview pages contain summaries and links, not every workflow. Use the practice selector before working with a record; changing practice clears old record IDs and filters. A shared login can have different roles in different practices.
+The application has separate URLs for each practice-wide page and one tabbed workspace per selected patient. Overview pages contain summaries and links, not every workflow. The current deployment is **Meridian Health only**: there is no practice selector or practice-management page. Existing Meridian logins and roles are unchanged. See [single-practice operation](SINGLE_PRACTICE.md) for the deployment boundary and retained data model.
 
 ## Demo access
 
@@ -8,28 +8,28 @@ Open `/accounts/login/` on the local development server. The existing demo passw
 
 | Login | Access |
 | --- | --- |
-| `sam.marchant@meridianhealth.co.za` | Doctor in Meridian Health and Orion Men's Health |
-| `joshua.czech@meridianhealth.co.za` | Practice Super Admin in both practices |
+| `sam.marchant@meridianhealth.co.za` | Doctor in Meridian Health |
+| `joshua.czech@meridianhealth.co.za` | Super Admin in Meridian Health |
 | `lindiwe.mahlangu@meridianhealth.co.za` | Practice Administrator in Meridian Health |
-| `nadia.m@example.co.za` | Own patient portal in both practices |
+| `nadia.m@example.co.za` | Own patient portal in Meridian Health |
 
 Demo data is for local testing only. The seed command is disabled when `DEBUG=False`; existing passwords are preserved unless the explicit local reset option is used. Do not run the seeder against an existing working database just to obtain newer screens.
 
 ## Your profile and account menu
 
-Click your avatar/name at the top right to open **My profile**, **Change password**, your role-appropriate history/preferences and **Sign out**. On mobile the compact avatar opens the same menu. The practice selector remains alongside it; the duplicate staff Account sidebar section has been removed.
+Click your avatar/name at the top right to open **My profile**, **Change password**, your role-appropriate history/preferences and **Sign out**. On mobile the compact avatar opens the same menu. The duplicate staff Account sidebar section and practice selector are absent.
 
 `/accounts/profile/` edits your own shared account name and shows your sign-in email, active practice access and account dates. It cannot change permissions, login email, another user's account or recorded patient/clinical names. Password changes require the current password. Patient **Account** remains a separate care-practice page for contact details, consent and preferences.
 
 ## Doctor and care-team pages
 
-Metrics and cohorts uses four compact summary cards, daily activity lines, an appointment-status ring, monthly cohort bars and a recorded weight-change breakdown. Date/practice filters and CSV export are unchanged. Expand **View daily counts** or **All measures & definitions** for exact values. “Current snapshot” measures describe now; other measures use the inclusive selected dates. No payment results, missing weights or clinical outcomes are inferred.
+Metrics and cohorts uses four compact summary cards, daily activity lines, an appointment-status ring, monthly cohort bars and a recorded weight-change breakdown. Date filters and CSV export remain available for Meridian Health. Expand **View daily counts** or **All measures & definitions** for exact values. “Current snapshot” measures describe now; other measures use the inclusive selected dates. No payment results, missing weights or clinical outcomes are inferred.
 
 | Page | What it does |
 | --- | --- |
 | `/desktop/`, `/mobile/` | Separate desktop/mobile summary entry points |
 | `/tasks/` | Table of patient/general tasks, assignment, due dates, workflow status and arbitrary tags |
-| `/patients/` | Searchable directory; current practice or permitted combined view |
+| `/patients/` | Searchable Meridian Health patient directory |
 | `/patients/<id>/` | One patient workspace; separate patient-specific tabs with a shared header |
 | `/patients/<id>/?tab=history` | Role-appropriate history, timeline filters and protected exports; the old `/record/` clinical URL remains an alias |
 | `/consultations/` | Author-owned drafts and explicit final signing; signed notes cannot be edited |
@@ -46,7 +46,7 @@ Native **video consultations** are available from appointment details for the bo
 
 In Messages, **Route / manage** can assign a reply task to a doctor, close or reopen a conversation. Closing retains its history and is blocked while an appointment suggestion is pending. Administrative task notes are not sent as a patient reply.
 
-Clinical record access differs by role. Doctors can see their own private notes/drafts through their protected workflows; the combined record excludes private notes and drafts. Super Admins can read shared/signed clinical records, not another doctor's private drafts or patient medical-profile answers. Practice Administrators retain operational access without clinical note bodies. Combined records match the same login identity only, require a stated care purpose and include only permitted active practices.
+Clinical record access differs by role. Doctors can see their own private notes/drafts through their protected workflows; the shared record excludes private notes and drafts. Super Admins can read shared/signed clinical records, not another doctor's private drafts or patient medical-profile answers. Practice Administrators retain operational access without clinical note bodies. Cross-practice combined records are disabled in the current deployment.
 
 ## Working within one patient
 
@@ -63,7 +63,7 @@ Lists are paginated within the selected patient. A tab change never changes the 
 
 ### History loading and downloads
 
-The clinical history initially shows 20 events. Scroll its panel or use **Load older entries** to append older entries; normal pagination remains available when JavaScript is unavailable. Activity/date filters and any explicitly permitted combined-practice view are retained. Times are displayed in South Africa time (SAST).
+The clinical history initially shows 20 events. Scroll its panel or use **Load older entries** to append older entries; normal pagination remains available when JavaScript is unavailable. Activity/date filters are retained and history is limited to Meridian Health. Times are displayed in South Africa time (SAST).
 
 **Download Excel** exports the same filtered history snapshot, including older entries not yet loaded on screen. The workbook includes its scope and filters, excludes private notes, unsigned consultations, attachment bytes and arbitrary audit metadata, and writes cells as text. An export above 10,000 entries asks you to narrow the filters; it is not silently cut short. **Export clinical record** remains a separate protected JSON clinical-record download.
 
@@ -90,11 +90,11 @@ Preparation reserves inventory; recording dispatch does not deduct it twice. Can
 - `/dropouts/`: paused/cancelled care plans and administrative follow-up history. Following up does not restart treatment.
 - `/subscriptions/`: local care-plan records. Patients explicitly enrol, pause/resume or cancel their own plan in `/patient/subscription/`; no payment is collected.
 - `/data-requests/`: administrators respond to patient access/correction/deletion-review requests. Responses are retained and visible to the patient. A deletion request does not erase records automatically.
-- `/settings/users/`: Super Admin staff access management, including authorised multi-practice memberships. Linking an existing sign-in does not silently rename it or reset its password. The last active practice Super Admin cannot be removed.
-- `/settings/practices/`: Super Admin practice setup. A practice Super Admin is not Django's site-wide superuser.
+- `/settings/users/`: Super Admin staff access management for Meridian Health. Linking an existing sign-in does not silently rename it or reset its password. The last active practice Super Admin cannot be removed.
+- `/settings/practices/`: disabled in single-practice mode, together with creation and editing endpoints. A practice Super Admin is not Django's site-wide superuser.
 - `/settings/policies/`: publish a new immutable policy version; effective dates control which document is shown publicly. Existing acceptances remain linked to their original version.
 - `/review-rules/`: planning settings and an explicit local reminder check. It creates deduplicated doctor reminders and can hold invalid unshipped supply. A reminder is not a completed review and never extends an authorisation or orders tests.
-- `/metrics/`: actual operational counts, creation cohorts and descriptive paired-weight data; current practice or permitted combined scope. Unrecorded cost/payment inputs are not guessed.
+- `/metrics/`: Meridian Health operational counts, creation cohorts and descriptive paired-weight data. Unrecorded cost/payment inputs are not guessed.
 - `/activity-statements/`: doctor-owned statements and Super Admin preparation/approval using explicitly entered rates. Completed appointments and saved messages are counted. Approved snapshots are immutable. No money is transferred or marked paid.
 - `/account/access-history/`: your own scoped, sanitised access/activity history.
 

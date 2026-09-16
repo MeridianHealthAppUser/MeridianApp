@@ -1,5 +1,6 @@
 """Patient care pages retain tenant, identity, availability and version boundaries."""
 
+from django.test import override_settings
 import time as wall_time
 from datetime import datetime, time, timedelta
 from unittest.mock import patch
@@ -20,6 +21,7 @@ from practices.models import Company, CompanyMembership, Patient
 from practices.services import ACTIVE_COMPANY_SESSION_KEY, ACTIVE_PATIENT_COMPANY_SESSION_KEY
 
 
+@override_settings(MULTI_PRACTICE_ENABLED=True)
 class PatientCareTests(TestCase):
     pages = ('patient-book-appointment', 'patient-medical-profile', 'patient-updates')
 

@@ -191,6 +191,8 @@ class ActivateCompanyView(LoginRequiredMixin, View):
     http_method_names = ('post',)
 
     def post(self, request, slug):
+        from practices.tenancy import require_multi_practice
+        require_multi_practice()
         company = get_object_or_404(Company, slug=slug, is_active=True)
         set_active_company(request, company)
         # Record URLs belong to the previous practice. Switch to an overview so
@@ -228,6 +230,8 @@ class ActivatePatientCompanyView(LoginRequiredMixin, View):
     http_method_names = ('post',)
 
     def post(self, request, slug):
+        from practices.tenancy import require_multi_practice
+        require_multi_practice()
         company = get_object_or_404(Company, slug=slug, is_active=True)
         set_active_patient_company(request, company)
         # Keep the section, never a record ID or query from the old practice.

@@ -1,5 +1,6 @@
 """The shared staff inbox lists only the selected practice's active patients."""
 
+from django.test import override_settings
 from datetime import timedelta
 from html.parser import HTMLParser
 from urllib.parse import parse_qs, urlsplit
@@ -28,6 +29,7 @@ class InboxPageParser(HTMLParser):
             self.conversations[attrs['id']] = 'open' in attrs
 
 
+@override_settings(MULTI_PRACTICE_ENABLED=True)
 class StaffInboxTests(TestCase):
     @classmethod
     def setUpTestData(cls):

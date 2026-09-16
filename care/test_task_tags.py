@@ -1,5 +1,6 @@
 """Free-form record labels retain the task/note tenancy and permission boundary."""
 
+from django.test import override_settings
 from django.contrib.auth import get_user_model
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import IntegrityError, transaction
@@ -15,6 +16,7 @@ from .services import complete_task
 from .task_services import save_task, set_record_tags
 
 
+@override_settings(MULTI_PRACTICE_ENABLED=True)
 class RecordTagTests(TestCase):
     @classmethod
     def setUpTestData(cls):

@@ -15,7 +15,7 @@
       {% block patient_heading %}{% endblock %}
       {% block patient_content %}{% endblock %}
       <aside class="patient-page-privacy">
-        <strong>Your care, in one place.</strong> You are viewing your patient record at {{ patient_company.name }}. Use the practice selector above to view care at another practice you belong to.
+        <strong>Your care, in one place.</strong> You are viewing your patient record at {{ patient_company.name }}.{% if multi_practice_enabled %} Use the practice selector above to view care at another practice you belong to.{% endif %}
       </aside>
     </div>
   </div>

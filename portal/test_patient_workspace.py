@@ -1,5 +1,6 @@
 """Patient tabs and legacy actions keep one patient context without stacked pages."""
 
+from django.test import override_settings
 from datetime import timedelta
 from urllib.parse import parse_qs, urlsplit
 
@@ -13,6 +14,7 @@ from . import test_workflows
 from .patient_workspace import CLINICAL_TABS, TABS
 
 
+@override_settings(MULTI_PRACTICE_ENABLED=True)
 class PatientWorkspaceTests(TestCase):
     setUpTestData = classmethod(test_workflows.PortalWorkflowTests.setUpTestData.__func__)
     login = test_workflows.PortalWorkflowTests.login

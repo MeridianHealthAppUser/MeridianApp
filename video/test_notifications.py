@@ -10,6 +10,7 @@ from django.test import TestCase, override_settings
 
 
 @override_settings(DEBUG=True, VIDEO_ENABLED=True, VIDEO_REDIS_URL='')
+@override_settings(MULTI_PRACTICE_ENABLED=True)
 class NotificationTemplateTests(TestCase):
     def test_anonymous_page_has_no_call_socket_or_banner(self):
         response = self.client.get('/privacy/')

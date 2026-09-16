@@ -1,5 +1,6 @@
 """Patient navigation is split into owned pages, never a staff-data dashboard."""
 
+from django.test import override_settings
 from datetime import timedelta
 from decimal import Decimal
 from html.parser import HTMLParser
@@ -37,6 +38,7 @@ class PatientNavigationParser(HTMLParser):
             self.nav_depth -= 1
 
 
+@override_settings(MULTI_PRACTICE_ENABLED=True)
 class PatientStandalonePagesTests(TestCase):
     page_names = ('patient-dashboard', 'patient-appointments', 'patient-messages', 'patient-progress', 'patient-account')
 

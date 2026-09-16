@@ -5,6 +5,7 @@ from django.db import transaction
 
 from care.demo import seed_demo_care
 from practices.models import Company, CompanyMembership, Patient
+from practices.tenancy import multi_practice_enabled
 
 
 DEMO_PASSWORD = 'MeridianDemo!2026'
@@ -24,10 +25,14 @@ class Command(BaseCommand):
             slug='meridian-health',
             defaults={'name': 'Meridian Health', 'is_active': True},
         )
-        orion, _ = Company.objects.update_or_create(
-            slug='orion-mens-health',
-            defaults={'name': "Orion Men’s Health", 'is_active': True},
-        )
+        if not multi_practice_enabled() and settings.SINGLE_PRACTICE_SLUG != 'meridian-health':
+            raise CommandError('The demo command is only for Meridian Health. No records were changed.')
+        orion = None
+        if multi_practice_enabled():
+            orion, _ = Company.objects.update_or_create(
+                slug='orion-mens-health',
+                defaults={'name': "Orion Men’s Health", 'is_active': True},
+            )
 
         user_model = get_user_model()
         people = (
@@ -88,6 +93,8 @@ class Command(BaseCommand):
             (users['lindiwe.mahlangu@meridianhealth.co.za'], meridian, CompanyMembership.Role.PRACTICE_ADMIN),
         )
         for user, company, role in memberships:
+            if company is None:
+                continue
             CompanyMembership.objects.update_or_create(
                 user=user,
                 company=company,
@@ -108,6 +115,7 @@ class Command(BaseCommand):
         seed_demo_care(meridian=meridian, orion=orion, users=users, nadia=nadia)
 
         self.stdout.write(self.style.SUCCESS(
-            'Demo data is ready: 2 practices, 4 accounts, 5 staff memberships, patient portals, and clinical demo records. '
+            f'Demo data is ready: {2 if orion else 1} practices, 4 accounts, '
+            f'{5 if orion else 3} staff memberships, patient portals, and clinical demo records. '
             f'New demo accounts use: {DEMO_PASSWORD}. Existing passwords are preserved unless --reset-passwords is supplied.'
         ))

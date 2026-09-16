@@ -1,5 +1,6 @@
 """Clinical pages retain signed ownership boundaries and private PDF delivery."""
 
+from django.test import override_settings
 import uuid
 from datetime import timedelta
 from unittest.mock import patch
@@ -19,6 +20,7 @@ from practices.services import ACTIVE_COMPANY_SESSION_KEY, ACTIVE_PATIENT_COMPAN
 PDF = b'%PDF-1.4\n1 0 obj << /Type /Catalog >> endobj\n%%EOF'
 
 
+@override_settings(MULTI_PRACTICE_ENABLED=True)
 class ClinicalPortalTests(TestCase):
     @classmethod
     def setUpTestData(cls):

@@ -5,14 +5,15 @@ from django.db import transaction
 from django.utils import timezone
 
 from practices.models import CompanyMembership
+from practices.tenancy import require_enabled_company, scope_queryset
 
 from .models import AuditEvent, ClinicalTask, MessageThread, PatientEvent, PatientMessage
 
 
 def _has_staff_access(user, company_id):
-    return bool(getattr(user, 'is_active', False)) and CompanyMembership.objects.filter(
+    return bool(getattr(user, 'is_active', False)) and scope_queryset(CompanyMembership.objects.filter(
         user=user, company_id=company_id, company__is_active=True, is_active=True,
-    ).exists()
+    )).exists()
 
 
 def request_ip_address(request):
@@ -39,6 +40,7 @@ def record_audit(*, company, actor, action, target=None, patient=None, request=N
 def post_patient_message(*, thread, sender, body, request=None):
     """Append a message and update only metadata on the thread's timeline."""
     thread = MessageThread.objects.select_for_update().get(pk=thread.pk, company_id=thread.company_id)
+    require_enabled_company(thread.company)
     owns_record = (
         sender.is_active and thread.patient.is_active and thread.company.is_active
         and thread.patient.user_id == sender.pk

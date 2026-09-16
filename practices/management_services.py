@@ -7,12 +7,13 @@ from django.db import transaction
 
 from care.services import record_audit
 from .models import Company, CompanyMembership
+from .tenancy import enabled_companies, require_multi_practice
 
 
 def manageable_practices(actor):
     if not getattr(actor, 'is_active', False):
         return Company.objects.none()
-    return Company.objects.filter(is_active=True, memberships__user=actor, memberships__user__is_active=True,
+    return enabled_companies().filter(memberships__user=actor, memberships__user__is_active=True,
         memberships__is_active=True, memberships__role=CompanyMembership.Role.SUPER_ADMIN).distinct()
 
 
@@ -39,6 +40,7 @@ def _role(role):
 
 @transaction.atomic
 def create_practice(*, actor, source_company, name, slug, request=None):
+    require_multi_practice()
     _lock_practices(actor, [source_company])
     company = Company(name=name.strip(), slug=slug.strip())
     company.full_clean()
@@ -54,6 +56,7 @@ def create_practice(*, actor, source_company, name, slug, request=None):
 
 @transaction.atomic
 def update_practice(*, actor, company, name, slug, expected_updated_at=None, request=None):
+    require_multi_practice()
     company = _lock_practices(actor, [company])[0]
     if expected_updated_at and company.updated_at.isoformat() != expected_updated_at:
         raise ValidationError('This practice was updated in another tab. Reload before saving.')

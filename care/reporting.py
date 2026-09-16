@@ -11,6 +11,7 @@ from django.db.models.functions import Cast, TruncDate, TruncMonth
 from django.utils import timezone
 
 from practices.models import Company, CompanyMembership, Patient
+from practices.tenancy import require_enabled_company, require_multi_practice, scope_queryset
 from .models import (Appointment, DoctorActivityStatement, LabRequest, Lead, MedicationBatch,
                      PatientMessage, PatientSubscription, Shipment, WeightEntry)
 from .operations import require_operations_actor
@@ -42,13 +43,16 @@ def period_bounds(start, end):
 
 
 def report_companies(actor, company, scope):
+    require_enabled_company(company)
     memberships = CompanyMembership.objects.filter(user=actor, user__is_active=True, company__is_active=True, is_active=True,
                                                      role__in=('doctor', 'practice_admin', 'super_admin'))
+    memberships = scope_queryset(memberships)
     if not memberships.filter(company=company).exists():
         raise PermissionDenied('An active practice membership is required.')
     if scope == 'current':
         return [company.pk]
     if scope == 'all':
+        require_multi_practice()
         return list(memberships.values_list('company_id', flat=True))
     raise ValidationError('Choose current practice or all permitted practices.')
 

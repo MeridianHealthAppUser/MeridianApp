@@ -63,7 +63,7 @@ def _message(*, thread, sender, body):
 
 
 def seed_demo_care(*, meridian, orion, users, nadia):
-    """Populate both practices without requiring an external payment or courier API."""
+    """Populate the explicitly supplied demo practices, without external integrations."""
     today = timezone.localdate()
     sam = users['sam.marchant@meridianhealth.co.za']
     joshua = users['joshua.czech@meridianhealth.co.za']
@@ -71,6 +71,8 @@ def seed_demo_care(*, meridian, orion, users, nadia):
     encounter_time = (timezone.now() - timedelta(days=25)).replace(hour=10, minute=0, second=0, microsecond=0)
 
     for company in (meridian, orion):
+        if company is None:
+            continue
         PracticeSettings.objects.update_or_create(
             company=company,
             defaults={

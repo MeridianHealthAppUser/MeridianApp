@@ -8,6 +8,7 @@ from django.core.validators import MaxValueValidator, MinValueValidator
 from django.utils import timezone
 
 from practices.models import CompanyMembership
+from practices.tenancy import multi_practice_enabled, scope_queryset
 from .staff_forms import PatientDirectoryFilterForm
 
 
@@ -36,6 +37,13 @@ class ClinicalRecordFilterForm(forms.Form):
         'type': 'date', 'min': '1900-01-01', 'max': '2100-12-31',
     }), validators=[MinValueValidator(date(1900, 1, 1)), MaxValueValidator(date(2100, 12, 31))])
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if not multi_practice_enabled():
+            self.fields['scope'].choices = (('current', 'This practice'),)
+            self.fields['scope'].widget = forms.HiddenInput()
+            self.fields['reason'].widget = forms.HiddenInput()
+
     def clean(self):
         cleaned = super().clean()
         if cleaned.get('scope') == 'all' and not cleaned.get('reason'):
@@ -58,6 +66,10 @@ class ScopedPatientDirectoryFilterForm(PatientDirectoryFilterForm):
 
     def __init__(self, *args, company, companies, **kwargs):
         super().__init__(*args, company=company, **kwargs)
+        if not multi_practice_enabled():
+            self.fields['scope'].choices = (('current', 'This practice'),)
+            self.fields['scope'].widget = forms.HiddenInput()
+            companies = scope_queryset(CompanyMembership.objects.filter(company__in=companies)).values('company_id')
         self.fields['clinician'].queryset = get_user_model().objects.filter(
             is_active=True, company_memberships__company__in=companies,
             company_memberships__company__is_active=True, company_memberships__is_active=True,

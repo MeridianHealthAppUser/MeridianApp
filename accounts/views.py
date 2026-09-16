@@ -12,6 +12,8 @@ from django.utils.decorators import method_decorator
 from django.views.decorators.cache import never_cache
 from django.views import View
 
+from practices.tenancy import enabled_companies, scope_queryset
+
 from .forms import AccountProfileForm, EmailAuthenticationForm
 from .profile import make_profile_context, save_own_profile
 
@@ -23,14 +25,14 @@ class AccountProfileView(LoginRequiredMixin, View):
     http_method_names = ('get', 'post', 'head', 'options')
 
     def display(self, request, form=None):
-        from practices.models import Company, CompanyMembership, Patient
+        from practices.models import CompanyMembership, Patient
 
         user = get_object_or_404(get_user_model(), pk=request.user.pk, is_active=True)
-        memberships = CompanyMembership.objects.filter(user=user, is_active=True, company__is_active=True)
-        patients = Patient.objects.filter(user=user, is_active=True, company__is_active=True)
+        memberships = scope_queryset(CompanyMembership.objects.filter(user=user, is_active=True, company__is_active=True))
+        patients = scope_queryset(Patient.objects.filter(user=user, is_active=True, company__is_active=True))
         has_staff_access = memberships.exists()
         has_patient_access = patients.exists()
-        companies = Company.objects.filter(is_active=True).filter(
+        companies = enabled_companies().filter(
             Q(memberships__in=memberships) | Q(practices_patient_records__in=patients)
         ).distinct().order_by('name', 'pk').prefetch_related(
             Prefetch('memberships', queryset=memberships, to_attr='profile_memberships'),
@@ -110,10 +112,9 @@ class AccountPasswordChangeView(PasswordChangeView):
 
     def form_valid(self, form):
         from care.services import record_audit
-        from practices.models import Company
 
         response = super().form_valid(form)
-        companies = Company.objects.filter(is_active=True).filter(
+        companies = enabled_companies().filter(
             Q(memberships__user=self.request.user, memberships__is_active=True) |
             Q(practices_patient_records__user=self.request.user, practices_patient_records__is_active=True)
         ).distinct()

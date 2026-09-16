@@ -10,6 +10,7 @@ from django.db.models.functions import Cast
 from django.utils import timezone
 
 from practices.models import CompanyMembership
+from practices.tenancy import require_enabled_company
 
 from .models import Appointment, AppointmentProposal, AvailabilitySlot, MessageThread, PatientEvent
 from .services import post_patient_message, record_audit
@@ -75,6 +76,7 @@ def _lock_appointment(appointment_id, company_id):
 
 
 def _validate_actor(appointment, actor, actor_role):
+    require_enabled_company(appointment.company)
     if not getattr(actor, 'is_active', False) or actor_role not in ('doctor', 'patient'):
         raise PermissionDenied('Only this appointment’s clinician and patient can agree to a change.')
     if not appointment.company.is_active or not appointment.patient.is_active:

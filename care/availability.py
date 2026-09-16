@@ -12,6 +12,7 @@ from django.db.models.functions import Cast, ExtractIsoWeekDay, TruncDate, Trunc
 from django.utils import timezone
 
 from practices.models import CompanyMembership
+from practices.tenancy import require_enabled_company
 
 from .models import Appointment, AvailabilitySlot, DoctorTimeOff, DoctorWorkingPattern
 from .services import record_audit
@@ -34,6 +35,7 @@ class OpenTimeSlot:
 
 
 def _lock_own_doctor(company, clinician, actor):
+    require_enabled_company(company)
     # This is the same first lock acquired by booking/proposal acceptance.
     if not getattr(actor, 'is_active', False) or actor.pk != clinician.pk:
         raise PermissionDenied('Only the doctor can change their own availability.')

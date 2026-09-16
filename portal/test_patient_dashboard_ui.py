@@ -1,4 +1,5 @@
 """The patient overview is compact without changing care navigation or data."""
+from django.test import override_settings
 import json
 import os
 import shutil
@@ -17,6 +18,7 @@ from practices.models import Company, CompanyMembership, Patient
 from practices.services import ACTIVE_PATIENT_COMPANY_SESSION_KEY
 
 
+@override_settings(MULTI_PRACTICE_ENABLED=True)
 class PatientDashboardPresentationTests(TestCase):
     @classmethod
     def setUpTestData(cls):

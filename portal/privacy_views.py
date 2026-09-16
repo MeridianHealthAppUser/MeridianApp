@@ -298,9 +298,11 @@ class PublicPolicyView(View):
     page_kind = 'terms'
 
     def get(self, request):
+        from practices.tenancy import enabled_companies
+
         data = request.GET.copy()
         if 'practice' not in data:
-            first = Company.objects.filter(is_active=True).first()
+            first = enabled_companies().first()
             if first:
                 data['practice'] = str(first.pk)
         form = PublicPracticeForm(data if data else None)

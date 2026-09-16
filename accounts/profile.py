@@ -9,6 +9,8 @@ from django.db import transaction
 from django.db.models import Q
 from django.utils.crypto import constant_time_compare, salted_hmac
 
+from practices.tenancy import enabled_companies
+
 
 PROFILE_CONTEXT_SALT = 'accounts.profile.form.v1'
 PROFILE_CONTEXT_MAX_AGE = 12 * 60 * 60
@@ -57,9 +59,8 @@ def save_own_profile(*, actor, context_token, first_name, last_name, request=Non
     user.save(update_fields=tuple(changes))
 
     from care.services import record_audit
-    from practices.models import Company
 
-    companies = Company.objects.filter(is_active=True).filter(
+    companies = enabled_companies().filter(
         Q(memberships__user=user, memberships__is_active=True) |
         Q(practices_patient_records__user=user, practices_patient_records__is_active=True)
     ).distinct()

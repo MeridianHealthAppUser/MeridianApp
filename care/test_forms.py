@@ -1,3 +1,4 @@
+from django.test import override_settings
 from datetime import timedelta
 
 from django.contrib.auth import get_user_model
@@ -10,6 +11,7 @@ from .forms import AppointmentForm, ClinicalNoteForm, ClinicalTaskForm, WeightEn
 from .models import Appointment, WeightEntry
 
 
+@override_settings(MULTI_PRACTICE_ENABLED=True)
 class PatientWorkflowFormTests(TestCase):
     @classmethod
     def setUpTestData(cls):

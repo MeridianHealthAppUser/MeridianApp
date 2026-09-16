@@ -17,6 +17,7 @@ from .management_services import (add_staff_user, create_practice, manageable_pr
                                   require_super_admin, update_membership, update_practice)
 from .models import Company, CompanyMembership
 from .services import active_membership_for, get_active_company
+from .tenancy import multi_practice_enabled, require_multi_practice
 
 
 @method_decorator(never_cache, name='dispatch')
@@ -142,14 +143,21 @@ class ManagementMembershipEditView(ManagementView):
             except (ValidationError, IntegrityError) as exc:
                 self.add_service_error(form, exc)
             else:
-                messages.success(request, 'Practice membership updated. The shared login and other practices are unchanged.')
+                messages.success(request, 'Practice membership updated. The shared login and other practices are unchanged.'
+                                 if multi_practice_enabled() else 'Staff access updated. The account and password are unchanged.')
                 if updated.user_id == request.user.pk and (not updated.is_active or updated.role != CompanyMembership.Role.SUPER_ADMIN):
                     return redirect('portal:desktop-dashboard')
                 return redirect('portal:management-users')
         return self.show(request, form, record)
 
 
-class ManagementPracticesView(ManagementView):
+class PracticeManagementView(ManagementView):
+    def dispatch(self, request, *args, **kwargs):
+        require_multi_practice()
+        return super().dispatch(request, *args, **kwargs)
+
+
+class ManagementPracticesView(PracticeManagementView):
     nav_section = 'practices'
 
     def get(self, request):
@@ -157,7 +165,7 @@ class ManagementPracticesView(ManagementView):
         return render(request, 'portal/management_practices.html', self.context(page_obj=page, practices=page.object_list))
 
 
-class ManagementPracticeCreateView(ManagementView):
+class ManagementPracticeCreateView(PracticeManagementView):
     nav_section = 'practices'
 
     def show(self, request, form, status=200):
@@ -189,7 +197,7 @@ class ManagementPracticeCreateView(ManagementView):
         return self.show(request, form)
 
 
-class ManagementPracticeEditView(ManagementView):
+class ManagementPracticeEditView(PracticeManagementView):
     nav_section = 'practices'
 
     def get_record(self, pk):

@@ -1,5 +1,6 @@
 """Standalone treatment pages remain scoped and require signed confirmation."""
 
+from django.test import override_settings
 from datetime import timedelta
 from unittest.mock import patch
 
@@ -16,6 +17,7 @@ from practices.services import ACTIVE_COMPANY_SESSION_KEY, ACTIVE_PATIENT_COMPAN
 from .treatment_forms import make_treatment_context
 
 
+@override_settings(MULTI_PRACTICE_ENABLED=True)
 class TreatmentPageTests(TestCase):
     @classmethod
     def setUpTestData(cls):

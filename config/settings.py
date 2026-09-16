@@ -39,12 +39,19 @@ CSRF_TRUSTED_ORIGINS = [
     if origin
 ]
 
+# Deployment boundary, independent of a user's memberships or stored session.
+# The multi-practice schema remains available for a future explicitly enabled deployment.
+MULTI_PRACTICE_ENABLED = os.getenv('MULTI_PRACTICE_ENABLED', 'false').lower() == 'true'
+SINGLE_PRACTICE_SLUG = os.getenv('SINGLE_PRACTICE_SLUG', 'meridian-health').strip()
+if not MULTI_PRACTICE_ENABLED and not SINGLE_PRACTICE_SLUG:
+    raise ImproperlyConfigured('SINGLE_PRACTICE_SLUG must identify the enabled practice.')
+
 
 # Application definition
 
 INSTALLED_APPS = [
     'daphne',
-    'django.contrib.admin',
+    'practices.admin_site.ScopedAdminConfig',
     'django.contrib.auth',
     'django.contrib.contenttypes',
     'django.contrib.sessions',

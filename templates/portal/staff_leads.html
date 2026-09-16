@@ -17,7 +17,7 @@
     <article><span>Converted</span><strong>{{ metrics.converted }}</strong></article>
   </section>
   <section class="staff-page-card" aria-labelledby="lead-filters-heading">
-    <header class="staff-page-card__header"><div><h2 id="lead-filters-heading">Find an enquiry</h2><p>Use the practice selector above to switch between practices you administer.</p></div></header>
+    <header class="staff-page-card__header"><div><h2 id="lead-filters-heading">Find an enquiry</h2><p>{% if multi_practice_enabled %}Use the practice selector above to switch between practices you administer.{% else %}Search enquiries or filter by stage and screening status.{% endif %}</p></div></header>
     <form class="staff-filter-form staff-filter-form--leads" method="get" action="{% url 'portal:staff-leads' %}">
       {{ filter_form.non_field_errors }}
       <div class="staff-filter-form__field">{{ filter_form.q.label_tag }}{{ filter_form.q }}{{ filter_form.q.errors }}</div>

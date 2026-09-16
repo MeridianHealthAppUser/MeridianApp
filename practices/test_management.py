@@ -1,5 +1,6 @@
 """Practice administration must never become a global identity/tenant bypass."""
 
+from django.test import override_settings
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
@@ -15,6 +16,7 @@ from .models import Company, CompanyMembership, Patient
 from .services import ACTIVE_COMPANY_SESSION_KEY
 
 
+@override_settings(MULTI_PRACTICE_ENABLED=True)
 class ManagementFixture(TestCase):
     @classmethod
     def setUpTestData(cls):

@@ -6,6 +6,7 @@ from django.urls import reverse
 from practices.models import Company, CompanyMembership, Patient
 
 
+@override_settings(MULTI_PRACTICE_ENABLED=True)
 class UserIdentityTests(TestCase):
     def test_email_is_the_authentication_identifier(self):
         user = get_user_model().objects.create_user('DOCTOR@EXAMPLE.COM', 'safe-password')
@@ -16,6 +17,7 @@ class UserIdentityTests(TestCase):
         self.assertEqual(authenticated_user, user)
 
 
+@override_settings(MULTI_PRACTICE_ENABLED=True)
 class LoginViewTests(TestCase):
     def setUp(self):
         self.user = get_user_model().objects.create_user(
@@ -65,6 +67,7 @@ class LoginViewTests(TestCase):
         )
 
 
+@override_settings(MULTI_PRACTICE_ENABLED=True)
 class DemoSeedCommandTests(TestCase):
     @override_settings(DEBUG=True)
     def test_demo_seed_is_idempotent_and_creates_the_expected_access(self):

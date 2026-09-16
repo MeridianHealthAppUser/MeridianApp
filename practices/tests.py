@@ -1,3 +1,4 @@
+from django.test import override_settings
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
@@ -6,6 +7,7 @@ from .models import Company, CompanyMembership, Patient
 from .services import ACTIVE_COMPANY_SESSION_KEY, get_active_company
 
 
+@override_settings(MULTI_PRACTICE_ENABLED=True)
 class CompanyScopingTests(TestCase):
     def setUp(self):
         self.user = get_user_model().objects.create_user('doctor@example.com', 'password')

@@ -1,5 +1,6 @@
 """Appointment negotiation keeps the booking unchanged until its recipient agrees."""
 
+from django.test import override_settings
 from datetime import timedelta
 from html.parser import HTMLParser
 from zoneinfo import ZoneInfo
@@ -35,6 +36,7 @@ class DecisionFormsParser(HTMLParser):
             self.in_form = False
 
 
+@override_settings(MULTI_PRACTICE_ENABLED=True)
 class AppointmentProposalPortalTests(TestCase):
     @classmethod
     def setUpTestData(cls):

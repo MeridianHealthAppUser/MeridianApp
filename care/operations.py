@@ -10,6 +10,7 @@ from django.db.models import Q, Sum
 from django.utils import timezone
 
 from practices.models import Company, CompanyMembership, Patient
+from practices.tenancy import require_enabled_company
 
 from .models import (
     MedicationBatch, MedicationProduct, PatientEvent, PatientSubscription,
@@ -23,6 +24,7 @@ UNDISPATCHED = (Shipment.Status.DRAFT, Shipment.Status.READY, Shipment.Status.HE
 
 
 def require_operations_actor(company, actor, *, catalogue=False):
+    require_enabled_company(company)
     roles = (CompanyMembership.Role.SUPER_ADMIN,) if catalogue else (
         CompanyMembership.Role.PRACTICE_ADMIN, CompanyMembership.Role.SUPER_ADMIN,
     )

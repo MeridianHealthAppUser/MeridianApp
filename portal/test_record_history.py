@@ -1,5 +1,6 @@
 """Stable history cursors and typed-text Excel exports retain clinical scoping."""
 
+from django.test import override_settings
 from datetime import timedelta
 from io import BytesIO
 import re
@@ -21,6 +22,7 @@ from .record_history import HISTORY_PAGE_SIZE
 from . import test_records
 
 
+@override_settings(MULTI_PRACTICE_ENABLED=True)
 class RecordHistoryTests(TestCase):
     # Reuse only the synthetic clinical-record fixtures and helpers, not its
     # already covered test methods.

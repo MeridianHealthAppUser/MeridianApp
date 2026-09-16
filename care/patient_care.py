@@ -10,6 +10,7 @@ from django.db.models.functions import Cast
 from django.utils import timezone
 
 from practices.models import Company, CompanyMembership, Patient
+from practices.tenancy import require_enabled_company
 from .availability import SAST, open_slots_for_day
 from .models import Appointment, AvailabilitySlot, PatientEvent
 from .scheduling import ensure_clinician_available
@@ -17,6 +18,7 @@ from .services import record_audit
 
 
 def _own_active_patient(company, patient, actor):
+    require_enabled_company(company)
     if not getattr(actor, 'is_active', False) or not company.is_active or not patient.is_active or patient.user_id != actor.pk or patient.company_id != company.pk:
         raise PermissionDenied('You need an active patient record in the selected practice.')
 

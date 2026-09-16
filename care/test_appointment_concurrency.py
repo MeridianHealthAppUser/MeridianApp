@@ -1,5 +1,6 @@
 """Real row-lock races; SQLite cannot verify PostgreSQL locking semantics."""
 
+from django.test import override_settings
 from datetime import timedelta
 from queue import Queue
 from threading import Barrier, BrokenBarrierError, Thread
@@ -19,6 +20,7 @@ from .models import Appointment, AuditEvent, PatientEvent
 
 
 @skipUnless(connection.vendor == 'postgresql', 'Requires real PostgreSQL row locks')
+@override_settings(MULTI_PRACTICE_ENABLED=True)
 class AppointmentConcurrencyTests(TransactionTestCase):
     """Only the shared person lock can serialize these different practices."""
 

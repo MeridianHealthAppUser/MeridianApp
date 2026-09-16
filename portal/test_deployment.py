@@ -8,6 +8,7 @@ from django.test import TestCase, override_settings
 from django.urls import reverse
 
 
+@override_settings(MULTI_PRACTICE_ENABLED=True)
 class HealthCheckTests(TestCase):
     def test_health_is_minimal_private_and_read_only(self):
         response = self.client.get(reverse('health'))

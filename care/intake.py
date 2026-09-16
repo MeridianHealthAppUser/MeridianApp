@@ -14,6 +14,7 @@ from django.db import IntegrityError, transaction
 from django.utils import timezone
 
 from practices.models import Company
+from practices.tenancy import company_is_enabled
 
 from .models import ConsentDocument, ConsentRecord, Lead, ScreeningQuestionnaire
 from .services import record_audit
@@ -83,7 +84,7 @@ def save_intake(*, form, submission_key, expected_notices, request=None):
     company = data['practice']
     with transaction.atomic():
         company = Company.objects.select_for_update().filter(pk=company.pk).first()
-        if company is None or not company.is_active:
+        if company is None or not company.is_active or not company_is_enabled(company):
             raise ValidationError('This practice is no longer accepting enquiries.')
         documents = practice_notices(company)
         if len(documents) != len(CONSENT_KINDS) or notice_fingerprint(documents) != expected_notices:

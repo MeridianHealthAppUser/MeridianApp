@@ -37,6 +37,7 @@ def sockets(test):
 @override_settings(VIDEO_ENABLED=True, VIDEO_REDIS_URL='', REDIS_URL='',
                    VIDEO_HEARTBEAT_SECONDS=15, VIDEO_JOIN_EARLY_MINUTES=5, VIDEO_JOIN_GRACE_MINUTES=0,
                    CHANNEL_LAYERS={'default': {'BACKEND': 'channels.layers.InMemoryChannelLayer'}})
+@override_settings(MULTI_PRACTICE_ENABLED=True)
 class VideoSocketTests(TransactionTestCase):
     def setUp(self):
         self.company = Company.objects.create(name='Video Alpha', slug='video-alpha')
@@ -84,6 +85,24 @@ class VideoSocketTests(TransactionTestCase):
         self.assertEqual(joined['type'], 'peer_joined')
         self.assertEqual(joined['room_epoch'], second['room_epoch'])
         return doctor, patient, second['room_epoch']
+
+    @sockets
+    async def test_single_practice_mode_rejects_previously_authorized_room(self):
+        with override_settings(MULTI_PRACTICE_ENABLED=False, SINGLE_PRACTICE_SLUG='video-beta'):
+            for actor in (self.doctor, self.patient_user):
+                _, accepted, code = await self.connect(actor)
+                self.assertEqual((accepted, code), (False, 4003))
+        self.assertEqual(await database_sync_to_async(CallSession.objects.count)(), 0)
+
+    @sockets
+    async def test_single_practice_boundary_is_rechecked_on_existing_connection(self):
+        doctor, patient, epoch = await self.pair()
+        with override_settings(MULTI_PRACTICE_ENABLED=False, SINGLE_PRACTICE_SLUG='video-beta'):
+            await patient.send_json_to({'type': 'offer', 'payload': {'type': 'offer', 'sdp': 'v=0\r\nblocked'},
+                                        'room_epoch': epoch})
+            self.assertEqual(await patient.receive_output(), {'type': 'websocket.close', 'code': 4003})
+            # The peer is also revoked; no signalling content is forwarded.
+            self.assertEqual(await doctor.receive_output(), {'type': 'websocket.close', 'code': 4003})
 
     @sockets
     async def test_anonymous_admin_and_wrong_practice_booking_are_rejected(self):

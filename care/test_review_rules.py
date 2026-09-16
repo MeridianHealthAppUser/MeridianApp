@@ -1,3 +1,4 @@
+from django.test import override_settings
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.test import TestCase
 
@@ -6,6 +7,7 @@ from .review_rules import save_review_rule, update_review_default
 from . import test_treatment as treatment_fixtures
 
 
+@override_settings(MULTI_PRACTICE_ENABLED=True)
 class ReviewRuleServiceTests(TestCase):
     setUpTestData = classmethod(treatment_fixtures.TreatmentLifecycleTests.setUpTestData.__func__)
     authorization = treatment_fixtures.TreatmentLifecycleTests.authorization

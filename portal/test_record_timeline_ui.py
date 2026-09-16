@@ -1,5 +1,6 @@
 """Presentation and optional real-browser checks for the bounded event trail."""
 
+from django.test import override_settings
 import json
 import os
 import shutil
@@ -19,6 +20,7 @@ from practices.models import Company, CompanyMembership, Patient
 from practices.services import ACTIVE_COMPANY_SESSION_KEY
 
 
+@override_settings(MULTI_PRACTICE_ENABLED=True)
 class RecordTimelinePresentationTests(TestCase):
     @classmethod
     def setUpTestData(cls):

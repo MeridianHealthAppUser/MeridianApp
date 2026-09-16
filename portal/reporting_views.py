@@ -18,6 +18,7 @@ from care.reporting import (ACTIVITIES, approve_activity_statement, create_activ
                             explicit_rates, operational_metrics, period_bounds, refresh_activity_statement, reporting_today)
 from care.services import record_audit
 from practices.models import Company
+from practices.tenancy import multi_practice_enabled
 from .operations_views import _csv_response
 from .views import StaffCompanyRequiredMixin
 from .workflow_context import make_workflow_context, validate_workflow_context
@@ -27,6 +28,12 @@ class ReportPeriodForm(forms.Form):
     start = forms.DateField(widget=forms.DateInput(attrs={'type': 'date'}))
     end = forms.DateField(widget=forms.DateInput(attrs={'type': 'date'}))
     scope = forms.ChoiceField(choices=(('current', 'Current practice'), ('all', 'All my permitted practices')))
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if not multi_practice_enabled():
+            self.fields['scope'].choices = (('current', 'Current practice'),)
+            self.fields['scope'].widget = forms.HiddenInput()
 
     def clean(self):
         data = super().clean()

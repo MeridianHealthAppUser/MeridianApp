@@ -10,6 +10,7 @@ from django.core.validators import MaxValueValidator, MinValueValidator
 
 from care.models import ConsentDocument, PatientDataRequest
 from practices.models import Company
+from practices.tenancy import multi_practice_enabled
 
 
 CONTEXT_SALT = 'portal.privacy-context.v1'
@@ -62,13 +63,23 @@ class DataRequestFilterForm(forms.Form):
 class AccessHistoryFilterForm(forms.Form):
     scope = forms.ChoiceField(label='Practice scope', choices=(('current', 'This practice'), ('all', 'All my active practices')))
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if not multi_practice_enabled():
+            self.fields['scope'].choices = (('current', 'This practice'),)
+            self.fields['scope'].widget = forms.HiddenInput()
+
 
 class PublicPracticeForm(forms.Form):
     practice = forms.ModelChoiceField(label='Practice', queryset=Company.objects.none(), empty_label=None)
 
     def __init__(self, *args, **kwargs):
+        from practices.tenancy import enabled_companies, multi_practice_enabled
+
         super().__init__(*args, **kwargs)
-        self.fields['practice'].queryset = Company.objects.filter(is_active=True)
+        self.fields['practice'].queryset = enabled_companies()
+        if not multi_practice_enabled():
+            self.fields['practice'].widget = forms.HiddenInput()
 
 
 class PolicyVersionForm(forms.Form):

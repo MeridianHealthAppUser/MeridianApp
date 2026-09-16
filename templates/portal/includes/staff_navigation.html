@@ -33,7 +33,7 @@
     <a{% if nav_section == 'review_rules' %} class="is-active" aria-current="page"{% endif %} href="{% url 'portal:treatment-review-rules' %}">Review rules</a>
   {% endif %}
   {% if active_membership.role == 'super_admin' %}
-    <a{% if nav_section == 'practices' %} class="is-active" aria-current="page"{% endif %} href="{% url 'portal:management-practices' %}">Practices</a>
+    {% if multi_practice_enabled %}<a{% if nav_section == 'practices' %} class="is-active" aria-current="page"{% endif %} href="{% url 'portal:management-practices' %}">Practices</a>{% endif %}
     <a{% if nav_section == 'users' %} class="is-active" aria-current="page"{% endif %} href="{% url 'portal:management-users' %}">Users and roles</a>
     <a{% if nav_section == 'policies' %} class="is-active" aria-current="page"{% endif %} href="{% url 'portal:policy-list' %}">Policy versions</a>
   {% endif %}

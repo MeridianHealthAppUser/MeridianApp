@@ -11,6 +11,7 @@ from django.db.models import Q
 from django.utils import timezone
 
 from practices.models import Company, CompanyMembership, Patient
+from practices.tenancy import require_enabled_company
 
 from .models import Appointment, ClinicalEncounter, ClinicalNote, ClinicalTask, LabRequest, LabResult, PatientEvent
 from .services import record_audit
@@ -26,6 +27,7 @@ def _active_actor(actor):
 
 
 def _lock_context(company, patient, actor):
+    require_enabled_company(company)
     # Clinical writes share the company-first lock order used by task/tag writes.
     company = Company.objects.select_for_update().filter(pk=company.pk, is_active=True).first()
     if company is None:
@@ -38,6 +40,7 @@ def _lock_context(company, patient, actor):
 
 
 def _require_doctor(company, actor, owner_id=None):
+    require_enabled_company(company)
     _active_actor(actor)
     if owner_id is not None and actor.pk != owner_id:
         raise PermissionDenied('Only the clinician responsible for this record can change it.')

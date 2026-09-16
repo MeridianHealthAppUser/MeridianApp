@@ -1,5 +1,6 @@
 """Own-account profile edits cannot change access or recorded patient identities."""
 
+from django.test import override_settings
 import json
 import os
 import subprocess
@@ -20,6 +21,7 @@ from practices.services import ACTIVE_COMPANY_SESSION_KEY, ACTIVE_PATIENT_COMPAN
 from .profile import PROFILE_CONTEXT_SALT, make_profile_context, save_own_profile
 
 
+@override_settings(MULTI_PRACTICE_ENABLED=True)
 class AccountProfileTests(TestCase):
     @classmethod
     def setUpTestData(cls):

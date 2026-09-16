@@ -7,12 +7,12 @@
   <header class="account-profile__heading">
     <p class="eyebrow">Your account</p>
     <h1 id="profile-heading">My profile</h1>
-    <p>One login across your practices. Manage your account name and security here.</p>
+    <p>{% if multi_practice_enabled %}One login across your practices. {% endif %}Manage your account name and security here.</p>
   </header>
   <div class="account-profile__grid">
     <section class="account-profile__card" aria-labelledby="profile-details-heading">
       <h2 id="profile-details-heading">Personal details</h2>
-      <p class="management-help">These are your shared account details. Changes here do not alter recorded patient names, contact details or clinical records.</p>
+      <p class="management-help">These are your{% if multi_practice_enabled %} shared{% endif %} account details. Changes here do not alter recorded patient names, contact details or clinical records.</p>
       <form method="post" class="management-form" novalidate>
         {% csrf_token %}<input type="hidden" name="profile_context" value="{{ profile_context }}">
         {% if form.non_field_errors %}<div class="management-errors" role="alert">{{ form.non_field_errors }} <a href="{% url 'accounts:profile' %}">Reload My profile</a></div>{% endif %}
@@ -23,10 +23,10 @@
     </section>
     <section class="account-profile__card" aria-labelledby="profile-security-heading">
       <h2 id="profile-security-heading">Security and account settings</h2>
-      <p class="management-help">Your password protects your shared login at every practice.</p>
+      <p class="management-help">Your password protects your{% if multi_practice_enabled %} shared login at every practice{% else %} account and personal information{% endif %}.</p>
       <a class="account-profile__link" href="{% url 'accounts:password-change' %}"><strong>Change password</strong><span>Confirm your current password to choose a new one.</span></a>
       {% if has_staff_access %}<a class="account-profile__link" href="{% url 'portal:account-access-history' %}"><strong>Account access history</strong><span>Review recorded activity for your own account.</span></a>{% endif %}
-      {% if has_patient_access %}<a class="account-profile__link" href="{% url 'portal:patient-account' %}"><strong>Patient contact details</strong><span>Manage contact details for your selected care practice.</span></a><a class="account-profile__link" href="{% url 'portal:patient-privacy' %}"><strong>Privacy and preferences</strong><span>Review recorded consent and communication preferences.</span></a>{% endif %}
+      {% if has_patient_access %}<a class="account-profile__link" href="{% url 'portal:patient-account' %}"><strong>Patient contact details</strong><span>Manage contact details for your{% if multi_practice_enabled %} selected{% endif %} care practice.</span></a><a class="account-profile__link" href="{% url 'portal:patient-privacy' %}"><strong>Privacy and preferences</strong><span>Review recorded consent and communication preferences.</span></a>{% endif %}
       <dl class="account-profile__facts"><div><dt>Account created</dt><dd>{{ profile_user.date_joined|date:"j M Y" }}</dd></div><div><dt>Last sign-in</dt><dd>{% if profile_user.last_login %}{{ profile_user.last_login|date:"j M Y, H:i" }} SAST{% else %}Not recorded{% endif %}</dd></div></dl>
       <form method="post" action="{% url 'accounts:logout' %}">{% csrf_token %}<button class="button button-secondary" type="submit">Sign out</button></form>
     </section>

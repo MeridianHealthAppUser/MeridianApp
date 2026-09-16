@@ -1,5 +1,6 @@
 """Standalone staff sections preserve practice boundaries and role-specific scope."""
 
+from django.test import override_settings
 from datetime import datetime, time, timedelta
 from html.parser import HTMLParser
 from urllib.parse import parse_qs, urlsplit
@@ -47,6 +48,7 @@ class StaffNavigationParser(HTMLParser):
             self.nav_depth -= 1
 
 
+@override_settings(MULTI_PRACTICE_ENABLED=True)
 class StaffPagesTests(TestCase):
     section_names = ('staff-tasks', 'patient-list', 'staff-schedule')
 
