@@ -37,8 +37,6 @@ HSTS preload is deliberately not enabled automatically. A deployment check may r
 
 Payments, outbound email, third-party Zoom integration and courier APIs are not configured. Native WebRTC video is included; production Redis and TURN must be provisioned separately. Configure any future integration separately; never infer payment success from a browser flag. The local review-reminder command can be scheduled only after choosing an authorised operational account and reviewing its scope.
 
-## Validation commands
-
 ## Meridian administration and first login
 
 The technical administration at `/admin/` uses pinned `django-jazzmin==3.0.5`
@@ -82,7 +80,7 @@ The 30/90/180-day window applies to weekly registrations and appointments;
 active patients/subscriptions and issued invoice totals describe current
 state. Empty periods display zero/empty states, never example metrics.
 
-### Validation commands
+## Validation commands
 
 ```sh
 python manage.py check

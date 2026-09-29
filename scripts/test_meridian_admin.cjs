@@ -21,11 +21,12 @@ const { chromium } = require(process.env.MERIDIAN_PLAYWRIGHT_PATH || 'playwright
       }
       if (url.hostname === 'meridian.test' && !url.pathname.startsWith('/static/')) {
         const entry = pages.find(item => item.path === url.pathname);
-        if (entry) return route.fulfill({ contentType: 'text/html', body: entry.html });
+        if (entry) return route.fulfill({ contentType: entry.contentType, body: entry.html });
       }
       return route.abort();
     });
     for (const entry of pages) {
+      if (!entry.contentType.startsWith('text/html')) continue;
       for (const width of [1440, 390, 320]) {
         await page.setViewportSize({ width, height: 1000 });
         // Empty and populated overview share a URL, so route this render directly.

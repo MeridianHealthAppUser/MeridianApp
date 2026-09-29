@@ -42,11 +42,13 @@ pages = []
 def capture(name, url):
     response = client.get(url)
     assert response.status_code == 200, (name, response.status_code)
-    pages.append({'name': name, 'path': url, 'html': response.content.decode()})
+    pages.append({'name': name, 'path': url, 'html': response.content.decode(),
+                  'contentType': response['Content-Type']})
 
 
 capture('login', reverse('admin:login'))
 client.force_login(user)
+capture('javascript-catalog', reverse('admin:jsi18n'))
 capture('empty', reverse('admin:index'))
 company = Company.objects.create(name='Meridian Health', slug='meridian-health')
 CompanyMembership.objects.create(company=company, user=user, role=CompanyMembership.Role.SUPER_ADMIN)
