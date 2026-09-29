@@ -89,8 +89,9 @@ def switch_own_practice_role(*, actor, role, request=None):
     The selected role applies across sessions so existing ORM and clinical
     service checks remain authoritative. Only a technical superuser can use
     this route; ordinary practice role management keeps its last-admin guard.
-    This superuser retains technical access and can always switch back while
-    their account, practice and membership remain active.
+    This superuser retains technical access and can switch back while their
+    account, practice and membership remain active. Leaving Doctor also
+    requires that no active clinical work depends on that membership.
     """
     if settings.MULTI_PRACTICE_ENABLED or not _technical_superuser(actor):
         raise PermissionDenied('Role switching is available only to an active technical administrator.')
