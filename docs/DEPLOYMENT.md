@@ -73,7 +73,11 @@ staff member, grant patient identity or bypass authorship, signed-record,
 appointment-participant and practice-boundary checks. Doctor actions are
 available while the account is in Doctor mode; switching away removes that
 account's active Doctor role (including its eligibility for new doctor
-assignments). Every change is audited. Ordinary staff cannot use this control.
+assignments). Leaving Doctor mode is blocked while existing clinical commitments
+still require that account to remain an active doctor; the workspace explains
+the conflict and leaves access unchanged. Technical administration remains
+available throughout. Every successful change is audited. Ordinary staff
+cannot use this control.
 
 Dashboard charts show actual scoped aggregates, respecting model permissions.
 The 30/90/180-day window applies to weekly registrations and appointments;

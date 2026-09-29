@@ -34,7 +34,7 @@ const { chromium } = require(process.env.MERIDIAN_PLAYWRIGHT_PATH || 'playwright
         await page.goto(`http://meridian.test${entry.path}`, { waitUntil: 'networkidle' });
         const overflow = await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1);
         assert.equal(overflow, false, `${entry.name} has horizontal overflow at ${width}`);
-        if (entry.name === 'overview') {
+        if (entry.name.startsWith('overview')) {
           assert.equal(await page.locator('#meridian-activity-chart svg').count(), 1);
           assert.ok(await page.locator('.md-chart-point').count() > 0);
           const toggle = page.locator('[data-chart-series="patients"]');

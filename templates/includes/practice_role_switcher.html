@@ -6,5 +6,6 @@
     {% for value, label in practice_role_choices %}<button type="submit" name="role" value="{{ value }}"{% if active_membership.role == value %} class="is-active" aria-current="true" disabled{% endif %}>{{ label }}</button>{% endfor %}
   </form>
   <p>Changes your own role across all open sessions.</p>
+  {% if active_membership.role == 'doctor' %}<p>Active clinical work may prevent leaving Doctor mode. Your administration access remains available.</p>{% endif %}
 </section>
 {% endif %}

@@ -9,7 +9,7 @@ from django.views import View
 from django.views.decorators.cache import never_cache
 from django.views.decorators.csrf import csrf_protect
 
-from practices.role_switching import switch_own_practice_role
+from practices.role_switching import ActiveClinicalWorkError, switch_own_practice_role
 
 
 @method_decorator(never_cache, name='dispatch')
@@ -26,6 +26,9 @@ class PracticeRoleView(View):
             membership = switch_own_practice_role(
                 actor=request.user, role=request.POST['role'], request=request,
             )
+        except ActiveClinicalWorkError as error:
+            messages.error(request, ' '.join(error.messages))
+            return redirect('portal:desktop-dashboard')
         except ValidationError:
             return HttpResponseBadRequest('Choose a supported practice role.')
         messages.success(
