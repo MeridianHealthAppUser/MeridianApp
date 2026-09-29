@@ -1,0 +1,17 @@
+{% extends "registration/base.html" %}
+{% load i18n static %}
+{% block extrahead %}{{ block.super }}<meta name="robots" content="noindex, nofollow"><script>document.documentElement.setAttribute('data-bs-theme', 'light');</script>{% endblock %}
+{% block content %}
+<div class="md-login-heading"><p class="md-eyebrow">MERIDIAN ADMINISTRATION</p><h1>Welcome back.</h1><p>Your practice, in focus.</p></div>
+<form action="{{ app_path }}" method="post" id="meridian-admin-login">
+    {% csrf_token %}
+    <input type="hidden" name="next" value="{{ next }}">
+    {% if user.is_authenticated %}<div class="alert alert-warning" role="alert">This account does not have administration access. Sign in with an authorised staff account.</div>{% endif %}
+    {% if form.errors %}<div class="alert alert-danger" role="alert">{% for error in form.non_field_errors %}<p>{{ error }}</p>{% endfor %}{% for field in form %}{% for error in field.errors %}<p>{{ field.label }}: {{ error }}</p>{% endfor %}{% endfor %}</div>{% endif %}
+    <div class="md-login-field"><label for="id_username">Email address</label><input id="id_username" type="email" name="username" value="{{ form.username.value|default_if_none:'' }}" class="form-control" placeholder="you@yourpractice.co.za" autocomplete="username" autocapitalize="none" required autofocus></div>
+    <div class="md-login-field"><label for="id_password">Password</label><input id="id_password" type="password" name="password" class="form-control" placeholder="Enter your password" autocomplete="current-password" required></div>
+    <button class="btn btn-primary md-login-submit" type="submit">Sign in to administration <i class="fas fa-arrow-right" aria-hidden="true"></i></button>
+    <p class="md-login-note"><i class="fas fa-lock" aria-hidden="true"></i> Authorised practice staff only</p>
+</form>
+<a class="md-login-return" href="{% url 'landing' %}"><i class="fas fa-arrow-left" aria-hidden="true"></i> Back to Meridian Health</a>
+{% endblock %}

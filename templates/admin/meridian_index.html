@@ -1,0 +1,102 @@
+{% extends "admin/base_site.html" %}
+{% load static i18n %}
+
+{% block bodyclass %}{{ block.super }} meridian-overview{% endblock %}
+{% block content_title %}Practice overview{% endblock %}
+{% block breadcrumbs %}<span class="meridian-date"><i class="far fa-calendar" aria-hidden="true"></i> {{ meridian_dashboard.today|date:"l, j F Y" }}</span>{% endblock %}
+
+{% block content %}
+<div class="col-12 meridian-dashboard">
+    {% include 'includes/practice_role_switcher.html' %}
+    <section class="md-welcome" aria-labelledby="overview-heading">
+        <div>
+            <p class="md-eyebrow"><span class="md-dot" aria-hidden="true"></span> {{ meridian_dashboard.scope_label }}</p>
+            <h1 id="overview-heading">A clearer picture.<br><span>Better care.</span></h1>
+            <p class="md-welcome__description">Your people, appointments and practice activity, together in one place.</p>
+        </div>
+        <div class="md-welcome__aside">
+            <span class="md-welcome__symbol" aria-hidden="true"><i class="fas fa-heartbeat"></i></span>
+            <p class="md-welcome__caption">THE PRACTICE AT A GLANCE</p>
+            <div class="md-period" aria-label="Reporting period">
+                {% for days in meridian_dashboard.period_options %}
+                <a href="?days={{ days }}"{% if days == meridian_dashboard.period %} class="is-active" aria-current="true"{% endif %}>{{ days }} days</a>
+                {% endfor %}
+            </div>
+        </div>
+    </section>
+
+    {% if not meridian_dashboard.has_practice %}
+    <div class="md-notice" role="status"><i class="fas fa-clinic-medical" aria-hidden="true"></i><div><strong>Let's get your practice ready.</strong><p>Your practice has not been activated yet. Complete the initial practice setup and assign your staff roles to start using the Meridian portal.</p></div></div>
+    {% endif %}
+
+    {% if meridian_dashboard.metrics %}
+    <section class="md-metrics" aria-label="Practice totals">
+        {% for metric in meridian_dashboard.metrics %}
+        <a class="md-metric md-tone-{{ metric.tone }}" href="{{ metric.url }}">
+            <div class="md-metric__top"><span>{{ metric.label }}</span><span class="md-icon"><i class="{{ metric.icon }}" aria-hidden="true"></i></span></div>
+            <strong class="md-metric__value">{{ metric.value }}</strong>
+            <div class="md-metric__bottom"><span>{{ metric.detail }}</span><i class="fas fa-arrow-right" aria-hidden="true"></i></div>
+        </a>
+        {% endfor %}
+    </section>
+    {% else %}
+    <div class="md-notice"><i class="fas fa-lock" aria-hidden="true"></i><div><strong>Your workspace is ready.</strong><p>Practice insights appear when your account has permission to view the corresponding records. Your available sections are below.</p></div></div>
+    {% endif %}
+
+    <div class="md-chart-grid">
+        {% if meridian_dashboard.activity.patients != None or meridian_dashboard.activity.appointments != None %}
+        <section class="md-panel md-activity" aria-labelledby="activity-heading">
+            <div class="md-panel__head"><div><p class="md-eyebrow">A LITTLE PERSPECTIVE</p><h2 id="activity-heading">Practice activity</h2><p>Weekly totals over the last {{ meridian_dashboard.period }} days, including today.</p></div><span class="md-panel__icon" aria-hidden="true"><i class="fas fa-chart-line"></i></span></div>
+            <div class="md-chart-legend" aria-label="Chart series">
+                {% if meridian_dashboard.activity.patients != None %}<button type="button" class="md-legend-toggle" data-chart-series="patients" aria-pressed="true"><span class="md-legend-dot md-legend-dot--teal"></span>New patients</button>{% endif %}
+                {% if meridian_dashboard.activity.appointments != None %}<button type="button" class="md-legend-toggle" data-chart-series="appointments" aria-pressed="true"><span class="md-legend-dot md-legend-dot--blue"></span>Appointments</button>{% endif %}
+            </div>
+            <div class="md-activity-chart" id="meridian-activity-chart" aria-label="Practice activity chart"></div>
+            {% if not meridian_dashboard.activity.has_data %}<div class="md-chart-empty"><strong>A fresh start.</strong><span>No activity recorded in this period. Your chart will grow with your practice.</span></div>{% endif %}
+            <details class="md-chart-table"><summary>View chart data</summary><div class="md-table-scroll"><table><caption>Weekly activity for the selected reporting period</caption><thead><tr><th scope="col">Week of</th>{% if meridian_dashboard.activity.patients != None %}<th scope="col">New patients</th>{% endif %}{% if meridian_dashboard.activity.appointments != None %}<th scope="col">Appointments</th>{% endif %}</tr></thead><tbody>{% for row in meridian_dashboard.activity.rows %}<tr><th scope="row">{{ row.label }}</th>{% if meridian_dashboard.activity.patients != None %}<td>{{ row.patients }}</td>{% endif %}{% if meridian_dashboard.activity.appointments != None %}<td>{{ row.appointments }}</td>{% endif %}</tr>{% endfor %}</tbody></table></div></details>
+            {{ meridian_dashboard.activity|json_script:"meridian-activity-data" }}
+        </section>
+        {% endif %}
+
+        {% if meridian_dashboard.appointment_total != None %}
+        <section class="md-panel md-appointments" aria-labelledby="appointments-heading">
+            <div class="md-panel__head"><div><p class="md-eyebrow">EVERY VISIT MATTERS</p><h2 id="appointments-heading">Appointment mix</h2><p>Scheduled within the last {{ meridian_dashboard.period }} days.</p></div></div>
+            <div class="md-donut-wrap"><div class="md-donut" id="meridian-appointment-chart" aria-hidden="true"><div class="md-donut__hole"><strong>{{ meridian_dashboard.appointment_total }}</strong><span>appointments</span></div></div></div>
+            <ul class="md-status-list" aria-label="Appointments by status">
+                {% for status in meridian_dashboard.appointment_statuses %}<li class="md-tone-{{ status.tone }}"><span class="md-status-list__label"><span class="md-status-dot" aria-hidden="true"></span>{{ status.label }}</span><strong>{{ status.count }}</strong><span>{{ status.percent }}%</span></li>{% endfor %}
+            </ul>
+            {% if not meridian_dashboard.appointment_total %}<p class="md-small-empty">No appointments in this period yet.</p>{% endif %}
+            {{ meridian_dashboard.appointment_statuses|json_script:"meridian-appointment-data" }}
+        </section>
+        {% endif %}
+    </div>
+
+    <div class="md-lower-grid">
+        {% if meridian_dashboard.workload %}
+        <section class="md-panel" aria-labelledby="workload-heading">
+            <div class="md-panel__head"><div><p class="md-eyebrow">KEEP THINGS MOVING</p><h2 id="workload-heading">On your radar</h2><p>Current work across your practice.</p></div><span class="md-panel__icon" aria-hidden="true"><i class="fas fa-clipboard-list"></i></span></div>
+            <div class="md-workload">
+                {% for item in meridian_dashboard.workload %}<a class="md-workload__item md-tone-{{ item.tone }}" href="{{ item.url }}"><span class="md-icon"><i class="{{ item.icon }}" aria-hidden="true"></i></span><span class="md-workload__text"><strong>{{ item.label }}</strong><span>{{ item.detail }}</span></span><strong class="md-workload__count">{{ item.count }}</strong><i class="fas fa-chevron-right" aria-hidden="true"></i></a>{% endfor %}
+            </div>
+        </section>
+        {% endif %}
+        {% if meridian_dashboard.quick_links %}
+        <section class="md-panel md-shortcuts" aria-labelledby="shortcuts-heading">
+            <div class="md-panel__head"><div><p class="md-eyebrow">YOUR DAILY ESSENTIALS</p><h2 id="shortcuts-heading">Quick access</h2><p>Less searching. More doing.</p></div></div>
+            <div class="md-shortcut-grid">{% for link in meridian_dashboard.quick_links %}<a href="{{ link.url }}"><i class="{{ link.icon }}" aria-hidden="true"></i><strong>{{ link.label }}</strong><span>{{ link.description }}</span><i class="fas fa-arrow-up-right-from-square fas fa-external-link-alt md-shortcut-arrow" aria-hidden="true"></i></a>{% endfor %}</div>
+        </section>
+        {% endif %}
+    </div>
+
+    {% if app_list %}
+    <section class="md-directory" aria-labelledby="directory-heading">
+        <div class="md-directory__heading"><div><p class="md-eyebrow">EVERYTHING IN ITS PLACE</p><h2 id="directory-heading">Administration directory</h2></div><label class="md-directory-search"><i class="fas fa-search" aria-hidden="true"></i><span class="visually-hidden">Find an administration section</span><input type="search" id="meridian-directory-search" placeholder="Find a section…" autocomplete="off"></label></div>
+        <div class="md-directory-grid" id="meridian-directory">
+            {% for app in app_list %}<details class="md-directory-group"><summary>{{ app.name }}<span>{{ app.models|length }} sections <i class="fas fa-chevron-down" aria-hidden="true"></i></span></summary><ul>{% for model in app.models %}<li data-section-name="{{ model.name|lower }}">{% if model.admin_url %}<a href="{{ model.admin_url }}">{{ model.name }}<i class="fas fa-arrow-right" aria-hidden="true"></i></a>{% elif model.add_url %}<a href="{{ model.add_url }}">Add {{ model.name }}<i class="fas fa-plus" aria-hidden="true"></i></a>{% else %}<span>{{ model.name }}</span>{% endif %}</li>{% endfor %}</ul></details>{% endfor %}
+        </div>
+        <p class="md-small-empty" id="meridian-directory-empty" hidden>No sections match your search.</p>
+    </section>
+    {% endif %}
+    <p class="md-dashboard-note"><i class="fas fa-shield-alt" aria-hidden="true"></i> Insights respect your practice access and account permissions. Updated when you open this page.</p>
+</div>
+{% endblock %}

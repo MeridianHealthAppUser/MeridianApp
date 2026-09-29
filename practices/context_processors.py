@@ -7,6 +7,8 @@ from .services import (
     get_active_patient_company,
 )
 from .tenancy import multi_practice_enabled
+from .models import CompanyMembership
+from .role_switching import can_switch_practice_role
 
 
 def active_company(request):
@@ -14,11 +16,14 @@ def active_company(request):
     if not request.user.is_authenticated:
         return context
     company = get_active_company(request)
+    membership = active_membership_for(request, company)
     patient_company = get_active_patient_company(request)
     return {
         **context,
         'active_company': company,
-        'active_membership': active_membership_for(request, company),
+        'active_membership': membership,
+        'can_switch_practice_role': can_switch_practice_role(request.user, membership, company),
+        'practice_role_choices': CompanyMembership.Role.choices,
         'available_companies': available_companies_for(request.user),
         'active_patient_company': patient_company,
         'active_patient': active_patient_for(request, patient_company),

@@ -11,6 +11,7 @@
     {% block extra_css %}{% endblock %}
     {% if is_workspace_page %}<link rel="stylesheet" href="{% static 'css/workspace_polish.css' %}"><script src="{% static 'js/workspace_polish.js' %}" defer></script>{% endif %}
     {% if user.is_authenticated %}<link rel="stylesheet" href="{% static 'css/account_menu.css' %}"><script src="{% static 'js/account_menu.js' %}" defer></script>{% endif %}
+    {% if can_switch_practice_role %}<link rel="stylesheet" href="{% static 'css/practice_role_switcher.css' %}">{% endif %}
     {% if video_notifications_enabled %}<link rel="stylesheet" href="{% static 'css/call_notifications.css' %}"><script src="{% static 'js/call_notifications.js' %}" defer></script>{% endif %}
     <link rel="stylesheet" href="{% static 'css/branding.css' %}?v=20260913-logo">
   </head>

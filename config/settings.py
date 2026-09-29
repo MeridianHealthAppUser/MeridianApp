@@ -51,6 +51,7 @@ if not MULTI_PRACTICE_ENABLED and not SINGLE_PRACTICE_SLUG:
 
 INSTALLED_APPS = [
     'daphne',
+    'jazzmin',
     'practices.admin_site.ScopedAdminConfig',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -190,3 +191,6 @@ if not DEBUG:
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+# Branding is kept separate from runtime secrets and deployment configuration.
+from .admin_theme import JAZZMIN_SETTINGS, JAZZMIN_UI_TWEAKS

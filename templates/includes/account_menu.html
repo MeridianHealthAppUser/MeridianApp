@@ -19,6 +19,8 @@
         <a href="{% url 'portal:account-access-history' %}">My access history</a>
       {% endif %}
     </nav>
+    {% if user.is_superuser and user.is_staff %}<div class="account-menu__links account-menu__section"><a href="{% url 'admin:index' %}">Practice administration</a></div>{% endif %}
+    {% include 'includes/practice_role_switcher.html' %}
     {% if identity.is_patient and active_company %}<div class="account-menu__links account-menu__section"><a href="{% url 'portal:desktop-dashboard' %}">Switch to workspace</a></div>{% elif not identity.is_patient and active_patient %}<div class="account-menu__links account-menu__section"><a href="{% url 'portal:patient-dashboard' %}">Switch to my care</a></div>{% endif %}
     <form class="account-menu__signout account-menu__section" method="post" action="{% url 'accounts:logout' %}">{% csrf_token %}<button type="submit">Sign out</button></form>
   </div>

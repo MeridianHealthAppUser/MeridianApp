@@ -1,0 +1,9 @@
+{% extends "admin/base.html" %}
+{% load static %}
+{% block extrastyle %}{{ block.super }}{% if can_switch_practice_role %}<link rel="stylesheet" href="{% static 'css/practice_role_switcher.css' %}">{% endif %}{% endblock %}
+{% block extrahead %}{{ block.super }}<script>document.documentElement.setAttribute('data-bs-theme', 'light');</script>{% endblock %}
+{% block footer %}
+{% if not is_popup %}
+<footer class="app-footer meridian-footer"><span><strong>Meridian Health</strong> <span class="meridian-footer__divider">/</span> Practice administration</span><span class="meridian-footer__note">Care starts with clarity.</span></footer>
+{% endif %}
+{% endblock %}

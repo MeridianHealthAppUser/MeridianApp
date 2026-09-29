@@ -39,6 +39,51 @@ Payments, outbound email, third-party Zoom integration and courier APIs are not 
 
 ## Validation commands
 
+## Meridian administration and first login
+
+The technical administration at `/admin/` uses pinned `django-jazzmin==3.0.5`
+with Meridian's clinical theme, locally served assets and a custom practice
+overview. The image's existing `collectstatic` step includes the theme, fonts,
+icons and charts; no Node build, chart CDN or new infrastructure is needed.
+No database schema migrations are introduced by the theme or role switcher.
+
+After deploying this version, open the DigitalOcean **web service Console**.
+Create a technical administrator if you do not already have one:
+
+```sh
+python manage.py createsuperuser
+```
+
+Link that existing active superuser to Meridian (replace the example email):
+
+```sh
+python manage.py bootstrap_practice_admin --email 'your-email@example.com'
+```
+
+This explicit, audited command creates the configured practice if missing and
+adds its Super Admin membership. It never seeds demo records, changes passwords
+or reactivates disabled access. Repeating it preserves an existing active role.
+Without a practice membership, Django admin login works but the staff portal
+cannot open; an already-authenticated superuser clicking Sign in may see 403.
+
+Technical superusers with active Meridian membership can use **Work as** on the
+admin overview or in the portal account menu to select **Super admin**,
+**Doctor**, or **Practice administrator**. This changes only their own real
+membership role, across all browser sessions. They retain their original
+identity and Django administration access. It does not impersonate a different
+staff member, grant patient identity or bypass authorship, signed-record,
+appointment-participant and practice-boundary checks. Doctor actions are
+available while the account is in Doctor mode; switching away removes that
+account's active Doctor role (including its eligibility for new doctor
+assignments). Every change is audited. Ordinary staff cannot use this control.
+
+Dashboard charts show actual scoped aggregates, respecting model permissions.
+The 30/90/180-day window applies to weekly registrations and appointments;
+active patients/subscriptions and issued invoice totals describe current
+state. Empty periods display zero/empty states, never example metrics.
+
+### Validation commands
+
 ```sh
 python manage.py check
 python manage.py makemigrations --check --dry-run

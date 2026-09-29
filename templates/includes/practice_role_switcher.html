@@ -1,0 +1,10 @@
+{% if can_switch_practice_role %}
+<section class="practice-role-switcher" aria-label="Superuser practice roles">
+  <div class="practice-role-switcher__heading"><strong>Work as</strong><span>Your Meridian role</span></div>
+  <form method="post" action="{% url 'accounts:practice-role' %}">
+    {% csrf_token %}
+    {% for value, label in practice_role_choices %}<button type="submit" name="role" value="{{ value }}"{% if active_membership.role == value %} class="is-active" aria-current="true" disabled{% endif %}>{{ label }}</button>{% endfor %}
+  </form>
+  <p>Changes your own role across all open sessions.</p>
+</section>
+{% endif %}
