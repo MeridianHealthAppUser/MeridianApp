@@ -15,6 +15,7 @@ from .models import User
 @admin.register(User)
 class MeridianUserAdmin(UserAdmin):
     add_form = PracticeUserCreationForm
+    add_form_template = 'admin/accounts/user/add_form.html'
 
     def get_fieldsets(self, request, obj=None):
         if obj is not None:

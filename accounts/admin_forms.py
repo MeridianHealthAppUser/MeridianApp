@@ -35,6 +35,8 @@ class PracticeUserCreationForm(UserCreationForm):
         self.practice = None
         self.fields['first_name'].required = True
         self.fields['last_name'].required = True
+        for name in ('password1', 'password2'):
+            self.fields[name].widget.attrs['class'] = 'form-control'
         self.fields['role'].choices = [
             (value, label) for value, label in self.fields['role'].choices
             if not value or actor.has_perm(ROLE_PERMISSIONS[value])
