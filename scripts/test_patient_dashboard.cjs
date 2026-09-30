@@ -17,7 +17,8 @@ const { chromium } = require(process.env.MERIDIAN_PLAYWRIGHT_PATH || 'playwright
         await page.setContent(entry.html, { waitUntil: 'domcontentloaded' });
         for (const sheet of await page.locator('link[rel="stylesheet"]').evaluateAll(nodes => nodes.map(n => n.getAttribute('href')))) {
           if (sheet.startsWith('/static/css/')) {
-            await page.addStyleTag({ content: fs.readFileSync(path.join(process.cwd(), 'static/css', path.basename(sheet)), 'utf8') });
+            const filename = path.basename(new URL(sheet, 'http://meridian.test').pathname);
+            await page.addStyleTag({ content: fs.readFileSync(path.join(process.cwd(), 'static/css', filename), 'utf8') });
           }
         }
         await page.waitForTimeout(250);

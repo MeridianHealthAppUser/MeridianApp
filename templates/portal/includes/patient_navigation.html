@@ -1,5 +1,6 @@
 {% load static %}
 <nav class="patient-navigation" aria-label="Patient navigation">
+  <p class="patient-navigation__heading">Your care</p>
   <div class="patient-navigation__links" data-scroll-navigation>
     <a href="{% url 'portal:patient-dashboard' %}"{% if patient_section == 'overview' %} class="is-active" aria-current="page"{% endif %}>
       <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="m3 10 9-7 9 7v10H3Z"/><path d="M9 20v-7h6v7"/></svg><span>Overview</span>

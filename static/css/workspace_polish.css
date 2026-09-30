@@ -82,14 +82,14 @@
   .workspace-page .meridian-console .staff-mobile-nav { background:rgba(255,255,255,.97); border-top:1px solid #dbe7e2; box-shadow:0 -3px 14px rgba(21,59,57,.035); padding-block:.45rem; }
   .workspace-page .meridian-console .staff-mobile-nav a { border-radius:.55rem; min-height:2.75rem; }
   .workspace-page .meridian-console .console-button { min-height:2.75rem; }
+  .workspace-page .meridian-console .patient-navigation a { font-size:.71rem; min-height:3.4rem; padding:.35rem .3rem; }
+  .workspace-page .meridian-console .patient-page-content { padding-bottom:calc(7rem + env(safe-area-inset-bottom)); }
 }
 @media (max-width:42rem) {
   .workspace-page .site-header { gap:.55rem; padding:.75rem 1rem; }
   .workspace-page .site-header .header-actions { flex-wrap:nowrap; gap:.5rem; }
   .workspace-page .site-header select { max-width:8.6rem; min-height:2.15rem; padding:.35rem .4rem; }
   .workspace-page .site-header .header-signout { font-size:.76rem; }
-  .workspace-page .meridian-console .patient-navigation a { font-size:.71rem; min-height:3.4rem; padding:.35rem .3rem; }
-  .workspace-page .meridian-console .patient-page-content { padding-bottom:calc(7rem + env(safe-area-inset-bottom)); }
   .workspace-page .meridian-console .record-directory-filters { grid-template-columns:minmax(0,1fr); }
   .workspace-page .meridian-console .record-directory-filters > button { width:100%; }
   .workspace-page .meridian-console .patient-page-actions { width:100%; }
