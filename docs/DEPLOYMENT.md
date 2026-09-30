@@ -64,6 +64,20 @@ or reactivates disabled access. Repeating it preserves an existing active role.
 Without a practice membership, Django admin login works but the staff portal
 cannot open; an already-authenticated superuser clicking Sign in may see 403.
 
+For subsequent accounts, use **Users → Add user** in `/admin/`. Enter the person's
+name, email and password, then choose **Doctor**, **Practice administrator**,
+**Super admin**, or **Patient**. Saving creates the login and its active Meridian
+membership or linked patient record together. Staff enter the practice workspace;
+patients enter their care portal. The configured practice must already be active.
+In multi-practice mode, also choose the practice. Creating access requires the
+corresponding membership or patient add permission, in addition to user permissions.
+
+The separate **Django administration (advanced)** options are only shown to
+technical superusers. Choosing the practice **Super admin** role does not enable
+those technical privileges. Existing accounts still use their membership or
+patient record to manage practice access; adding a user does not repair older,
+unlinked accounts.
+
 Technical superusers with active Meridian membership can use **Work as** on the
 admin overview or in the portal account menu to select **Super admin**,
 **Doctor**, or **Practice administrator**. This changes only their own real

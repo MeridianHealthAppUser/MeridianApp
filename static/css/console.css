@@ -120,6 +120,37 @@
   text-transform: uppercase;
 }
 
+.console-nav__group { flex: 0 0 auto; min-width: 0; }
+.console-nav__links { display: grid; gap: .12rem; }
+.console-nav__toggle {
+  align-items: center;
+  border-radius: .55rem;
+  color: #527074;
+  cursor: pointer;
+  display: flex;
+  gap: .5rem;
+  justify-content: space-between;
+  list-style: none;
+  margin: .4rem 0 .1rem;
+  min-height: 2.25rem;
+  padding: .35rem .65rem;
+}
+.console-nav__toggle::-webkit-details-marker { display: none; }
+.console-nav__toggle::after {
+  border-bottom: 1.5px solid currentColor;
+  border-right: 1.5px solid currentColor;
+  content: '';
+  flex: 0 0 auto;
+  height: .35rem;
+  margin-right: .2rem;
+  transform: rotate(-45deg);
+  width: .35rem;
+}
+.console-nav__group[open] > .console-nav__toggle::after { transform: rotate(45deg); }
+.console-nav__toggle:hover { background: #f1f8f4; color: var(--console-teal-dark); }
+.console-nav .console-nav__toggle .console-nav__label { color: inherit; margin: 0; padding: 0; }
+.console-nav__toggle:focus-visible { outline: 2px solid var(--console-teal); outline-offset: -2px; }
+
 .console-nav a {
   align-items: center;
   border-radius: .65rem;
