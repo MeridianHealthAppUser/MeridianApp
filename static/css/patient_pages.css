@@ -84,7 +84,7 @@
   .patient-navigation__links { display: flex; flex: 1 1 auto; flex-direction: column; flex-wrap: nowrap; margin: 0; max-width: none; min-height: 0; overflow-y: auto; overscroll-behavior-y: contain; padding: .15rem .2rem .3rem; scrollbar-color: #bfd5cc transparent; scrollbar-width: thin; }
   .patient-navigation a { justify-content: flex-start; text-align: left; }
   .patient-navigation a span { min-width: 0; overflow-wrap: anywhere; }
-  .patient-navigation a:focus-visible { outline-offset: -2px; }
+  .workspace-page .meridian-console .patient-navigation a:focus-visible { outline-offset: -2px; }
 }
 
 @media (max-width: 52rem) {

@@ -57,7 +57,8 @@
 .patient-new-message .console-form > .console-button { justify-self: start; }
 .patient-inbox-notice { color: var(--console-muted); font-size: .77rem; line-height: 1.6; margin: 1rem 0 0; }
 
-@media (max-width: 52rem) {
+/* Leave room for the patient sidebar before splitting the inbox into columns. */
+@media (max-width: 68rem) {
   .patient-inbox { grid-template-columns: minmax(0, 1fr); }
   .patient-inbox-threads { border-bottom: 1px solid var(--console-line); border-right: 0; }
   .patient-inbox-thread-list { max-height: 23rem; overflow-y: auto; }
