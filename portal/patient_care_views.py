@@ -12,6 +12,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
+from django.utils.formats import date_format
 from django.views import View
 
 from care.availability import SAST, open_slots_for_day
@@ -19,11 +20,11 @@ from care.models import Appointment, PatientEvent, PatientMedicalProfile
 from care.patient_care import book_patient_appointment, patient_busy_intervals, save_patient_medical_profile
 from .clinical_forms import make_clinical_context, validate_clinical_context
 from .patient_care_forms import (
-    BOOKING_SLOT_MAX_AGE, BookingConfirmationForm, BookingFilterForm,
+    BOOKING_SLOT_MAX_AGE, BOOKING_TYPES, BookingConfirmationForm, BookingFilterForm,
     PatientMedicalProfileForm, PatientUpdatesFilterForm, make_booking_slot, read_booking_slot,
 )
 from .patient_context import validate_patient_context
-from .patient_views import patient_page_context
+from .patient_views import patient_appointments_context, patient_page_context
 from .views import PatientPortalRequiredMixin
 
 
@@ -39,41 +40,77 @@ def add_error(form, error):
         form.add_error(None, message)
 
 
+BOOKING_DAY_CHIPS = 7
+
+
+def _booking_chips(filters, data):
+    """Links that change one booking choice at a time and keep the others."""
+    today = timezone.localdate()
+    chosen = {key: str(data.get(key) or '') for key in ('date', 'clinician', 'appointment_type', 'status')}
+
+    def link(**changes):
+        params = {key: value for key, value in {**chosen, **changes}.items() if value}
+        return f"{reverse('portal:patient-appointments')}?{urlencode(params)}#book"
+
+    days = []
+    for offset in range(BOOKING_DAY_CHIPS):
+        day = today + timedelta(days=offset)
+        label = 'Today' if offset == 0 else 'Tomorrow' if offset == 1 else date_format(day, 'D j M')
+        days.append({'label': label, 'url': link(date=day.isoformat()), 'active': chosen['date'] == day.isoformat()})
+    doctors = [{'label': 'Any doctor', 'url': link(clinician=''), 'active': not chosen['clinician']}]
+    doctors += [{'label': doctor.full_name, 'url': link(clinician=str(doctor.pk)), 'active': chosen['clinician'] == str(doctor.pk)}
+                for doctor in filters.fields['clinician'].queryset]
+    types = [{'label': label.split(' · ')[0], 'url': link(appointment_type=value), 'active': chosen['appointment_type'] == value}
+             for value, label in BOOKING_TYPES]
+    return {'days': days, 'doctors': doctors, 'types': types}
+
+
+def booking_context(request, company, patient, booking_form=None):
+    """The booking card on My Appointments: choices, open 15-minute times and the confirmation form."""
+    data = (request.POST if request.method == 'POST' else request.GET).copy()
+    data.setdefault('date', timezone.localdate().isoformat())
+    data.setdefault('appointment_type', Appointment.Type.REVIEW)
+    filters = BookingFilterForm(data, company=company, auto_id='booking_filter_%s')
+    slots = []
+    selected = None
+    if request.method == 'POST':
+        try:
+            selected = read_booking_slot(request.POST.get('slot', ''), request, company, patient)
+        except ValidationError:
+            pass
+    if filters.is_valid():
+        clinician = filters.cleaned_data['clinician']
+        doctors = [clinician] if clinician else filters.fields['clinician'].queryset
+        day = filters.cleaned_data['date']
+        busy = list(patient_busy_intervals(patient, day))
+        for slot in open_slots_for_day(company=company, clinicians=doctors, day=day, duration_minutes=15, limit=100):
+            if any(slot.starts_at < finish and slot.starts_at + timedelta(minutes=15) > begin for begin, finish in busy):
+                continue
+            slots.append({
+                'token': make_booking_slot(request, company, patient, slot, filters.cleaned_data['appointment_type']),
+                'starts_at': slot.starts_at, 'clinician': slot.clinician,
+                'selected': bool(selected and selected.get('clinician_id') == slot.clinician_id
+                                 and parse_datetime(selected.get('starts_at', '')) == slot.starts_at
+                                 and selected.get('appointment_type') == filters.cleaned_data['appointment_type']),
+            })
+    return {
+        'booking_filter_form': filters, 'booking_form': booking_form or BookingConfirmationForm(),
+        'slots': slots, 'slot_expiry_minutes': BOOKING_SLOT_MAX_AGE // 60,
+        'booking_chips': _booking_chips(filters, data),
+    }
+
+
 class PatientBookingView(PatientCarePage):
+    """Booking now happens on My Appointments; this address keeps old links and the booking POST working."""
+
     def display(self, request, booking_form=None):
-        data = (request.POST if request.method == 'POST' else request.GET).copy()
-        data.setdefault('date', timezone.localdate().isoformat())
-        data.setdefault('appointment_type', Appointment.Type.REVIEW)
-        filters = BookingFilterForm(data, company=self.patient_company, auto_id='booking_filter_%s')
-        slots = []
-        selected = None
-        if request.method == 'POST':
-            try:
-                selected = read_booking_slot(request.POST.get('slot', ''), request, self.patient_company, self.patient)
-            except ValidationError:
-                pass
-        if filters.is_valid():
-            clinician = filters.cleaned_data['clinician']
-            doctors = [clinician] if clinician else filters.fields['clinician'].queryset
-            day = filters.cleaned_data['date']
-            busy = list(patient_busy_intervals(self.patient, day))
-            for slot in open_slots_for_day(company=self.patient_company, clinicians=doctors, day=day, duration_minutes=15, limit=100):
-                if any(slot.starts_at < finish and slot.starts_at + timedelta(minutes=15) > begin for begin, finish in busy):
-                    continue
-                slots.append({
-                    'token': make_booking_slot(request, self.patient_company, self.patient, slot, filters.cleaned_data['appointment_type']),
-                    'starts_at': slot.starts_at, 'clinician': slot.clinician,
-                    'selected': bool(selected and selected.get('clinician_id') == slot.clinician_id
-                                     and parse_datetime(selected.get('starts_at', '')) == slot.starts_at
-                                     and selected.get('appointment_type') == filters.cleaned_data['appointment_type']),
-                })
-        context = self.context('appointments', 'Book an appointment',
-                               filter_form=filters, booking_form=booking_form or BookingConfirmationForm(),
-                               slots=slots, slot_expiry_minutes=BOOKING_SLOT_MAX_AGE // 60)
-        return render(request, 'portal/patient_care_booking.html', context)
+        context = patient_appointments_context(request, self.patient_company, self.patient)
+        context.update(booking_context(request, self.patient_company, self.patient, booking_form))
+        return render(request, 'portal/patient_appointments.html', context)
 
     def get(self, request):
-        return self.display(request)
+        query = request.GET.urlencode()
+        return redirect(f"{reverse('portal:patient-appointments')}{'?' + query if query else ''}#book")
 
     def post(self, request):
         form = BookingConfirmationForm(request.POST)
@@ -164,7 +201,14 @@ class PatientUpdatesView(PatientCarePage):
         else:
             events = events.none()
         page = Paginator(events, 20).get_page(request.GET.get('page'))
-        context = self.context('updates', 'Your care updates', filter_form=form, events=page.object_list,
+        # Category chips keep the chosen dates and order.
+        chosen = {key: request.GET[key] for key in ('date_from', 'date_to', 'sort') if request.GET.get(key)}
+        chips = []
+        for value, label in (('', 'All'), *PatientEvent.Category.choices):
+            chip_query = urlencode({**chosen, 'category': value} if value else chosen)
+            chips.append({'label': label, 'active': (form.data.get('category') or '') == value,
+                          'url': reverse('portal:patient-updates') + (f'?{chip_query}' if chip_query else '')})
+        context = self.context('updates', 'Updates', filter_form=form, events=page.object_list, category_chips=chips,
                                page_obj=page, is_paginated=page.has_other_pages(), pagination_query=urlencode(query))
         return render(request, 'portal/patient_care_updates.html', context)
 

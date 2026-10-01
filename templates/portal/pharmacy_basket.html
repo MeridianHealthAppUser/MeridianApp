@@ -1,4 +1,60 @@
 {% extends 'portal/pharmacy_base.html' %}
+{% load static %}
 {% block title %}Your basket | Meridian{% endblock %}
-{% block patient_heading %}<header class="patient-page-heading"><div><p class="console-kicker">Your care · Pharmacy basket</p><h1>Your basket</h1><p>{{ patient_company.name }} · Check your items before requesting supply.</p></div><a class="console-button console-button--secondary" href="{% url 'portal:patient-pharmacy' %}">Back to pharmacy</a></header>{% endblock %}
-{% block pharmacy_content %}<div class="ops-notice">This is a local supply request, not a payment screen. No payment is collected, no stock is reserved by the basket, and no medication is dispatched automatically.</div>{% if order and items %}<div class="ops-grid"><section class="staff-page-card"><header class="staff-page-card__header"><h2>Basket items</h2></header>{% include 'portal/operations_order_items.html' %}<div class="ops-panel"><a href="{% url 'portal:patient-pharmacy' %}">Change quantities in the catalogue</a><p>Set a quantity to 0 to remove that product from your basket.</p></div></section><section class="staff-page-card ops-panel"><h2>Delivery details</h2><form method="post" action="{% url 'portal:patient-order-detail' order.pk %}" class="ops-form">{% csrf_token %}<input type="hidden" name="workflow_context" value="{{ workflow_context }}"><input type="hidden" name="action" value="submit">{% include 'portal/operations_fields.html' %}<button class="console-button console-button--primary" type="submit">Submit supply request</button></form></section></div>{% else %}{{ form.non_field_errors }}<section class="staff-page-card ops-empty"><h2>Your basket is empty</h2><p>Choose available products in the catalogue to start a supply request.</p><a class="console-button console-button--primary" href="{% url 'portal:patient-pharmacy' %}">Browse pharmacy</a></section>{% endif %}{% endblock %}
+{% block patient_extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/patient_medications.css' %}?v=20261001">{% endblock %}
+{% block patient_heading %}<header class="patient-page-heading"><div><p class="console-kicker"><a class="patient-inline-link" href="{% url 'portal:patient-pharmacy' %}">My Medications</a> · Basket</p><h1>Your basket</h1></div></header>{% endblock %}
+
+{% block pharmacy_content %}
+  {% if order and items %}
+    <div class="patient-basket">
+      <section class="console-card" aria-labelledby="basket-items-heading">
+        <div class="console-card__body">
+          <h2 class="patient-eyebrow" id="basket-items-heading">Items</h2>
+          <div class="patient-basket__lines">
+            {% for item in items %}
+              <div class="patient-basket-line">
+                <div><strong>{{ item.product_name }}</strong>{% if item.strength %}<small>{{ item.strength }}</small>{% endif %}</div>
+                <span class="patient-basket-line__qty">{{ item.quantity }} × R{{ item.unit_price }}</span>
+                {% if item.remove_context %}
+                  <form method="post" action="{% url 'portal:patient-basket-item' item.product_id %}">
+                    {% csrf_token %}
+                    <input type="hidden" name="workflow_context" value="{{ item.remove_context }}">
+                    <input type="hidden" name="quantity" value="0">
+                    <button class="console-button console-button--secondary" type="submit">Remove<span class="sr-only"> {{ item.product_name }} from basket</span></button>
+                  </form>
+                {% endif %}
+              </div>
+            {% endfor %}
+          </div>
+          <p class="patient-small">To change a quantity, go back to <a class="patient-inline-link" href="{% url 'portal:patient-pharmacy' %}">My Medications</a>.</p>
+        </div>
+      </section>
+
+      <section class="console-card" aria-labelledby="basket-summary-heading">
+        <div class="console-card__body">
+          <h2 class="patient-eyebrow" id="basket-summary-heading">Summary</h2>
+          <div class="patient-basket__total"><span>Reference subtotal</span><strong>R{{ order.subtotal|default:'0.00' }}</strong></div>
+          <p class="patient-small">This is a supply request, not a payment screen. No payment is taken, the basket does not reserve stock, and nothing is dispatched until your practice accepts the request.</p>
+          <form method="post" action="{% url 'portal:patient-order-detail' order.pk %}" class="ops-form">
+            {% csrf_token %}
+            <input type="hidden" name="workflow_context" value="{{ workflow_context }}">
+            <input type="hidden" name="action" value="submit">
+            <h3 class="patient-eyebrow">Delivery details</h3>
+            {% include 'portal/operations_fields.html' %}
+            <button class="console-button console-button--primary" type="submit">Submit supply request</button>
+          </form>
+          <div class="patient-card-actions"><a class="console-button console-button--secondary patient-card-actions__wide" href="{% url 'portal:patient-pharmacy' %}">Keep browsing</a></div>
+        </div>
+      </section>
+    </div>
+  {% else %}
+    {{ form.non_field_errors }}
+    <section class="console-card" aria-labelledby="basket-empty-heading">
+      <div class="console-card__body">
+        <h2 class="patient-plan__empty-title" id="basket-empty-heading">Your basket is empty</h2>
+        <p class="patient-small">Add authorised items or supplies from My Medications.</p>
+        <div class="patient-card-actions"><a class="console-button console-button--secondary" href="{% url 'portal:patient-pharmacy' %}">Back to My Medications</a></div>
+      </div>
+    </section>
+  {% endif %}
+{% endblock %}

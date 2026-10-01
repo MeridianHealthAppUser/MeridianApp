@@ -2,41 +2,20 @@
 <nav class="patient-navigation" aria-label="Patient navigation">
   <p class="patient-navigation__heading">Your care</p>
   <div class="patient-navigation__links" data-scroll-navigation>
-    <a href="{% url 'portal:patient-dashboard' %}"{% if patient_section == 'overview' %} class="is-active" aria-current="page"{% endif %}>
-      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="m3 10 9-7 9 7v10H3Z"/><path d="M9 20v-7h6v7"/></svg><span>Overview</span>
+    <a href="{% url 'portal:patient-dashboard' %}"{% if patient_nav == 'home' %} class="is-active" aria-current="{% if patient_section == 'overview' %}page{% else %}true{% endif %}"{% endif %}>
+      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="m3 10 9-7 9 7v10H3Z"/><path d="M9 20v-7h6v7"/></svg><span class="patient-navigation__label">Home</span>
     </a>
-    <a href="{% url 'portal:patient-appointments' %}"{% if patient_section == 'appointments' %} class="is-active" aria-current="page"{% endif %}>
-      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4m10-4v4M3 11h18m-13 4h2m4 0h2m-8 3h2"/></svg><span>Appointments</span>
+    <a href="{% url 'portal:patient-treatment' %}"{% if patient_nav == 'treatment' %} class="is-active" aria-current="{% if patient_section == 'treatment' %}page{% else %}true{% endif %}"{% endif %}>
+      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 21S3 15 3 9a5 5 0 0 1 9-3 5 5 0 0 1 9 3c0 6-9 12-9 12Z"/><path d="M8 11h8m-4-4v8"/></svg><span class="patient-navigation__label"><span class="patient-navigation__prefix">My </span>Treatment</span>
     </a>
-    <a href="{% url 'portal:patient-messages' %}"{% if patient_section == 'messages' %} class="is-active" aria-current="page"{% endif %}>
-      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M21 15a3 3 0 0 1-3 3H9l-6 3V6a3 3 0 0 1 3-3h12a3 3 0 0 1 3 3Z"/><path d="M7 8h10M7 12h7"/></svg><span>Messages</span>
+    <a href="{% url 'portal:patient-appointments' %}"{% if patient_nav == 'appointments' %} class="is-active" aria-current="{% if patient_section == 'appointments' and request.resolver_match.url_name == 'patient-appointments' %}page{% else %}true{% endif %}"{% endif %}>
+      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4m10-4v4M3 11h18m-13 4h2m4 0h2m-8 3h2"/></svg><span class="patient-navigation__label"><span class="patient-navigation__prefix">My </span>Appointments</span>
     </a>
-    <a href="{% url 'portal:patient-progress' %}"{% if patient_section == 'progress' %} class="is-active" aria-current="page"{% endif %}>
-      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4 3v17h17M7 15l4-4 4 2 6-7"/></svg><span>Progress</span>
+    <a href="{% url 'portal:patient-messages' %}"{% if patient_nav == 'messages' %} class="is-active" aria-current="page"{% endif %}>
+      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M21 15a3 3 0 0 1-3 3H9l-6 3V6a3 3 0 0 1 3-3h12a3 3 0 0 1 3 3Z"/><path d="M7 8h10M7 12h7"/></svg><span class="patient-navigation__label"><span class="patient-navigation__prefix">My </span>Messages</span>{% if patient_unread_messages %}<span class="patient-navigation__badge" aria-hidden="true">{% if patient_unread_messages > 9 %}9+{% else %}{{ patient_unread_messages }}{% endif %}</span><span class="sr-only">, {{ patient_unread_messages }} unread</span>{% endif %}
     </a>
-    <a href="{% url 'portal:patient-account' %}"{% if patient_section == 'account' %} class="is-active" aria-current="page"{% endif %}>
-      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="8" r="4"/><path d="M4 21v-2a8 8 0 0 1 16 0v2"/></svg><span>Account</span>
-    </a>
-    <a href="{% url 'portal:patient-labs' %}"{% if patient_section == 'labs' %} class="is-active" aria-current="page"{% endif %}>
-      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M8 3h8M10 3v7l-5 8a2 2 0 0 0 2 3h10a2 2 0 0 0 2-3l-5-8V3M8 15h8"/></svg><span>Tests</span>
-    </a>
-    <a href="{% url 'portal:patient-treatment' %}"{% if patient_section == 'treatment' %} class="is-active" aria-current="page"{% endif %}>
-      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 21S3 15 3 9a5 5 0 0 1 9-3 5 5 0 0 1 9 3c0 6-9 12-9 12Z"/><path d="M8 11h8m-4-4v8"/></svg><span>Treatment</span>
-    </a>
-    <a href="{% url 'portal:patient-subscription' %}"{% if patient_section == 'subscription' %} class="is-active" aria-current="page"{% endif %}>
-      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 10h18M7 15h4"/></svg><span>Subscription</span>
-    </a>
-    <a href="{% url 'portal:patient-medical-profile' %}"{% if patient_section == 'medical_profile' %} class="is-active" aria-current="page"{% endif %}>
-      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M8 4H5v17h14V4h-3M8 2h8v5H8ZM8 12h8m-8 4h6"/></svg><span>Medical profile</span>
-    </a>
-    <a href="{% url 'portal:patient-updates' %}"{% if patient_section == 'updates' %} class="is-active" aria-current="page"{% endif %}>
-      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span>Updates</span>
-    </a>
-    <a href="{% url 'portal:patient-pharmacy' %}"{% if patient_section == 'pharmacy' %} class="is-active" aria-current="page"{% endif %}>
-      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4 7h16v14H4ZM8 7V3h8v4M9 14h6m-3-3v6"/></svg><span>Pharmacy</span>
-    </a>
-    <a href="{% url 'portal:patient-orders' %}"{% if patient_section == 'orders' %} class="is-active" aria-current="page"{% endif %}>
-      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="m3 7 9-4 9 4v13H3ZM3 7l9 4 9-4m-9 4v9"/></svg><span>Orders</span>
+    <a href="{% url 'portal:patient-pharmacy' %}"{% if patient_nav == 'medications' %} class="is-active" aria-current="{% if patient_section == 'pharmacy' %}page{% else %}true{% endif %}"{% endif %}>
+      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4 7h16v14H4ZM8 7V3h8v4M9 14h6m-3-3v6"/></svg><span class="patient-navigation__label"><span class="patient-navigation__prefix">My </span>Medications</span>
     </a>
   </div>
 </nav>

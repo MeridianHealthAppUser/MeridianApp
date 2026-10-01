@@ -10,7 +10,7 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from care.models import Appointment, AppointmentProposal, MessageThread, PatientMessage
+from care.models import Appointment, AppointmentProposal, AuditEvent, MessageThread, PatientMessage
 from practices.models import Company, CompanyMembership, Patient
 from practices.services import ACTIVE_COMPANY_SESSION_KEY
 
@@ -261,11 +261,34 @@ class StaffInboxTests(TestCase):
         self.assertIsNone(outgoing_message.read_at)
         self.assertIsNone(other_practice_message.read_at)
 
-    def test_inbox_defaults_to_first_conversation_on_current_page(self):
+    def test_inbox_opens_with_no_conversation_so_messages_stay_unread(self):
+        unread = self.add_message()
         self.login()
         response = self.client.get(self.inbox_url())
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.context['selected_thread'].pk, response.context['threads'][0].pk)
+        self.assertIsNone(response.context['selected_thread'])
+        self.assertContains(response, 'Choose a patient message')
+        self.assertNotContains(response, 'action="' + reverse('portal:staff-message-create', args=[self.recent_thread.pk]) + '"')
+        counts = {thread.pk: thread.unread_count for thread in response.context['threads']}
+        self.assertEqual(counts[self.recent_thread.pk], 1)
+        unread.refresh_from_db()
+        self.assertIsNone(unread.read_at)
+        self.assertFalse(AuditEvent.objects.filter(action='message.thread_viewed').exists())
+        # Choosing the conversation is what marks it read.
+        self.client.get(self.inbox_url(), {'thread': self.recent_thread.pk})
+        unread.refresh_from_db()
+        self.assertIsNotNone(unread.read_at)
+
+    def test_patient_record_messages_tab_opens_with_no_conversation(self):
+        unread = self.add_message()
+        self.login()
+        response = self.client.get(reverse('portal:patient-detail', args=[self.patient.pk]), {'tab': 'messages'})
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNone(response.context['selected_thread'])
+        self.assertContains(response, 'New messages from the patient stay unread until you open them.')
+        self.assertContains(response, '· 1 unread')
+        unread.refresh_from_db()
+        self.assertIsNone(unread.read_at)
 
     def test_explicit_inbox_selection_rejects_malformed_unknown_and_out_of_scope_threads(self):
         self.login()

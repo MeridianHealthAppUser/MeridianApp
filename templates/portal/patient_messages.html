@@ -1,51 +1,43 @@
 {% extends 'portal/patient_page_base.html' %}
 {% load static %}
 
-{% block title %}Your messages | Meridian{% endblock %}
-{% block patient_extra_css %}<link rel="stylesheet" href="{% static 'css/patient_messages.css' %}">{% endblock %}
+{% block title %}My Messages | Meridian{% endblock %}
+{% block patient_extra_css %}<link rel="stylesheet" href="{% static 'css/patient_messages.css' %}?v=20261001-2">{% endblock %}
+{% block patient_content_class %}patient-messages-page{% endblock %}
 
 {% block patient_heading %}
   <header class="patient-page-heading patient-inbox-heading">
     <div>
-      <p class="console-kicker">Your care · Messages</p>
-      <h1>Your messages</h1>
-      <p>Secure conversations with your care team at {{ patient_company.name }}.</p>
+      <p class="console-kicker">My Messages</p>
+      <h1>Talk to your doctor</h1>
+      <p class="patient-lead">Experiencing side effects, or wondering if your dose needs adjusting? Message your doctor here.</p>
+      <p>We aim to reply within 48 hours. For anything urgent, {% if support_email %}email <a class="patient-inline-link" href="mailto:{{ support_email }}">{{ support_email }}</a> and {% endif %}go to your nearest GP or emergency department.</p>
     </div>
-    <a class="console-button console-button--primary" href="#new-thread">New message</a>
   </header>
 {% endblock %}
 
 {% block patient_content %}
-  <form class="console-form patient-inbox-filter" method="get" action="{% url 'portal:patient-messages' %}">
-    <div class="console-form__field">
-      <label for="{{ filter_form.status.id_for_label }}">Conversations</label>
-      {{ filter_form.status }}
-      {{ filter_form.status.errors }}
-    </div>
-    <button class="console-button console-button--quiet" type="submit">Apply filter</button>
-  </form>
+  <div class="patient-inbox-toolbar">
+    <a class="console-button console-button--primary" href="{% url 'portal:patient-messages' %}?compose=1#patient-conversation">Start a new message</a>
+    <span>{{ page_obj.paginator.count }} conversation{{ page_obj.paginator.count|pluralize }}{% if filter_form.status.value == 'open' %} · open only{% elif filter_form.status.value == 'closed' %} · closed only{% endif %}</span>
+    {% if filter_form.errors or filter_form.status.value == 'open' or filter_form.status.value == 'closed' %}<a class="patient-inline-link" href="{% url 'portal:patient-messages' %}">Show all conversations</a>{% endif %}
+  </div>
 
   <section class="patient-inbox" aria-label="Secure messages">
     <section class="patient-inbox-threads" aria-labelledby="patient-thread-list-heading">
-      <header class="patient-inbox-threads__header">
-        <h2 id="patient-thread-list-heading">Conversations</h2>
-        <span>{{ page_obj.paginator.count }}</span>
-      </header>
+      <h2 class="sr-only" id="patient-thread-list-heading">Conversations</h2>
       <ol class="patient-inbox-thread-list">
         {% for thread in threads %}
           <li>
-            <a class="patient-inbox-thread{% if selected_thread.pk == thread.pk %} is-selected{% endif %}"{% if selected_thread.pk == thread.pk %} aria-current="page"{% endif %} href="{% url 'portal:patient-messages' %}?status={{ filter_form.status.value|default:'all'|urlencode }}&amp;page={{ page_obj.number }}&amp;thread={{ thread.pk }}#patient-conversation">
-              <strong>{{ thread.subject|default:"Your care" }}</strong>
-              {% if thread.latest_body %}<span class="patient-inbox-thread__preview">{{ thread.latest_body|truncatechars:90 }}</span>{% endif %}
-              <span class="patient-inbox-thread__meta">
-                {% if thread.last_activity %}<time datetime="{{ thread.last_activity|date:'c' }}">{{ thread.last_activity|date:"j M, H:i" }}</time>{% endif %}
-                <span class="patient-inbox-pill">{% if thread.is_closed %}Closed{% else %}Open{% endif %}</span>
-                {% if thread.unread_count %}<span class="patient-inbox-pill patient-inbox-pill--unread">{{ thread.unread_count }} unread</span>{% endif %}
-              </span>
+            <a class="patient-inbox-thread{% if selected_thread.pk == thread.pk %} is-selected{% endif %}{% if thread.unread_count %} is-unread{% endif %}"{% if selected_thread.pk == thread.pk %} aria-current="page"{% endif %} href="{% url 'portal:patient-messages' %}?status={{ filter_form.status.value|default:'all'|urlencode }}&amp;page={{ page_obj.number }}&amp;thread={{ thread.pk }}#patient-conversation">
+              <strong>{% if thread.unread_count %}<span class="patient-inbox-thread__dot" aria-hidden="true"></span>{% endif %}{{ thread.subject|default:"Your care" }}</strong>
+              <span class="patient-inbox-thread__meta">{% if thread.latest_sender_name %}<span class="patient-inbox-thread__from"><span class="sr-only">Latest message from </span>{{ thread.latest_sender_name }}</span>{% endif %}{% if thread.latest_sender_name and thread.last_activity %} · {% endif %}{% if thread.last_activity %}<time datetime="{{ thread.last_activity|date:'c' }}">{{ thread.last_activity|date:"j M, H:i" }}</time>{% endif %}</span>
+              <span class="patient-inbox-thread__preview">{% if thread.is_closed %}<span class="patient-inbox-pill">Closed</span> {% elif thread.latest_sender_id == user.pk %}<span class="patient-inbox-pill patient-inbox-pill--waiting">Waiting for a reply</span> {% endif %}{{ thread.latest_body|default:""|truncatechars:90 }}</span>
+              {% if thread.unread_count %}<span class="sr-only">{{ thread.unread_count }} unread</span>{% endif %}
             </a>
           </li>
         {% empty %}
-          <li class="patient-inbox-empty">No conversations match this filter. You can start a new message below.</li>
+          <li class="patient-inbox-empty">{% if filter_form.errors %}No conversations to show.{% else %}No messages yet.{% endif %}</li>
         {% endfor %}
       </ol>
       {% if is_paginated %}
@@ -58,15 +50,43 @@
     </section>
 
     <section class="patient-conversation" id="patient-conversation" aria-labelledby="patient-conversation-heading" tabindex="-1">
-      {% if selected_thread %}
+      {% if composing %}
         <header class="patient-conversation__header">
           <div>
-            <p>{{ patient_company.name }} care team</p>
-            <h2 id="patient-conversation-heading">{{ selected_thread.subject|default:"Your care" }}</h2>
+            <h2 id="patient-conversation-heading">New message</h2>
+            <p>To your care team at {{ patient_company.name }} · kept in your medical record</p>
           </div>
-          <span class="patient-inbox-pill">{% if selected_thread.is_closed %}Closed{% else %}Open{% endif %}</span>
         </header>
-        <p class="patient-conversation__timezone">All times shown in South Africa time (SAST).</p>
+        <form class="console-form patient-compose" id="new-thread" method="post" action="{% url 'portal:patient-thread-create' %}">
+          {% csrf_token %}
+          <input type="hidden" name="patient_context" value="{{ patient_context }}">
+          {{ thread_form.non_field_errors }}
+          <div class="console-form__field">
+            <label for="{{ thread_form.subject.id_for_label }}">{{ thread_form.subject.label }}</label>
+            {{ thread_form.subject }}
+            {{ thread_form.subject.errors }}
+            <div class="patient-chip-row" data-subject-chips hidden>
+              {% for suggestion in subject_suggestions %}<button class="patient-chip" type="button" data-subject-chip="{{ suggestion }}" aria-pressed="{% if thread_form.subject.value == suggestion %}true{% else %}false{% endif %}">{{ suggestion }}</button>{% endfor %}
+            </div>
+          </div>
+          <div class="console-form__field">
+            <label for="{{ thread_form.body.id_for_label }}">{{ thread_form.body.label }}</label>
+            {{ thread_form.body }}
+            {{ thread_form.body.errors }}
+          </div>
+          <div class="patient-compose__actions">
+            <button class="console-button console-button--primary" type="submit">Send</button>
+            <a class="console-button console-button--secondary" href="{% url 'portal:patient-messages' %}">Cancel</a>
+          </div>
+        </form>
+      {% elif selected_thread %}
+        <header class="patient-conversation__header">
+          <div>
+            <h2 id="patient-conversation-heading">{{ selected_thread.subject|default:"Your care" }}</h2>
+            <p>{{ patient_company.name }} care team · kept in your medical record · times in SAST</p>
+          </div>
+          {% if selected_thread.is_closed %}<span class="patient-inbox-pill">Closed</span>{% endif %}
+        </header>
 
         {% if older_messages_url or newer_messages_url %}
           <nav class="patient-inbox-pagination patient-inbox-pagination--history" aria-label="Message history pages">
@@ -79,11 +99,11 @@
         <ol class="patient-conversation-messages" aria-label="Messages in {{ selected_thread.subject }}">
           {% for message in selected_thread.conversation_messages %}
             <li class="patient-conversation-message{% if message.sender == user %} patient-conversation-message--mine{% endif %}">
+              <p>{{ message.body|linebreaksbr }}</p>
               <div class="patient-conversation-message__meta">
                 <strong>{% if message.sender == user %}You{% elif message.sender %}{{ message.sender.full_name }}{% else %}Meridian care team{% endif %}</strong>
                 <time datetime="{{ message.created_at|date:'c' }}">{{ message.created_at|date:"j M Y, H:i" }}</time>
               </div>
-              <p>{{ message.body|linebreaksbr }}</p>
             </li>
           {% empty %}
             <li class="patient-inbox-empty">There are no messages in this conversation yet.</li>
@@ -97,53 +117,25 @@
             {% csrf_token %}
             {{ message_form.non_field_errors }}
             <div class="console-form__field">
-              <label for="{{ message_form.body.id_for_label }}">Reply to your care team</label>
+              <label class="sr-only" for="{{ message_form.body.id_for_label }}">Reply to your care team</label>
               {{ message_form.body }}
               {{ message_form.body.errors }}
             </div>
             <div class="patient-conversation-reply__footer">
-              <p>Your reply stays in this secure conversation.</p>
-              <button class="console-button console-button--primary" type="submit">Send reply</button>
+              <p>Your reply goes into your medical record, and your doctor is asked to respond.</p>
+              <button class="console-button console-button--primary" type="submit">Send</button>
             </div>
           </form>
         {% else %}
-          <p class="patient-conversation-closed">This conversation is closed and remains available to read. <a href="#new-thread">Start a new message</a> if you need to contact your care team.</p>
+          <p class="patient-conversation-closed">This conversation is closed and stays here to read. <a href="{% url 'portal:patient-messages' %}?compose=1#patient-conversation">Start a new message</a> if you need your care team.</p>
         {% endif %}
       {% else %}
         <div class="patient-conversation-empty">
-          <p class="console-kicker">Your secure inbox</p>
-          <h2 id="patient-conversation-heading">Stay in touch with your care team</h2>
-          <p>Choose a conversation to read its messages, or start a new one below.</p>
+          <h2 id="patient-conversation-heading">Choose a conversation</h2>
+          <p>Select a conversation to read it. New replies stay unread until you open them.</p>
+          <a class="console-button console-button--primary" href="{% url 'portal:patient-messages' %}?compose=1#patient-conversation">Start a new message</a>
         </div>
       {% endif %}
     </section>
   </section>
-
-  <section class="console-card patient-new-message" id="new-thread" aria-labelledby="patient-new-thread-heading" tabindex="-1">
-    <header class="console-card__header">
-      <div class="console-card__heading">
-        <h2 id="patient-new-thread-heading">Start a new conversation</h2>
-        <p>Send a question to your care team at {{ patient_company.name }}.</p>
-      </div>
-    </header>
-    <div class="console-card__body">
-      <form class="console-form" method="post" action="{% url 'portal:patient-thread-create' %}">
-        {% csrf_token %}
-        <input type="hidden" name="patient_context" value="{{ patient_context }}">
-        {{ thread_form.non_field_errors }}
-        <div class="console-form__field">
-          <label for="{{ thread_form.subject.id_for_label }}">{{ thread_form.subject.label }}</label>
-          {{ thread_form.subject }}
-          {{ thread_form.subject.errors }}
-        </div>
-        <div class="console-form__field">
-          <label for="{{ thread_form.body.id_for_label }}">{{ thread_form.body.label }}</label>
-          {{ thread_form.body }}
-          {{ thread_form.body.errors }}
-        </div>
-        <button class="console-button console-button--primary" type="submit">Start secure conversation</button>
-      </form>
-    </div>
-  </section>
-  <p class="patient-inbox-notice">Messages are not monitored continuously. Please do not use this inbox for an emergency.</p>
 {% endblock %}

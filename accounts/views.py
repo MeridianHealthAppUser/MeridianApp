@@ -91,8 +91,22 @@ class AccountLogoutView(LogoutView):
     next_page = reverse_lazy('landing')
 
 
+class PatientAccountPageMixin:
+    """People with only a patient record see their account pages in the patient app's look."""
+
+    def get_context_data(self, **kwargs):
+        from practices.models import CompanyMembership, Patient
+
+        context = super().get_context_data(**kwargs)
+        user = self.request.user
+        has_staff_access = scope_queryset(CompanyMembership.objects.filter(user=user, is_active=True, company__is_active=True)).exists()
+        has_patient_access = scope_queryset(Patient.objects.filter(user=user, is_active=True, company__is_active=True)).exists()
+        context['is_patient_portal'] = has_patient_access and not has_staff_access
+        return context
+
+
 @method_decorator(never_cache, name='dispatch')
-class AccountPasswordChangeView(PasswordChangeView):
+class AccountPasswordChangeView(PatientAccountPageMixin, PasswordChangeView):
     """A person changes only their own shared password, after proving the old one."""
 
     template_name = 'accounts/password_change.html'
@@ -125,5 +139,5 @@ class AccountPasswordChangeView(PasswordChangeView):
 
 
 @method_decorator(never_cache, name='dispatch')
-class AccountPasswordChangeDoneView(LoginRequiredMixin, PasswordChangeDoneView):
+class AccountPasswordChangeDoneView(LoginRequiredMixin, PatientAccountPageMixin, PasswordChangeDoneView):
     template_name = 'accounts/password_change_done.html'

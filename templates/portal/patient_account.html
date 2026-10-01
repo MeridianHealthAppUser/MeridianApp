@@ -1,22 +1,41 @@
 {% extends 'portal/patient_page_base.html' %}
 
+{% block title %}Account settings | Meridian{% endblock %}
+
 {% block patient_heading %}
   <header class="patient-page-heading">
     <div>
-      <p class="console-kicker">Your care · Account</p>
+      <p class="console-kicker">Account settings</p>
       <h1>Your account</h1>
-      <p>Keep your contact details up to date and review the information recorded at {{ patient_company.name }}.</p>
     </div>
     <div class="patient-page-actions"><a class="console-button console-button--secondary" href="{% url 'portal:patient-privacy' %}">Privacy and preferences</a><a class="console-button console-button--secondary" href="{% url 'accounts:password-change' %}">Change password</a></div>
   </header>
 {% endblock %}
 
 {% block patient_content %}
-  <div class="patient-page-grid">
-    <section class="console-card" aria-labelledby="patient-contact-heading">
-      <header class="console-card__header"><div class="console-card__heading"><h2 id="patient-contact-heading">Contact details</h2><p>Changes here apply only to your record at {{ patient_company.name }}.</p></div></header>
+  <div class="patient-two-up">
+    <section class="console-card" aria-labelledby="patient-identity-heading">
       <div class="console-card__body">
-        <form class="console-form" method="post" action="{% url 'portal:patient-account' %}">
+        <h2 class="patient-eyebrow" id="patient-identity-heading">Personal details</h2>
+        <dl class="patient-kv">
+          <div><dt>Name</dt><dd>{{ patient.first_name }} {{ patient.last_name }}</dd></div>
+          <div><dt>Email</dt><dd>{{ user.email }}</dd></div>
+          <div><dt>ID / passport</dt><dd{% if not patient.id_number %} class="patient-kv__quiet"{% endif %}>{{ patient.id_number|default:"Not recorded" }}</dd></div>
+          <div><dt>Date of birth</dt><dd{% if not patient.date_of_birth %} class="patient-kv__quiet"{% endif %}>{{ patient.date_of_birth|date:"j F Y"|default:"Not recorded" }}</dd></div>
+          <div><dt>Practice</dt><dd>{{ patient_company.name }}</dd></div>
+          <div><dt>Your doctor</dt><dd>{% if patient.assigned_doctor %}{{ patient.assigned_doctor.full_name }}{% else %}Your practice will assign a doctor{% endif %}</dd></div>
+          {% if patient.medical_record_number %}<div><dt>Record number</dt><dd>{{ patient.medical_record_number }}</dd></div>{% endif %}
+        </dl>
+        <div class="patient-card-actions"><a class="console-button console-button--secondary patient-card-actions__wide" href="{{ details_change_url }}">Request a change</a></div>
+        <p class="patient-small">Changes to your name, ID or date of birth go through your care team, so your record stays matched to your ID.</p>
+      </div>
+    </section>
+
+    <section class="console-card" aria-labelledby="patient-contact-heading">
+      <div class="console-card__body">
+        <h2 class="patient-eyebrow" id="patient-contact-heading">Contact details</h2>
+        <p class="patient-small">Update these yourself. Changes apply only to your record at {{ patient_company.name }}.</p>
+        <form class="console-form patient-account__form" method="post" action="{% url 'portal:patient-account' %}">
           {% csrf_token %}
           <input type="hidden" name="patient_context" value="{{ patient_context }}">
           {{ contact_form.non_field_errors }}
@@ -30,24 +49,8 @@
             {{ contact_form.city }}
             {{ contact_form.city.errors }}
           </div>
-          <button class="console-button console-button--primary" type="submit">Save contact details</button>
+          <div class="patient-card-actions"><button class="console-button console-button--primary" type="submit">Save contact details</button></div>
         </form>
-      </div>
-    </section>
-
-    <section class="console-card" aria-labelledby="patient-identity-heading">
-      <header class="console-card__header"><div class="console-card__heading"><h2 id="patient-identity-heading">Your profile</h2><p>Your identity and care team details.</p></div></header>
-      <div class="console-card__body">
-        <dl class="patient-account-facts">
-          <div><dt>Patient name</dt><dd>{{ patient.first_name }} {{ patient.last_name }}</dd></div>
-          <div><dt>Sign-in email</dt><dd>{{ user.email }}</dd></div>
-          <div><dt>ID / passport</dt><dd>{{ patient.id_number|default:"Not recorded" }}</dd></div>
-          <div><dt>Date of birth</dt><dd>{{ patient.date_of_birth|date:"j F Y"|default:"Not recorded" }}</dd></div>
-          <div><dt>Practice</dt><dd>{{ patient_company.name }}</dd></div>
-          <div><dt>Your doctor</dt><dd>{% if patient.assigned_doctor %}{{ patient.assigned_doctor.full_name }}{% else %}Your practice will assign a doctor{% endif %}</dd></div>
-          {% if patient.medical_record_number %}<div><dt>Record number</dt><dd>{{ patient.medical_record_number }}</dd></div>{% endif %}
-        </dl>
-        <p class="patient-empty">Need to correct your identity details? <a class="patient-inline-link" href="{% url 'portal:patient-messages' %}">Contact your care team.</a></p>
       </div>
     </section>
   </div>

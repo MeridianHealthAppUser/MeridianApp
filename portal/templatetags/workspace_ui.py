@@ -21,6 +21,12 @@ def metric_label(value):
     return str(value).replace('_', ' ').capitalize()
 
 
+@register.filter
+def kg(value):
+    from portal.patient_summary import format_kg
+    return format_kg(value)
+
+
 @register.simple_tag(takes_context=True)
 def account_identity(context):
     """Display the current portal role without another membership lookup."""

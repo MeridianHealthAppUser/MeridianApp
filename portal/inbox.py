@@ -41,7 +41,7 @@ def _inbox_threads(company):
 
 
 def staff_inbox_context(request, company, membership, *, selected_thread_id=None, **overrides):
-    """Render one conversation; listing a thread alone never marks it read."""
+    """Render a conversation only once it is chosen; listing threads never marks them read."""
     from .views import _attach_appointment_proposals
 
     all_threads = _inbox_threads(company)
@@ -72,7 +72,8 @@ def staff_inbox_context(request, company, membership, *, selected_thread_id=None
             raise Http404('Conversation not found.')
         selected = get_object_or_404(all_threads, pk=thread_id)
     else:
-        selected = threads[0] if threads else None
+        # Nothing opens by itself, so new patient messages stay unread until chosen.
+        selected = None
 
     context = {
         'company': company,

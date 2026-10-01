@@ -6,7 +6,7 @@ from django import forms
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.exceptions import PermissionDenied
 from django.core.paginator import Paginator
-from django.db.models import Prefetch, Q
+from django.db.models import Count, Prefetch, Q
 from django.http import Http404
 from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
@@ -45,6 +45,8 @@ OPERATIONAL_AUDIT_LABELS = {
     'shipment.locked': 'Delivery contents locked', 'shipment.dispatched': 'Delivery dispatched',
     'pharmacy_order.submitted': 'Supply request submitted', 'pharmacy_order.accepted': 'Supply request accepted',
     'pharmacy_order.cancelled': 'Supply request cancelled',
+    'patient.account_created': 'Patient login created', 'patient.record_created': 'Patient record created',
+    'lead.converted': 'Enquiry converted to patient',
 }
 
 
@@ -105,7 +107,13 @@ def consultations(company, membership, patient, actor):
 
 
 def workspace_messages(request, company, membership, patient, **overrides):
-    threads = scoped(MessageThread, company, patient).order_by('-last_message_at', '-pk')
+    threads = scoped(MessageThread, company, patient)
+    if patient.user_id:
+        # Conversations open only when chosen, so the list shows what is still unread.
+        threads = threads.annotate(unread_count=Count('messages', filter=Q(
+            messages__company=company, messages__sender_id=patient.user_id, messages__read_at__isnull=True,
+        )))
+    threads = threads.order_by('-last_message_at', '-pk')
     page = Paginator(threads, 20).get_page(request.GET.get('page'))
     raw = overrides.get('reply_thread_id') or request.GET.get('thread')
     selected = None
@@ -114,8 +122,6 @@ def workspace_messages(request, company, membership, patient, **overrides):
         if not value.isascii() or not value.isdecimal() or len(value) > 19 or not 0 < int(value) < 2**63:
             raise Http404
         selected = get_object_or_404(threads, pk=value)
-    elif page.object_list:
-        selected = page.object_list[0]
     context = dict(message_thread_page=page, workspace_message_threads=page.object_list, selected_thread=selected, selected_thread_id=selected.pk if selected else None,
                    message_threads=[selected] if selected else [],
                    message_form=PatientMessageForm(), thread_form=PatientThreadForm(auto_id='thread_%s'))
@@ -133,6 +139,8 @@ def workspace_messages(request, company, membership, patient, **overrides):
                 PatientMessage.objects.for_company(company).filter(pk__in=ids, read_at__isnull=True).update(read_at=timezone.now())
     for thread in context['workspace_message_threads']:
         thread.workspace_url = workspace_url(patient, 'messages', thread=thread.pk)
+        if selected and thread.pk == selected.pk and request.method == 'GET':
+            thread.unread_count = 0
     context.update(
         workspace_previous_url=workspace_url(patient, 'messages', page=page.previous_page_number()) if page.has_previous() else '',
         workspace_next_url=workspace_url(patient, 'messages', page=page.next_page_number()) if page.has_next() else '',

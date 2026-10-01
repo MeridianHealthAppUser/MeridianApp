@@ -1,0 +1,15 @@
+{# The patient's next booked consult, with the real video join state. #}
+{% if consult %}
+  <section class="patient-bar patient-bar--join{% if not consult.video_room_url %} is-waiting{% endif %}" aria-labelledby="next-consult-title">
+    <div class="patient-bar__copy">
+      <p class="patient-eyebrow">{{ eyebrow|default:"Your next consult" }}</p>
+      <p class="patient-bar__title" id="next-consult-title">{{ consult.get_appointment_type_display }} with {% if consult.clinician %}{{ consult.clinician.full_name }}{% else %}your care team{% endif %} · {{ consult.duration_minutes }} min</p>
+      <p class="patient-bar__body">{{ consult.starts_at|date:"l j F \a\t H:i" }} SAST{% if consult.video_room_url %} · the room is open now{% elif consult.video_join_message %} · {{ consult.video_join_message }}{% endif %}</p>
+    </div>
+    <div class="patient-bar__actions">
+      {% if consult.video_room_url %}<a class="console-button console-button--primary" href="{{ consult.video_room_url }}">Join the consult</a>{% endif %}
+      <a class="console-button console-button--secondary" href="{% url 'portal:patient-appointment-detail' consult.pk %}">Details</a>
+      <a class="console-button console-button--secondary" href="{% url 'portal:patient-appointment-calendar' consult.pk %}">Add to calendar</a>
+    </div>
+  </section>
+{% endif %}

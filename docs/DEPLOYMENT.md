@@ -18,6 +18,7 @@ DigitalOcean App Platform supports Dockerfile source builds and a `PRE_DEPLOY` j
 - `DJANGO_ALLOWED_HOSTS`: exact application/custom domains
 - `DJANGO_CSRF_TRUSTED_ORIGINS`: corresponding HTTPS origins
 - `DJANGO_TIME_ZONE=Africa/Johannesburg`
+- `CHECKOUT_TEST_CODE`: a discount code that settles the initial consultation at R0 and runs the full patient conversion without a payment provider. It defaults to `devtest` only when `DJANGO_DEBUG=true` and is empty (off) otherwise. Leave it unset on any site real patients can reach.
 - `MULTI_PRACTICE_ENABLED=false` and `SINGLE_PRACTICE_SLUG=meridian-health`: keep the application restricted to Meridian Health (also the defaults). Existing other-practice data is not automatically deleted. See [single-practice operation](SINGLE_PRACTICE.md).
 - `REDIS_URL` (or `VIDEO_REDIS_URL`): private shared Redis for video signalling and expiring room presence; video is unavailable in production without it.
 - Configure a separate TURN relay for reliable cross-network video. See [native video setup](VIDEO_CONSULTATIONS.md).

@@ -1,0 +1,32 @@
+{# One catalogue product. `kind` is authorised, open or previous. #}
+<article class="patient-product patient-product--{{ kind }}" aria-labelledby="product-heading-{{ product.pk }}">
+  <div class="patient-product__art" aria-hidden="true"><span></span></div>
+  <div class="patient-product__body">
+    <h3 id="product-heading-{{ product.pk }}">{{ product.name }}{% if product.strength %} <span>{{ product.strength }}</span>{% endif %}</h3>
+    {% if product.description %}<p class="patient-product__description">{{ product.description|linebreaksbr }}</p>{% endif %}
+
+    {% if kind == 'previous' %}
+      <p class="patient-product__price">R{{ product.price }}</p>
+      <p class="patient-product__note">Prescribed {{ product.previous_authorization.starts_on|date:"M Y" }} – {{ product.previous_authorization.expires_on|date:"M Y" }} · {{ product.previous_authorization.prescribed_by.full_name }}</p>
+    {% else %}
+      {% if product.plan %}
+        <div class="patient-product__plan">
+          <span>Subscription {% if product.plan.status == 'active' %}active{% else %}{{ product.plan.get_status_display|lower }}{% endif %}: <strong>R{{ product.plan.monthly_amount|floatformat:"-2" }} / month</strong></span>
+          <a class="console-button console-button--secondary" href="{% url 'portal:patient-treatment' %}#treatment-plan">Manage subscription</a>
+        </div>
+      {% endif %}
+      {% if not product.plan or product.in_basket %}
+        <form method="post" action="{% url 'portal:patient-basket-item' product.pk %}" class="patient-product__form">
+          {% csrf_token %}
+          <input type="hidden" name="workflow_context" value="{{ product.workflow_context }}">
+          <span class="patient-product__price">R{{ product.price }}</span>
+          <label class="sr-only" for="{{ product.quantity_form.quantity.id_for_label }}">Quantity of {{ product.name }}{% if product.in_basket %} (0 removes it){% endif %}</label>
+          {{ product.quantity_form.quantity }}
+          <button class="console-button {% if product.in_basket %}console-button--secondary{% else %}console-button--primary{% endif %}" type="submit">{% if product.in_basket %}Update basket{% else %}Add to basket{% endif %}</button>
+        </form>
+        {{ product.quantity_form.non_field_errors }}{{ product.quantity_form.quantity.errors }}
+      {% endif %}
+      <p class="patient-product__note">{% if kind == 'authorised' %}{% if product.plan and not product.in_basket %}Delivered through your subscription{% else %}{{ product.remaining }} left to request this cycle{% endif %} · authorised until {{ product.authorization.expires_on|date:"j M Y" }}{% elif product.in_basket %}{{ product.in_basket }} in your basket{% else %}Reference price · no payment is taken{% endif %}{% if kind == 'authorised' and product.in_basket %} · {{ product.in_basket }} in your basket{% endif %}</p>
+    {% endif %}
+  </div>
+</article>

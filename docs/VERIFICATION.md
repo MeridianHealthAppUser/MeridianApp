@@ -19,6 +19,14 @@ MERIDIAN_WORKSPACE_FORMS_BROWSER=1 \
 python manage.py test --noinput --failfast
 ```
 
+## Patient web app restructure — 30 September 2026
+
+- **SQLite: 1,152 tests, all passing apart from 15 expected skips** (the optional browser, isolated-Redis and PostgreSQL-only checks). The run includes the new `portal.test_patient_web_app` checks for the unread count, task rules, medication groups, answering a suggested time from My Appointments and logging a weight from Home.
+- Home, My Treatment, My Appointments (with and without open times), My Messages (conversation and new message), My Medications (all three groups), the basket, Account settings and Updates were rendered from the local demo patient and inspected at 1280px and 390px. The extra demo data for these renders was rolled back afterwards.
+- The optional Playwright checks (`scripts/test_patient_dashboard.cjs`, `scripts/operations_layout_smoke.cjs`) were updated for the new Home layout and versioned stylesheet links. They did not run here, because Playwright is not installed locally.
+- No migrations were added and the practice console is unchanged.
+- **Brand theme:** 1,154 tests pass apart from the same 15 skips. New checks confirm that the theme loads last on patient pages (and on a patient's own profile and password pages), never on staff pages, and that its two font files exist. A production `collectstatic` into a scratch folder rewrote the theme's font URLs to hashed file names. All patient pages, including blood tests, appointment details, weight history, medical profile and privacy, were re-inspected at 1280px, and the main sections at 390px.
+
 ## Patient workspace and final UI verification
 
 - The canonical patient workspace passed 32 role-permitted tab clicks across Doctor, Practice Administrator and Super Admin accounts. Every tab retained the selected patient and was checked at 1440px, 390px and 320px, with no document overflow or JavaScript errors. Mobile patient-section targets are at least 44px high.
@@ -78,4 +86,4 @@ The relay check used an isolated **local** coturn container. It verifies TURN cr
 
 ## Limits
 
-Passing tests is not a clinical, regulatory or penetration-test certification. Payment collection, outbound email, live prescribing, third-party Zoom integration and courier APIs remain excluded. Native appointment video is provided instead. The questionnaire remains lead-only; dummy checkout cannot create a patient login. File uploads have basic PDF checks, not malware scanning. Review the live-use prerequisites in [USER_GUIDE.md](USER_GUIDE.md) and [DEPLOYMENT.md](DEPLOYMENT.md) before handling real patient data.
+Passing tests is not a clinical, regulatory or penetration-test certification. Payment collection, outbound email, live prescribing, third-party Zoom integration and courier APIs remain excluded. Native appointment video is provided instead. The questionnaire remains lead-only; the checkout creates a patient login only with the checkout test code. File uploads have basic PDF checks, not malware scanning. Review the live-use prerequisites in [USER_GUIDE.md](USER_GUIDE.md) and [DEPLOYMENT.md](DEPLOYMENT.md) before handling real patient data.

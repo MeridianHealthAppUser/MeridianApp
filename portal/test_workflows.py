@@ -330,8 +330,10 @@ class PortalWorkflowTests(TestCase):
         response = self.client.get(reverse('portal:patient-messages'), {'thread': self.thread.pk})
         self.assertContains(response, long_body)
         self.assertContains(response, 'Later message 6')
-        self.assertContains(response, f'action="{reverse("portal:patient-thread-create")}"')
         self.assertContains(response, f'action="{reverse("portal:patient-message-create", args=[self.thread.pk])}"')
+        self.assertContains(response, f'href="{reverse("portal:patient-messages")}?compose=1#patient-conversation"')
+        compose = self.client.get(reverse('portal:patient-messages'), {'compose': 1})
+        self.assertContains(compose, f'action="{reverse("portal:patient-thread-create")}"')
 
     def test_invalid_patient_thread_preserves_body_and_field_errors(self):
         self.login(self.patient_user)

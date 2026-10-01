@@ -65,9 +65,11 @@ class PatientDashboardPresentationTests(TestCase):
         response = self.page()
         self.assertContains(response, 'patient-home__heading')
         self.assertNotContains(response, 'class="patient-hero"')
-        for content in ('94.50 kg', 'Comprehensive ongoing care and follow-up support plan', 'Your appointment is confirmed'):
+        # Home shows the latest check-in and the next consult; the plan and the
+        # timeline are one click away on My Treatment and Updates.
+        for content in ('Latest 94.5 kg', 'Next consult', 'Log my weight'):
             self.assertContains(response, content)
-        for name in ('patient-appointments', 'patient-progress', 'patient-messages', 'patient-updates'):
+        for name in ('patient-treatment', 'patient-appointments', 'patient-progress', 'patient-messages', 'patient-updates'):
             self.assertContains(response, f'href="{reverse(f"portal:{name}")}"')
 
     @skipUnless(os.getenv('MERIDIAN_PLAYWRIGHT_PATH'), 'Optional Chrome patient overview check')

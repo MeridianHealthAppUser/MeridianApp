@@ -46,6 +46,11 @@ SINGLE_PRACTICE_SLUG = os.getenv('SINGLE_PRACTICE_SLUG', 'meridian-health').stri
 if not MULTI_PRACTICE_ENABLED and not SINGLE_PRACTICE_SLUG:
     raise ImproperlyConfigured('SINGLE_PRACTICE_SLUG must identify the enabled practice.')
 
+# No payment provider is connected. This discount code settles the initial
+# consultation at R0 so the full conversion flow can be tested. Set it empty
+# to disable; it is off by default when DEBUG is false.
+CHECKOUT_TEST_CODE = os.getenv('CHECKOUT_TEST_CODE', 'devtest' if DEBUG else '').strip()
+
 
 # Application definition
 

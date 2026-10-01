@@ -90,5 +90,31 @@
 .questionnaire-checkout-summary { margin-bottom: 1rem; }
 .questionnaire-checkout-summary .questionnaire-review-list { margin-bottom: 0; }
 .questionnaire-checkout-actions { display: flex; flex-wrap: wrap; gap: .7rem; margin-top: 1.3rem; }
+.questionnaire-checkout-form .questionnaire-checkout-summary { margin-bottom: 0; }
+.questionnaire-date-row, .questionnaire-code-row { align-items: flex-end; display: flex; flex-wrap: wrap; gap: .7rem; }
+.questionnaire-date-row { margin-bottom: 1.2rem; }
+.questionnaire-date-row .question-field, .questionnaire-code-row .question-field { flex: 1 1 13rem; }
+.questionnaire-date-row .questionnaire-button, .questionnaire-code-row .questionnaire-button { min-height: 3rem; }
+.questionnaire-slots { border: 0; margin: 0; min-width: 0; padding: 0; }
+.questionnaire-slots legend { color: #54717a; font-size: .85rem; font-weight: 650; margin-bottom: .6rem; padding: 0; }
+.questionnaire-slots__grid { display: grid; gap: .6rem; grid-template-columns: repeat(auto-fill, minmax(8.5rem, 1fr)); max-height: 21rem; overflow-y: auto; padding: 2px; }
+.questionnaire-slot { cursor: pointer; position: relative; }
+.questionnaire-slot input { height: 1px; opacity: 0; position: absolute; width: 1px; }
+.questionnaire-slot > span { background: #fff; border: 1px solid #e0eaee; border-radius: .7rem; display: block; padding: .65rem .8rem; }
+.questionnaire-slot strong { color: #173a43; display: block; font-size: 1rem; }
+.questionnaire-slot small { color: #6b8791; display: block; font-size: .8rem; line-height: 1.4; overflow-wrap: anywhere; }
+.questionnaire-slot input:checked + span { background: #e4f4f1; border-color: #11988c; box-shadow: inset 0 0 0 1px #11988c; }
+.questionnaire-slot input:focus-visible + span { outline: 3px solid #0c766e; outline-offset: 3px; }
+.questionnaire-card .questionnaire-note { color: #587780; font-size: .9rem; line-height: 1.6; margin: .8rem 0 0; }
+.questionnaire-card .questionnaire-note--success { color: #288254; font-weight: 650; }
+.questionnaire-price-row--discount dd { color: #288254; }
+.questionnaire-price-row--total dt { font-size: 1.02rem; }
+.questionnaire-methods { border: 0; margin: 1.2rem 0 0; min-width: 0; padding: 0; }
+.questionnaire-methods legend { color: #54717a; font-size: .85rem; font-weight: 650; margin-bottom: .6rem; padding: 0; }
+.questionnaire-card-fields { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); margin-top: 1rem; }
+.question-field input:disabled { background: #f3f7f7; color: #8a9fa7; cursor: not-allowed; }
+.questionnaire-eft-note { display: none; }
+.questionnaire-payment:has(input[value='eft']:checked) .questionnaire-eft-note { display: block; }
+.questionnaire-payment:has(input[value='eft']:checked) .questionnaire-card-fields { display: none; }
 @media (max-width: 760px) { .questionnaire-result-grid { grid-template-columns: 1fr; } .questionnaire-result-heading { margin-bottom: 1.2rem; } }
-@media (max-width: 480px) { .form-grid { grid-template-columns: 1fr; } .questionnaire-card { padding: 1.15rem; } .questionnaire-callout { flex-direction: column; padding: 1rem; } .questionnaire-submit-row { align-items: stretch; flex-direction: column; } .questionnaire-progress { text-align: center; } .questionnaire-price-row { align-items: flex-start; } .questionnaire-price-row dd { font-size: 1.05rem; } .questionnaire-price-row dd small { display: block; } .questionnaire-checkout-actions { flex-direction: column; } }
+@media (max-width: 480px) { .form-grid { grid-template-columns: 1fr; } .questionnaire-card { padding: 1.15rem; } .questionnaire-callout { flex-direction: column; padding: 1rem; } .questionnaire-submit-row { align-items: stretch; flex-direction: column; } .questionnaire-progress { text-align: center; } .questionnaire-price-row { align-items: flex-start; } .questionnaire-price-row dd { font-size: 1.05rem; } .questionnaire-price-row dd small { display: block; } .questionnaire-checkout-actions { flex-direction: column; } .questionnaire-date-row .questionnaire-button, .questionnaire-code-row .questionnaire-button { width: 100%; } }

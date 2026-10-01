@@ -1,5 +1,208 @@
-{% extends 'portal/patient_page_base.html' %}{% load static %}
-{% block title %}Your treatment | Meridian{% endblock %}
+{% extends 'portal/patient_page_base.html' %}
+{% load static %}
+
+{% block title %}My Treatment | Meridian{% endblock %}
 {% block patient_extra_css %}<link rel="stylesheet" href="{% static 'css/treatment.css' %}">{% endblock %}
-{% block patient_heading %}<header class="patient-page-heading"><div><p class="console-kicker">Your care · Treatment</p><h1>Your treatment</h1><p>Decisions and instructions recorded by your doctor at {{ patient_company.name }}.</p></div></header>{% endblock %}
-{% block patient_content %}<div class="treatment-workspace"><div class="treatment-notice">Your doctor decides your treatment. This page does not change your prescription. <a href="{% url 'portal:patient-messages' %}">Message your care team</a> if you have questions.</div>{% for item in page_obj %}<section class="staff-page-card treatment-panel"><h2>{{ item.product.name }} {{ item.product.strength }}</h2><p><span class="console-status">{% if item.is_current %}Currently authorised{% else %}Not currently valid for dispensing{% endif %}</span> · {{ item.get_status_display }}</p><dl class="treatment-facts"><div><dt>Maximum authorised dose</dt><dd>{{ item.max_dose }}</dd></div><div><dt>Quantity per cycle</dt><dd>{{ item.quantity_per_cycle }}</dd></div><div><dt>Authorised dates</dt><dd>{{ item.starts_on|date:'j M Y' }} – {{ item.expires_on|date:'j M Y' }}</dd></div><div><dt>Review interval</dt><dd>{{ item.review_interval_days }} days</dd></div><div><dt>Prescribing doctor</dt><dd>{{ item.prescribed_by.full_name }}</dd></div></dl><h3>Your doctor's instructions</h3><p class="treatment-instructions">{{ item.instructions|default:'No instructions recorded.'|linebreaksbr }}</p></section>{% empty %}<section class="staff-page-card treatment-panel"><h2>No treatment authorisation yet</h2><p>Your doctor records an authorisation after reviewing your care. Completing a questionnaire or booking does not guarantee a prescription.</p><a class="console-button console-button--secondary" href="{% url 'portal:patient-appointments' %}">Your appointments</a></section>{% endfor %}{% include 'portal/includes/patient_pagination.html' with pagination_label='Treatment history' %}<div><a class="console-button console-button--primary" href="{% url 'portal:patient-subscription' %}">Manage your local care plan</a></div></div>{% endblock %}
+{% block patient_content_class %}patient-treatment{% endblock %}
+{% block patient_heading %}<header class="patient-page-heading"><div><h1>My Treatment</h1></div></header>{% endblock %}
+
+{% block patient_content %}
+<div class="treatment-workspace patient-treatment__body">
+  {% include 'portal/includes/patient_next_consult.html' with consult=next_consult %}
+
+  <section class="patient-treatment__tasks" aria-labelledby="treatment-tasks-heading">
+    <div class="patient-section-head">
+      <div class="patient-section-head__copy">
+        <h2 class="patient-eyebrow" id="treatment-tasks-heading">My Tasks</h2>
+        <p>Raised from your record. Each one clears itself once it’s done.</p>
+      </div>
+      {% if tasks %}<span class="patient-pill patient-pill--amber">{{ tasks|length }} open</span>{% else %}<span class="patient-pill patient-pill--teal">All clear</span>{% endif %}
+    </div>
+    <div class="patient-stack">
+      {% for task in tasks %}
+        <article class="patient-bar{% if task.urgent %} patient-bar--urgent{% endif %}">
+          <span class="patient-pill {% if task.urgent %}patient-pill--amber{% else %}patient-pill--blue{% endif %}">{% if task.urgent %}Action needed{% else %}To do{% endif %}</span>
+          <div class="patient-bar__copy">
+            <h3 class="patient-bar__title">{{ task.title }}</h3>
+            <p class="patient-bar__body">{{ task.body }}</p>
+            <div class="patient-bar__actions">
+              {% for action in task.actions %}<a class="console-button {% if action.primary %}console-button--primary{% else %}console-button--secondary{% endif %}" href="{{ action.url }}">{{ action.label }}</a>{% endfor %}
+            </div>
+          </div>
+        </article>
+      {% empty %}
+        <div class="patient-bar patient-bar--done">
+          <span class="patient-pill patient-pill--teal">All done</span>
+          <div class="patient-bar__copy">
+            <p class="patient-bar__title">Nothing needs doing right now</p>
+            <p class="patient-bar__body">New tasks appear here when something in your record needs your attention.</p>
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+  </section>
+
+  <div class="patient-two-up patient-treatment__cards">
+    <section class="console-card" aria-labelledby="medical-information-heading">
+      <div class="console-card__body">
+        <h2 class="patient-eyebrow" id="medical-information-heading">Medical information</h2>
+        <dl class="patient-kv">
+          {% for label, value in medical_rows %}<div{% if value|length > 48 %} class="is-long"{% endif %}><dt>{{ label }}</dt><dd{% if value == 'Not recorded' %} class="patient-kv__quiet"{% endif %}>{{ value }}</dd></div>{% endfor %}
+        </dl>
+        <div class="patient-card-actions">
+          <a class="console-button console-button--secondary patient-card-actions__wide" href="{{ medical_change_url }}">Tell my doctor something has changed</a>
+        </div>
+        <p class="patient-small">What your doctor has on file from your questionnaire and medical profile. Only your doctor can change your treatment. <a class="patient-inline-link" href="{% url 'portal:patient-medical-profile' %}">{% if medical_profile and medical_profile.revision %}Update your medical profile{% else %}Complete your medical profile{% endif %}</a></p>
+      </div>
+    </section>
+
+    <section class="console-card patient-plan" id="treatment-plan" aria-labelledby="treatment-plan-heading">
+      <div class="console-card__body">
+        {% if current_plan %}
+          {{ enrollment_form.non_field_errors }}
+          <h2 class="patient-eyebrow" id="treatment-plan-heading">{% if current_plan.status == 'active' %}My active subscription{% else %}My subscription{% endif %}</h2>
+          <div class="patient-plan__head">
+            <p class="patient-plan__product">{% if plan_authorization %}<strong>{{ plan_authorization.product.name }}{% if plan_authorization.product.strength %} {{ plan_authorization.product.strength }}{% endif %}</strong> <span>· {{ plan_authorization.quantity_per_cycle }} per cycle</span>{% else %}<strong>{{ current_plan.plan_name }}</strong>{% endif %}</p>
+            <p class="patient-plan__amount">R{{ current_plan.monthly_amount|floatformat:"-2" }}<span>a month</span></p>
+          </div>
+          <p class="patient-small patient-plan__billing">Reference amount only. No payment is collected in this app.</p>
+          <dl class="patient-kv">
+            <div><dt>Plan</dt><dd>{{ current_plan.plan_name }}</dd></div>
+            <div><dt>Status</dt><dd>{{ current_plan.get_status_display }}</dd></div>
+            {% if plan_authorization %}
+              <div><dt>Maximum dose</dt><dd>{{ plan_authorization.max_dose }}</dd></div>
+              <div><dt>Authorised on</dt><dd>{{ plan_authorization.starts_on|date:"j M Y" }}</dd></div>
+              <div><dt>Valid until</dt><dd class="patient-kv__amber">{{ plan_authorization.expires_on|date:"j M Y" }}</dd></div>
+              <div><dt>Prescribing doctor</dt><dd>{{ plan_authorization.prescribed_by.full_name }}</dd></div>
+            {% endif %}
+            <div><dt>Doctor review due</dt><dd>{{ current_plan.review_due_on|date:"j M Y"|default:"Not specified" }}</dd></div>
+          </dl>
+          {% if plan_hold_reason %}<p class="patient-plan__hold">Deliveries are on hold. {{ plan_hold_reason }}</p>{% endif %}
+          {% if plan_authorization.instructions %}<div class="patient-plan__note"><h3 class="patient-eyebrow">Your doctor’s instructions</h3><p class="treatment-instructions">{{ plan_authorization.instructions|linebreaksbr }}</p></div>{% endif %}
+
+          <div class="patient-plan__manage">
+            <h3 class="patient-eyebrow">Pause or cancel</h3>
+            <p class="patient-small">If something isn’t working, such as side effects, cost or results, tell us before you cancel. Most of it can be sorted out at a follow-up consult. Pausing or cancelling holds parcels that have not been dispatched.</p>
+            {% if action_plan %}
+              <form method="post" action="{% url 'portal:patient-subscription-status' action_plan.pk %}" class="console-form">
+                {% csrf_token %}
+                <input type="hidden" name="treatment_context" value="{{ action_context }}">
+                {{ action_form.non_field_errors }}
+                <label class="patient-check" for="{{ action_form.confirm.id_for_label }}">{{ action_form.confirm }}<span>{{ action_form.confirm.label }}</span></label>
+                {{ action_form.confirm.errors }}
+                <div class="patient-card-actions patient-card-actions--split">
+                  <a class="console-button console-button--secondary patient-card-actions__wide" href="{{ treatment_help_url }}">Something is wrong, help me</a>
+                  {% if action_plan.status == 'paused' %}<button type="submit" name="action" value="resume" class="console-button console-button--primary">Resume my subscription</button>{% elif action_plan.status != 'cancelled' %}<button type="submit" name="action" value="pause" class="console-button console-button--secondary">Pause my subscription</button>{% endif %}
+                  {% if action_plan.status != 'cancelled' %}<button type="submit" name="action" value="cancel" class="console-button console-button--secondary patient-button--rose">Cancel my subscription</button>{% endif %}
+                </div>
+              </form>
+            {% endif %}
+          </div>
+        {% elif current_authorization %}
+          {{ action_form.non_field_errors }}
+          <h2 class="patient-eyebrow" id="treatment-plan-heading">My treatment</h2>
+          <div class="patient-plan__head">
+            <p class="patient-plan__product"><strong>{{ current_authorization.product.name }}{% if current_authorization.product.strength %} {{ current_authorization.product.strength }}{% endif %}</strong> <span>· {{ current_authorization.quantity_per_cycle }} per cycle</span></p>
+          </div>
+          <dl class="patient-kv">
+            <div><dt>Maximum dose</dt><dd>{{ current_authorization.max_dose }}</dd></div>
+            <div><dt>Authorised on</dt><dd>{{ current_authorization.starts_on|date:"j M Y" }}</dd></div>
+            <div><dt>Valid until</dt><dd class="patient-kv__amber">{{ current_authorization.expires_on|date:"j M Y" }}</dd></div>
+            <div><dt>Prescribing doctor</dt><dd>{{ current_authorization.prescribed_by.full_name }}</dd></div>
+          </dl>
+          {% if current_authorization.instructions %}<div class="patient-plan__note"><h3 class="patient-eyebrow">Your doctor’s instructions</h3><p class="treatment-instructions">{{ current_authorization.instructions|linebreaksbr }}</p></div>{% endif %}
+          {% if can_enroll or enrollment_form.errors %}
+            <div class="patient-plan__manage">
+              <h3 class="patient-eyebrow">Start your subscription</h3>
+              <p class="patient-small">Your parcels are scheduled from your subscription.{% if plan_settings %} The reference amount is R{{ plan_settings.standard_subscription_amount|floatformat:"-2" }} a month.{% endif %} No payment is collected in this app.</p>
+              <form method="post" action="{% url 'portal:patient-subscription-enroll' %}" class="console-form">
+                {% csrf_token %}
+                <input type="hidden" name="treatment_context" value="{{ enrollment_context }}">
+                {{ enrollment_form.non_field_errors }}
+                <div class="console-form__field">
+                  <label for="{{ enrollment_form.authorization.id_for_label }}">{{ enrollment_form.authorization.label }}</label>
+                  {{ enrollment_form.authorization }}
+                  {{ enrollment_form.authorization.errors }}
+                </div>
+                <label class="patient-check" for="{{ enrollment_form.confirm.id_for_label }}">{{ enrollment_form.confirm }}<span>{{ enrollment_form.confirm.label }}</span></label>
+                {{ enrollment_form.confirm.errors }}
+                <div class="patient-card-actions"><button type="submit" class="console-button console-button--primary">Start my subscription</button></div>
+              </form>
+            </div>
+          {% endif %}
+        {% else %}
+          {{ action_form.non_field_errors }}{{ enrollment_form.non_field_errors }}
+          <h2 class="patient-eyebrow" id="treatment-plan-heading">My subscription</h2>
+          <p class="patient-plan__empty-title">No treatment authorised yet</p>
+          <p class="patient-small">Your doctor records an authorisation after reviewing your care at a consult. Completing a questionnaire or booking does not guarantee a prescription.</p>
+          {% if enrollment_form.errors %}{{ enrollment_form.authorization.errors }}{{ enrollment_form.confirm.errors }}{% endif %}
+          <div class="patient-card-actions"><a class="console-button console-button--primary" href="{% url 'portal:patient-appointments' %}#book">Book a consult</a></div>
+        {% endif %}
+      </div>
+    </section>
+  </div>
+
+  <details class="patient-history" id="treatment-history"{% if history_open %} open{% endif %}>
+    <summary>Treatment and delivery history</summary>
+    <div class="patient-history__body">
+      <section aria-labelledby="authorisation-history-heading">
+        <h3 id="authorisation-history-heading">Treatment authorisations</h3>
+        <div class="treatment-table-wrap">
+          <table class="treatment-table">
+            <thead><tr><th scope="col">Medicine</th><th scope="col">Dose and quantity</th><th scope="col">Authorised dates</th><th scope="col">Status</th><th scope="col">Doctor</th></tr></thead>
+            <tbody>
+              {% for item in page_obj %}
+                <tr>
+                  <td>{{ item.product.name }}{% if item.product.strength %} {{ item.product.strength }}{% endif %}</td>
+                  <td>{{ item.max_dose }} · {{ item.quantity_per_cycle }} per cycle</td>
+                  <td>{{ item.starts_on|date:"j M Y" }} – {{ item.expires_on|date:"j M Y" }}</td>
+                  <td>{% if item.is_current %}Currently authorised{% else %}{{ item.get_status_display }} · not valid for dispensing{% endif %}</td>
+                  <td>{{ item.prescribed_by.full_name }}</td>
+                </tr>
+                {% if item.instructions %}<tr class="patient-history__detail"><td colspan="5"><span>Instructions:</span> {{ item.instructions|linebreaksbr }}</td></tr>{% endif %}
+              {% empty %}
+                <tr><td colspan="5">No treatment authorisations have been recorded yet.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% include 'portal/includes/patient_pager.html' with pager=page_obj param='page' query=history_queries.page anchor='treatment-history' label='Treatment authorisation history' %}
+      </section>
+
+      <section aria-labelledby="plan-history-heading">
+        <h3 id="plan-history-heading">Subscriptions</h3>
+        <div class="treatment-table-wrap">
+          <table class="treatment-table">
+            <thead><tr><th scope="col">Plan</th><th scope="col">Started</th><th scope="col">Status</th><th scope="col">Cancelled</th></tr></thead>
+            <tbody>
+              {% for item in plans_page %}
+                <tr><td>{{ item.plan_name }}</td><td>{{ item.starts_on|date:"j M Y" }}</td><td>{{ item.get_status_display }}</td><td>{{ item.cancelled_at|date:"j M Y, H:i"|default:"—" }}{% if item.cancelled_at %} SAST{% endif %}</td></tr>
+              {% empty %}
+                <tr><td colspan="4">No subscriptions have been recorded yet.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% include 'portal/includes/patient_pager.html' with pager=plans_page param='plans_page' query=history_queries.plans_page anchor='treatment-history' label='Subscription history' %}
+      </section>
+
+      <section aria-labelledby="delivery-history-heading">
+        <h3 id="delivery-history-heading">Deliveries</h3>
+        <div class="treatment-table-wrap">
+          <table class="treatment-table">
+            <thead><tr><th scope="col">Scheduled</th><th scope="col">Cycle</th><th scope="col">Status</th><th scope="col">Tracking reference</th></tr></thead>
+            <tbody>
+              {% for item in shipments_page %}
+                <tr><td>{{ item.scheduled_for|date:"j M Y" }}</td><td>{{ item.cycle_number }}</td><td>{{ item.get_status_display }}</td><td>{{ item.tracking_number|default:"Not dispatched" }}</td></tr>
+              {% empty %}
+                <tr><td colspan="4">No deliveries have been recorded.</td></tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% include 'portal/includes/patient_pager.html' with pager=shipments_page param='shipments_page' query=history_queries.shipments_page anchor='treatment-history' label='Delivery history' %}
+      </section>
+    </div>
+  </details>
+</div>
+{% endblock %}

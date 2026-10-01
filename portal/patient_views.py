@@ -5,6 +5,7 @@ from urllib.parse import urlencode
 
 from django import forms
 from django.contrib import messages
+from django.contrib.auth import get_user_model
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.exceptions import ValidationError
 from django.core.paginator import Paginator
@@ -19,8 +20,7 @@ from django.views import View
 
 from care.forms import AppointmentProposalForm, PatientMessageForm, PatientThreadForm, WeightEntryForm
 from care.models import (
-    Appointment, ConsentRecord, MessageThread, PatientEvent, PatientMessage,
-    PatientSubscription, WeightEntry,
+    Appointment, ConsentRecord, MessageThread, PatientMessage, PracticeSettings, WeightEntry,
 )
 from care.services import record_audit
 from practices.models import Patient
@@ -52,33 +52,54 @@ class PatientContactForm(forms.Form):
                            widget=forms.TextInput(attrs={'autocomplete': 'address-level2'}))
 
 
+# Five sidebar destinations. Pages without their own entry light up the one
+# they belong to; account and privacy pages live in the account menu instead.
+PATIENT_NAV_GROUPS = {
+    'overview': 'home', 'progress': 'home', 'updates': 'home',
+    'treatment': 'treatment', 'subscription': 'treatment', 'medical_profile': 'treatment', 'labs': 'treatment',
+    'appointments': 'appointments', 'messages': 'messages', 'pharmacy': 'medications', 'orders': 'medications',
+}
+
+
+def unread_patient_messages(request, company, patient):
+    return PatientMessage.objects.for_company(company).filter(
+        thread__company=company, thread__patient=patient, read_at__isnull=True,
+    ).exclude(sender=request.user).count()
+
+
 def patient_page_context(request, company, patient, section, title):
     return {
         'is_patient_portal': True, 'patient_company': company, 'patient': patient,
-        'patient_section': section, 'page_title': title,
+        'patient_section': section, 'patient_nav': PATIENT_NAV_GROUPS.get(section, ''), 'page_title': title,
         'patient_context': make_patient_context(request, company, patient),
+        'patient_unread_messages': unread_patient_messages(request, company, patient),
     }
 
 
 def patient_overview_context(request, company, patient, **overrides):
-    context = patient_page_context(request, company, patient, 'overview', 'Your care overview')
+    from .patient_progress import weight_chart
+    from .patient_summary import current_authorization, current_plan, latest_authorization, next_consult, next_delivery
+
+    context = patient_page_context(request, company, patient, 'overview', 'Home')
+    plan = current_plan(company, patient)
+    authorization = current_authorization(company, patient, plan)
+    weights = WeightEntry.objects.for_company(company).filter(patient=patient).order_by('-recorded_on', '-pk')
+    latest, first = weights.first(), weights.last()
+    last = None if authorization else latest_authorization(company, patient)
+    change = latest.weight_kg - first.weight_kg if latest and first and latest.pk != first.pk else None
+    today = timezone.localdate()
     context.update(
-        active_subscription=PatientSubscription.objects.for_company(company).filter(
-            patient=patient, status=PatientSubscription.Status.ACTIVE,
-        ).first(),
-        upcoming_appointments=_with_appointment_end(Appointment.objects.for_company(company)).filter(
-            patient=patient, scheduled_ends_at__gte=timezone.now(), status=Appointment.Status.BOOKED,
-        ).select_related('clinician').order_by('starts_at', 'pk')[:3],
-        recent_weights=WeightEntry.objects.for_company(company).filter(patient=patient).order_by('-recorded_on', '-pk')[:3],
-        unread_messages=PatientMessage.objects.for_company(company).filter(
-            thread__company=company, thread__patient=patient, read_at__isnull=True,
-        ).exclude(sender=request.user).count(),
-        patient_events=PatientEvent.objects.for_company(company).filter(
-            patient=patient, is_patient_visible=True,
-        ).order_by('-occurred_at', '-pk')[:5],
-    )
-    context['upcoming_appointments'] = attach_video_join(
-        context['upcoming_appointments'], request.user.pk, allowed_role='patient',
+        current_authorization=authorization, last_authorization=last,
+        last_authorization_state=('' if last is None else 'upcoming' if last.starts_on > today and last.status == 'active'
+                                  else 'paused' if last.status == 'paused' else 'ended'),
+        next_consult=next_consult(request, company, patient),
+        next_delivery=next_delivery(company, patient),
+        care_doctor=patient.assigned_doctor or (authorization.prescribed_by if authorization else None),
+        latest_weight=latest, first_weight=first,
+        weight_change=change, weight_change_abs=abs(change) if change is not None else None,
+        weight_chart=weight_chart(reversed(list(weights[:300]))),
+        weight_form=WeightEntryForm(company=company, patient=patient, recorded_by=request.user,
+                                    initial={'recorded_on': timezone.localdate()}),
     )
     context.update(overrides)
     return context
@@ -105,7 +126,15 @@ def _with_appointment_end(queryset):
 
 
 def patient_appointments_context(request, company, patient):
-    context = patient_page_context(request, company, patient, 'appointments', 'Your appointments')
+    from .patient_summary import RENEWAL_WINDOW_DAYS, current_authorization, current_plan, next_consult, pending_proposals
+
+    context = patient_page_context(request, company, patient, 'appointments', 'My Appointments')
+    consult = next_consult(request, company, patient)
+    authorization = current_authorization(company, patient, current_plan(company, patient))
+    renewal_due = None
+    if authorization is not None and consult is None and (authorization.expires_on - timezone.localdate()).days <= RENEWAL_WINDOW_DAYS:
+        renewal_due = authorization.expires_on
+    context.update(next_consult=consult, proposals=pending_proposals(request, company, patient), renewal_due=renewal_due)
     form, status = _filter(request, AppointmentFilterForm, 'upcoming')
     now = timezone.now()
     upcoming = Q(scheduled_ends_at__gte=now, status=Appointment.Status.BOOKED)
@@ -182,6 +211,7 @@ def patient_messages_context(request, company, patient, *, selected_thread_id=No
     latest = PatientMessage.objects.for_company(company).filter(thread_id=OuterRef('pk')).order_by('-created_at', '-pk')
     all_threads = MessageThread.objects.for_company(company).filter(patient=patient).annotate(
         latest_body=Subquery(latest.values('body')[:1]),
+        latest_sender_id=Subquery(latest.values('sender_id')[:1]),
         last_activity=Coalesce('last_message_at', 'created_at'),
         unread_count=Count('messages', filter=(
             Q(messages__company=company, messages__read_at__isnull=True) & ~Q(messages__sender=request.user)
@@ -195,13 +225,32 @@ def patient_messages_context(request, company, patient, *, selected_thread_id=No
         filtered = filtered.none()
     context.update(_paginate(request, filtered))
     threads = list(context['page_obj'].object_list)
+    # Who wrote the latest message in each listed conversation, fetched once for the page.
+    sender_ids = {thread.latest_sender_id for thread in threads if thread.latest_sender_id}
+    senders = {person.pk: person.full_name for person in get_user_model().objects.filter(pk__in=sender_ids)}
+    for thread in threads:
+        if thread.latest_body is None:
+            thread.latest_sender_name = ''
+        elif thread.latest_sender_id == request.user.pk:
+            thread.latest_sender_name = 'You'
+        else:
+            thread.latest_sender_name = senders.get(thread.latest_sender_id) or 'Meridian care team'
     requested = selected_thread_id if selected_thread_id is not None else request.GET.get('thread')
-    selected = get_object_or_404(all_threads, pk=_thread_id(requested)) if requested is not None else (threads[0] if threads else None)
+    # A new message opens in the conversation pane. Links elsewhere in the
+    # portal can suggest a subject, which the patient can change before sending.
+    composing = request.GET.get('compose') == '1' or overrides.get('failed_form') == 'thread_form'
+    suggested_subject = ' '.join(request.GET.get('subject', '').split())[:120] if composing else ''
+    # Nothing opens by itself: replies stay unread until the patient chooses a conversation.
+    selected = get_object_or_404(all_threads, pk=_thread_id(requested)) if requested is not None else None
+    settings_row = PracticeSettings.objects.for_company(company).first()
     context.update(
         threads=threads, filter_form=form, selected_thread=selected,
         message_threads=[selected] if selected else [],
         message_form=PatientMessageForm(auto_id='patient_reply_%s'),
-        thread_form=PatientThreadForm(auto_id='thread_%s'),
+        thread_form=PatientThreadForm(auto_id='thread_%s', initial={'subject': suggested_subject} if suggested_subject else None),
+        composing=composing or (selected is None and not all_threads.exists()),
+        subject_suggestions=('Side effects', 'My dose', 'My delivery', 'My appointment', 'Something else'),
+        support_email=settings_row.support_email if settings_row else '',
     )
     context.update(overrides)
     if selected is None:
@@ -217,6 +266,7 @@ def patient_messages_context(request, company, patient, *, selected_thread_id=No
     # to a GET, which records the actual conversation view.
     if read_ids and request.method == 'GET':
         PatientMessage.objects.for_company(company).filter(thread=selected, pk__in=read_ids, read_at__isnull=True).update(read_at=timezone.now())
+        context['patient_unread_messages'] = unread_patient_messages(request, company, patient)
     selected.unread_count = history.filter(read_at__isnull=True).exclude(sender=request.user).count()
     for thread in threads:
         if thread.pk == selected.pk:
@@ -239,9 +289,10 @@ def patient_messages_context(request, company, patient, *, selected_thread_id=No
 
 
 def patient_account_context(request, company, patient, **overrides):
-    context = patient_page_context(request, company, patient, 'account', 'Your account')
+    context = patient_page_context(request, company, patient, 'account', 'Account settings')
     context.update(
         contact_form=PatientContactForm(initial={'phone': patient.phone, 'city': patient.city}),
+        details_change_url=f"{reverse('portal:patient-messages')}?{urlencode({'compose': 1, 'subject': 'Change to my personal details'})}#patient-conversation",
         consents=ConsentRecord.objects.for_company(company).filter(patient=patient).order_by('-created_at', '-pk'),
     )
     context.update(overrides)
@@ -252,7 +303,11 @@ class PatientAppointmentsView(LoginRequiredMixin, PatientPortalRequiredMixin, Vi
     http_method_names = ('get', 'head', 'options')
 
     def get(self, request):
-        return render(request, 'portal/patient_appointments.html', patient_appointments_context(request, self.patient_company, self.patient))
+        from .patient_care_views import booking_context
+
+        context = patient_appointments_context(request, self.patient_company, self.patient)
+        context.update(booking_context(request, self.patient_company, self.patient))
+        return render(request, 'portal/patient_appointments.html', context)
 
 
 class PatientProgressView(LoginRequiredMixin, PatientPortalRequiredMixin, View):

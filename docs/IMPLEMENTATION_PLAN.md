@@ -7,7 +7,7 @@ Scope confirmed 12 September 2026: complete the in-app functionality without app
 ## Completed foundation
 
 - [x] Two demo practices, shared login identities and practice-scoped roles/data.
-- [x] Landing page and anonymous questionnaire → lead only; dummy checkout never creates a patient account.
+- [x] Landing page and anonymous questionnaire → lead only; checkout converts a lead into a booked patient only with the checkout test code.
 - [x] Separate staff and patient workspaces; task table, general/patient tasks, assignment and arbitrary tags.
 - [x] Secure conversations and mutually accepted appointment-change proposals.
 - [x] Schedule calendar/table, doctor working hours, global clinician time off and clash checks.
@@ -27,6 +27,7 @@ Scope confirmed 12 September 2026: complete the in-app functionality without app
 - [x] **Unified staff patient workspace** — canonical `/patients/<id>/` with separate Overview, History, Appointments, Consultations, Blood tests, Notes, Weight, Messages, Tasks, Payments, Treatment and Deliveries tabs. Only the selected tab renders, with one patient header and role-filtered access. Practice-wide lists remain separate. Existing booking, note, task and conversation actions return to the patient's relevant section, retaining invalid drafts.
 - [x] **Incremental patient history and spreadsheet export** — 20-event initial timeline, stable signed older-event loading, SAST dates, no-JavaScript pagination and a filtered `.xlsx` snapshot download. Scope and permissions are rechecked; private drafts/notes, arbitrary audit metadata and attachment bytes stay excluded. Over 10,000 events requires narrower filters. Protected JSON export remains separate.
 - [x] **Compact patient portal overview** — one greeting, content-sized summaries and panels, no duplicate practice strip, and links to dedicated appointments, progress, messages and updates pages. Overview does not mark conversations read or perform workflow writes.
+- [x] **Patient web app restructure (design Rev 3.9)** — a five-destination sidebar (Home, My Treatment, My Appointments, My Messages with an unread count, My Medications) and Account settings in the account menu. My Treatment combines tasks, medical information and the care plan; booking moved onto My Appointments; medications are grouped by authorisation. Only recorded data is shown, and earlier pages (weight history, updates, blood tests, medical profile, basket and request history) stay reachable from their section. The practice console is unchanged.
 
 The current route map and practical workflows are in [USER_GUIDE.md](USER_GUIDE.md). Deployment preparation and remaining live-use prerequisites are in [DEPLOYMENT.md](DEPLOYMENT.md). Verification results are recorded in [VERIFICATION.md](VERIFICATION.md).
 
@@ -36,7 +37,7 @@ The current route map and practical workflows are in [USER_GUIDE.md](USER_GUIDE.
 - Practice Administrators retain Leads access as explicitly requested, despite the prototype's inconsistent role matrix.
 - Cross-practice views may combine only records the signed-in user is authorised to read. Actions always target a specific practice and recheck permissions.
 - Patient tab navigation stays bound to that patient; the global navigation is the explicit exit to practice-wide pages. Practice Administrators get operational patient history, never clinical bodies. Local payment records are read-only and do not verify funds received.
-- A patient never gains an account by merely submitting a questionnaire. Since payment functionality is excluded, that existing checkout remains a preview; staff-user administration does not convert leads.
+- A patient never gains an account by merely submitting a questionnaire. No payment provider is connected, so the checkout converts a lead only with the checkout test code; staff-user administration does not convert leads.
 - Do not collect real card/bank details, mark money paid, send emails, dispense externally or contact couriers. Local orders/subscriptions/dispatch logs are auditable in-app records.
 - Generated prescribing documents, automatic clinical decisions and live clinical deployment require separately validated governance. The prototype is not clinical or legal authority.
 

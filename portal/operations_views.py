@@ -18,7 +18,7 @@ from django.utils.decorators import method_decorator
 from django.views import View
 from django.views.decorators.cache import never_cache
 
-from care.models import MedicationBatch, MedicationProduct, PharmacyOrder, Shipment, StockMovement
+from care.models import MedicationBatch, MedicationProduct, PharmacyOrder, Shipment, StockMovement, TreatmentAuthorization
 from care.operations import (
     UNDISPATCHED, change_batch, dispatch_shipment, hold_or_cancel_shipment, lock_shipping_week,
     mark_delivered, prepare_shipment, product_allowance, receive_stock, require_operations_actor, shipment_hold_reason,
@@ -512,7 +512,7 @@ class PatientPharmacyBase(LoginRequiredMixin, PatientPortalRequiredMixin, View):
     http_method_names = ('get', 'post', 'head', 'options')
 
     def context(self, **kwargs):
-        return dict(patient_page_context(self.request, self.patient_company, self.patient, 'pharmacy', 'Your pharmacy'), **kwargs)
+        return dict(patient_page_context(self.request, self.patient_company, self.patient, 'pharmacy', 'My Medications'), **kwargs)
 
     def orders(self):
         return PharmacyOrder.objects.for_company(self.patient_company).filter(patient=self.patient).select_related('shipment')
@@ -525,18 +525,46 @@ class PatientPharmacyView(PatientPharmacyBase):
     http_method_names = ('get', 'head', 'options')
 
     def display(self, request, failed_product=None, failed_form=None, status=200):
-        products = MedicationProduct.objects.for_company(self.patient_company).filter(is_active=True).order_by('name', 'strength', 'pk')
-        context = self.context(**_paginate(request, products), basket=self.orders().filter(status='draft').first())
-        context['products'] = list(context['page_obj'].object_list)
-        existing = {item.product_id: item.quantity for item in context['basket'].items.all()} if context['basket'] else {}
-        for product in context['products']:
-            product.authorization, product.remaining, product.locked_reason = product_allowance(self.patient, product)
+        from .patient_summary import current_plan
+
+        company, patient = self.patient_company, self.patient
+        products = list(MedicationProduct.objects.for_company(company).filter(is_active=True).order_by('name', 'strength', 'pk'))
+        basket = self.orders().filter(status='draft').first()
+        existing = {item.product_id: item.quantity for item in basket.items.all()} if basket else {}
+        plan = current_plan(company, patient)
+        # The latest authorisation for each product, to show what was prescribed before.
+        previous = {}
+        for authorization in TreatmentAuthorization.objects.for_company(company).filter(
+            patient=patient, product__in=[product for product in products if product.requires_authorisation],
+        ).select_related('prescribed_by').order_by('expires_on', 'pk'):
+            previous[authorization.product_id] = authorization
+        groups = {'authorised': [], 'open': [], 'previous': []}
+        for product in products:
+            product.authorization, product.remaining, product.locked_reason = product_allowance(patient, product)
             product.workflow_context = self.token('basket-product', product)
             if request.method == 'POST' and failed_product and product.pk == failed_product.pk:
                 product.workflow_context = request.POST.get('workflow_context', '')
             product.quantity_form = failed_form if failed_product and product.pk == failed_product.pk else BasketQuantityForm(
                 initial={'quantity': existing.get(product.pk, 1)}, auto_id=f'product_{product.pk}_%s',
             )
+            product.in_basket = existing.get(product.pk, 0)
+            product.plan = plan if plan and plan.authorization_id and plan.authorization.product_id == product.pk else None
+            if not product.requires_authorisation:
+                groups['open'].append(product)
+            elif product.authorization is not None:
+                groups['authorised'].append(product)
+            elif product.pk in previous:
+                # Products never prescribed to this patient are not listed.
+                product.previous_authorization = previous[product.pk]
+                groups['previous'].append(product)
+        shown = {product.pk for group in groups.values() for product in group}
+        prescribers = {product.authorization.prescribed_by for product in groups['authorised']}
+        context = self.context(
+            products=products, product_groups=groups, basket=basket, basket_count=sum(existing.values()),
+            authorised_prescriber=next(iter(prescribers)) if len(prescribers) == 1 else None,
+            authorised_until=min((product.authorization.expires_on for product in groups['authorised']), default=None),
+            hidden_failed_form=failed_form if failed_product and failed_product.pk not in shown else None,
+        )
         return render(request, 'portal/pharmacy_catalogue.html', context, status=status)
 
     def get(self, request):

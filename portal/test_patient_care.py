@@ -23,7 +23,7 @@ from practices.services import ACTIVE_COMPANY_SESSION_KEY, ACTIVE_PATIENT_COMPAN
 
 @override_settings(MULTI_PRACTICE_ENABLED=True)
 class PatientCareTests(TestCase):
-    pages = ('patient-book-appointment', 'patient-medical-profile', 'patient-updates')
+    pages = ('patient-appointments', 'patient-medical-profile', 'patient-updates')
 
     @classmethod
     def setUpTestData(cls):
@@ -61,7 +61,7 @@ class PatientCareTests(TestCase):
     def booking_page(self, **changes):
         data = {'date': self.day.isoformat(), 'clinician': self.doctor.pk, 'appointment_type': 'review'}
         data.update(changes)
-        return self.client.get(self.url('patient-book-appointment'), data)
+        return self.client.get(self.url('patient-appointments'), data)
 
     def booking_data(self):
         response = self.booking_page()
@@ -116,6 +116,18 @@ class PatientCareTests(TestCase):
                     self.assertIn('no-store', response.headers['Cache-Control'])
         self.assertEqual(before, self.counts())
 
+    def test_old_booking_address_opens_booking_on_my_appointments(self):
+        self.login()
+        response = self.client.get(self.url('patient-book-appointment'), {'date': self.day.isoformat(), 'clinician': self.doctor.pk})
+        self.assertRedirects(
+            response, f"{self.url('patient-appointments')}?date={self.day.isoformat()}&clinician={self.doctor.pk}#book",
+            fetch_redirect_response=False,
+        )
+        page = self.booking_page()
+        self.assertTemplateUsed(page, 'portal/patient_appointments.html')
+        self.assertContains(page, 'id="book"')
+        self.assertContains(page, f'action="{self.url("patient-book-appointment")}"')
+
     def test_csrf_protects_booking_and_profile(self):
         client = Client(enforce_csrf_checks=True)
         client.force_login(self.user)
@@ -127,7 +139,7 @@ class PatientCareTests(TestCase):
         response = self.booking_page()
         self.assertNotContains(response, 'Beta Doctor')
         response = self.booking_page(clinician=self.beta_doctor.pk)
-        self.assertTrue(response.context['filter_form'].errors)
+        self.assertTrue(response.context['booking_filter_form'].errors)
         self.assertEqual(response.context['slots'], [])
 
     def test_invalid_dates_do_not_show_slots(self):
@@ -135,7 +147,7 @@ class PatientCareTests(TestCase):
         for date in ('invalid', '9999-12-31', (self.day - timedelta(days=5)).isoformat(), (self.day + timedelta(days=91)).isoformat()):
             with self.subTest(date=date):
                 response = self.booking_page(date=date)
-                self.assertTrue(response.context['filter_form'].errors)
+                self.assertTrue(response.context['booking_filter_form'].errors)
                 self.assertEqual(response.context['slots'], [])
 
     def test_booking_needs_explicit_confirmation(self):

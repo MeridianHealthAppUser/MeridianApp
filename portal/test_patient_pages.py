@@ -41,6 +41,7 @@ class PatientNavigationParser(HTMLParser):
 @override_settings(MULTI_PRACTICE_ENABLED=True)
 class PatientStandalonePagesTests(TestCase):
     page_names = ('patient-dashboard', 'patient-appointments', 'patient-messages', 'patient-progress', 'patient-account')
+    nav_pages = ('patient-dashboard', 'patient-treatment', 'patient-appointments', 'patient-messages', 'patient-pharmacy')
 
     @classmethod
     def setUpTestData(cls):
@@ -183,6 +184,8 @@ class PatientStandalonePagesTests(TestCase):
             'patient-messages': 'portal/patient_messages.html',
             'patient-progress': 'portal/patient_progress.html',
             'patient-account': 'portal/patient_account.html',
+            'patient-treatment': 'portal/treatment_patient.html',
+            'patient-pharmacy': 'portal/pharmacy_catalogue.html',
         }
         for name, template in templates.items():
             with self.subTest(page=name):
@@ -192,11 +195,14 @@ class PatientStandalonePagesTests(TestCase):
                 self.assertIn('no-store', response.headers.get('Cache-Control', ''))
                 navigation = PatientNavigationParser(response.content.decode()).links
                 hrefs = {item.get('href') for item in navigation}
-                for section in self.page_names:
+                for section in (*self.nav_pages, 'patient-account'):
                     self.assertIn(reverse(f'portal:{section}'), hrefs)
-                current = [item for item in navigation if item.get('aria-current') == 'page']
-                self.assertTrue(current)
-                self.assertEqual({item.get('href') for item in current}, {reverse(f'portal:{name}')})
+                current = {item.get('href') for item in navigation if item.get('aria-current') == 'page'}
+                self.assertEqual(current, {reverse(f'portal:{name}')} if name in self.nav_pages else set())
+                if name == 'patient-progress':
+                    # Weight history is part of Home, which stays marked as the section.
+                    section = {item.get('href') for item in navigation if item.get('aria-current') == 'true'}
+                    self.assertEqual(section, {reverse('portal:patient-dashboard')})
 
     def test_overview_has_summaries_without_inline_write_forms_or_conversations(self):
         self.login()
@@ -204,8 +210,11 @@ class PatientStandalonePagesTests(TestCase):
         self.message(body=long_body)
         response = self.page('patient-dashboard')
         self.assertNotContains(response, long_body)
+        # Logging a weight is the one write Home offers, with its signed context.
+        self.assertContains(response, f'action="{reverse("portal:patient-weight-add")}"')
+        self.assertContains(response, 'name="patient_context"')
         for action in (
-            reverse('portal:patient-weight-add'), reverse('portal:patient-thread-create'),
+            reverse('portal:patient-thread-create'),
             reverse('portal:patient-message-create', args=[self.thread.pk]),
             reverse('portal:patient-appointment-propose', args=[self.thread.pk]),
         ):
@@ -478,9 +487,9 @@ class PatientStandalonePagesTests(TestCase):
 
     def test_patient_write_forms_include_their_signed_context(self):
         self.login()
-        for name in ('patient-account', 'patient-progress', 'patient-messages'):
+        for name, params in (('patient-account', {}), ('patient-progress', {}), ('patient-messages', {'compose': 1})):
             with self.subTest(page=name):
-                response = self.page(name)
+                response = self.page(name, **params)
                 self.assertTrue(response.context['patient_context'])
                 self.assertContains(response, 'name="patient_context"')
 

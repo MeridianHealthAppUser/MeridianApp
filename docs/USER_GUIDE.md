@@ -54,7 +54,7 @@ Choose a patient in the directory. Their name, details and tab bar remain visibl
 
 - **Overview**: a compact summary, with no full forms or conversations. Looking at it does not mark messages read.
 - **History**: the permitted event log. Doctors and practice Super Admins see the clinical record; Practice Administrators see only an operational history without clinical note bodies or audit metadata.
-- **Appointments**, **Messages**, **Tasks** and **Deliveries**: records and actions for this patient only. Selecting a conversation shows its own message history, and only opened incoming messages are marked read.
+- **Appointments**, **Messages**, **Tasks** and **Deliveries**: records and actions for this patient only. The Messages tab opens with no conversation selected and shows each one's unread count. Selecting a conversation shows its own message history, and only opened incoming messages are marked read.
 - **Consultations**, **Blood tests**, **Notes** and **Treatment**: shown only to the appropriate clinical roles. Unsigned consultations remain author-only; private notes remain author-only while the author has the Doctor role. Generated clinical tasks must still be completed through their clinical workflow.
 - **Weight**: the recorded weight trend and exact check-ins. Chart points are spaced by their actual dates, with first/current/change summaries. The chart covers up to the latest 300 check-ins; the paginated table still provides older entries. There are explicit empty and single-entry states, and longer notes can be expanded.
 - **Payments**: existing local records only. No charge can be made here, and a local “paid” status does not verify a real payment.
@@ -88,7 +88,7 @@ Preparation reserves inventory; recording dispatch does not deduct it twice. Can
 
 - `/leads/`: questionnaire enquiries, screening outcome, versioned consent and follow-up notes. Follow-ups can assign an administrator, set the next contact date, record booking interest or close an enquiry. They cannot create an account or change clinical screening.
 - `/dropouts/`: paused/cancelled care plans and administrative follow-up history. Following up does not restart treatment.
-- `/subscriptions/`: local care-plan records. Patients explicitly enrol, pause/resume or cancel their own plan in `/patient/subscription/`; no payment is collected.
+- `/subscriptions/`: local care-plan records. Patients explicitly enrol, pause/resume or cancel their own plan on My Treatment (`/patient/treatment/`); no payment is collected.
 - `/data-requests/`: administrators respond to patient access/correction/deletion-review requests. Responses are retained and visible to the patient. A deletion request does not erase records automatically.
 - `/settings/users/`: Super Admin staff access management for Meridian Health. Linking an existing sign-in does not silently rename it or reset its password. The last active practice Super Admin cannot be removed.
 - `/settings/practices/`: disabled in single-practice mode, together with creation and editing endpoints. A practice Super Admin is not Django's site-wide superuser.
@@ -108,9 +108,9 @@ It acts on the selected practice's live records. No scheduler is enabled automat
 
 ## Patient pages
 
-Patients have separate Overview, Appointments, Messages, Progress, Tests, Treatment, Subscription, Medical profile, Updates, Pharmacy, Orders and Account destinations.
+The patient sidebar has five destinations: Home, My Treatment, My Appointments, My Messages (with the unread count) and My Medications. Account settings is in the account menu. Weight history and Updates open from Home; the medical profile, blood tests and the care plan are on or linked from My Treatment; booking is on My Appointments; the basket and request history open from My Medications.
 
-The patient Overview uses a single greeting and compact care-plan, weight and unread-message summaries, followed by upcoming appointments, recent check-ins and shared updates. It avoids a duplicate practice strip and oversized empty panels. Its links open the dedicated pages; it never marks a conversation read or submits a form automatically.
+Home shows the authorisation and next consult, what is on its way, and the recorded weight chart. Its only form logs a weight check-in, and it never marks a conversation read. My Treatment lists tasks raised from the record, such as booking a follow-up before an authorisation lapses; each one disappears once the record changes.
 
 - Book an available review/follow-up slot; download a private `.ics` calendar entry or suggest a new time in Messages.
 - Save a stage-2 medical profile with retained revisions. Self-reported answers are not automatic clinical assessments.
@@ -119,7 +119,7 @@ The patient Overview uses a single greeting and compact care-plan, weight and un
 - Review orders and delivery updates from their own practice record only.
 - Update local contact details, change the shared-login password, change marketing preferences independently of consent, and submit privacy/data requests from Account.
 
-Submitting the anonymous `/questionnaire/` creates a **lead only**. The checkout is a local dummy preview and never creates a user or collects card details. Paid conversion remains intentionally unavailable because payment functionality was excluded.
+Submitting the anonymous `/questionnaire/` creates a **lead only**. A cleared demo lead can open the checkout, choose an initial consultation time and create a login. Card and EFT payments are not connected and no card details are collected. Only the checkout test code (`CHECKOUT_TEST_CODE`, `devtest` locally) brings the fee to R0 and converts the lead into a booked, signed-in patient with a paid invoice. The practice needs a consultation fee in **Practice settings** and at least one doctor with open times.
 
 ## Before real patient use
 

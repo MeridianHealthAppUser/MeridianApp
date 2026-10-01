@@ -1,0 +1,35 @@
+/* Updates: filters, then a month-by-month timeline. */
+.patient-updates__bar { border-bottom: 1px solid var(--console-line); display: grid; gap: .8rem; margin-bottom: .5rem; padding-bottom: 1rem; }
+.patient-updates__filters { align-items: end; display: flex; flex-wrap: wrap; gap: .6rem; }
+.patient-updates__filters .console-form__field { flex: 0 1 10.5rem; }
+.patient-updates__filters input, .patient-updates__filters select { min-height: 2.35rem; padding-block: .35rem; }
+.patient-updates__filters .console-button { min-height: 2.35rem; }
+
+.patient-updates__month-head { align-items: center; display: flex; gap: .85rem; margin: 1.6rem 0 .3rem; }
+.workspace-page .meridian-console .patient-updates__month-head h2 { color: var(--console-muted); font-size: .72rem; font-weight: 500; letter-spacing: .09em; margin: 0; text-transform: uppercase; white-space: nowrap; }
+.patient-updates__month-head > span { background: var(--console-line); flex: 1; height: 1px; }
+.patient-updates__month-head p { color: var(--console-muted); font-size: .72rem; margin: 0; white-space: nowrap; }
+.patient-updates__items { list-style: none; margin: 0; padding: 0; }
+.patient-update { align-items: start; display: grid; gap: .9rem; grid-template-columns: 3.4rem minmax(0, 1fr); }
+.patient-update__date { color: var(--console-muted); font-size: .74rem; font-variant-numeric: tabular-nums; line-height: 1.35; padding-top: .85rem; text-align: right; }
+.patient-update__date b { color: var(--console-ink); display: block; font-size: .84rem; font-weight: 500; }
+.patient-update__body { border-left: 2px solid var(--console-line); margin-left: .95rem; min-width: 0; padding: .85rem 0 1.1rem 1.9rem; position: relative; }
+.patient-update:last-child .patient-update__body { border-left-color: transparent; }
+.workspace-page .meridian-console .patient-update__body h3 { color: var(--console-ink); font-size: .9rem; font-weight: 500; line-height: 1.4; margin: 0; overflow-wrap: anywhere; }
+.patient-update__body p { color: var(--patient-text); font-size: .82rem; line-height: 1.6; margin: .25rem 0 0; overflow-wrap: anywhere; }
+.patient-update__body .patient-update__meta { color: var(--console-muted); font-size: .72rem; margin-top: .1rem; }
+.patient-update__icon { align-items: center; background: #fff; border: 1px solid var(--console-line); border-radius: 50%; color: var(--patient-text); display: flex; height: 1.9rem; justify-content: center; left: -1rem; position: absolute; top: .7rem; width: 1.9rem; }
+.patient-update__icon svg { fill: none; height: .95rem; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.8; width: .95rem; }
+.patient-update--appointment .patient-update__icon { background: var(--patient-amber-soft); border-color: var(--patient-amber-line); color: var(--console-amber); }
+.patient-update--delivery .patient-update__icon { background: var(--patient-blue-soft); border-color: var(--patient-blue-line); color: var(--patient-blue); }
+.patient-update--payment .patient-update__icon, .patient-update--medication .patient-update__icon { background: var(--console-teal-soft); border-color: var(--patient-teal-line); color: var(--console-teal-dark); }
+.patient-update--clinical .patient-update__icon { background: var(--patient-ok-soft, #e8f5ee); border-color: var(--patient-ok-line, #bfe0ce); color: var(--patient-ok, #1a7a52); }
+.patient-update--message .patient-update__icon { background: var(--console-canvas); border-color: var(--console-line); color: var(--console-ink); }
+.patient-updates__empty { padding: 3rem 1rem; text-align: center; }
+
+@media (max-width: 42rem) {
+  .patient-updates__filters .console-form__field { flex: 1 1 8rem; }
+  .patient-updates__filters .console-button { width: 100%; }
+  .patient-update { gap: .6rem; grid-template-columns: 2.6rem minmax(0, 1fr); }
+  .patient-update__body { padding-left: 1.6rem; }
+}

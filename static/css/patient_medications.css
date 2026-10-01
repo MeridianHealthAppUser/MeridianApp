@@ -1,0 +1,67 @@
+/* My Medications: authorised, open and previously prescribed shelves, and the basket. */
+.patient-medications__actions { display: flex; flex-wrap: wrap; gap: .5rem; }
+.patient-shelf { margin-top: 1.9rem; }
+.patient-shelf:first-of-type { margin-top: .4rem; }
+.patient-shelf__head { align-items: flex-end; border-bottom: 1px solid var(--console-line); display: flex; flex-wrap: wrap; gap: .8rem 1.5rem; justify-content: space-between; margin-bottom: 1rem; padding-bottom: .85rem; }
+.patient-shelf__head > div { flex: 1 1 24rem; min-width: 0; }
+.patient-shelf__head p { color: var(--patient-text); font-size: .84rem; line-height: 1.55; margin: .4rem 0 0; max-width: 46rem; }
+.workspace-page .meridian-console .patient-shelf__title { align-items: center; color: var(--console-ink); display: flex; flex-wrap: wrap; font-size: clamp(1.3rem, 2.2vw, 1.6rem); font-weight: 500; gap: .55rem; letter-spacing: -.02em; margin: 0; }
+.patient-shelf__dot { border-radius: 50%; height: .55rem; width: .55rem; }
+.patient-shelf__dot--teal { background: var(--console-teal); }
+.patient-shelf__dot--blue { background: var(--patient-blue); }
+.patient-shelf__dot--amber { background: var(--console-amber); }
+.patient-shelf__count { color: var(--console-muted); font-size: .78rem; font-weight: 500; letter-spacing: 0; }
+.patient-shelf__grid { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr)); }
+
+.patient-product { background: #fff; border: 1px solid var(--console-line); border-radius: .9rem; display: flex; flex-direction: column; min-width: 0; overflow: hidden; }
+.patient-product__art { align-items: center; background: linear-gradient(135deg, var(--console-teal-soft), #fff); border-bottom: 1px solid var(--console-line); display: flex; height: 5.6rem; justify-content: center; }
+.patient-product__art span { background: linear-gradient(180deg, #fff, #e9f2f4); border: 1px solid var(--patient-teal-line); border-radius: .5rem; height: 3.4rem; position: relative; width: 1rem; }
+.patient-product__art span::after { background: var(--console-teal); border-radius: .2rem; content: ''; height: 1.25rem; left: .19rem; opacity: .22; position: absolute; right: .19rem; top: .6rem; }
+.patient-product--open .patient-product__art { background: linear-gradient(135deg, var(--patient-blue-soft), #fff); }
+.patient-product--open .patient-product__art span { border-color: var(--patient-blue-line); }
+.patient-product--open .patient-product__art span::after { background: var(--patient-blue); opacity: .22; }
+.patient-product--previous { background: var(--console-canvas); border-style: dashed; }
+.patient-product--previous .patient-product__art { background: var(--console-canvas); }
+.patient-product--previous .patient-product__art span { opacity: .4; }
+.patient-product__body { display: flex; flex: 1 1 auto; flex-direction: column; gap: .45rem; padding: .95rem 1rem 1rem; }
+.workspace-page .meridian-console .patient-product__body h3 { color: var(--console-ink); font-size: .95rem; font-weight: 500; line-height: 1.35; margin: 0; }
+.patient-product__body h3 span { color: var(--patient-text); font-weight: 400; }
+.patient-product__description { color: var(--console-muted); font-size: .78rem; line-height: 1.5; margin: 0; }
+.patient-product__price { color: var(--console-ink); font-size: 1.06rem; font-variant-numeric: tabular-nums; font-weight: 500; margin: 0; }
+.patient-product__form { align-items: center; display: flex; flex-wrap: wrap; gap: .5rem; margin-top: auto; padding-top: .35rem; }
+.patient-product__form .patient-product__price { margin-right: auto; }
+.patient-product__form input { border: 1px solid var(--console-line); border-radius: .55rem; color: var(--console-ink); font: inherit; font-size: .85rem; min-height: 2.35rem; padding: .3rem .45rem; text-align: center; width: 3.6rem; }
+.patient-product__form input:focus { border-color: var(--console-teal); box-shadow: 0 0 0 3px var(--patient-focus-ring, rgba(0, 151, 178, .16)); outline: none; }
+.patient-product__form .console-button { min-height: 2.35rem; }
+.patient-product__plan { align-items: center; border-top: 1px solid var(--console-line); display: flex; flex-wrap: wrap; font-size: .82rem; gap: .5rem .75rem; justify-content: space-between; margin-top: auto; padding-top: .75rem; }
+.patient-product__plan strong { color: var(--console-ink); }
+.patient-product__note { color: var(--console-muted); font-size: .72rem; line-height: 1.5; margin: 0; }
+.patient-product--previous .patient-product__note { margin-top: auto; }
+.patient-product .errorlist { color: var(--console-red); font-size: .74rem; list-style: none; margin: 0; padding: 0; }
+
+/* Basket: items on the left, the summary and delivery details on the right. */
+.patient-basket { align-items: start; display: grid; gap: 1rem; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); }
+.patient-basket > .console-card { min-width: 0; }
+.patient-basket-line { align-items: center; border-bottom: 1px solid var(--console-soft-line); display: grid; gap: .75rem; grid-template-columns: minmax(0, 1fr) auto auto; padding: .8rem 0; }
+.patient-basket-line:last-child { border-bottom: 0; }
+.patient-basket-line strong { color: var(--console-ink); display: block; font-size: .9rem; font-weight: 500; }
+.patient-basket-line small { color: var(--console-muted); font-size: .76rem; }
+.patient-basket-line__qty { color: var(--patient-text); font-size: .82rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.patient-basket-line form { margin: 0; }
+.patient-basket__total { align-items: baseline; border-top: 1px solid var(--console-line); display: flex; justify-content: space-between; margin-top: .75rem; padding-top: .75rem; }
+.patient-basket__total span { color: var(--patient-text); font-size: .82rem; }
+.patient-basket__total strong { color: var(--console-ink); font-size: 1.1rem; font-variant-numeric: tabular-nums; font-weight: 700; }
+.patient-basket .ops-form { display: grid; gap: .8rem; margin-top: .9rem; }
+.patient-basket .ops-form > .console-button { justify-content: center; width: 100%; }
+
+@media (max-width: 52rem) {
+  .patient-basket { grid-template-columns: minmax(0, 1fr); }
+}
+
+@media (max-width: 42rem) {
+  .patient-shelf__grid { grid-template-columns: minmax(0, 1fr); }
+  .patient-medications__actions { width: 100%; }
+  .patient-medications__actions > .console-button { flex: 1 1 auto; justify-content: center; }
+  .patient-basket-line { grid-template-columns: minmax(0, 1fr) auto; }
+  .patient-basket-line > :first-child { grid-column: 1 / -1; }
+}

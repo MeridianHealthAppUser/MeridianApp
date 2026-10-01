@@ -90,8 +90,8 @@ class OperationsTemplateTests(OperationsFixture):
 
     def test_patient_catalogue_and_basket_show_no_payment_flow(self):
         self.login(self.patient_user)
-        catalogue = self.assert_page('patient-pharmacy', 'Your pharmacy')
-        self.assertContains(catalogue, 'Update basket')
+        catalogue = self.assert_page('patient-pharmacy', 'My Medications')
+        self.assertContains(catalogue, 'Add to basket')
         empty = self.assert_page('patient-basket', 'Your basket is empty')
         self.assertNotContains(empty, 'Submit supply request')
         self.basket()

@@ -2,7 +2,7 @@
 {% load static %}
 
 {% block title %}Your enquiry | {{ lead.company.name }}{% endblock %}
-{% block extra_css %}<link rel="stylesheet" href="{% static 'css/questionnaire.css' %}?v=intake-20260912">{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{% static 'css/questionnaire.css' %}?v=checkout-20260930">{% endblock %}
 
 {% block content %}
   <section class="questionnaire-result-layout" aria-labelledby="result-title">
@@ -13,7 +13,7 @@
     </header>
 
     {% if demo_screening %}
-      <aside class="questionnaire-callout questionnaire-callout--warm"><span class="questionnaire-badge questionnaire-badge--blue">Prototype</span><div><strong>This screening result is for testing, not clinical approval.</strong><p>A clinician must decide whether treatment is suitable. Booking and payment are not live; no money will be taken and no account will be created.</p></div></aside>
+      <aside class="questionnaire-callout questionnaire-callout--warm"><span class="questionnaire-badge questionnaire-badge--blue">Prototype</span><div><strong>This screening result is for testing, not clinical approval.</strong><p>A clinician must decide whether treatment is suitable. Online payment is not connected yet, so no money can be taken.</p></div></aside>
     {% endif %}
 
     {% if not can_continue %}
@@ -50,9 +50,9 @@
       <aside class="questionnaire-result-column">
         <section class="questionnaire-card" aria-labelledby="next-step-heading">
           <h2 class="questionnaire-kicker" id="next-step-heading">Next step</h2>
-          <p>{% if can_continue %}Preview the consultation payment screen. This is a dummy checkout: it does not reserve a slot, charge you or create a login.{% else %}Your enquiry remains with {{ lead.company.name }} for review. You can correct your answers below.{% endif %}</p>
+          <p>{% if can_continue %}Choose a consultation time and create your login. Online payment is not connected yet, so card and EFT payments cannot be completed.{% else %}Your enquiry remains with {{ lead.company.name }} for review. You can correct your answers below.{% endif %}</p>
           <div class="questionnaire-next-step">
-            {% if can_continue %}<a class="questionnaire-button" href="{% url 'portal:questionnaire-checkout' %}">Preview payment{% if pricing %} · R{{ pricing.initial_consult_fee|floatformat:"-2" }}{% endif %}</a>{% endif %}
+            {% if can_continue %}<a class="questionnaire-button" href="{% url 'portal:questionnaire-checkout' %}">Book your consultation{% if pricing %} · R{{ pricing.initial_consult_fee|floatformat:"-2" }}{% endif %}</a>{% endif %}
             <a class="questionnaire-button questionnaire-button--secondary" href="{% url 'portal:questionnaire' %}?edit=1">Change an answer</a>
           </div>
         </section>

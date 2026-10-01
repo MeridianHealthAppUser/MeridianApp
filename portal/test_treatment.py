@@ -67,8 +67,12 @@ class TreatmentPageTests(TestCase):
         self.assertContains(self.client.get(reverse('portal:treatment-authorisations')), 'Treatment authorisations')
         self.assertContains(self.client.get(reverse('portal:treatment-subscriptions')), 'Patient subscriptions')
         self.login(self.patient_user)
-        self.assertContains(self.client.get(reverse('portal:patient-treatment')), 'Your treatment')
-        self.assertContains(self.client.get(reverse('portal:patient-subscription')), 'No payment collection is connected')
+        treatment = self.client.get(reverse('portal:patient-treatment'))
+        self.assertContains(treatment, '<h1>My Treatment</h1>', html=True)
+        self.assertContains(treatment, 'No treatment authorised yet')
+        # The plan now lives on My Treatment; the old address keeps working.
+        self.assertRedirects(self.client.get(reverse('portal:patient-subscription')),
+                             reverse('portal:patient-treatment') + '#treatment-plan', fetch_redirect_response=False)
 
     def test_admins_cannot_prescribe_and_practice_admin_cannot_read_clinical_details(self):
         auth = self.authorization()
@@ -104,8 +108,9 @@ class TreatmentPageTests(TestCase):
         auth = self.authorization()
         self.login(self.patient_user)
         url = reverse('portal:patient-subscription-enroll')
-        response = self.client.get(reverse('portal:patient-subscription'))
+        response = self.client.get(reverse('portal:patient-treatment'))
         self.assertContains(response, 'Selected treatment product')
+        self.assertContains(response, 'No payment is collected in this app')
         data = dict(authorization=auth.pk, confirm='on')
         self.assertEqual(self.client.post(url, data).status_code, 400)
         self.assertFalse(PatientSubscription.objects.exists())

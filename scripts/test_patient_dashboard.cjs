@@ -31,8 +31,10 @@ const { chromium } = require(process.env.MERIDIAN_PLAYWRIGHT_PATH || 'playwright
             duplicateStrip: !!document.querySelector('.patient-page-topbar'),
             headingSize: parseFloat(style('h1').fontSize),
             headingHeight: header.getBoundingClientRect().height,
-            metricHeights: [...home.querySelectorAll('.metric-card')].map(n => n.getBoundingClientRect().height),
-            subheadingSizes: [...home.querySelectorAll('h2')].map(n => parseFloat(getComputedStyle(n).fontSize)),
+            displaySize: parseFloat(style('.patient-home__display').fontSize),
+            subheadingSizes: [...home.querySelectorAll('h2:not(.patient-home__display)')].map(n => parseFloat(getComputedStyle(n).fontSize)),
+            hasStatus: !!home.querySelector('.patient-home__status .patient-kv'),
+            hasWeightLog: !!home.querySelector('#weight-log form'),
             buttons: [...home.querySelectorAll('.console-button')].map(n => ({
               height: n.getBoundingClientRect().height,
               weight: Number(getComputedStyle(n).fontWeight),
@@ -44,10 +46,12 @@ const { chromium } = require(process.env.MERIDIAN_PLAYWRIGHT_PATH || 'playwright
         assert.equal(await page.locator('h1').count(), 1);
         assert.equal(layout.duplicateStrip, false);
         assert.equal(layout.overflow, false, `${entry.name} overflows at ${width}`);
-        assert.ok(layout.headingSize <= 30);
+        // Home: a welcome with three actions and status pills, then the weight headline.
+        assert.ok(layout.headingSize <= 40);
+        assert.ok(layout.displaySize <= 32);
         assert.ok(layout.subheadingSizes.every(size => size <= 16));
-        assert.ok(layout.headingHeight < (width > 832 ? 125 : 190));
-        assert.ok(layout.metricHeights.every(height => height < 155));
+        assert.ok(layout.headingHeight < (width > 832 ? 200 : 360));
+        assert.ok(layout.hasStatus && layout.hasWeightLog);
         assert.ok(layout.buttons.every(b => b.height >= (width > 832 ? 39 : 43) && b.weight <= 600));
         assert.ok(layout.buttons.filter(b => b.primary).every(b => b.color === 'rgb(255, 255, 255)'));
         if (process.env.MERIDIAN_LAYOUT_OUTPUT) {

@@ -1,9 +1,9 @@
 {% extends 'portal/patient_page_base.html' %}
 {% load static %}
-{% block patient_extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/patient_care.css' %}">{% endblock %}
+{% block patient_extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/patient_care.css' %}?v=20261001">{% endblock %}
 
 {% block patient_heading %}
-  <header class="patient-page-heading"><div><p class="console-kicker">Your care · Medical profile</p><h1>Your medical profile</h1><p>Give your doctor more context before you meet. These are your own answers, not a diagnosis or a treatment decision.</p></div></header>
+  <header class="patient-page-heading"><div><p class="console-kicker"><a class="patient-inline-link" href="{% url 'portal:patient-treatment' %}">My Treatment</a> · Medical profile</p><h1>Your medical profile</h1><p>Give your doctor more context before you meet. These are your own answers, not a diagnosis or a treatment decision.</p></div></header>
 {% endblock %}
 
 {% block patient_content %}

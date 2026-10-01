@@ -1,0 +1,193 @@
+/* Shared pieces of the patient pages: status pills, key/value rows, task and
+   join bars, and the unread count on the sidebar. The brand palette and type
+   are set in patient_theme.css; these are the same values, for pages without it. */
+.patient-pages-console {
+  --patient-amber-soft: #fcf3e2;
+  --patient-amber-line: #ebd5ac;
+  --patient-blue: #1072aa;
+  --patient-blue-soft: #e8f4fc;
+  --patient-blue-line: #bce0f5;
+  --patient-teal-line: #b5e3ea;
+  --patient-rose-soft: #fbedeb;
+  --patient-rose-line: #efccc8;
+  --patient-badge: #d92d20;
+}
+
+/* Sidebar: five destinations, with the unread count after My Messages. */
+.patient-navigation a { position: relative; }
+.patient-navigation a .patient-navigation__badge {
+  align-items: center; background: var(--patient-badge); border-radius: 999px; color: #fff; display: inline-flex; flex: 0 0 auto;
+  font-size: .68rem; font-variant-numeric: tabular-nums; font-weight: 700; height: 1.15rem; justify-content: center; line-height: 1;
+  margin-left: -.15rem; min-width: 1.15rem; padding: 0 .35rem; white-space: nowrap;
+}
+
+/* Page titles use the body typeface, as in the patient app design. */
+.workspace-page .meridian-console.patient-pages-console .patient-page-heading h1 {
+  font-family: inherit; font-size: clamp(1.6rem, 2.6vw, 1.95rem); font-weight: 500; letter-spacing: -.02em; line-height: 1.2; margin: .15rem 0 .5rem;
+}
+.patient-page-heading h1:last-child { margin-bottom: 0; }
+/* Buttons are lighter than in the practice console, as in the patient app design. */
+.workspace-page .meridian-console.patient-pages-console .console-button { font-weight: 500; }
+
+/* Small uppercase label above a card's content. */
+.patient-eyebrow { color: var(--console-muted); font-size: .7rem; font-weight: 500; letter-spacing: .1em; margin: 0; text-transform: uppercase; }
+.workspace-page .meridian-console :is(h2, h3).patient-eyebrow { font-size: .7rem; }
+
+.patient-pills { display: flex; flex-wrap: wrap; gap: .45rem; }
+.patient-pill {
+  align-items: center; background: var(--console-canvas); border: 1px solid var(--console-line); border-radius: 999px;
+  color: var(--patient-text); display: inline-flex; font-size: .74rem; font-weight: 500; gap: .4rem; line-height: 1.3; padding: .28rem .7rem;
+}
+.patient-pill::before { background: currentColor; border-radius: 50%; content: ''; flex: 0 0 auto; height: .38rem; width: .38rem; }
+.patient-pill--plain::before { display: none; }
+.patient-pill--teal { background: var(--console-teal-soft); border-color: var(--patient-teal-line); color: var(--console-teal-dark); }
+.patient-pill--amber { background: var(--patient-amber-soft); border-color: var(--patient-amber-line); color: var(--console-amber); }
+.patient-pill--blue { background: var(--patient-blue-soft); border-color: var(--patient-blue-line); color: var(--patient-blue); }
+.patient-pill--rose { background: var(--patient-rose-soft); border-color: var(--patient-rose-line); color: var(--console-red); }
+
+/* Label on the left, value on the right. */
+.patient-kv { display: grid; margin: .6rem 0 0; }
+.patient-kv > div { align-items: baseline; border-bottom: 1px solid var(--console-soft-line); display: flex; gap: 1rem; justify-content: space-between; padding: .68rem 0; }
+.patient-kv > div:last-child { border-bottom: 0; }
+.patient-kv dt { color: var(--patient-text); flex: 0 0 auto; font-size: .82rem; }
+.patient-kv dd { color: var(--console-ink); font-size: .86rem; font-weight: 500; margin: 0; min-width: 0; overflow-wrap: anywhere; text-align: right; }
+.patient-kv dd.patient-kv__amber { color: var(--console-amber); }
+.patient-kv dd.patient-kv__quiet { color: var(--console-muted); font-weight: 500; }
+.patient-kv > div.is-long { display: block; }
+.patient-kv > div.is-long dd { font-weight: 500; line-height: 1.55; margin-top: .25rem; text-align: left; }
+
+/* One task, or the next consult. */
+.patient-bar {
+  align-items: flex-start; background: #fff; border: 1px solid var(--console-line); border-radius: .9rem;
+  display: flex; gap: .85rem; padding: 1rem 1.1rem;
+}
+.patient-bar > .patient-pill { flex: 0 0 auto; justify-content: center; min-width: 6.6rem; }
+.patient-bar__copy { flex: 1 1 auto; min-width: 0; }
+.patient-bar__title { color: var(--console-ink); font-size: .92rem; font-weight: 500; line-height: 1.4; margin: 0; }
+.patient-bar__body { color: var(--patient-text); font-size: .84rem; line-height: 1.6; margin: .25rem 0 0; }
+.patient-bar__actions { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: .75rem; }
+.patient-bar--urgent { background: var(--patient-amber-soft); border-color: var(--patient-amber-line); }
+.patient-bar--done { background: var(--console-teal-soft); border-color: var(--patient-teal-line); }
+.patient-bar--join { align-items: center; background: var(--console-teal-soft); border-color: var(--patient-teal-line); flex-wrap: wrap; padding: 1.05rem 1.2rem; }
+.patient-bar--join.is-waiting { background: var(--patient-amber-soft); border-color: var(--patient-amber-line); }
+.patient-bar--join .patient-bar__title { font-size: 1.02rem; margin-top: .35rem; }
+.patient-bar--join .patient-bar__actions { flex: 0 0 auto; margin-top: 0; }
+.patient-stack { display: grid; gap: .75rem; }
+.patient-bar :is(h2, h3).patient-bar__title { font-size: .92rem; font-weight: 500; }
+.patient-bar--join :is(h2, h3).patient-bar__title { font-size: 1.02rem; }
+.treatment-workspace.patient-treatment__body { gap: 1.6rem; }
+
+.patient-section-head { align-items: flex-end; display: flex; flex-wrap: wrap; gap: .6rem 1rem; justify-content: space-between; margin: 0 0 .8rem; }
+.patient-section-head__copy { min-width: 0; }
+.patient-section-head__copy p { color: var(--patient-text); font-size: .84rem; line-height: 1.55; margin: .3rem 0 0; }
+.patient-section-title { align-items: center; color: var(--console-ink); display: flex; flex-wrap: wrap; font-size: 1.3rem; font-weight: 500; gap: .55rem; letter-spacing: -.02em; margin: 0; }
+.patient-section-title__dot { border-radius: 50%; height: .55rem; width: .55rem; }
+.patient-section-title__count { color: var(--console-muted); font-size: .78rem; font-weight: 500; letter-spacing: 0; }
+
+/* Two cards side by side, actions pinned to the bottom of each. */
+.patient-two-up { align-items: stretch; display: grid; gap: 1rem; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.patient-two-up > .console-card { display: flex; flex-direction: column; min-width: 0; }
+.patient-two-up > .console-card > .console-card__body { display: flex; flex: 1 1 auto; flex-direction: column; padding-block: 1.1rem; }
+.patient-card-actions { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: auto; padding-top: 1rem; }
+.patient-card-actions--split { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.patient-card-actions--split > * { justify-content: center; width: 100%; }
+.patient-card-actions__wide { justify-content: center; width: 100%; }
+.patient-card-actions--split > .patient-card-actions__wide { grid-column: 1 / -1; }
+.workspace-page .meridian-console .console-button.patient-button--rose { border-color: var(--patient-rose-line); color: var(--console-red); }
+.workspace-page .meridian-console .console-button.patient-button--rose:hover { background: var(--patient-rose-soft); }
+
+.patient-chip-row { display: flex; flex-wrap: wrap; gap: .4rem; }
+.patient-chip-row[hidden] { display: none; }
+.patient-chip {
+  background: #fff; border: 1px solid var(--console-line); border-radius: 999px; color: var(--patient-text); cursor: pointer;
+  font: inherit; font-size: .76rem; font-weight: 500; padding: .32rem .75rem;
+}
+.patient-chip:hover { border-color: var(--patient-teal-line); color: var(--console-teal-dark); }
+.patient-chip[aria-pressed="true"], a.patient-chip.is-active { background: var(--console-ink); border-color: var(--console-ink); color: #fff; }
+.patient-chip:focus-visible { outline: 3px solid var(--console-teal); outline-offset: 2px; }
+a.patient-chip { display: inline-block; text-decoration: none; }
+
+/* A confirmation checkbox with its sentence beside it. */
+.patient-pages-console .console-form label.patient-check { align-items: flex-start; color: var(--patient-text); cursor: pointer; display: flex; font-size: .82rem; font-weight: 500; gap: .65rem; line-height: 1.5; }
+.patient-pages-console .console-form .patient-check input { accent-color: var(--console-teal); flex: 0 0 auto; height: 1.1rem; margin: .1rem 0 0; padding: 0; width: 1.1rem; }
+
+.patient-optional { color: var(--console-muted); font-weight: 400; }
+.patient-small { color: var(--console-muted); font-size: .78rem; line-height: 1.55; margin: .6rem 0 0; }
+.patient-lead { color: var(--console-ink); font-size: 1.02rem; font-weight: 500; line-height: 1.5; margin: 0; max-width: 46rem; }
+
+/* The subscription card on My Treatment. */
+.patient-plan__head { align-items: baseline; display: flex; flex-wrap: wrap; gap: .35rem 1rem; justify-content: space-between; margin-top: .75rem; }
+.patient-plan__product { color: var(--patient-text); font-size: .88rem; margin: 0; min-width: 0; }
+.patient-plan__product strong { color: var(--console-ink); font-weight: 500; }
+.patient-plan__amount { color: var(--console-ink); font-size: 1.15rem; font-variant-numeric: tabular-nums; font-weight: 700; margin: 0; }
+.patient-plan__amount span { color: var(--console-muted); font-size: .76rem; font-weight: 500; margin-left: .3rem; }
+.patient-plan .patient-plan__billing { margin-top: .2rem; }
+.patient-plan__hold { background: var(--patient-amber-soft); border: 1px solid var(--patient-amber-line); border-radius: .7rem; color: var(--console-amber); font-size: .82rem; line-height: 1.55; margin: .8rem 0 0; padding: .65rem .8rem; }
+.patient-plan__note { border-top: 1px solid var(--console-soft-line); margin-top: .7rem; padding-top: .8rem; }
+.patient-plan__note p { color: var(--console-ink); font-size: .85rem; margin: .35rem 0 0; }
+.patient-plan__manage { border-top: 1px solid var(--console-line); margin-top: 1.1rem; padding-top: 1rem; }
+.patient-plan__manage .patient-small { margin-top: .4rem; }
+.patient-plan__manage .console-form { gap: .8rem; margin-top: .8rem; }
+.patient-plan__empty-title { color: var(--console-ink); font-size: 1rem; font-weight: 500; margin: .75rem 0 0; }
+
+/* Booking on My Appointments: one choice per row, then the open times. */
+.patient-book__head { align-items: flex-start; display: flex; flex-wrap: wrap; gap: .6rem 1rem; justify-content: space-between; }
+.patient-book__head > div { flex: 1 1 22rem; min-width: 0; }
+.workspace-page .meridian-console .patient-book__title { color: var(--console-ink); font-size: 1.05rem; font-weight: 500; letter-spacing: -.01em; margin: 0; }
+.patient-book__head .patient-small { margin-top: .3rem; }
+.patient-book__choices { display: grid; gap: .85rem; margin-top: 1.1rem; }
+.patient-book__group { display: grid; gap: .4rem; }
+.patient-book__label { color: var(--console-muted); font-size: .7rem; font-weight: 500; letter-spacing: .08em; margin: 0; text-transform: uppercase; }
+.patient-book__date { align-items: center; display: flex; flex-wrap: wrap; gap: .5rem; margin-top: .15rem; }
+.patient-book__date label { color: var(--patient-text); font-size: .78rem; font-weight: 500; }
+.patient-book__date input { border: 1px solid var(--console-line); border-radius: .6rem; color: var(--console-ink); font: inherit; font-size: .82rem; min-height: 2.35rem; padding: .35rem .6rem; }
+.patient-book__date .console-button { min-height: 2.35rem; }
+.patient-book__form { border-top: 1px solid var(--console-soft-line); gap: .9rem; margin-top: 1.1rem; padding-top: 1rem; }
+.patient-slots { border: 0; margin: 0; min-width: 0; padding: 0; }
+.patient-slots legend { color: var(--console-ink); font-size: .88rem; font-weight: 500; margin-bottom: .65rem; padding: 0; }
+.patient-slots__grid { display: grid; gap: .5rem; grid-template-columns: repeat(auto-fill, minmax(7.2rem, 1fr)); max-height: 22rem; overflow-y: auto; overscroll-behavior-y: contain; padding: .2rem; }
+.patient-slot { background: #fff; border: 1px solid var(--console-line); border-radius: .65rem; cursor: pointer; display: block; min-width: 0; padding: .6rem .4rem; position: relative; text-align: center; }
+.patient-pages-console .patient-slot input { height: 1px; margin: 0; opacity: 0; padding: 0; position: absolute; width: 1px; }
+.patient-slot > span { display: grid; gap: .12rem; }
+.patient-slot strong { color: var(--console-ink); font-size: .95rem; font-variant-numeric: tabular-nums; font-weight: 500; }
+.patient-slot small { color: var(--console-muted); font-size: .7rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.patient-slot:hover { border-color: var(--patient-teal-line); }
+.patient-slot:has(input:checked) { background: var(--console-teal-dark); border-color: var(--console-teal-dark); }
+.patient-slot:has(input:checked) strong, .patient-slot:has(input:checked) small { color: #fff; }
+.patient-slot:focus-within { outline: 3px solid var(--console-teal); outline-offset: 2px; }
+.patient-book__actions { align-items: center; display: flex; flex-wrap: wrap; gap: .5rem 1rem; }
+.patient-book__actions .patient-small { margin: 0; }
+
+/* Collapsed history kept below the main content. */
+.patient-history { background: #fff; border: 1px solid var(--console-line); border-radius: .9rem; margin-top: 1.4rem; }
+.patient-history > summary { color: var(--console-teal-dark); cursor: pointer; font-size: .88rem; font-weight: 500; list-style: none; padding: .95rem 1.15rem; }
+.patient-history > summary::-webkit-details-marker { display: none; }
+.patient-history > summary::after { content: '+'; float: right; font-weight: 500; }
+.patient-history[open] > summary::after { content: '–'; }
+.patient-history > summary:focus-visible { outline: 3px solid var(--console-teal); outline-offset: -3px; }
+.patient-history__body { border-top: 1px solid var(--console-soft-line); display: grid; gap: 1.2rem; padding: 1rem 1.15rem 1.2rem; }
+.patient-history__body h3 { color: var(--console-ink); font-size: .9rem; font-weight: 500; margin: 0 0 .5rem; }
+.patient-history .treatment-table { font-size: .82rem; }
+.patient-history .treatment-table th { padding: .6rem .75rem; }
+.patient-history .treatment-table td { padding: .7rem .75rem; }
+.patient-history .patient-history__detail td { border-top: 0; color: var(--patient-text); font-size: .78rem; padding-top: 0; }
+.patient-history__detail span { color: var(--console-muted); font-weight: 500; }
+
+@media (max-width: 52rem) {
+  .patient-navigation__prefix { display: none; }
+  .patient-navigation a { flex: 1 0 4.2rem; }
+  /* The tab bar puts each label under its icon, so the count sits beside the icon instead. */
+  .patient-navigation a .patient-navigation__badge { box-shadow: 0 0 0 2px #fff; left: calc(50% + .65rem); margin: 0; position: absolute; top: .3rem; }
+  .patient-navigation a.is-active .patient-navigation__badge { box-shadow: 0 0 0 2px var(--console-teal-soft); }
+}
+
+@media (max-width: 42rem) {
+  .patient-two-up { grid-template-columns: 1fr; }
+  .patient-bar { flex-direction: column; gap: .55rem; }
+  .patient-bar > .patient-pill { min-width: 0; }
+  .patient-bar--join .patient-bar__actions { width: 100%; }
+  .patient-bar--join .patient-bar__actions > * { flex: 1 1 auto; justify-content: center; }
+  .patient-section-title { font-size: 1.15rem; }
+  .patient-slots__grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .patient-book__actions .console-button { justify-content: center; width: 100%; }
+}

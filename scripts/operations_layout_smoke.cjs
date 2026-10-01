@@ -18,7 +18,8 @@ const { chromium } = require(process.env.MERIDIAN_PLAYWRIGHT_PATH || 'playwright
         const sheets = await page.locator('link[rel="stylesheet"]').evaluateAll(nodes => nodes.map(node => node.getAttribute('href')));
         for (const sheet of sheets) {
           if (sheet.startsWith('/static/css/')) {
-            await page.addStyleTag({ content: fs.readFileSync(path.join(process.cwd(), 'static/css', path.basename(sheet)), 'utf8') });
+            const filename = path.basename(new URL(sheet, 'http://meridian.test').pathname);
+            await page.addStyleTag({ content: fs.readFileSync(path.join(process.cwd(), 'static/css', filename), 'utf8') });
           }
         }
         // Inserting stylesheet text triggers the console's short colour

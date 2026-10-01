@@ -1,10 +1,13 @@
 """Separate authorisation and local-plan pages; no billing or email actions."""
 
+from urllib.parse import urlencode
+
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.exceptions import ValidationError
 from django.core.paginator import Paginator
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 from django.utils import timezone
 from django.utils.decorators import method_decorator
 from django.views import View
@@ -156,52 +159,98 @@ class SubscriptionListView(LoginRequiredMixin, StaffCompanyRequiredMixin, View):
         ))
 
 
+def _eligible_authorizations(company, patient):
+    today = timezone.localdate()
+    # The service repeats all checks against locked records on submission.
+    return _authorizations(company, patient).filter(
+        status=TreatmentAuthorization.Status.ACTIVE, starts_on__lte=today, expires_on__gte=today,
+        product__is_active=True, prescribed_by__is_active=True,
+        prescribed_by__company_memberships__company=company,
+        prescribed_by__company_memberships__role=CompanyMembership.Role.DOCTOR,
+        prescribed_by__company_memberships__is_active=True,
+    ).distinct()
+
+
+def _compose_url(subject):
+    return f"{reverse('portal:patient-messages')}?{urlencode({'compose': 1, 'subject': subject})}#patient-conversation"
+
+
+HISTORY_PAGES = ('page', 'plans_page', 'shipments_page')
+
+
+def _query_without(request, name):
+    query = request.GET.copy()
+    query.pop(name, None)
+    return query.urlencode()
+
+
+def patient_treatment_context(request, company, patient, *, enrollment_form=None, action_form=None, action_plan=None):
+    """My Treatment: tasks, the record the doctor has on file, and the care plan."""
+    from .patient_summary import (
+        current_authorization, intake_answers, latest_weight, medical_information, medical_profile,
+        next_consult, open_lab_requests, patient_tasks, pending_proposals,
+    )
+
+    context = patient_page_context(request, company, patient, 'treatment', 'My Treatment')
+    current = _plans(company, patient).exclude(status=PatientSubscription.Status.CANCELLED).first()
+    authorization = current_authorization(company, patient, current)
+    consult = next_consult(request, company, patient)
+    profile = medical_profile(company, patient)
+    weight = latest_weight(company, patient)
+    authorizations = Paginator(_authorizations(company, patient), 20).get_page(request.GET.get('page'))
+    for item in authorizations.object_list:
+        item.is_current = authorization_is_current(item)
+    context.update(
+        next_consult=consult,
+        tasks=patient_tasks(
+            authorization=authorization, plan=current, consult=consult, weight=weight, profile=profile,
+            labs=open_lab_requests(company, patient), proposals=pending_proposals(request, company, patient),
+        ),
+        medical_rows=medical_information(profile=profile, intake=intake_answers(company, patient), weight=weight),
+        medical_profile=profile,
+        medical_change_url=_compose_url('Change to my medical information'),
+        treatment_help_url=_compose_url('Something is not working with my treatment'),
+        current_plan=current, current_authorization=authorization,
+        plan_authorization=current.authorization if current and current.authorization_id else authorization,
+        can_enroll=current is None and _eligible_authorizations(company, patient).exists(),
+        history_open=any(request.GET.get(name) for name in HISTORY_PAGES),
+        history_queries={name: _query_without(request, name) for name in HISTORY_PAGES},
+        plan_hold_reason=subscription_hold_reason(current) if current else '',
+        page_obj=authorizations,
+        plans_page=Paginator(_plans(company, patient), 20).get_page(request.GET.get('plans_page')),
+        shipments_page=Paginator(Shipment.objects.for_company(company).filter(patient=patient).order_by('-scheduled_for', '-pk'), 20).get_page(request.GET.get('shipments_page')),
+        enrollment_form=enrollment_form if enrollment_form is not None else EnrollmentForm(authorizations=_eligible_authorizations(company, patient)),
+        action_form=action_form if action_form is not None else ConfirmTreatmentForm(),
+        action_plan=action_plan or current,
+        enrollment_context=_token(request, company, patient, 'subscription-enroll') if enrollment_form is not None else make_treatment_context(request, company, patient, 'subscription-enroll'),
+        action_context=_token(request, company, patient, 'subscription-status', action_plan or current) if action_form is not None else make_treatment_context(request, company, patient, 'subscription-status', current),
+        plan_settings=PracticeSettings.objects.for_company(company).first(),
+    )
+    return context
+
+
 class PatientTreatmentView(LoginRequiredMixin, PatientPortalRequiredMixin, View):
     http_method_names = ('get', 'head', 'options')
 
     def get(self, request):
-        context = patient_page_context(request, self.patient_company, self.patient, 'treatment', 'Your treatment')
-        page = Paginator(_authorizations(self.patient_company, self.patient), 20).get_page(request.GET.get('page'))
-        for authorization in page.object_list:
-            authorization.is_current = authorization_is_current(authorization)
-        context.update(page_obj=page)
-        return render(request, 'portal/treatment_patient.html', context)
+        return render(request, 'portal/treatment_patient.html', patient_treatment_context(request, self.patient_company, self.patient))
 
 
 class PatientSubscriptionView(LoginRequiredMixin, PatientPortalRequiredMixin, View):
+    """The care plan now lives on My Treatment; this keeps the old address and its forms working."""
+
     http_method_names = ('get', 'head', 'options')
 
     def eligible(self):
-        today = timezone.localdate()
-        # The service repeats all checks against locked records on submission.
-        return _authorizations(self.patient_company, self.patient).filter(
-            status=TreatmentAuthorization.Status.ACTIVE, starts_on__lte=today, expires_on__gte=today,
-            product__is_active=True, prescribed_by__is_active=True,
-            prescribed_by__company_memberships__company=self.patient_company,
-            prescribed_by__company_memberships__role=CompanyMembership.Role.DOCTOR,
-            prescribed_by__company_memberships__is_active=True,
-        ).distinct()
+        return _eligible_authorizations(self.patient_company, self.patient)
 
     def display(self, request, enrollment_form=None, action_form=None, action_plan=None, status=200):
-        company, patient = self.patient_company, self.patient
-        context = patient_page_context(request, company, patient, 'subscription', 'Your local care plan')
-        current = _plans(company, patient).exclude(status=PatientSubscription.Status.CANCELLED).first()
-        history = Paginator(_plans(company, patient), 20).get_page(request.GET.get('page'))
-        shipments = Paginator(Shipment.objects.for_company(company).filter(patient=patient).order_by('-scheduled_for', '-pk'), 20).get_page(request.GET.get('shipments_page'))
-        context.update(
-            current_plan=current, plan_hold_reason=subscription_hold_reason(current) if current else '',
-            page_obj=history, shipments_page=shipments,
-            enrollment_form=enrollment_form if enrollment_form is not None else EnrollmentForm(authorizations=self.eligible()),
-            action_form=action_form if action_form is not None else ConfirmTreatmentForm(),
-            action_plan=action_plan or current,
-            enrollment_context=_token(request, company, patient, 'subscription-enroll') if enrollment_form is not None else make_treatment_context(request, company, patient, 'subscription-enroll'),
-            action_context=_token(request, company, patient, 'subscription-status', action_plan or current) if action_form is not None else make_treatment_context(request, company, patient, 'subscription-status', current),
-            plan_settings=PracticeSettings.objects.for_company(company).first(),
-        )
-        return render(request, 'portal/treatment_subscription.html', context, status=status)
+        context = patient_treatment_context(request, self.patient_company, self.patient, enrollment_form=enrollment_form,
+                                            action_form=action_form, action_plan=action_plan)
+        return render(request, 'portal/treatment_patient.html', context, status=status)
 
     def get(self, request):
-        return self.display(request)
+        return redirect(reverse('portal:patient-treatment') + '#treatment-plan')
 
 
 class PatientEnrollmentView(PatientSubscriptionView):
@@ -216,7 +265,7 @@ class PatientEnrollmentView(PatientSubscriptionView):
                 enroll_local_subscription(company=self.patient_company, patient=self.patient, actor=request.user,
                                           submission_key=token['submission_key'], request=request, **form.cleaned_data)
                 messages.success(request, 'Local care plan enrolled. No payment was collected.')
-                return redirect('portal:patient-subscription')
+                return redirect(reverse('portal:patient-treatment') + '#treatment-plan')
         except ValidationError as error:
             _error(form, error)
         return self.display(request, enrollment_form=form, status=400)
@@ -235,7 +284,7 @@ class PatientSubscriptionStatusView(PatientSubscriptionView):
                 change_subscription_status(subscription=plan, actor=request.user, action=request.POST.get('action'),
                                            confirm=form.cleaned_data['confirm'], request=request)
                 messages.success(request, 'Local care plan status updated. No payment was processed.')
-                return redirect('portal:patient-subscription')
+                return redirect(reverse('portal:patient-treatment') + '#treatment-plan')
         except ValidationError as error:
             _error(form, error)
         return self.display(request, action_form=form, action_plan=plan, status=400)

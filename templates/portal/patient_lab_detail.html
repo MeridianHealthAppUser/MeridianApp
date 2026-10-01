@@ -4,7 +4,7 @@
 {% block patient_extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/clinical_workflow.css' %}">{% endblock %}
 
 {% block patient_heading %}
-  <header class="patient-page-heading"><div><p class="console-kicker">Your care · Blood tests</p><h1>Your blood-test request</h1><p>Your request at {{ patient_company.name }}.</p></div><a class="console-button console-button--secondary" href="{% url 'portal:patient-labs' %}">All blood-test requests</a></header>
+  <header class="patient-page-heading"><div><p class="console-kicker"><a class="patient-inline-link" href="{% url 'portal:patient-treatment' %}">My Treatment</a> · Blood tests</p><h1>Your blood-test request</h1><p>Your request at {{ patient_company.name }}.</p></div><a class="console-button console-button--secondary" href="{% url 'portal:patient-labs' %}">All blood-test requests</a></header>
 {% endblock %}
 
 {% block patient_content %}

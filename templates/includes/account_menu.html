@@ -12,7 +12,7 @@
       {% url 'accounts:profile' as profile_url %}{% if profile_url %}<a href="{{ profile_url }}">My profile</a>{% endif %}
       <a href="{% url 'accounts:password-change' %}">Change password</a>
       {% if identity.is_patient %}
-        <a href="{% url 'portal:patient-account' %}">Care account details</a>
+        <a href="{% url 'portal:patient-account' %}">Account settings</a>
         <a href="{% url 'portal:patient-privacy' %}">Privacy and preferences</a>
         <a href="{% url 'portal:patient-data-requests' %}">My data requests</a>
       {% elif active_company %}

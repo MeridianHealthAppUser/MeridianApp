@@ -407,10 +407,13 @@ def _patient_portal_context(request, company, patient, **overrides):
 
 
 def _invalid_patient_form(request, company, patient, name, form, **extra):
-    from .patient_views import patient_messages_context, patient_progress_context
+    from .patient_views import patient_messages_context, patient_overview_context, patient_progress_context
 
     overrides = {name: form, 'failed_form': name, **extra}
-    if name == 'weight_form':
+    if name == 'weight_form' and extra.get('return_to') == 'home':
+        context = patient_overview_context(request, company, patient, **overrides)
+        template = 'portal/patient_dashboard.html'
+    elif name == 'weight_form':
         context = patient_progress_context(request, company, patient, **overrides)
         template = 'portal/patient_progress.html'
     else:
@@ -556,12 +559,14 @@ class PatientWeightAddView(LoginRequiredMixin, PatientPortalRequiredMixin, View)
 
     def post(self, request):
         form = WeightEntryForm(request.POST, company=self.patient_company, patient=self.patient, recorded_by=request.user)
+        # Check-ins can be logged from Home or from the weight history page.
+        return_to = 'home' if request.POST.get('return_to') == 'home' else ''
         try:
             validate_patient_context(request, self.patient_company, self.patient)
         except ValidationError as error:
             form.add_error(None, error)
         if not form.is_valid():
-            return _invalid_patient_form(request, self.patient_company, self.patient, 'weight_form', form)
+            return _invalid_patient_form(request, self.patient_company, self.patient, 'weight_form', form, return_to=return_to)
         try:
             with transaction.atomic():
                 entry = form.save()
@@ -577,8 +582,10 @@ class PatientWeightAddView(LoginRequiredMixin, PatientPortalRequiredMixin, View)
                 record_audit(company=self.patient_company, actor=request.user, patient=self.patient, action='weight_entry.created', target=entry, request=request)
         except IntegrityError:
             form.add_error('recorded_on', 'A weight entry already exists for that date.')
-            return _invalid_patient_form(request, self.patient_company, self.patient, 'weight_form', form)
+            return _invalid_patient_form(request, self.patient_company, self.patient, 'weight_form', form, return_to=return_to)
         messages.success(request, 'Your weight check-in has been saved.')
+        if return_to == 'home':
+            return redirect(reverse('portal:patient-dashboard') + '#weight-progress')
         return redirect('portal:patient-progress')
 
 

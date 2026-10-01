@@ -1,34 +1,120 @@
 {% extends 'base.html' %}
 {% load static %}
 
-{% block title %}Payment preview | {{ lead.company.name }}{% endblock %}
-{% block extra_css %}<link rel="stylesheet" href="{% static 'css/questionnaire.css' %}?v=intake-20260912">{% endblock %}
+{% block title %}Book your consultation | {{ lead.company.name }}{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{% static 'css/questionnaire.css' %}?v=checkout-20260930">{% endblock %}
 
 {% block content %}
   <section class="questionnaire-checkout-layout" aria-labelledby="checkout-title">
     <header class="questionnaire-result-heading">
-      <p class="questionnaire-step">Consultation · Payment preview</p>
+      <p class="questionnaire-step">Consultation · Book and pay</p>
       <h1 id="checkout-title">Your initial consultation</h1>
-      <p>Review the consultation cost for {{ lead.company.name }}. No payment details are needed in this preview.</p>
+      <p>Choose a time, create your login and pay for your {{ consult_minutes }}-minute consultation with {{ lead.company.name }}.</p>
     </header>
-    <aside class="questionnaire-callout questionnaire-callout--warm"><span class="questionnaire-badge questionnaire-badge--blue">Dummy checkout</span><div><strong>No payment is taken. No account is created.</strong><p>You remain a lead. Real payment, appointment booking and account activation will be connected in a later checkpoint.</p></div></aside>
-    <section class="questionnaire-card questionnaire-checkout-summary" aria-labelledby="checkout-summary-heading">
-      <h2 class="questionnaire-kicker" id="checkout-summary-heading">Your enquiry</h2>
-      <dl class="questionnaire-review-list">
-        <div><dt>Name</dt><dd>{{ lead.first_name }} {{ lead.last_name }}</dd></div>
-        <div><dt>Practice</dt><dd>{{ lead.company.name }}</dd></div>
-        <div><dt>Email</dt><dd>{{ lead.email }}</dd></div>
-        <div><dt>Appointment</dt><dd>No appointment reserved</dd></div>
-      </dl>
-    </section>
-    <section class="questionnaire-card" aria-labelledby="checkout-cost-heading">
-      <h2 class="questionnaire-kicker" id="checkout-cost-heading">Consultation cost</h2>
-      <dl class="questionnaire-price-list"><div class="questionnaire-price-row"><dt>Initial consultation<span>30 minutes with a doctor, on Zoom</span></dt><dd>{% if pricing %}R{{ pricing.initial_consult_fee|floatformat:"-2" }}{% else %}<small>Price not configured</small>{% endif %}</dd></div></dl>
-      <p class="questionnaire-legal">This screen does not collect card details, process a charge or send a Zoom link. There is no paid consultation or subscription yet.</p>
-      <div class="questionnaire-checkout-actions">
-        <button class="questionnaire-button" type="button" disabled>Payment unavailable · preview only</button>
-        <a class="questionnaire-button questionnaire-button--secondary" href="{% url 'portal:questionnaire-result' %}">Back to my enquiry</a>
-      </div>
-    </section>
+    <aside class="questionnaire-callout questionnaire-callout--warm"><span class="questionnaire-badge questionnaire-badge--blue">Payments offline</span><div><strong>Online payment is not connected yet.</strong><p>Card and EFT payments cannot be completed, so no money is taken.{% if code_applied %} Your code covers the full consultation fee, so you can book now.{% endif %}</p></div></aside>
+
+    <form method="get" id="checkout-date-form" action="{% url 'portal:questionnaire-checkout' %}"></form>
+    <form method="post" class="questionnaire-form questionnaire-checkout-form" id="checkout-form" action="{% url 'portal:questionnaire-checkout' %}" novalidate>
+      {% csrf_token %}
+      <input type="hidden" name="date" value="{{ day|date:'Y-m-d' }}">
+      {% if form.non_field_errors %}<div class="form-errors" role="alert">{{ form.non_field_errors }}</div>{% endif %}
+
+      <section class="questionnaire-card questionnaire-checkout-summary" aria-labelledby="checkout-summary-heading">
+        <h2 class="questionnaire-kicker" id="checkout-summary-heading">Your enquiry</h2>
+        <dl class="questionnaire-review-list">
+          <div><dt>Name</dt><dd>{{ lead.first_name }} {{ lead.last_name }}</dd></div>
+          <div><dt>Practice</dt><dd>{{ lead.company.name }}</dd></div>
+          <div><dt>Email</dt><dd>{{ lead.email }}</dd></div>
+          <div><dt>Appointment</dt><dd>Initial consultation · {{ consult_minutes }} minutes</dd></div>
+        </dl>
+      </section>
+
+      <section class="questionnaire-card" aria-labelledby="checkout-time-heading">
+        <h2 id="checkout-time-heading">1. Choose a time</h2>
+        <p>{{ consult_minutes }} minutes by video with a doctor, shown in South Africa time (SAST). The time is checked again when you pay.</p>
+        <div class="questionnaire-date-row">
+          <div class="question-field">{{ date_form.date.label_tag }}{{ date_form.date }}{% for error in date_form.date.errors %}<small class="field-error">{{ error }}</small>{% endfor %}</div>
+          <button type="submit" form="checkout-date-form" class="questionnaire-button questionnaire-button--secondary">Show times</button>
+        </div>
+        {% if slots %}
+          <fieldset class="questionnaire-slots"><legend>{{ day|date:"l, j F Y" }}</legend>
+            <div class="questionnaire-slots__grid">
+              {% for slot in slots %}<label class="questionnaire-slot" for="checkout-slot-{{ forloop.counter }}"><input type="radio" id="checkout-slot-{{ forloop.counter }}" name="slot" value="{{ slot.token }}"{% if slot.selected %} checked{% endif %}><span><strong>{{ slot.starts_at|date:"H:i" }}</strong><small>{{ slot.clinician.full_name }}</small></span></label>{% endfor %}
+            </div>
+          </fieldset>
+          <p class="questionnaire-legal">Your choice is not reserved until payment completes. Choose again if this page is open for more than {{ slot_expiry_minutes }} minutes.</p>
+        {% elif day %}
+          <p class="questionnaire-note">No consultation times are free on {{ day|date:"j F Y" }}. Choose another date.</p>
+        {% endif %}
+        {% for error in form.slot.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+      </section>
+
+      <section class="questionnaire-card" aria-labelledby="checkout-code-heading">
+        <h2 id="checkout-code-heading">2. Discount code</h2>
+        <p>Have a code from the practice? Apply it before you pay.</p>
+        <div class="questionnaire-code-row">
+          <div class="question-field">{{ form.discount_code.label_tag }}{{ form.discount_code }}</div>
+          <button type="submit" name="action" value="apply" class="questionnaire-button questionnaire-button--secondary">Apply</button>
+        </div>
+        {% for error in form.discount_code.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+        {% if code_applied %}<p class="questionnaire-note questionnaire-note--success" role="status">Code applied. The consultation fee is covered in full.</p>{% endif %}
+      </section>
+
+      <section class="questionnaire-card" aria-labelledby="checkout-login-heading">
+        <h2 id="checkout-login-heading">3. Your login</h2>
+        {% if identity == 'new_account' %}
+          <p>Your patient portal login uses <strong>{{ lead.email }}</strong>. It is created only when payment completes.</p>
+          <div class="form-grid">
+            <div class="question-field">{{ form.password1.label_tag }}{{ form.password1 }}{% for error in form.password1.errors %}<small class="field-error">{{ error }}</small>{% endfor %}</div>
+            <div class="question-field">{{ form.password2.label_tag }}{{ form.password2 }}{% for error in form.password2.errors %}<small class="field-error">{{ error }}</small>{% endfor %}</div>
+          </div>
+          <p class="questionnaire-legal">Use at least 8 characters. Avoid common passwords, numbers only, or anything close to your name or email.</p>
+        {% elif identity == 'signed_in' %}
+          <p>You are signed in as <strong>{{ request.user.email }}</strong>. Your patient record will be added to this login.</p>
+        {% elif identity == 'sign_in_required' %}
+          <p>An account already uses <strong>{{ lead.email }}</strong>. Sign in with it to continue. You will come back to this page.</p>
+          <a class="questionnaire-button questionnaire-button--secondary" href="{{ login_url }}">Sign in to continue</a>
+        {% elif identity == 'other_account' %}
+          <p>You are signed in as <strong>{{ request.user.email }}</strong>, but this enquiry is for <strong>{{ lead.email }}</strong>. Sign out and return to this page, or <a href="{% url 'portal:questionnaire' %}?edit=1">change your enquiry email</a>.</p>
+        {% else %}
+          <p>You already have a patient record at {{ lead.company.name }}. <a href="{% url 'portal:patient-book-appointment' %}">Book from your patient portal</a> instead.</p>
+        {% endif %}
+      </section>
+
+      <section class="questionnaire-card questionnaire-payment" aria-labelledby="checkout-payment-heading">
+        <h2 id="checkout-payment-heading">4. Payment</h2>
+        <p>Your consultation fee, any discount and how you pay.</p>
+        {% if quote %}
+          <dl class="questionnaire-price-list">
+            <div class="questionnaire-price-row"><dt>Initial consultation<span>{{ consult_minutes }} minutes with a doctor, by video</span></dt><dd>R{{ quote.fee|floatformat:"2" }}</dd></div>
+            {% if quote.discount %}<div class="questionnaire-price-row questionnaire-price-row--discount"><dt>Discount<span>Code {{ quote.code }}</span></dt><dd>−R{{ quote.discount|floatformat:"2" }}</dd></div>{% endif %}
+            <div class="questionnaire-price-row questionnaire-price-row--total"><dt>Total due</dt><dd>R{{ quote.total|floatformat:"2" }}</dd></div>
+          </dl>
+          {% if quote.total %}
+            <fieldset class="questionnaire-methods">
+              <legend>Payment method</legend>
+              <div class="questionnaire-options">{% for option in form.payment_method %}<label>{{ option.tag }}<span>{{ option.choice_label }}</span></label>{% endfor %}</div>
+              <div class="form-grid questionnaire-card-fields">
+                <div class="question-field question-field-wide"><label for="checkout-card-number">Card number</label><input id="checkout-card-number" inputmode="numeric" autocomplete="off" placeholder="1234 5678 9012 3456" disabled></div>
+                <div class="question-field"><label for="checkout-card-expiry">Expiry</label><input id="checkout-card-expiry" autocomplete="off" placeholder="MM / YY" disabled></div>
+                <div class="question-field"><label for="checkout-card-cvc">Security code</label><input id="checkout-card-cvc" autocomplete="off" placeholder="CVC" disabled></div>
+              </div>
+              <p class="questionnaire-note questionnaire-eft-note">Instant EFT will send you to your bank to approve the payment.</p>
+              <p class="questionnaire-note">Card and EFT payments are not connected yet. These fields are switched off and no card details are collected.</p>
+            </fieldset>
+          {% else %}
+            <p class="questionnaire-note questionnaire-note--success">Nothing to pay, so no card details are needed.</p>
+          {% endif %}
+        {% else %}
+          <p class="questionnaire-note">The practice has not set its consultation fee yet, so booking is unavailable.</p>
+        {% endif %}
+        <div class="questionnaire-checkout-actions">
+          <button class="questionnaire-button" type="submit" name="action" value="pay"{% if not pay_enabled %} disabled{% endif %}>{% if pay_enabled %}Pay R{{ quote.total|floatformat:"2" }} and book{% else %}Pay now{% endif %}</button>
+          <a class="questionnaire-button questionnaire-button--secondary" href="{% url 'portal:questionnaire-result' %}">Back to my enquiry</a>
+        </div>
+        {% if not pay_enabled and quote %}<p class="questionnaire-note">{% if quote.total %}Pay now is unavailable until online payment is connected.{% elif not slots %}Choose a date with a free time to continue.{% else %}Sort out your login above to continue.{% endif %}</p>{% endif %}
+        <p class="questionnaire-legal">Your login, patient record, booking and invoice are created together when payment completes. A consultation does not guarantee a prescription.</p>
+      </section>
+    </form>
   </section>
 {% endblock %}

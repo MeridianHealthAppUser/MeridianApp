@@ -2,7 +2,7 @@
 {% load static %}
 
 {% block title %}Start your questionnaire | Meridian Health{% endblock %}
-{% block extra_css %}<link rel="stylesheet" href="{% static 'css/questionnaire.css' %}?v=intake-20260912">{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{% static 'css/questionnaire.css' %}?v=checkout-20260930">{% endblock %}
 
 {% block content %}
   <section class="questionnaire-layout" aria-labelledby="questionnaire-title">
@@ -13,7 +13,7 @@
     </header>
     <aside class="questionnaire-callout questionnaire-callout--warm">
       <span class="questionnaire-badge questionnaire-badge--blue">Stage 2</span>
-      <div><strong>The rest of your medical profile comes after you book</strong><p>These first questions record your enquiry. The fuller medical profile and booking stages will follow in a later update.</p></div>
+      <div><strong>The rest of your medical profile comes after you book</strong><p>These first questions record your enquiry. After you book your consultation, you complete the fuller medical profile in your patient portal.</p></div>
     </aside>
     <form method="post" class="questionnaire-form" id="screening-form" novalidate>
       {% csrf_token %}
@@ -29,7 +29,7 @@
       </section>{% else %}{{ form.practice }}{% if form.practice.errors %}<div class="form-errors" role="alert">This questionnaire is not available for that practice. Please reload the page.</div>{% endif %}{% endif %}
       <section class="questionnaire-card" aria-labelledby="identity-heading">
         <h2 id="identity-heading">Who you are</h2>
-        <p>We need this to contact you about your enquiry. Submitting the questionnaire records you as a lead, nothing more — an account with a login is only created after a successful consultation payment. Payment is a preview only for now.</p>
+        <p>We need this to contact you about your enquiry. Submitting the questionnaire records you as a lead, nothing more — an account with a login is only created after a successful consultation payment. Online payment is not connected yet.</p>
         <div class="form-grid">
           <div class="question-field">{{ form.first_name.label_tag }}{{ form.first_name }}{% for error in form.first_name.errors %}<small class="field-error">{{ error }}</small>{% endfor %}</div>
           <div class="question-field">{{ form.last_name.label_tag }}{{ form.last_name }}{% for error in form.last_name.errors %}<small class="field-error">{{ error }}</small>{% endfor %}</div>

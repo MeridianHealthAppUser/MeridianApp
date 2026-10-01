@@ -1,30 +1,59 @@
 {% extends 'portal/patient_page_base.html' %}
 {% load static %}
-{% block patient_extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/patient_care.css' %}">{% endblock %}
+{% block title %}Updates | Meridian{% endblock %}
+{% block patient_extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/patient_care.css' %}?v=20261001"><link rel="stylesheet" href="{% static 'css/patient_updates.css' %}?v=20261001">{% endblock %}
+{% block patient_content_class %}patient-updates{% endblock %}
 
 {% block patient_heading %}
-  <header class="patient-page-heading"><div><p class="console-kicker">Your care · Updates</p><h1>Everything shared with you</h1><p>Appointments, messages and other care updates recorded for you at {{ patient_company.name }}.</p></div></header>
+  <header class="patient-page-heading">
+    <div>
+      <p class="console-kicker"><a class="patient-inline-link" href="{% url 'portal:patient-dashboard' %}">Home</a> · Updates</p>
+      <h1>Everything that’s happened</h1>
+      <p>Appointments, messages, deliveries and changes to your care that {{ patient_company.name }} has shared with you. Times are South Africa time (SAST).</p>
+    </div>
+    <span class="patient-pill patient-pill--teal">{{ page_obj.paginator.count }} update{{ page_obj.paginator.count|pluralize }}</span>
+  </header>
 {% endblock %}
 
 {% block patient_content %}
-  <div class="patient-care">
-    <section class="console-card" aria-labelledby="updates-filter-heading">
-      <header class="console-card__header"><div class="console-card__heading"><h2 id="updates-filter-heading">Find an update</h2><p>All dates and times are shown in South Africa time (SAST).</p></div></header>
-      <div class="console-card__body"><form method="get" action="{% url 'portal:patient-updates' %}" class="console-form patient-care-filters">
-        {{ filter_form.non_field_errors }}
-        {% for field in filter_form %}<div class="console-form__field"><label for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}{{ field.errors }}</div>{% endfor %}
-        <button type="submit" class="console-button console-button--secondary">Apply filters</button>
-      </form></div>
-    </section>
-    <section class="console-card patient-page-section" aria-labelledby="care-updates-heading">
-      <header class="console-card__header"><div class="console-card__heading"><h2 id="care-updates-heading">Care timeline</h2><p>{{ page_obj.paginator.count }} update{{ page_obj.paginator.count|pluralize }} in this view</p></div></header>
-      <div class="console-card__body">
-        <ol class="patient-care-timeline">
-          {% for event in events %}<li><div class="patient-care-timeline__meta"><span class="console-status">{{ event.get_category_display }}</span><time datetime="{{ event.occurred_at|date:'c' }}">{{ event.occurred_at|date:"j M Y, H:i" }} SAST</time></div><h3>{{ event.title }}</h3>{% if event.detail %}<p>{{ event.detail|linebreaksbr }}</p>{% endif %}</li>
-          {% empty %}<li class="patient-care-empty">{% if filter_form.errors %}Correct the filters above to view your updates.{% else %}There are no shared updates matching this view.{% endif %}</li>{% endfor %}
-        </ol>
-        {% include 'portal/includes/patient_pagination.html' with pagination_label='Care updates' %}
-      </div>
-    </section>
+  <div class="patient-updates__bar">
+    <div class="patient-chip-row" role="group" aria-label="Type of update">{% for chip in category_chips %}<a class="patient-chip{% if chip.active %} is-active{% endif %}" href="{{ chip.url }}"{% if chip.active %} aria-current="true"{% endif %}>{{ chip.label }}</a>{% endfor %}</div>
+    <form method="get" action="{% url 'portal:patient-updates' %}" class="console-form patient-updates__filters">
+      {{ filter_form.non_field_errors }}
+      {% if filter_form.category.value %}<input type="hidden" name="category" value="{{ filter_form.category.value }}">{% endif %}
+      <div class="console-form__field"><label for="{{ filter_form.date_from.id_for_label }}">From</label>{{ filter_form.date_from }}{{ filter_form.date_from.errors }}</div>
+      <div class="console-form__field"><label for="{{ filter_form.date_to.id_for_label }}">To</label>{{ filter_form.date_to }}{{ filter_form.date_to.errors }}</div>
+      <div class="console-form__field"><label for="{{ filter_form.sort.id_for_label }}">Order</label>{{ filter_form.sort }}{{ filter_form.sort.errors }}</div>
+      <button type="submit" class="console-button console-button--secondary">Apply</button>
+    </form>
+    {{ filter_form.category.errors }}
   </div>
+
+  {% regroup events by occurred_at|date:"F Y" as months %}
+  <div class="patient-updates__list">
+    {% for month in months %}
+      <section class="patient-updates__month" aria-labelledby="updates-month-{{ forloop.counter }}">
+        <div class="patient-updates__month-head"><h2 id="updates-month-{{ forloop.counter }}">{{ month.grouper }}</h2><span aria-hidden="true"></span><p>{{ month.list|length }} update{{ month.list|length|pluralize }}</p></div>
+        <ol class="patient-updates__items">
+          {% for event in month.list %}
+            <li class="patient-update patient-update--{{ event.category }}">
+              <time class="patient-update__date" datetime="{{ event.occurred_at|date:'c' }}"><b>{{ event.occurred_at|date:"j" }}</b>{{ event.occurred_at|date:"M" }}</time>
+              <div class="patient-update__body">
+                {% include 'portal/includes/patient_update_icon.html' with category=event.category %}
+                <h3>{{ event.title }}</h3>
+                <p class="patient-update__meta">{{ event.get_category_display }} · {{ event.occurred_at|date:"H:i" }}</p>
+                {% if event.detail %}<p>{{ event.detail|linebreaksbr }}</p>{% endif %}
+              </div>
+            </li>
+          {% endfor %}
+        </ol>
+      </section>
+    {% empty %}
+      <div class="patient-updates__empty">
+        <p class="patient-plan__empty-title">Nothing here yet</p>
+        <p class="patient-small">{% if filter_form.errors %}Correct the filters above to see your updates.{% else %}Try a different type or a wider date range.{% endif %}</p>
+      </div>
+    {% endfor %}
+  </div>
+  {% include 'portal/includes/patient_pagination.html' with pagination_label='Care updates' %}
 {% endblock %}

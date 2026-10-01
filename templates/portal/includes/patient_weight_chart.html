@@ -1,0 +1,12 @@
+{% load workspace_ui %}{# Recorded weights only: no target, range or projection is drawn. #}
+<figure class="patient-weight-chart">
+  <svg viewBox="0 0 720 250" role="img" aria-labelledby="{{ chart_id }}-title {{ chart_id }}-description">
+    <title id="{{ chart_id }}-title">Recorded weight in kilograms</title><desc id="{{ chart_id }}-description">{{ chart.count }} check-in{{ chart.count|pluralize }} from {{ chart.start|date:"j M Y" }} to {{ chart.end|date:"j M Y" }}. Exact dates and weights are listed in your weight history.</desc>
+    {% for tick in chart.ticks %}<line x1="62" x2="692" y1="{{ tick.y }}" y2="{{ tick.y }}" class="patient-weight-chart__grid"/><text x="10" y="{{ tick.y|add:'4' }}">{{ tick.label }}</text>{% endfor %}
+    <polyline points="{{ chart.polyline }}" class="patient-weight-chart__line"/>
+    {% for point in chart.points %}<circle cx="{{ point.x }}" cy="{{ point.y }}" r="3" class="patient-weight-chart__point"><title>{{ point.date|date:"j M Y" }}: {{ point.weight|kg }} kg</title></circle>{% endfor %}
+    <text x="62" y="240">{{ chart.start|date:"j M Y" }}</text><text x="692" y="240" text-anchor="end">{{ chart.end|date:"j M Y" }}</text>
+  </svg>
+  <div class="patient-weight-chart__range"><span>{{ chart.start|date:"j M Y" }} – {{ chart.end|date:"j M Y" }}</span><span>{{ chart.minimum|kg }}–{{ chart.maximum|kg }} kg</span></div>
+  {% if caption %}<figcaption>{{ caption }}</figcaption>{% endif %}
+</figure>

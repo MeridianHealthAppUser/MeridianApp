@@ -336,14 +336,16 @@ class PublicLeadIntakeTests(TestCase):
             with self.subTest(page=name):
                 self.assertEqual(self.client.get(reverse(f'portal:{name}')).status_code, 404)
 
-    def test_dummy_checkout_is_get_only_and_never_creates_accounts_or_bookings(self):
+    def test_checkout_without_the_test_code_never_creates_accounts_or_bookings(self):
         response, _ = self.submit()
         self.assert_successful_submission(response)
         before = self.identity_counts()
         url = reverse('portal:questionnaire-checkout')
         response = self.client.get(url)
         self.assertContains(response, '630')
-        self.assertEqual(self.client.post(url, {'paid': 'true', 'payment_status': 'success'}).status_code, 405)
+        self.assertFalse(response.context['pay_enabled'])
+        response = self.client.post(url, {'action': 'pay', 'paid': 'true', 'payment_status': 'success'})
+        self.assertEqual(response.status_code, 200)
         self.assertEqual(self.identity_counts(), before)
         self.assertIsNone(Lead.objects.get().converted_patient_id)
         self.assertNotIn('_auth_user_id', self.client.session)

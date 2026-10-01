@@ -62,6 +62,9 @@ class AppointmentProposalActionMixin:
         if self.actor_role == 'patient':
             from .patient_views import patient_messages_redirect
 
+            if self.request.POST.get('return_to') == 'appointments':
+                return redirect('portal:patient-appointments')
+
             return patient_messages_redirect(thread)
         if self.is_staff_inbox():
             return staff_inbox_redirect(thread)

@@ -1,0 +1,8 @@
+{# Pages for one of several lists on the same page; `query` keeps the other lists where they were. #}
+{% if pager.has_other_pages %}
+  <nav class="patient-pagination" aria-label="{{ label }} pages">
+    {% if pager.has_previous %}<a class="console-button console-button--secondary" href="?{% if query %}{{ query }}&amp;{% endif %}{{ param }}={{ pager.previous_page_number }}{% if anchor %}#{{ anchor }}{% endif %}">Previous</a>{% endif %}
+    <span>Page {{ pager.number }} of {{ pager.paginator.num_pages }}</span>
+    {% if pager.has_next %}<a class="console-button console-button--secondary" href="?{% if query %}{{ query }}&amp;{% endif %}{{ param }}={{ pager.next_page_number }}{% if anchor %}#{{ anchor }}{% endif %}">Next</a>{% endif %}
+  </nav>
+{% endif %}
