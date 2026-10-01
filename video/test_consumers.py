@@ -205,7 +205,9 @@ class VideoSocketTests(TransactionTestCase):
         self.assertEqual((await doctor.receive_json_from())['type'], 'peer_left')
         for _ in range(161):
             await doctor.send_json_to({'type': 'unsupported'})
-        self.assertEqual((await doctor.receive_output())['code'], 4008)
+        # The first 160 messages each recheck room access before being ignored,
+        # which can take several seconds on a busy CI runner.
+        self.assertEqual((await doctor.receive_output(timeout=15))['code'], 4008)
 
     @sockets
     async def test_server_event_cannot_forward_from_unowned_channel_even_in_current_epoch(self):
