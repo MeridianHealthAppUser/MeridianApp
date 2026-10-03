@@ -1,9 +1,9 @@
 {% extends 'portal/staff_page_base.html' %}
-{% load static %}
+{% load static workspace_ui %}
 {% block title %}Practices | Meridian{% endblock %}
 {% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/management.css' %}">{% endblock %}
-{% block breadcrumb %}<span>Setup · Practices</span>{% endblock %}
-{% block page_heading %}<header class="staff-page-header"><div><p class="console-kicker">Super Admin · Practice setup</p><h1>Your practices</h1><p>Only practices where you hold active Super Admin access appear here. Patient records and staff permissions remain separate.</p></div><a class="console-button console-button--primary" href="{% url 'portal:management-practice-create' %}">Create a practice</a></header>{% endblock %}
+{% block breadcrumbs %}{% breadcrumbs 'Practices' %}{% endblock %}
+{% block page_heading %}<header class="staff-page-header"><div><h1>Practices</h1><p>Only practices where you hold active Super Admin access appear here. Patient records and staff permissions remain separate.</p></div><a class="console-button console-button--primary" href="{% url 'portal:management-practice-create' %}">Create a practice</a></header>{% endblock %}
 {% block page_content %}
   <section class="management-practice-grid" aria-label="Authorized practices">
   {% for practice in practices %}<article class="staff-page-card management-practice-card"><p class="console-kicker">{% if practice.pk == company.pk %}Selected practice{% else %}Super Admin access{% endif %}</p><h2>{{ practice.name }}</h2><p class="management-help">{{ practice.slug }}</p>{% if practice.pk == company.pk %}<div class="management-actions"><a class="console-button console-button--primary" href="{% url 'portal:management-practice-edit' practice.pk %}">Edit details</a><a class="console-button console-button--quiet" href="{% url 'portal:management-users' %}">Manage staff</a></div>{% else %}<p class="management-help">Select this practice in the practice switcher to manage its details and staff.</p>{% endif %}</article>{% endfor %}

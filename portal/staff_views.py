@@ -33,7 +33,7 @@ class StaffPageView(LoginRequiredMixin, StaffCompanyRequiredMixin, TemplateView)
         context.update(
             company=self.company, active_membership=self.membership,
             nav_section=self.nav_section, page_title=self.page_title,
-            is_doctor=self.membership.role == CompanyMembership.Role.DOCTOR,
+            is_doctor=self.membership.role == CompanyMembership.Role.DOCTOR, is_clinician=self.membership.is_clinician,
         )
         return context
 
@@ -177,15 +177,16 @@ class StaffScheduleView(StaffPageView):
         else:
             queryset = queryset.none()
         context['metrics'] = {status: queryset.filter(status=status).count() for status in Appointment.Status.values}
+        # The clinician's own open conversation with the patient, if they have one.
         open_thread = MessageThread.objects.for_company(self.company).filter(
-            patient_id=OuterRef('patient_id'), is_closed=False,
+            patient_id=OuterRef('patient_id'), is_closed=False, participant_links__user_id=OuterRef('clinician_id'),
         ).order_by('-last_message_at', '-created_at', '-pk')
         queryset = queryset.annotate(conversation_id=Subquery(open_thread.values('pk')[:1])).order_by('starts_at', 'pk')
         context.update(self.paginate(queryset, **filters))
         appointments = list(context['page_obj'].object_list)
         from video.access import attach_video_join
 
-        attach_video_join(appointments, self.request.user.pk, allowed_role='doctor' if context['is_doctor'] else None)
+        attach_video_join(appointments, self.request.user.pk, allowed_role='doctor' if context['is_clinician'] else None)
         needs_attention = set(appointments_requiring_attention(
             company=self.company, clinician=selected_clinician,
         ).filter(pk__in=[appointment.pk for appointment in appointments]).values_list('pk', flat=True))
@@ -203,7 +204,7 @@ class StaffScheduleView(StaffPageView):
                 and appointment.pk not in already_rebooked
             )
             if (
-                context['is_doctor'] and appointment.clinician_id == self.request.user.pk and may_change
+                context['is_clinician'] and appointment.clinician_id == self.request.user.pk and may_change
                 and appointment.patient.user_id and appointment.patient.user.is_active
             ):
                 if appointment.conversation_id:
@@ -211,7 +212,7 @@ class StaffScheduleView(StaffPageView):
                     appointment.proposal_url = f'{reverse("portal:staff-inbox")}?{params}#appointment-proposals-{appointment.conversation_id}'
                     appointment.proposal_label = 'Offer a new time' if appointment.status == Appointment.Status.BOOKED else 'Discuss rebooking'
                 else:
-                    appointment.proposal_url = f'{reverse("portal:patient-detail", args=[appointment.patient_id])}#new-thread'
+                    appointment.proposal_url = f'{reverse("portal:patient-detail", args=[appointment.patient_id])}?tab=messages'
                     appointment.proposal_label = 'Start a conversation'
         context.update(
             filter_form=form, appointments=appointments, open_slots=slots,

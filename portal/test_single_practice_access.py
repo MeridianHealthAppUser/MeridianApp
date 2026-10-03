@@ -41,8 +41,8 @@ class SinglePracticeAccessTests(TestCase):
             title='Allowed patient history', category='clinical', is_patient_visible=True)
         cls.other_event = PatientEvent.objects.create(company=cls.other, patient=cls.other_patient,
             title='DISABLED_PRACTICE_HISTORY', category='clinical', is_patient_visible=True)
-        cls.audit = AuditEvent.objects.create(company=cls.company, actor=cls.doctor, action='patient.record_viewed')
-        cls.other_audit = AuditEvent.objects.create(company=cls.other, actor=cls.doctor, action='patient.record_viewed')
+        cls.audit = AuditEvent.objects.create(company=cls.company, actor=cls.doctor, action='patient.contact_updated')
+        cls.other_audit = AuditEvent.objects.create(company=cls.other, actor=cls.doctor, action='patient.contact_updated')
         cls.appointment = Appointment.objects.create(company=cls.company, patient=cls.patient,
             clinician=cls.doctor, starts_at=cls.now, duration_minutes=30)
         cls.other_appointment = Appointment.objects.create(company=cls.other, patient=cls.other_patient,

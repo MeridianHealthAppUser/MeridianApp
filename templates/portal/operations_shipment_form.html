@@ -1,4 +1,6 @@
 {% extends 'portal/operations_base.html' %}
+{% load workspace_ui %}
 {% block title %}Create shipment | Meridian{% endblock %}
-{% block page_heading %}<header class="staff-page-header"><div><p class="console-kicker">Operations · New shipment</p><h1>Create a shipment record</h1><p>{{ company.name }}</p></div><a class="console-button console-button--secondary" href="{% url 'portal:ops-shipping' %}">Back to shipping</a></header>{% endblock %}
+{% block breadcrumbs %}{% breadcrumbs 'Weekly shipping list' 'portal:ops-shipping' 'Create a shipment record' %}{% endblock %}
+{% block page_heading %}<header class="staff-page-header"><div><h1>Create a shipment record</h1><p>{{ company.name }}</p></div></header>{% endblock %}
 {% block operations_content %}<div class="ops-grid"><section class="staff-page-card ops-panel"><form method="post" class="ops-form" action="{{ request.path }}">{% csrf_token %}<input type="hidden" name="workflow_context" value="{{ workflow_context }}">{% include 'portal/operations_fields.html' %}<div><button type="submit" class="console-button console-button--primary">Create local shipment</button></div></form></section><aside class="staff-page-card ops-panel"><h2>Before you create it</h2><p>Choose the patient, exact product and quantity to prepare. Authorisation, local-plan eligibility and remaining allowance are checked by the system.</p><p>This creates a local record only. Preparation, weekly locking and actual dispatch are separate steps.</p></aside></div>{% endblock %}

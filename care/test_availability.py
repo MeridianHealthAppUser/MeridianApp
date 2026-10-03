@@ -17,6 +17,7 @@ from .availability import (
     ensure_working_time, open_slots_for_day, save_working_pattern,
 )
 from .forms import AppointmentForm
+from .messaging import add_participant
 from .models import (
     Appointment, AppointmentProposal, AuditEvent, AvailabilitySlot,
     DoctorTimeOff, DoctorWorkingPattern, MessageThread, PatientEvent, PatientMessage,
@@ -45,6 +46,7 @@ class DoctorAvailabilityTests(TestCase):
         cls.patient = Patient.objects.create(company=cls.company, user=cls.patient_user, first_name='Alice', last_name='Patient')
         cls.beta_patient = Patient.objects.create(company=cls.beta, first_name='Beta', last_name='Patient')
         cls.thread = MessageThread.objects.create(company=cls.company, patient=cls.patient, opened_by=cls.patient_user, subject='Appointment changes')
+        add_participant(cls.thread, cls.doctor)
         today = timezone.localdate()
         cls.monday = today + timedelta(days=(7 - today.weekday()) % 7 or 7)
         cls.sast = ZoneInfo('Africa/Johannesburg')

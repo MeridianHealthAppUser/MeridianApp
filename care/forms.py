@@ -127,7 +127,7 @@ class AppointmentForm(PatientBoundModelForm):
         self.fields['clinician'].queryset = get_user_model().objects.filter(
             is_active=True,
             company_memberships__company=company,
-            company_memberships__role=CompanyMembership.Role.DOCTOR,
+            company_memberships__clinician_type__in=CompanyMembership.CLINICIAN_TYPES,
             company_memberships__is_active=True,
         ).distinct().order_by('first_name', 'last_name', 'email')
 
@@ -229,6 +229,32 @@ class PatientThreadForm(PatientMessageForm):
         widget=forms.TextInput(attrs={'placeholder': 'What can we help with?'}),
     )
 
+    def __init__(self, *args, patient=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.has_recipients = True
+        if patient is None:
+            return  # Staff start conversations with themselves in them.
+        # Patients write to their assigned clinician by default, or a past clinician or one they are booked with.
+        from .messaging import recipient_choices
+
+        clinicians = recipient_choices(patient)
+        self.fields['recipient'] = forms.ModelChoiceField(
+            label='To', queryset=get_user_model().objects.filter(pk__in=[clinician.pk for clinician in clinicians]),
+            empty_label=None, initial=clinicians[0].pk if clinicians else None, required=False,
+        )
+        self.default_recipient = clinicians[0] if clinicians else None
+        self.fields['recipient'].label_from_instance = (
+            lambda user: f'{user.full_name} (your clinician)' if user.pk == patient.assigned_doctor_id else user.full_name)
+        self.order_fields(['recipient', 'subject', 'body'])
+        self.has_recipients = bool(clinicians)
+
+    def clean_recipient(self):
+        # Older forms and links post no recipient: they reach the assigned clinician.
+        recipient = self.cleaned_data.get('recipient') or self.default_recipient
+        if recipient is None:
+            raise ValidationError('You can message a clinician once your practice assigns one to you.')
+        return recipient
+
 
 class ProposalAppointmentChoiceField(forms.ModelChoiceField):
     def label_from_instance(self, appointment):
@@ -262,11 +288,11 @@ class AppointmentProposalForm(forms.Form):
             clinician__is_active=True,
             clinician__company_memberships__company=company,
             clinician__company_memberships__is_active=True,
-            clinician__company_memberships__role=CompanyMembership.Role.DOCTOR,
+            clinician__company_memberships__clinician_type__in=CompanyMembership.CLINICIAN_TYPES,
         ).select_related('clinician').distinct()
         if actor_role == 'doctor':
             active_doctor = CompanyMembership.objects.filter(
-                company=company, user=actor, role=CompanyMembership.Role.DOCTOR, is_active=True,
+                company=company, user=actor, clinician_type__in=CompanyMembership.CLINICIAN_TYPES, is_active=True,
             ).exists()
             appointments = appointments.filter(clinician=actor) if active_doctor else appointments.none()
         elif actor_role != 'patient' or patient.user_id != actor.pk:
@@ -276,6 +302,8 @@ class AppointmentProposalForm(forms.Form):
             or not company.is_active or not patient.is_active or not actor.is_active or not patient.user_id
         ):
             appointments = appointments.none()
+        # Only appointments whose clinician is in this conversation can be discussed in it.
+        appointments = appointments.filter(clinician__message_thread_links__thread=thread)
         self.fields['appointment'].queryset = appointments
         self.has_selectable_appointments = appointments.exists()
 

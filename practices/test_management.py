@@ -53,7 +53,7 @@ class ManagementFixture(TestCase):
 
     def new_staff_data(self, **extra):
         return {'mode': 'create', 'email': 'new.staff@example.test', 'first_name': 'New', 'last_name': 'Doctor',
-                'role': 'doctor', 'practices': [self.alpha.pk], 'password1': 'Fresh-Forest!7Clouds',
+                'role': 'doctor', 'clinician_type': 'doctor', 'practices': [self.alpha.pk], 'password1': 'Fresh-Forest!7Clouds',
                 'password2': 'Fresh-Forest!7Clouds', **extra}
 
 
@@ -283,11 +283,11 @@ class ManagementViewTests(ManagementFixture):
     def test_last_admin_form_error_and_self_demote_redirects_out_after_second_admin_added(self):
         url = reverse('portal:management-membership-edit', args=[self.owner_alpha.pk])
         token = self.token('portal:management-membership-edit', [self.owner_alpha.pk])
-        response = self.client.post(url, {'management_context': token, 'role': 'doctor', 'is_active': 'on'})
+        response = self.client.post(url, {'management_context': token, 'role': 'doctor', 'clinician_type': 'doctor', 'is_active': 'on'})
         self.assertContains(response, 'Keep at least one active Super Admin')
         self.doctor_alpha.role = 'super_admin'
         self.doctor_alpha.save()
-        response = self.client.post(url, {'management_context': token, 'role': 'doctor', 'is_active': 'on'})
+        response = self.client.post(url, {'management_context': token, 'role': 'doctor', 'clinician_type': 'doctor', 'is_active': 'on'})
         self.assertRedirects(response, reverse('portal:desktop-dashboard'), fetch_redirect_response=False)
         self.assertEqual(self.client.get(reverse('portal:management-users')).status_code, 403)
 

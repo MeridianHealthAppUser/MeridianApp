@@ -38,6 +38,23 @@ def _role(role):
         raise ValidationError('Choose a supported staff role.')
 
 
+def _clinician_type(role, clinician_type, current=''):
+    """None keeps the current type; clinician access defaults to Doctor and admins are never clinicians."""
+    if clinician_type is None:
+        clinician_type = current
+        if role == CompanyMembership.Role.DOCTOR and not clinician_type:
+            clinician_type = CompanyMembership.ClinicianType.DOCTOR
+        elif role == CompanyMembership.Role.PRACTICE_ADMIN:
+            clinician_type = ''
+    if clinician_type and clinician_type not in CompanyMembership.CLINICIAN_TYPES:
+        raise ValidationError('Choose a supported clinician type.')
+    if role == CompanyMembership.Role.DOCTOR and not clinician_type:
+        raise ValidationError('Clinician access needs a clinician type: Doctor or Dietitian.')
+    if role == CompanyMembership.Role.PRACTICE_ADMIN and clinician_type:
+        raise ValidationError('Practice administrators are not clinicians.')
+    return clinician_type
+
+
 @transaction.atomic
 def create_practice(*, actor, source_company, name, slug, request=None):
     require_multi_practice()
@@ -72,7 +89,7 @@ def update_practice(*, actor, company, name, slug, expected_updated_at=None, req
 
 
 @transaction.atomic
-def add_staff_user(*, actor, source_company, companies, mode, email, role,
+def add_staff_user(*, actor, source_company, companies, mode, email, role, clinician_type=None,
                    first_name='', last_name='', password='', request=None):
     """New login or explicit SSO link. Existing identities are never edited here."""
     companies = list(companies)
@@ -80,6 +97,7 @@ def add_staff_user(*, actor, source_company, companies, mode, email, role,
         raise ValidationError('Choose at least one practice.')
     _lock_practices(actor, [source_company, *companies])
     _role(role)
+    clinician_type = _clinician_type(role, clinician_type)
     User = get_user_model()
     email = email.strip().lower()
     matches = list(User.objects.select_for_update().filter(email__iexact=email)[:2])
@@ -105,15 +123,16 @@ def add_staff_user(*, actor, source_company, companies, mode, email, role,
     if CompanyMembership.objects.filter(user=user, company__in=companies).exists():
         raise ValidationError('This person already has a membership in a selected practice. Edit that membership instead.')
     for company in companies:
-        membership = CompanyMembership.objects.create(company=company, user=user, role=role)
+        membership = CompanyMembership.objects.create(company=company, user=user, role=role, clinician_type=clinician_type)
         record_audit(company=company, actor=actor,
                      action='staff.account_created' if mode == 'create' else 'staff.membership_linked',
-                     target=membership, request=request, metadata={'user_id': user.pk, 'role': role})
+                     target=membership, request=request,
+                     metadata={'user_id': user.pk, 'role': role, 'clinician_type': clinician_type})
     return user
 
 
 @transaction.atomic
-def update_membership(*, actor, company, membership, role, is_active,
+def update_membership(*, actor, company, membership, role, is_active, clinician_type=None,
                       expected_updated_at=None, request=None):
     _lock_practices(actor, [company])
     if membership.company_id != company.pk:
@@ -123,6 +142,7 @@ def update_membership(*, actor, company, membership, role, is_active,
     if expected_updated_at and membership.updated_at.isoformat() != expected_updated_at:
         raise ValidationError('This membership was updated in another tab. Reload before saving.')
     _role(role)
+    clinician_type = _clinician_type(role, clinician_type, membership.clinician_type)
     if is_active and not membership.user.is_active:
         raise ValidationError('A globally inactive account cannot be reactivated from a practice.')
     removes_super_admin = (membership.is_active and membership.role == CompanyMembership.Role.SUPER_ADMIN
@@ -131,15 +151,15 @@ def update_membership(*, actor, company, membership, role, is_active,
         company=company, role=CompanyMembership.Role.SUPER_ADMIN, is_active=True,
         user__is_active=True).exclude(pk=membership.pk).exists():
         raise ValidationError('Keep at least one active Super Admin in this practice.')
-    changed = [field for field, value in {'role': role, 'is_active': is_active}.items()
+    changed = [field for field, value in {'role': role, 'clinician_type': clinician_type, 'is_active': is_active}.items()
                if getattr(membership, field) != value]
     if changed:
-        old_role, old_active = membership.role, membership.is_active
-        membership.role, membership.is_active = role, is_active
+        old_role, old_type, old_active = membership.role, membership.clinician_type, membership.is_active
+        membership.role, membership.clinician_type, membership.is_active = role, clinician_type, is_active
         membership.full_clean()
         membership.save(update_fields=(*changed, 'updated_at'))
         record_audit(company=company, actor=actor, action='staff.membership_updated', target=membership,
                      request=request, metadata={'changed_fields': changed, 'previous_role': old_role,
-                         'role': role, 'previous_active': old_active, 'is_active': is_active,
-                         'user_id': membership.user_id})
+                         'role': role, 'previous_clinician_type': old_type, 'clinician_type': clinician_type,
+                         'previous_active': old_active, 'is_active': is_active, 'user_id': membership.user_id})
     return membership

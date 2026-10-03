@@ -85,7 +85,7 @@ def _validate_actor(appointment, actor, actor_role):
         raise ValidationError('The appointment does not belong to the patient’s practice.')
     if actor_role == 'doctor':
         if actor.pk != appointment.clinician_id or not CompanyMembership.objects.filter(
-            user=actor, company_id=appointment.company_id, is_active=True, role=CompanyMembership.Role.DOCTOR,
+            user=actor, company_id=appointment.company_id, is_active=True, clinician_type__in=CompanyMembership.CLINICIAN_TYPES,
         ).exists():
             raise PermissionDenied('Only the clinician booked for this appointment can respond as the doctor.')
     elif actor.pk != appointment.patient.user_id:
@@ -97,7 +97,7 @@ def _validate_participants(appointment):
         raise ValidationError('The patient needs an active portal account to agree to a time.')
     if not appointment.clinician.is_active or not CompanyMembership.objects.filter(
         user_id=appointment.clinician_id, company_id=appointment.company_id,
-        role=CompanyMembership.Role.DOCTOR, is_active=True,
+        clinician_type__in=CompanyMembership.CLINICIAN_TYPES, is_active=True,
     ).exists():
         raise ValidationError('The appointment clinician is no longer active in this practice.')
 
@@ -121,11 +121,15 @@ def _proposal_kind(appointment):
     raise ValidationError('A completed appointment cannot be rescheduled or rebooked.')
 
 
-def _validate_thread(thread, appointment):
+def _validate_thread(thread, appointment, *, proposing=False):
     if thread.company_id != appointment.company_id or thread.patient_id != appointment.patient_id:
         raise ValidationError('Use a conversation belonging to this appointment’s patient and practice.')
     if thread.is_closed:
         raise ValidationError('This conversation is closed. Start a new conversation to propose a time.')
+    # The appointment's clinician must be in the conversation, or they could never see the suggestion.
+    # Responses rely on the original-booking snapshot, which already rejects a changed clinician.
+    if proposing and not thread.participant_links.filter(user_id=appointment.clinician_id).exists():
+        raise ValidationError('Suggest a new time in a conversation with the appointment’s clinician.')
 
 
 def _time_label(starts_at):
@@ -175,7 +179,7 @@ def propose_appointment_time(*, appointment, thread, actor, actor_role, proposed
         appointment=appointment, status=AppointmentProposal.Status.PENDING,
     ).order_by('pk'))
     thread = MessageThread.objects.select_for_update().get(pk=thread.pk)
-    _validate_thread(thread, appointment)
+    _validate_thread(thread, appointment, proposing=True)
     for previous in pending:
         previous.status = AppointmentProposal.Status.SUPERSEDED
         previous.responded_by = actor

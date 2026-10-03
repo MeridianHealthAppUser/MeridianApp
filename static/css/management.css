@@ -5,10 +5,8 @@
 .management-field input:not([type=checkbox]), .management-field select { border: 1px solid #dbe7e8; border-radius: .65rem; background: #fff; color: #183b42; font: inherit; min-height: 2.8rem; padding: .65rem .8rem; width: 100%; }
 .management-field input:focus-visible, .management-field select:focus-visible { outline: 3px solid #99d8d4; outline-offset: 2px; }
 .management-field input[type=checkbox] { accent-color: #0b958a; height: 1.1rem; width: 1.1rem; margin-right: .5rem; vertical-align: middle; }
-.management-field--check { grid-template-columns: 1.2rem 1fr; align-items: center; }
-.management-field--check label { grid-column: 2; grid-row: 1; }
-.management-field--check input { grid-column: 1; grid-row: 1; }
-.management-field--check .management-help { grid-column: 1 / -1; }
+.management-field--check > label { align-items: center; cursor: pointer; display: flex; gap: .1rem; }
+.management-field--check .management-help { margin-left: 1.6rem; }
 .management-help { color: #68828a; display: block; font-size: .85rem; line-height: 1.6; }
 .management-help ul { margin: .1rem 0; padding-left: 1.2rem; }
 .management-errors, .management-field .errorlist { color: #a5352e; font-size: .9rem; }

@@ -11,6 +11,7 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
+from care.messaging import add_participant
 from care.models import Appointment, AvailabilitySlot, ClinicalTask, MessageThread
 from practices.models import Company, CompanyMembership, Patient
 from practices.services import ACTIVE_COMPANY_SESSION_KEY
@@ -345,7 +346,13 @@ class StaffPagesTests(TestCase):
     def test_primary_navigation_routes_to_real_sections_on_desktop_and_mobile(self):
         expected = {reverse(f'portal:{name}') for name in (*self.section_names, 'staff-inbox')}
         self.login()
-        for name in ('desktop-dashboard', 'mobile-dashboard', *self.section_names, 'staff-inbox'):
+        # The mobile bar holds only the sections; Care's page lists the same destinations.
+        mobile = StaffNavigationParser()
+        mobile.feed(self.page('mobile-dashboard').content.decode())
+        self.assertIn(reverse('portal:staff-menu-section', args=['care']), {href for href, label in mobile.links})
+        care = self.client.get(reverse('portal:staff-menu-section', args=['care'])).content.decode()
+        self.assertTrue(all(url in care for url in expected))
+        for name in ('desktop-dashboard', *self.section_names, 'staff-inbox'):
             with self.subTest(page=name):
                 response = self.page(name)
                 self.assertEqual(response.status_code, 200)
@@ -356,7 +363,7 @@ class StaffPagesTests(TestCase):
                     if label.lower() in ('overview', 'patients', 'tasks', 'schedule', 'messages', 'inbox'):
                         self.assertFalse(urlsplit(href).fragment, f'{label} still uses an in-page anchor: {href}')
 
-    def test_patient_record_sidebar_shares_real_section_links_and_marks_record_active(self):
+    def test_patient_record_sidebar_shares_real_section_links_and_marks_patients_active(self):
         self.login()
         record_url = reverse('portal:patient-detail', args=[self.patient.pk])
         response = self.client.get(record_url)
@@ -365,7 +372,9 @@ class StaffPagesTests(TestCase):
         parser.feed(response.content.decode())
         expected = {reverse(f'portal:{name}') for name in (*self.section_names, 'staff-inbox')}
         self.assertTrue(expected.issubset({href for href, label in parser.links}))
-        self.assertIn(reverse('portal:patient-detail', args=[self.patient.pk]), parser.active_links)
+        # An open record highlights Patients rather than adding its own menu item.
+        self.assertIn(reverse('portal:patient-list'), parser.active_links)
+        self.assertNotIn(reverse('portal:patient-detail', args=[self.patient.pk]), {href for href, label in parser.links})
         self.assertNotIn(reverse('portal:staff-patient-record', args=[self.patient.pk]), parser.active_links)
         self.assertTrue(all(not urlsplit(href).fragment for href, label in parser.links))
 
@@ -373,6 +382,7 @@ class StaffPagesTests(TestCase):
         thread = MessageThread.objects.create(
             company=self.company, patient=self.patient, subject='Review appointment arrangements',
         )
+        add_participant(thread, self.doctor)
         self.login()
         response = self.page('staff-schedule', date=self.day.isoformat())
         appointment = next(item for item in response.context['appointments'] if item.pk == self.midnight_appointment.pk)

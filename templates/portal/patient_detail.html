@@ -1,5 +1,5 @@
 {% extends 'base.html' %}
-{% load static %}
+{% load static workspace_ui %}
 
 {% block title %}{{ patient }} | {{ company.name }} | Meridian{% endblock %}
 {% block extra_css %}<link rel="stylesheet" href="{% static 'css/console.css' %}"><link rel="stylesheet" href="{% static 'css/record_weight.css' %}">{% endblock %}
@@ -7,6 +7,7 @@
   <div class="meridian-console console-desktop patient-record-console">
     <div class="console-shell">
       <aside class="console-sidebar" aria-label="Practice navigation">
+        {# Only shown when the app runs more than one practice. #}{% if multi_practice_enabled %}
         <div class="console-sidebar__practice">
           <span class="console-practice-mark" aria-hidden="true">M</span>
           <div>
@@ -14,30 +15,20 @@
             <strong>{{ company.name }}</strong>
           </div>
         </div>
+        {% endif %}
 
         {% include 'portal/includes/staff_navigation.html' with nav_section='record' %}
 
       </aside>
 
       <div class="console-main">
-        <header class="console-topbar">
-          <div class="console-breadcrumb">
-            <a class="console-breadcrumb__link" href="{% url 'portal:patient-list' %}">Patients</a>
-            <span class="console-breadcrumb__dot" aria-hidden="true"></span>
-            <span>{{ patient }}</span>
-          </div>
-          <div class="console-topbar__right">
-            <a class="console-icon-button" href="{% url 'portal:staff-inbox' %}"><span aria-hidden="true">●</span><span>Messages</span></a>
-            <a class="console-icon-button" href="#add-care"><span aria-hidden="true">+</span><span>Add care</span></a>
-          </div>
-        </header>
 
         <main class="console-content" id="summary">
+          {% breadcrumbs 'Patients' 'portal:patient-list' patient %}
           <section class="record-hero" aria-labelledby="patient-name">
             <div class="record-identity">
               <span class="record-avatar" aria-hidden="true">{{ patient.first_name|slice:":1"|upper }}{{ patient.last_name|slice:":1"|upper }}</span>
               <div>
-                <p class="console-kicker">Clinical record</p>
                 <h1 id="patient-name">{{ patient }}</h1>
                 <p class="record-hero__subline">{% if patient.user %}{{ patient.user.email }}{% elif patient.phone %}{{ patient.phone }}{% else %}Contact details pending{% endif %}</p>
               </div>
@@ -52,7 +43,7 @@
             <section class="console-section console-card" aria-label="Clinical workflows">
               <div class="console-card__body record-hero__actions">
                 <a class="console-button console-button--secondary" href="{% url 'portal:clinical-consultations' %}?patient={{ patient.pk }}">Consultation notes</a>
-                <a class="console-button console-button--secondary" href="{% url 'portal:staff-patient-record' patient.pk %}">Full clinical record</a>
+                <a class="console-button console-button--secondary" href="{% url 'portal:patient-detail' patient.pk %}?tab=history">History</a>
                 <a class="console-button console-button--secondary" href="{% url 'portal:clinical-labs' %}?patient={{ patient.pk }}">Blood tests</a>
                 <a class="console-button console-button--secondary" href="{% url 'portal:treatment-authorisations' %}?patient={{ patient.pk }}">Authorisations</a>
                 {% if can_add_clinical_note %}

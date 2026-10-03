@@ -1,0 +1,4 @@
+<nav class="page-breadcrumbs" aria-label="Breadcrumb">
+  <a class="page-breadcrumbs__back" href="{{ back.1 }}" aria-label="Back to {{ back.0 }}" title="Back to {{ back.0 }}"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M19 12H5"/><path d="m11 6-6 6 6 6"/></svg></a>
+  <ol>{% for label, url in items %}<li><a href="{{ url }}">{{ label }}</a></li>{% endfor %}<li><span aria-current="page">{{ current }}</span></li></ol>
+</nav>

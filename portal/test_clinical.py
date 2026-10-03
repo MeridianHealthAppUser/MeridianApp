@@ -405,7 +405,7 @@ class ClinicalPortalTests(TestCase):
                     self.assertEqual(self.client.session[ACTIVE_COMPANY_SESSION_KEY], self.beta.pk)
 
     def test_switch_to_practice_admin_role_does_not_redirect_to_inaccessible_clinical_pages(self):
-        CompanyMembership.objects.filter(company=self.beta, user=self.doctor).update(role='practice_admin')
+        CompanyMembership.objects.filter(company=self.beta, user=self.doctor).update(role='practice_admin', clinician_type='')
         for route in ('clinical-consultations', 'clinical-labs'):
             self.login()
             response = self.client.post(reverse('portal:activate-company', args=[self.beta.slug]), {

@@ -1,5 +1,5 @@
 {% extends 'base.html' %}
-{% load static %}
+{% load static workspace_ui %}
 
 {% block title %}Care workspace | Meridian{% endblock %}
 {% block extra_css %}<link rel="stylesheet" href="{% static 'css/console.css' %}">{% endblock %}
@@ -8,6 +8,7 @@
     <div class="meridian-console console-desktop staff-page-console">
       <div class="console-shell">
         <aside class="console-sidebar" aria-label="Practice navigation">
+          {# Only shown when the app runs more than one practice. #}{% if multi_practice_enabled %}
           <div class="console-sidebar__practice">
             <span class="console-practice-mark" aria-hidden="true">M</span>
             <div>
@@ -15,32 +16,18 @@
               <strong>{{ practice.name }}</strong>
             </div>
           </div>
+          {% endif %}
 
           {% include 'portal/includes/staff_navigation.html' with nav_section=nav_section %}
 
         </aside>
 
         <div class="console-main">
-          <header class="console-topbar">
-            <div class="console-breadcrumb">
-              {% block breadcrumb %}
-                <span>Care workspace</span>
-                <span class="console-breadcrumb__dot" aria-hidden="true"></span>
-                <span>{{ practice.name }}</span>
-              {% endblock %}
-            </div>
-            <div class="console-topbar__right">
-              {% block topbar_actions %}
-                <a class="console-icon-button" href="{% url 'portal:desktop-dashboard' %}" aria-label="Back to overview">
-                  <span aria-hidden="true">←</span><span>Overview</span>
-                </a>
-              {% endblock %}
-            </div>
-          </header>
-
           {% include 'portal/includes/staff_mobile_navigation.html' %}
 
           <div class="console-content staff-page-content">
+            {# Each page names its trail; the default is Overview • page title. #}
+            {% block breadcrumbs %}{% if page_title %}{% breadcrumbs page_title %}{% endif %}{% endblock %}
             {% block page_heading %}{% endblock %}
             {% block page_content %}{% endblock %}
           </div>

@@ -1,8 +1,9 @@
 {% extends 'portal/pharmacy_base.html' %}
-{% load static %}
+{% load static workspace_ui %}
 {% block title %}My Medications | Meridian{% endblock %}
 {% block patient_extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/patient_medications.css' %}?v=20261001">{% endblock %}
 {% block patient_content_class %}patient-medications{% endblock %}
+{% block patient_breadcrumbs %}{% breadcrumbs 'My Medications' %}{% endblock %}
 {% block patient_heading %}
   <header class="patient-page-heading">
     <div>

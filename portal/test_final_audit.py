@@ -10,6 +10,7 @@ from django.core.management.base import CommandError
 from django.test import override_settings
 from django.urls import reverse
 
+from care.messaging import add_participant
 from care.models import AuditEvent, ClinicalNote, ClinicalTask, MessageThread, PatientMessage, RecordTag
 from care.task_services import save_task
 from care.test_operations import OperationsFixture
@@ -173,6 +174,7 @@ class FinalWriteAuditTests(OperationsFixture):
 
     def test_head_legacy_record_and_staff_inbox_does_not_mark_read_or_audit(self):
         thread = MessageThread.objects.create(company=self.company, patient=self.patient, subject='Unread conversation')
+        add_participant(thread, self.doctor)
         message = PatientMessage.objects.create(company=self.company, thread=thread, sender=self.patient_user, body='Not opened yet')
         before = AuditEvent.objects.count()
         for url in (reverse('portal:patient-detail', args=[self.patient.pk]), reverse('portal:staff-inbox')):
@@ -186,6 +188,7 @@ class FinalWriteAuditTests(OperationsFixture):
 
     def test_invalid_staff_forms_do_not_mark_other_patient_messages_read(self):
         thread = MessageThread.objects.create(company=self.company, patient=self.patient, subject='Unread conversation')
+        add_participant(thread, self.doctor)
         message = PatientMessage.objects.create(company=self.company, thread=thread, sender=self.patient_user, body='Not opened yet')
         before = AuditEvent.objects.count()
         response = self.client.post(reverse('portal:patient-task-create', args=[self.patient.pk]), {

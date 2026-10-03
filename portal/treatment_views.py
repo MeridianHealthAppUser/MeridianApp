@@ -155,7 +155,7 @@ class SubscriptionListView(LoginRequiredMixin, StaffCompanyRequiredMixin, View):
         listing = _listing(request, self.company, _plans(self.company), PatientSubscription.Status.choices)
         return render(request, 'portal/treatment_subscriptions.html', dict(
             company=self.company, active_membership=self.membership, nav_section='subscriptions',
-            can_read_clinical=self.membership.role in (CompanyMembership.Role.DOCTOR, CompanyMembership.Role.SUPER_ADMIN), **listing,
+            can_read_clinical=self.membership.has_clinical_access, **listing,
         ))
 
 
@@ -166,7 +166,7 @@ def _eligible_authorizations(company, patient):
         status=TreatmentAuthorization.Status.ACTIVE, starts_on__lte=today, expires_on__gte=today,
         product__is_active=True, prescribed_by__is_active=True,
         prescribed_by__company_memberships__company=company,
-        prescribed_by__company_memberships__role=CompanyMembership.Role.DOCTOR,
+        prescribed_by__company_memberships__clinician_type__in=CompanyMembership.PRESCRIBER_TYPES,
         prescribed_by__company_memberships__is_active=True,
     ).distinct()
 

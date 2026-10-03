@@ -51,8 +51,8 @@ class CompanyAdmin(admin.ModelAdmin):
 
 @admin.register(CompanyMembership)
 class CompanyMembershipAdmin(SinglePracticeAdminScope, admin.ModelAdmin):
-    list_display = ('user', 'company', 'role', 'is_active')
-    list_filter = ('role', 'is_active', 'company')
+    list_display = ('user', 'company', 'role', 'clinician_type', 'is_active')
+    list_filter = ('role', 'clinician_type', 'is_active', 'company')
     search_fields = ('user__email', 'company__name')
     autocomplete_fields = ('user', 'company')
 

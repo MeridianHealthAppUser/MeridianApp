@@ -1,13 +1,13 @@
 {% extends 'portal/patient_page_base.html' %}
-{% load static %}
+{% load static workspace_ui %}
 {% block title %}Updates | Meridian{% endblock %}
 {% block patient_extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/patient_care.css' %}?v=20261001"><link rel="stylesheet" href="{% static 'css/patient_updates.css' %}?v=20261001">{% endblock %}
 {% block patient_content_class %}patient-updates{% endblock %}
 
+{% block patient_breadcrumbs %}{% breadcrumbs 'Updates' %}{% endblock %}
 {% block patient_heading %}
   <header class="patient-page-heading">
     <div>
-      <p class="console-kicker"><a class="patient-inline-link" href="{% url 'portal:patient-dashboard' %}">Home</a> · Updates</p>
       <h1>Everything that’s happened</h1>
       <p>Appointments, messages, deliveries and changes to your care that {{ patient_company.name }} has shared with you. Times are South Africa time (SAST).</p>
     </div>

@@ -14,7 +14,7 @@ from django.test import Client
 from django.urls import reverse
 
 from care.followups import append_follow_up
-from care.models import AdministrativeFollowUp, AuditEvent, DoctorActivityStatement, Lead, PatientSubscription, Payment
+from care.models import AdministrativeFollowUp, AuditEvent, DoctorActivityStatement, Lead, PatientSubscription, Payment, PracticeSettings
 from care.reporting import approve_activity_statement, operational_metrics
 from care.test_reporting import RATES, ReportingFixture
 from practices.models import CompanyMembership
@@ -107,6 +107,7 @@ class MetricsPortalTests(ReportingPortalFixture):
         self.company.save(update_fields=['name'])
         self.appointment()
         message = self.message()
+        PracticeSettings.objects.update_or_create(company=self.company, defaults={'store_view_log': True})
         response = self.get('metrics-export', start=self.start, end=self.end)
         self.assertEqual(response.status_code, 200)
         self.assertIn('no-store', response['Cache-Control'])

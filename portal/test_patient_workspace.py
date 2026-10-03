@@ -98,13 +98,17 @@ class PatientWorkspaceTests(TestCase):
         self.assertEqual(invalid.context['rows'], [])
 
     def test_message_and_new_conversation_success_return_to_the_exact_patient_thread(self):
-        self.login(self.administrator)
-        response = self.client.post(reverse('portal:staff-message-create', args=[self.thread.pk]), {'body': 'Administrative reply'})
+        self.login(self.doctor)
+        response = self.client.post(reverse('portal:staff-message-create', args=[self.thread.pk]), {'body': 'Clinician reply'})
         self.assertRedirects(response, self.path() + f'?tab=messages&thread={self.thread.pk}', fetch_redirect_response=False)
+        self.login(self.administrator)
         response = self.client.post(reverse('portal:staff-thread-create', args=[self.patient.pk]), {'subject': 'A new thread', 'body': 'New administrative message'})
         new_thread = MessageThread.objects.get(subject='A new thread')
         self.assertRedirects(response, self.path() + f'?tab=messages&thread={new_thread.pk}', fetch_redirect_response=False)
         self.assertEqual(new_thread.patient_id, self.patient.pk)
+        # The administrator sees their own conversation, never the doctor's.
+        threads = self.page('messages').context['workspace_message_threads']
+        self.assertEqual([thread.pk for thread in threads], [new_thread.pk])
 
     def test_invalid_legacy_forms_render_only_their_own_tab_and_preserve_inputs(self):
         self.login(self.doctor)

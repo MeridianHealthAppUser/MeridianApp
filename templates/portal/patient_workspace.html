@@ -11,7 +11,22 @@
       <div><dt>Date of birth</dt><dd>{{ patient.date_of_birth|date:'j M Y'|default:'Not recorded' }}</dd></div>
       <div><dt>Contact number</dt><dd>{{ patient.phone|default:'Not recorded' }}</dd></div>
       <div><dt>Location</dt><dd>{{ patient.city|default:'Not recorded' }}</dd></div>
-      <div><dt>Assigned clinician</dt><dd>{{ patient.assigned_doctor.full_name|default:'Unassigned' }}</dd></div>
+      <div><dt>Assigned clinician</dt><dd class="patient-workspace-fact-editable">
+        <span class="patient-workspace-fact-value">{{ patient.assigned_doctor.full_name|default:'Unassigned' }}</span>
+        {% if doctor_form %}{% if patient.assigned_doctor %}{% firstof 'Change assigned clinician' as edit_label %}{% else %}{% firstof 'Assign a clinician' as edit_label %}{% endif %}
+        <details class="patient-workspace-fact-editor" data-inline-editor{% if failed_form == 'doctor_form' %} open{% endif %}>
+          <summary aria-label="{{ edit_label }}" title="{{ edit_label }}"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4 20h4L19 9a2.83 2.83 0 0 0-4-4L4 16v4Z"/><path d="m13.5 6.5 4 4"/></svg></summary>
+          <form class="console-form" method="post" action="{% url 'portal:patient-doctor-assign' patient.pk %}">{% csrf_token %}<input type="hidden" name="workflow_context" value="{{ doctor_assignment_context }}">
+            {{ doctor_form.non_field_errors }}
+            <div class="console-form__field"><label class="sr-only" for="{{ doctor_form.doctor.id_for_label }}">{{ doctor_form.doctor.label }}</label>{{ doctor_form.doctor }}<span class="helptext">Active clinicians at {{ company.name }}. Changing this keeps every past record, which stays visible to the new clinician.</span>{{ doctor_form.doctor.errors }}</div>
+            <div class="patient-workspace-fact-editor__actions">
+              <button class="console-button console-button--primary" type="submit">Save</button>
+              {# Without JavaScript, Cancel reloads the Overview with the editor closed. #}
+              <a class="console-button console-button--secondary" href="{{ workspace_url }}" data-inline-editor-cancel>Cancel</a>
+            </div>
+          </form>
+        </details>{% endif %}
+      </dd></div>
       <div><dt>Practice</dt><dd>{{ company.name }}</dd></div>
     </dl></div><p class="patient-workspace-empty">Choose a patient section above. Each section shows only this patient’s records at this practice; clinical History can include other permitted practices when a care purpose is selected.</p></section>
   {% elif workspace_tab == 'weights' %}
@@ -20,14 +35,14 @@
     {% include 'portal/patient_workspace_messages.html' %}
   {% else %}
     <div class="patient-workspace-toolbar"><h2>{{ page_title }}</h2><div class="patient-workspace-actions">
-      {% if workspace_tab == 'consultations' and is_doctor %}<a class="console-button console-button--primary" href="{% url 'portal:clinical-consultation-create' patient.pk %}">New consultation note</a>{% endif %}
+      {% if workspace_tab == 'consultations' and is_clinician %}<a class="console-button console-button--primary" href="{% url 'portal:clinical-consultation-create' patient.pk %}">New consultation note</a>{% endif %}
       {% if workspace_tab == 'blood-tests' and is_doctor %}<a class="console-button console-button--primary" href="{% url 'portal:clinical-lab-create' patient.pk %}">Request blood tests</a>{% endif %}
       {% if workspace_tab == 'treatment' and is_doctor %}<a class="console-button console-button--primary" href="{% url 'portal:treatment-authorisation-create' patient.pk %}?workspace=patient">Authorise treatment</a>{% endif %}
       {% if workspace_filter %}<form class="patient-workspace-filter" method="get" action="{% url 'portal:patient-detail' patient.pk %}"><input type="hidden" name="tab" value="{{ workspace_tab }}"><label for="{{ workspace_filter.status.id_for_label }}">Status</label>{{ workspace_filter.status }}<button class="console-button console-button--secondary" type="submit">Filter</button>{{ workspace_filter.errors }}</form>{% endif %}
     </div></div>
     {% if workspace_tab == 'payments' %}<p class="patient-workspace-notice">Read-only local payment records. Live payment processing is not enabled: no charges, refunds or payment-provider checks happen here. Imported or demo statuses are not proof that funds were received.</p>{% endif %}
     {% if workspace_tab == 'history' %}<p class="patient-workspace-notice">Administrative activity only. Clinical notes, results, private profiles and internal audit details are restricted to authorised clinical roles.</p>{% endif %}
-    {% if workspace_tab == 'consultations' %}<p class="patient-workspace-notice">Consultations for {{ patient }} only. {% if is_doctor %}Your drafts and signed records are available; another doctor’s unsigned notes are not shown.{% else %}Only signed consultations are shown.{% endif %}</p>{% endif %}
+    {% if workspace_tab == 'consultations' %}<p class="patient-workspace-notice">Consultations for {{ patient }} only. {% if is_clinician %}Your drafts and signed records are available; another clinician’s unsigned notes are not shown.{% else %}Only signed consultations are shown.{% endif %}</p>{% endif %}
     <section class="patient-workspace-panel">
       {% if workspace_tab == 'notes' %}
         {% for note in notes %}<article class="patient-workspace-note" id="note-{{ note.pk }}"><strong>{{ note.get_note_type_display }}</strong><small> · {{ note.created_at|date:'j M Y, H:i' }} · {{ note.author.full_name }}{% if note.is_private %} · Only visible to you{% endif %}</small><p>{{ note.body|linebreaksbr }}</p><div class="record-tags">{% for tag in note.tags.all %}<span class="record-tag">{{ tag.name }}</span>{% endfor %}</div>
@@ -62,6 +77,6 @@
     </section>
     {% if workspace_tab == 'appointments' %}{% include 'portal/patient_workspace_legacy_form.html' with section_form=appointment_form form_name='appointment_form' form_title='Book an appointment' form_url_name='portal:patient-appointment-create' %}{% endif %}
     {% if workspace_tab == 'tasks' %}{% include 'portal/patient_workspace_legacy_form.html' with section_form=task_form form_name='task_form' form_title='Create a task for this patient' form_url_name='portal:patient-task-create' %}{% endif %}
-    {% if workspace_tab == 'notes' and is_doctor %}{% include 'portal/patient_workspace_legacy_form.html' with section_form=note_form form_name='note_form' form_title='Add a general clinical note' form_url_name='portal:patient-note-create' %}{% endif %}
+    {% if workspace_tab == 'notes' and is_clinician %}{% include 'portal/patient_workspace_legacy_form.html' with section_form=note_form form_name='note_form' form_title='Add a general clinical note' form_url_name='portal:patient-note-create' %}{% endif %}
   {% endif %}
 {% endblock %}

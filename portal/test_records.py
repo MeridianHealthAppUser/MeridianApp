@@ -11,7 +11,7 @@ from django.utils import timezone
 from care.models import (
     AuditEvent, ClinicalEncounter, ClinicalNote, ConsentRecord, LabRequest, LabResult,
     MedicationProduct, PatientEvent, PatientMedicalProfile, PatientMedicalProfileRevision,
-    PatientSubscription, TreatmentAuthorization, WeightEntry,
+    PatientSubscription, PracticeSettings, TreatmentAuthorization, WeightEntry,
 )
 from practices.models import Company, CompanyMembership, Patient
 from practices.services import ACTIVE_COMPANY_SESSION_KEY
@@ -204,7 +204,7 @@ class ClinicalRecordTests(TestCase):
                 self.assertContains(response, 'Signed consultation summary')
 
     def test_profile_access_is_decided_by_role_in_actual_practice(self):
-        CompanyMembership.objects.filter(company=self.beta, user=self.doctor).update(role='super_admin')
+        CompanyMembership.objects.filter(company=self.beta, user=self.doctor).update(role='super_admin', clinician_type='')
         self.login()
         response = self.page(True, scope='all', reason='direct_care')
         self.assertContains(response, 'ALPHA_DOCTOR_ONLY_PROFILE')
@@ -212,6 +212,8 @@ class ClinicalRecordTests(TestCase):
         self.assertContains(response, 'Beta visible event')
 
     def test_read_and_export_audited_once_in_each_actual_practice(self):
+        PracticeSettings.objects.update_or_create(company=self.alpha, defaults={'store_view_log': True})
+        PracticeSettings.objects.update_or_create(company=self.beta, defaults={'store_view_log': True})
         self.login()
         for export, action in ((False, 'patient.clinical_record_viewed'), (True, 'patient.clinical_record_exported')):
             before = AuditEvent.objects.filter(action=action).count()
@@ -361,3 +363,29 @@ class ClinicalRecordTests(TestCase):
         response = self.directory(scope='everyone')
         self.assertIn('scope', response.context['filter_form'].errors)
         self.assertEqual(response.context['patients'], [])
+
+    def test_history_lists_changes_but_not_views_downloads_or_exports(self):
+        from .record_views import ACCESS_AUDIT_LABELS
+        PracticeSettings.objects.update_or_create(company=self.alpha, defaults={'store_view_log': True})
+        for action in ACCESS_AUDIT_LABELS:
+            AuditEvent.objects.create(company=self.alpha, patient=self.patient, actor=self.doctor, action=action)
+        AuditEvent.objects.create(company=self.alpha, patient=self.patient, actor=self.doctor, action='patient.contact_updated')
+        self.login()
+        self.page()
+        response = self.page()
+        self.assertEqual([entry['title'] for entry in response.context['timeline_entries'] if entry['kind'] == 'audit'],
+                         ['Contact details updated'])
+        self.assertNotContains(response, 'record viewed')
+        # Views are still audited for privacy access history.
+        self.assertEqual(AuditEvent.objects.filter(patient=self.patient, action='patient.clinical_record_viewed').count(), 3)
+
+    def test_history_leaves_out_messages(self):
+        PatientEvent.objects.create(company=self.alpha, patient=self.patient, category='message', title='New secure message',
+                                    detail='A message was added to the secure conversation.')
+        AuditEvent.objects.create(company=self.alpha, patient=self.patient, actor=self.doctor, action='message.sent')
+        self.login()
+        response = self.page()
+        self.assertNotContains(response, 'New secure message')
+        self.assertNotContains(response, 'Secure message sent')
+        self.assertNotIn('messages', dict(response.context['filter_form'].fields['category'].choices))
+

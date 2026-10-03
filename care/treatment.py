@@ -27,7 +27,7 @@ def authorization_is_current(authorization, on_date=None):
         and authorization.prescribed_by.is_active
         and CompanyMembership.objects.filter(
             company_id=authorization.company_id, user_id=authorization.prescribed_by_id,
-            role=CompanyMembership.Role.DOCTOR, is_active=True,
+            clinician_type__in=CompanyMembership.PRESCRIBER_TYPES, is_active=True,
         ).exists()
     )
 

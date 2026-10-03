@@ -1,13 +1,14 @@
 {% extends 'portal/patient_page_base.html' %}
+{% load workspace_ui %}
 
 {% block title %}My Appointments | Meridian{% endblock %}
 {% block patient_content_class %}patient-appointments{% endblock %}
 
+{% block patient_breadcrumbs %}{% breadcrumbs 'My Appointments' %}{% endblock %}
 {% block patient_heading %}
   <header class="patient-page-heading">
     <div>
-      <p class="console-kicker">My Appointments</p>
-      <h1>Your consults</h1>
+      <h1>My Appointments</h1>
     </div>
   </header>
 {% endblock %}
@@ -38,7 +39,7 @@
       <div class="patient-book__head">
         <div>
           <h2 class="patient-book__title" id="book-heading">Book a consult · 15 min</h2>
-          <p class="patient-small">All times are South Africa time (SAST) and allow for each doctor’s working hours, time off and existing bookings. Booking does not take payment.</p>
+          <p class="patient-small">All times are South Africa time (SAST) and allow for each clinician’s working hours, time off and existing bookings. Booking does not take payment.</p>
         </div>
         {% if renewal_due %}<span class="patient-pill patient-pill--amber">Due by {{ renewal_due|date:"j M" }}</span>{% endif %}
       </div>
@@ -51,7 +52,7 @@
           {{ booking_filter_form.appointment_type.errors }}
         </div>
         <div class="patient-book__group">
-          <p class="patient-book__label" id="book-doctor-label">Doctor</p>
+          <p class="patient-book__label" id="book-doctor-label">Clinician</p>
           <div class="patient-chip-row" role="group" aria-labelledby="book-doctor-label">{% for chip in booking_chips.doctors %}<a class="patient-chip{% if chip.active %} is-active{% endif %}" href="{{ chip.url }}"{% if chip.active %} aria-current="true"{% endif %}>{{ chip.label }}</a>{% endfor %}</div>
           {{ booking_filter_form.clinician.errors }}
         </div>
@@ -84,7 +85,7 @@
               {% for slot in slots %}<label class="patient-slot" for="booking-slot-{{ forloop.counter }}"><input type="radio" id="booking-slot-{{ forloop.counter }}" name="slot" value="{{ slot.token }}" required{% if slot.selected %} checked{% endif %}><span><strong>{{ slot.starts_at|date:"H:i" }}</strong><small>{{ slot.clinician.full_name }}</small></span></label>{% endfor %}
             </div>
           </fieldset>
-          {% if slots|length >= 100 %}<p class="patient-small">Showing the first 100 times. Choose a doctor to narrow the list.</p>{% endif %}
+          {% if slots|length >= 100 %}<p class="patient-small">Showing the first 100 times. Choose a clinician to narrow the list.</p>{% endif %}
           <label class="patient-check" for="{{ booking_form.confirm_booking.id_for_label }}">{{ booking_form.confirm_booking }}<span>{{ booking_form.confirm_booking.label }}</span></label>
           {{ booking_form.confirm_booking.errors }}
           <div class="patient-book__actions">
@@ -92,7 +93,7 @@
             <span class="patient-small">Your chosen time is held for {{ slot_expiry_minutes }} minutes and checked again when you confirm.</span>
           </div>
         {% else %}
-          <p class="patient-empty">{% if booking_filter_form.errors %}Correct the choices above to see available times.{% else %}No times are free on this day. Choose another day or doctor, or message your care team for help.{% endif %}</p>
+          <p class="patient-empty">{% if booking_filter_form.errors %}Correct the choices above to see available times.{% else %}No times are free on this day. Choose another day or clinician, or message your clinician for help.{% endif %}</p>
           <a class="console-button console-button--secondary" href="{% url 'portal:patient-messages' %}">Message my care team</a>
         {% endif %}
       </form>
@@ -129,7 +130,7 @@
                 <td data-label="Actions">
                   <div class="patient-table__actions">
                     <a class="patient-inline-link" href="{% url 'portal:patient-appointment-detail' appointment.pk %}">Details / cancel</a>
-                    <a class="patient-inline-link" href="{% url 'portal:patient-appointment-calendar' appointment.pk %}">Add to calendar</a>
+                    <a class="patient-inline-link" data-no-loader href="{% url 'portal:patient-appointment-calendar' appointment.pk %}">Add to calendar</a>
                     {% include 'portal/includes/video_join_link.html' %}
                     {% if appointment.proposal_url %}<a class="console-button console-button--secondary" href="{{ appointment.proposal_url }}">{{ appointment.proposal_label }}</a>{% else %}<a class="patient-inline-link" href="{% url 'portal:patient-messages' %}">Contact care team</a>{% endif %}
                   </div>
@@ -145,7 +146,7 @@
   </section>
   {% include 'portal/includes/patient_pagination.html' with pagination_label='Appointment' %}
   <aside class="patient-care-notice">
-    <p><strong>Need a different time?</strong> You or your doctor can suggest a new time in Messages. Your existing appointment stays in place until the other person accepts the change.</p>
+    <p><strong>Need a different time?</strong> You or your clinician can suggest a new time in Messages. Your existing appointment stays in place until the other person accepts the change.</p>
   </aside>
 </div>
 {% endblock %}

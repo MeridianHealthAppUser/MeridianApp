@@ -19,7 +19,7 @@
             <div class="console-form__field"><label for="{{ form.occurred_at.id_for_label }}">Consultation date and time (SAST)</label>{{ form.occurred_at }}{{ form.occurred_at.errors }}</div>
             <div class="console-form__field"><label for="{{ form.summary.id_for_label }}">{{ form.summary.label }}</label>{{ form.summary }}{{ form.summary.errors }}</div>
             {% if can_sign %}<div class="clinical-signature"><label class="clinical-signature-check" for="{{ form.confirm_signature.id_for_label }}">{{ form.confirm_signature }}<span>I confirm this is the final note.</span></label>{{ form.confirm_signature.errors }}<p>Signing locks this consultation note. Check the patient, appointment and wording before signing. You do not need to confirm this to save a draft.</p></div>{% endif %}
-            <div class="clinical-form-actions"><button class="console-button console-button--secondary" type="submit" name="action" value="save">Save draft</button>{% if can_sign %}<button class="console-button console-button--primary" type="submit" name="action" value="sign">Sign final note</button>{% endif %}</div>
+            <div class="clinical-form-actions"><button class="console-button console-button--secondary" type="submit" name="action" value="save">Save draft</button>{% if can_sign %}<button class="console-button console-button--primary" type="submit" name="action" value="sign" data-requires-check="{{ form.confirm_signature.id_for_label }}">Sign final note</button>{% endif %}</div>
           </form>
         {% else %}
           {{ form.non_field_errors }}

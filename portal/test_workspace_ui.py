@@ -77,7 +77,8 @@ class WorkspacePresentationTests(TestCase):
         response = self.page('desktop-dashboard')
         self.assertContains(response, 'data-rail-navigation')
         for group in ('Care', 'Operations', 'Administration', 'Insights', 'Settings'):
-            self.assertContains(response, f'<span class="console-nav__label">{group}</span>', html=True)
+            self.assertContains(response, f'data-navigation-group="{group.lower()}"')
+            self.assertContains(response, f'</svg>{group}</span>')
         for name in ('staff-tasks', 'staff-schedule', 'ops-catalogue', 'policy-list', 'management-users', 'metrics', 'staff-data-requests'):
             self.assertContains(response, reverse(f'portal:{name}'))
         self.login(self.doctor)

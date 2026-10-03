@@ -37,11 +37,29 @@ def validate_management_context(request, company, kind, record=None):
     return data
 
 
+CLINICIAN_TYPE_HELP = ('Clinicians can be booked, assigned patients and keep clinical records. Only doctors can '
+                       'authorise treatment, compound or request blood tests. Practice administrators are not clinicians.')
+
+
+def clinician_type_field():
+    return forms.ChoiceField(label='Clinician type', required=False, help_text=CLINICIAN_TYPE_HELP,
+                             choices=(('', 'None'), *CompanyMembership.ClinicianType.choices))
+
+
+def check_clinician_type(form, data):
+    role, clinician_type = data.get('role'), data.get('clinician_type', '')
+    if role == CompanyMembership.Role.DOCTOR and not clinician_type:
+        form.add_error('clinician_type', 'Clinician access needs a clinician type: Doctor or Dietitian.')
+    elif role == CompanyMembership.Role.PRACTICE_ADMIN and clinician_type:
+        form.add_error('clinician_type', 'Practice administrators are not clinicians. Choose None.')
+
+
 class StaffUserForm(forms.Form):
     mode = forms.ChoiceField(label='Account action', choices=(('create', 'Create a new staff login'),
                                       ('link', 'Link an existing account')))
     email = forms.EmailField(max_length=254)
     role = forms.ChoiceField(choices=CompanyMembership.Role.choices)
+    clinician_type = clinician_type_field()
     practices = forms.ModelMultipleChoiceField(queryset=Company.objects.none(),
         widget=forms.CheckboxSelectMultiple, help_text='Only practices where you are a Super Admin appear here.')
     first_name = forms.CharField(max_length=150, required=False, label='First name (new accounts only)')
@@ -63,6 +81,7 @@ class StaffUserForm(forms.Form):
     def clean(self):
         data = super().clean()
         data['email'] = data.get('email', '').lower()
+        check_clinician_type(self, data)
         if data.get('mode') == 'create':
             for field in ('first_name', 'last_name', 'password1', 'password2'):
                 if not data.get(field):
@@ -84,6 +103,7 @@ class StaffUserForm(forms.Form):
 
 class MembershipForm(forms.Form):
     role = forms.ChoiceField(choices=CompanyMembership.Role.choices)
+    clinician_type = clinician_type_field()
     is_active = forms.BooleanField(required=False, label='Active in this practice',
         help_text='Turning this off removes only this practice’s staff access. The shared login and other practices stay unchanged.')
 
@@ -91,6 +111,11 @@ class MembershipForm(forms.Form):
         super().__init__(*args, **kwargs)
         if not multi_practice_enabled():
             self.fields['is_active'].help_text = 'Turning this off removes staff access to this practice without deleting the account.'
+
+    def clean(self):
+        data = super().clean()
+        check_clinician_type(self, data)
+        return data
 
 
 class PracticeForm(forms.ModelForm):

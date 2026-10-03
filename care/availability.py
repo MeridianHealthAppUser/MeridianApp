@@ -42,9 +42,9 @@ def _lock_own_doctor(company, clinician, actor):
     doctor = get_user_model().objects.select_for_update().get(pk=clinician.pk)
     if not doctor.is_active or not CompanyMembership.objects.filter(
         company=company, company__is_active=True, user=doctor,
-        role=CompanyMembership.Role.DOCTOR, is_active=True,
+        clinician_type__in=CompanyMembership.CLINICIAN_TYPES, is_active=True,
     ).exists():
-        raise PermissionDenied('You need an active doctor membership in this practice.')
+        raise PermissionDenied('You need an active clinician membership in this practice.')
     return doctor
 
 
@@ -173,7 +173,7 @@ def open_slots_for_day(*, company, clinicians, day, duration_minutes=30, limit=1
     doctors = list(get_user_model().objects.filter(
         pk__in=ids, is_active=True, company_memberships__company=company,
         company_memberships__company__is_active=True, company_memberships__is_active=True,
-        company_memberships__role=CompanyMembership.Role.DOCTOR,
+        company_memberships__clinician_type__in=CompanyMembership.CLINICIAN_TYPES,
     ).distinct().order_by('pk'))
     if not doctors:
         return []

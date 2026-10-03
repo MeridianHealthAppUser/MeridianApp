@@ -86,7 +86,7 @@ class VideoPolicyTests(AppointmentLifecycleFixture):
                         self.access(actor)
                 type(record).objects.filter(pk=record.pk).update(is_active=True)
         membership = CompanyMembership.objects.get(company=self.company, user=self.doctor)
-        for changes in ({'is_active': False}, {'is_active': True, 'role': 'practice_admin'}):
+        for changes in ({'is_active': False}, {'is_active': True, 'role': 'practice_admin', 'clinician_type': ''}):
             CompanyMembership.objects.filter(pk=membership.pk).update(**changes)
             with self.assertRaises(VideoAccessDenied):
                 self.access()

@@ -54,9 +54,19 @@ class CompanyScopedModel(TimeStampedModel):
 
 class CompanyMembership(TimeStampedModel):
     class Role(models.TextChoices):
-        DOCTOR = 'doctor', 'Doctor'
+        # The stored value predates clinician types; this role is clinical staff without admin rights.
+        DOCTOR = 'doctor', 'Clinician'
         PRACTICE_ADMIN = 'practice_admin', 'Practice administrator'
         SUPER_ADMIN = 'super_admin', 'Super admin'
+
+    class ClinicianType(models.TextChoices):
+        DOCTOR = 'doctor', 'Doctor'
+        DIETITIAN = 'dietitian', 'Dietitian'
+
+    # Any clinician can be booked, assigned patients and keep clinical records.
+    # Only prescribers can authorise treatment, compound or request blood tests.
+    CLINICIAN_TYPES = tuple(ClinicianType.values)
+    PRESCRIBER_TYPES = (ClinicianType.DOCTOR,)
 
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -69,17 +79,61 @@ class CompanyMembership(TimeStampedModel):
         related_name='memberships',
     )
     role = models.CharField(max_length=32, choices=Role.choices)
+    clinician_type = models.CharField(max_length=16, choices=ClinicianType.choices, blank=True)
     is_active = models.BooleanField(default=True)
 
     class Meta:
         constraints = [
             models.UniqueConstraint(fields=('user', 'company'), name='one_role_per_user_per_company'),
+            models.CheckConstraint(
+                condition=~models.Q(role='practice_admin', clinician_type__in=('doctor', 'dietitian')),
+                name='practice_admin_is_not_a_clinician',
+            ),
         ]
         indexes = [models.Index(fields=('user', 'company', 'is_active'))]
         ordering = ('company__name', 'user__email')
 
     def __str__(self):
         return f'{self.user} — {self.company} ({self.get_role_display()})'
+
+    def clean(self):
+        super().clean()
+        if self.role == self.Role.PRACTICE_ADMIN and self.clinician_type:
+            raise ValidationError({'clinician_type': 'Practice administrators are not clinicians. Choose None.'})
+
+    def save(self, *args, **kwargs):
+        # Clinician access always carries a type; callers that predate types mean Doctor.
+        if self.role == self.Role.DOCTOR and not self.clinician_type:
+            self.clinician_type = self.ClinicianType.DOCTOR
+            if kwargs.get('update_fields') is not None:
+                kwargs['update_fields'] = {*kwargs['update_fields'], 'clinician_type'}
+        elif self.role == self.Role.PRACTICE_ADMIN and self.clinician_type:
+            self.clinician_type = ''
+            if kwargs.get('update_fields') is not None:
+                kwargs['update_fields'] = {*kwargs['update_fields'], 'clinician_type'}
+        super().save(*args, **kwargs)
+
+    @property
+    def is_clinician(self):
+        return self.clinician_type in self.CLINICIAN_TYPES
+
+    @property
+    def is_prescriber(self):
+        return self.clinician_type in self.PRESCRIBER_TYPES
+
+    @property
+    def has_clinical_access(self):
+        """Clinical records are open to clinicians and to Super Admins."""
+        return self.is_clinician or self.role == self.Role.SUPER_ADMIN
+
+    @property
+    def title(self):
+        """How the account menu names this person, e.g. "Dietitian" or "Super admin · Doctor"."""
+        if self.role == self.Role.DOCTOR and self.clinician_type:
+            return self.get_clinician_type_display()
+        if self.clinician_type:
+            return f'{self.get_role_display()} · {self.get_clinician_type_display()}'
+        return self.get_role_display()
 
 
 class Patient(CompanyScopedModel):
@@ -139,11 +193,11 @@ class Patient(CompanyScopedModel):
         if self.assigned_doctor_id and self.company_id and not CompanyMembership.objects.filter(
             user_id=self.assigned_doctor_id,
             company_id=self.company_id,
-            role=CompanyMembership.Role.DOCTOR,
+            clinician_type__in=CompanyMembership.CLINICIAN_TYPES,
             is_active=True,
         ).exists():
             raise ValidationError({
-                'assigned_doctor': 'The assigned doctor must have an active doctor role in this practice.'
+                'assigned_doctor': 'The assigned clinician must be active in this practice.'
             })
 
 # Create your models here.

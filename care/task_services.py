@@ -36,7 +36,7 @@ def _validate_record_actor(record, actor, membership):
     if record.patient_id and (not record.patient.is_active or record.patient.company_id != record.company_id):
         raise PermissionDenied('This patient record is not available in the active practice.')
     if isinstance(record, ClinicalNote):
-        if membership.role != CompanyMembership.Role.DOCTOR or record.author_id != actor.pk:
+        if not membership.is_clinician or record.author_id != actor.pk:
             raise PermissionDenied('Only the note author can edit its tags.')
     elif isinstance(record, ClinicalTask):
         from .clinical import WORKFLOW_TASK_ERROR, is_clinical_workflow_task

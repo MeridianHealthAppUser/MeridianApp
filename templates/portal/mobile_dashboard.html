@@ -8,7 +8,7 @@
     <header class="mobile-console__top">
       <div>
         <div class="mobile-console__practice">{{ active_company.name|default:"Meridian Health" }}</div>
-        <div class="mobile-console__role">{% if active_membership %}{{ active_membership.get_role_display }}{% elif is_patient_portal %}Patient portal{% else %}Care workspace{% endif %}</div>
+        <div class="mobile-console__role">{% if active_membership %}{{ active_membership.title }}{% elif is_patient_portal %}Patient portal{% else %}Care workspace{% endif %}</div>
       </div>
       {% if is_patient_portal %}
         <a class="console-icon-button" href="#messages" aria-label="Open messages"><span aria-hidden="true">●</span><span>Inbox</span></a>
@@ -20,13 +20,11 @@
     <main class="mobile-console__content">
       {% if is_patient_portal %}
         <section class="mobile-console__welcome" aria-labelledby="mobile-heading">
-          <p class="console-kicker">Your care</p>
           <h1 id="mobile-heading">Hello, {{ user.first_name|default:user.full_name }}.</h1>
           <p>Keep track of your appointments, care plan, and messages in one secure place.</p>
         </section>
       {% else %}
         <section class="mobile-console__welcome" aria-labelledby="mobile-heading">
-          <p class="console-kicker">Today at {{ active_company.name }}</p>
           <h1 id="mobile-heading">Welcome, {{ user.first_name|default:user.full_name }}.</h1>
           <p>Your focused mobile view for care that needs attention.</p>
         </section>

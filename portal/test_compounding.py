@@ -10,7 +10,7 @@ from django.conf import settings
 from django.urls import reverse
 
 from care.compounding import mark_compounding_submitted, update_compounding_draft
-from care.models import AuditEvent, AuthorizationReviewReminder, CompoundingRecord, TreatmentAuthorization
+from care.models import AuditEvent, AuthorizationReviewReminder, CompoundingRecord, PracticeSettings, TreatmentAuthorization
 from care.test_compounding import CompoundingFixture
 from practices.services import ACTIVE_COMPANY_SESSION_KEY
 
@@ -95,6 +95,7 @@ class CompoundingPageTests(CompoundingFixture):
 
     def test_print_is_doctor_only_marks_summary_not_prescription_and_head_has_no_audit(self):
         record = self.review_record()
+        PracticeSettings.objects.update_or_create(company=self.company, defaults={'store_view_log': True})
         self.login()
         url = self.url('compounding-print', record.pk)
         before = AuditEvent.objects.count()

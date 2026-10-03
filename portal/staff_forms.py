@@ -14,7 +14,7 @@ def practice_doctors(company):
     return get_user_model().objects.filter(
         is_active=True, company_memberships__company=company,
         company_memberships__is_active=True,
-        company_memberships__role=CompanyMembership.Role.DOCTOR,
+        company_memberships__clinician_type__in=CompanyMembership.CLINICIAN_TYPES,
     ).distinct().order_by('first_name', 'last_name', 'email')
 
 
@@ -29,7 +29,7 @@ class PatientDirectoryFilterForm(forms.Form):
         widget=forms.TextInput(attrs={'placeholder': 'Name, ID, email or record number', 'type': 'search'}),
     )
     clinician = DoctorChoiceField(
-        label='Doctor', required=False, queryset=get_user_model().objects.none(), empty_label='All doctors',
+        label='Clinician', required=False, queryset=get_user_model().objects.none(), empty_label='All clinicians',
     )
 
     def __init__(self, *args, company, **kwargs):
@@ -65,7 +65,7 @@ class ScheduleFilterForm(forms.Form):
         widget=forms.DateInput(attrs={'type': 'date', 'min': '1900-01-01', 'max': '2100-12-31'}),
     )
     clinician = DoctorChoiceField(
-        label='Whose diary', required=False, queryset=get_user_model().objects.none(), empty_label='All doctors',
+        label='Whose diary', required=False, queryset=get_user_model().objects.none(), empty_label='All clinicians',
     )
 
     def __init__(self, *args, company, actor, membership, **kwargs):

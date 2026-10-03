@@ -1,16 +1,23 @@
-<div class="patient-workspace-toolbar"><h2>Patient messages</h2></div>
+<div class="patient-workspace-toolbar"><h2>Messages</h2></div>
+<p class="patient-workspace-notice">Only conversations you are part of are shown. Other conversations with this patient stay private to the people in them.</p>
 <div class="patient-workspace-message-grid">
   <aside class="patient-workspace-panel"><ul class="patient-workspace-threads">{% for thread in workspace_message_threads %}<li><a href="{{ thread.workspace_url }}"{% if selected_thread.pk == thread.pk %} aria-current="page"{% endif %}>{{ thread.subject }}<small>{% if thread.unread_count %} · {{ thread.unread_count }} unread{% endif %}{% if thread.is_closed %} · Closed{% endif %}</small></a></li>{% empty %}<li class="patient-workspace-empty">No conversations for this patient.</li>{% endfor %}</ul>{% include 'portal/patient_workspace_pagination.html' %}</aside>
   <section class="patient-workspace-panel" id="patient-conversation">
     {% if selected_thread %}
-      <div class="patient-workspace-panel__body"><h2>{{ selected_thread.subject }}</h2><p>{% if selected_thread.is_closed %}Closed conversation{% else %}Secure conversation{% endif %} · {{ company.name }}</p>
+      <div class="patient-workspace-panel__body"><h2>{{ selected_thread.subject }}</h2><p>{% if selected_thread.is_closed %}Closed conversation{% else %}Secure conversation{% endif %} · With {{ selected_thread.patient }}{% for row in selected_thread.participant_rows %}, {{ row.user.full_name }}{% endfor %}</p>{% for row in selected_thread.participant_rows %}{% if row.added_by %}<p class="thread-joined">{{ row.added_by.full_name }} added {{ row.user.full_name }} · {{ row.created_at|date:'j M Y, H:i' }}</p>{% endif %}{% endfor %}
         <div class="patient-workspace-actions">{% if older_message_url %}<a href="{{ older_message_url }}">Older messages</a>{% endif %}{% if newer_message_url %}<a href="{{ newer_message_url }}">Newer messages</a>{% endif %}<a class="console-button console-button--quiet" href="{% url 'portal:conversation-manage' selected_thread.pk %}">Manage conversation</a></div>
       </div>
       <ol class="thread-message-list">{% for message in selected_thread.conversation_messages %}<li class="thread-message{% if message.sender_id == user.pk %} thread-message--mine{% endif %}"><div class="thread-message__meta"><strong>{{ message.sender.full_name|default:'Care team' }}</strong><time>{{ message.created_at|date:'j M Y, H:i' }}</time></div><p>{{ message.body|linebreaksbr }}</p></li>{% empty %}<li class="patient-workspace-empty">No messages yet.</li>{% endfor %}</ol>
       {% include 'portal/includes/appointment_proposals.html' with thread=selected_thread %}
       {% if not selected_thread.is_closed %}<div class="patient-workspace-panel__body"><form class="console-form" method="post" action="{% url 'portal:staff-message-create' selected_thread.pk %}">{% csrf_token %}{{ message_form.non_field_errors }}<div class="console-form__field"><label for="{{ message_form.body.id_for_label }}">Message</label>{{ message_form.body }}{{ message_form.body.errors }}</div><button class="console-button console-button--primary" type="submit">Send message</button></form></div>{% endif %}
     {% elif workspace_message_threads %}<p class="patient-workspace-empty">Choose a conversation to read it. New messages from the patient stay unread until you open them.</p>
-    {% else %}<p class="patient-workspace-empty">Start a conversation below to contact this patient.</p>{% endif %}
+    {% else %}<p class="patient-workspace-empty">You have no conversations with this patient. Start one below; only you and the patient will be able to read it.</p>{% endif %}
   </section>
 </div>
 {% include 'portal/patient_workspace_legacy_form.html' with section_form=thread_form form_name='thread_form' form_title='Start a new conversation' form_url_name='portal:staff-thread-create' %}
+<section class="patient-workspace-panel patient-workspace-team" aria-labelledby="team-about-patient-heading"><div class="patient-workspace-panel__body">
+  <h2 id="team-about-patient-heading">Team conversations about this patient</h2>
+  <p class="patient-workspace-team__note">Only you and the colleagues in each conversation can see these. The patient never does.</p>
+  <ul class="patient-workspace-threads">{% for thread in team_threads_about_patient %}<li><a href="{% url 'portal:team-inbox' %}?thread={{ thread.pk }}#team-conversation">{{ thread.subject }}<small> · {% for member in thread.members.all %}{% if member.pk == user.pk %}you{% else %}{{ member.full_name }}{% endif %}{% if not forloop.last %}, {% endif %}{% endfor %}{% if thread.unread_count %} · {{ thread.unread_count }} unread{% endif %}</small></a></li>{% empty %}<li class="patient-workspace-empty">No team conversations about this patient that include you.</li>{% endfor %}</ul>
+  <a class="console-button console-button--secondary" href="{% url 'portal:team-inbox' %}?compose=1&amp;patient={{ patient.pk }}#team-conversation">Message a colleague about this patient</a>
+</div></section>

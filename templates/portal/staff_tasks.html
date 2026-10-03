@@ -1,17 +1,13 @@
 {% extends 'portal/staff_page_base.html' %}
+{% load workspace_ui %}
 
 {% block title %}{{ title|default:page_title }} | {{ company.name }} | Meridian{% endblock %}
 
-{% block breadcrumb %}
-  <span>Tasks</span>
-  <span class="console-breadcrumb__dot" aria-hidden="true"></span>
-  <span>{{ company.name }}</span>
-{% endblock %}
 
+{% block breadcrumbs %}{% breadcrumbs page_title %}{% endblock %}
 {% block page_heading %}
   <header class="staff-page-header">
     <div>
-      <p class="console-kicker">Care coordination</p>
       <h1>{{ page_title }}</h1>
       <p>{% if active_membership.role == 'doctor' %}Tasks assigned to you or created by you in {{ company.name }}.{% else %}Care tasks for {{ company.name }}.{% endif %}</p>
     </div>

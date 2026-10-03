@@ -1,0 +1,29 @@
+{% extends 'portal/staff_page_base.html' %}{% load workspace_ui %}
+{% block title %}Practice settings | {{ company.name }} | Meridian{% endblock %}
+{% block breadcrumbs %}{% breadcrumbs 'Practice settings' %}{% endblock %}
+{% block page_heading %}<header class="staff-page-header"><div><h1>Practice settings</h1><p>Settings for {{ company.name }}. Only Super Admins can change these.</p></div></header>{% endblock %}
+{% block page_content %}
+<section class="staff-page-card event-log-settings" aria-labelledby="event-log-heading">
+  <div class="staff-page-card__header"><div>
+    <h2 id="event-log-heading">Event log settings</h2>
+    <p>Every change below is always stored with who made it and when. Entries cannot be edited or deleted in the app. Items marked <span class="event-log-badge">History</span> also appear on the patient’s History tab.</p>
+  </div></div>
+  <div class="event-log-sections">
+    {% for title, items in event_log_sections %}
+      <fieldset class="event-log-section" disabled>
+        <legend>{{ title }}</legend>
+        <ul>{% for label, in_history in items %}<li><label class="event-log-item"><input type="checkbox" checked aria-describedby="event-log-always"><span>{{ label }}</span>{% if in_history %}<span class="event-log-badge">History</span>{% endif %}</label></li>{% endfor %}</ul>
+      </fieldset>
+    {% endfor %}
+  </div>
+  <p class="event-log-note" id="event-log-always">Always stored. These cannot be turned off.</p>
+
+  <form class="console-form practice-settings-form event-log-optional" method="post">
+    {% csrf_token %}
+    <h3>Optional</h3>
+    {{ form.non_field_errors }}
+    {% include 'portal/includes/form_field.html' with field=form.store_view_log %}
+    <button class="console-button console-button--primary" type="submit">Save settings</button>
+  </form>
+</section>
+{% endblock %}

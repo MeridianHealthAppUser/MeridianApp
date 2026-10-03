@@ -149,13 +149,17 @@ def patient_appointments_context(request, company, patient):
     context.update(_paginate(request, appointments), filter_form=form)
     context['appointments'] = list(context['page_obj'].object_list)
     attach_video_join(context['appointments'], request.user.pk, allowed_role='patient', now=now)
-    thread = MessageThread.objects.for_company(company).filter(patient=patient, is_closed=False).first()
+    # A new time is suggested in the patient's open conversation with that appointment's clinician.
+    thread_for = {}
+    for open_thread in MessageThread.objects.for_company(company).filter(patient=patient, is_closed=False).prefetch_related('participant_links'):
+        for link in open_thread.participant_links.all():
+            thread_for.setdefault(link.user_id, open_thread)
     eligible_ids = set()
-    if thread:
+    for open_thread in {open_thread.pk: open_thread for open_thread in thread_for.values()}.values():
         proposal_form = AppointmentProposalForm(
-            company=company, patient=patient, thread=thread, actor=request.user, actor_role='patient',
+            company=company, patient=patient, thread=open_thread, actor=request.user, actor_role='patient',
         )
-        eligible_ids = set(proposal_form.fields['appointment'].queryset.filter(
+        eligible_ids |= set(proposal_form.fields['appointment'].queryset.filter(
             pk__in=[appointment.pk for appointment in context['appointments']],
         ).values_list('pk', flat=True))
     for appointment in context['appointments']:
@@ -163,6 +167,7 @@ def patient_appointments_context(request, company, patient):
         appointment.video_link = safe_video_link(appointment.video_link)
         can_reschedule = appointment.status == Appointment.Status.BOOKED and appointment.starts_at > now
         can_rebook = appointment.status in (Appointment.Status.CANCELLED, Appointment.Status.NO_SHOW)
+        thread = thread_for.get(appointment.clinician_id)
         if can_reschedule or can_rebook:
             if thread and appointment.pk in eligible_ids:
                 appointment.proposal_url = (
@@ -171,8 +176,9 @@ def patient_appointments_context(request, company, patient):
                 )
                 appointment.proposal_label = 'Suggest a new time' if can_reschedule else 'Ask to rebook'
             elif not thread:
-                appointment.proposal_url = f'{reverse("portal:patient-messages")}#new-thread'
-                appointment.proposal_label = 'Message your care team'
+                query = urlencode({'compose': 1, 'to': appointment.clinician_id, 'subject': 'My appointment'})
+                appointment.proposal_url = f'{reverse("portal:patient-messages")}?{query}#patient-conversation'
+                appointment.proposal_label = f'Message {appointment.clinician.full_name}'
     return context
 
 
@@ -216,7 +222,7 @@ def patient_messages_context(request, company, patient, *, selected_thread_id=No
         unread_count=Count('messages', filter=(
             Q(messages__company=company, messages__read_at__isnull=True) & ~Q(messages__sender=request.user)
         )),
-    ).order_by('-last_activity', '-pk')
+    ).prefetch_related('participants').order_by('-last_activity', '-pk')
     form, status = _filter(request, MessageFilterForm, 'all')
     filtered = all_threads
     if status in ('open', 'closed'):
@@ -235,11 +241,14 @@ def patient_messages_context(request, company, patient, *, selected_thread_id=No
             thread.latest_sender_name = 'You'
         else:
             thread.latest_sender_name = senders.get(thread.latest_sender_id) or 'Meridian care team'
+        thread.people = ', '.join(person.full_name for person in thread.participants.all())
     requested = selected_thread_id if selected_thread_id is not None else request.GET.get('thread')
     # A new message opens in the conversation pane. Links elsewhere in the
     # portal can suggest a subject, which the patient can change before sending.
     composing = request.GET.get('compose') == '1' or overrides.get('failed_form') == 'thread_form'
     suggested_subject = ' '.join(request.GET.get('subject', '').split())[:120] if composing else ''
+    suggested_to = request.GET.get('to', '') if composing and request.GET.get('to', '').isdecimal() else ''
+    initial = {key: value for key, value in (('subject', suggested_subject), ('recipient', suggested_to)) if value}
     # Nothing opens by itself: replies stay unread until the patient chooses a conversation.
     selected = get_object_or_404(all_threads, pk=_thread_id(requested)) if requested is not None else None
     settings_row = PracticeSettings.objects.for_company(company).first()
@@ -247,7 +256,7 @@ def patient_messages_context(request, company, patient, *, selected_thread_id=No
         threads=threads, filter_form=form, selected_thread=selected,
         message_threads=[selected] if selected else [],
         message_form=PatientMessageForm(auto_id='patient_reply_%s'),
-        thread_form=PatientThreadForm(auto_id='thread_%s', initial={'subject': suggested_subject} if suggested_subject else None),
+        thread_form=PatientThreadForm(auto_id='thread_%s', patient=patient, initial=initial or None),
         composing=composing or (selected is None and not all_threads.exists()),
         subject_suggestions=('Side effects', 'My dose', 'My delivery', 'My appointment', 'Something else'),
         support_email=settings_row.support_email if settings_row else '',
@@ -260,6 +269,7 @@ def patient_messages_context(request, company, patient, *, selected_thread_id=No
     history = PatientMessage.objects.for_company(company).filter(thread=selected).select_related('sender').order_by('-created_at', '-pk')
     message_page = Paginator(history, 50).get_page(request.GET.get('message_page', 1))
     selected.conversation_messages = list(reversed(list(message_page.object_list)))
+    selected.participant_rows = list(selected.participant_links.select_related('user', 'added_by'))
     read_ids = [message.pk for message in selected.conversation_messages if message.sender_id != request.user.pk and message.read_at is None]
     # HEAD has no displayed body, and an invalid POST must not cause incidental
     # writes while returning a preserved form draft. Successful POSTs redirect

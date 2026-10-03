@@ -18,6 +18,8 @@
 .patient-inbox-thread__dot { background: var(--patient-badge, #d92d20); border-radius: 50%; display: inline-block; height: .5rem; margin-right: .4rem; vertical-align: .08em; width: .5rem; }
 .patient-inbox-thread__meta { color: var(--console-muted); font-size: .72rem; overflow-wrap: anywhere; }
 .patient-inbox-thread__from { color: var(--patient-text); font-weight: 500; }
+.patient-inbox-thread__with { color: var(--console-muted); font-size: .72rem; overflow-wrap: anywhere; }
+.patient-conversation__joined { color: var(--console-muted); font-size: .75rem; margin: .2rem 0 0; }
 .patient-inbox-thread__preview { color: var(--patient-text); font-size: .76rem; line-height: 1.45; margin-top: .3rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .patient-inbox-pill { background: var(--console-canvas); border: 1px solid var(--console-line); border-radius: 99rem; color: var(--patient-text); display: inline-block; font-size: .64rem; font-weight: 500; line-height: 1.35; padding: .1rem .45rem; white-space: nowrap; }
 .patient-inbox-pill--waiting { background: var(--patient-amber-soft, #fcf3e2); border-color: var(--patient-amber-line, #ebd5ac); color: var(--console-amber); }

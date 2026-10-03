@@ -1,12 +1,12 @@
 {% extends 'portal/staff_page_base.html' %}
-{% load static %}
+{% load static workspace_ui %}
 {% block title %}Consultations | {{ company.name }} | Meridian{% endblock %}
 {% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/clinical_workflow.css' %}">{% endblock %}
-{% block breadcrumb %}<span>Clinical · Consultations</span><span class="console-breadcrumb__dot" aria-hidden="true"></span><span>{{ company.name }}</span>{% endblock %}
 
+{% block breadcrumbs %}{% breadcrumbs 'Consultations' %}{% endblock %}
 {% block page_heading %}
   <header class="staff-page-header">
-    <div><p class="console-kicker">Clinical · Consultations</p><h1>Consultation notes</h1><p>Draft and signed consultation records at {{ company.name }}. Times are shown in South Africa time (SAST).</p></div>
+    <div><h1>Consultations</h1><p>Draft and signed consultation records at {{ company.name }}. Times are shown in South Africa time (SAST).</p></div>
     {% if can_create %}
       <div class="clinical-heading-actions">
         {% if filter_form.cleaned_data.patient %}<a class="console-button console-button--primary" href="{% url 'portal:clinical-consultation-create' filter_form.cleaned_data.patient.pk %}">New consultation</a>{% else %}<a class="console-button console-button--primary" href="{% url 'portal:patient-list' %}">Choose a patient</a>{% endif %}

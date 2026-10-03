@@ -36,8 +36,8 @@ def book_staff_appointment(*, company, patient, actor, clinician, starts_at, dur
         raise PermissionDenied('An active staff membership is required.')
     if not patient.is_active or patient.company_id != company.pk:
         raise ValidationError('Choose an active patient record in this practice.')
-    if clinician is None or not clinician.is_active or not CompanyMembership.objects.filter(company=company, user=clinician, role='doctor', is_active=True).exists():
-        raise ValidationError('Choose an active doctor in this practice.')
+    if clinician is None or not clinician.is_active or not CompanyMembership.objects.filter(company=company, user=clinician, clinician_type__in=CompanyMembership.CLINICIAN_TYPES, is_active=True).exists():
+        raise ValidationError('Choose an active clinician in this practice.')
     if not isinstance(starts_at, datetime) or timezone.is_naive(starts_at) or starts_at <= timezone.now():
         raise ValidationError('Choose a future appointment time.')
     if type(duration_minutes) is not int or not 5 <= duration_minutes <= 120 or appointment_type not in Appointment.Type.values:
@@ -89,10 +89,10 @@ def change_appointment_status(*, appointment, actor, status, expected_updated, c
         membership = _membership(appointment.company, actor)
         if membership is None:
             raise PermissionDenied('An active practice membership is required.')
-        if status in ('completed', 'no_show') and (membership.role != 'doctor' or appointment.clinician_id != actor.pk):
-            raise PermissionDenied('Only the booked doctor may record attendance.')
+        if status in ('completed', 'no_show') and (not membership.is_clinician or appointment.clinician_id != actor.pk):
+            raise PermissionDenied('Only the booked clinician may record attendance.')
         if membership.role == 'doctor' and appointment.clinician_id != actor.pk:
-            raise PermissionDenied('Only the booked doctor can change this appointment.')
+            raise PermissionDenied('Only the booked clinician can change this appointment.')
     if status not in ('cancelled', 'completed', 'no_show') or confirm is not True:
         raise ValidationError('Choose and confirm an appointment status.')
     if appointment.status == status:

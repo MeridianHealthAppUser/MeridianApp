@@ -39,7 +39,7 @@ def _schedule_filters(request, company, membership):
 
 def schedule_availability_context(request, company, membership, clinician, selected_date, mode):
     """No mutations during a schedule GET, including availability generation."""
-    can_manage = bool(clinician and clinician.pk == request.user.pk and membership.role == CompanyMembership.Role.DOCTOR)
+    can_manage = bool(clinician and clinician.pk == request.user.pk and membership.is_clinician)
     rows_by_day = {row.weekday: row for row in DoctorWorkingPattern.objects.for_company(company).filter(clinician=clinician)} if clinician else {}
     initial = [
         {'is_working': rows_by_day[day].is_working, 'starts_at': rows_by_day[day].starts_at, 'ends_at': rows_by_day[day].ends_at}
@@ -94,8 +94,8 @@ class DoctorAvailabilityMixin(LoginRequiredMixin, StaffCompanyRequiredMixin):
     http_method_names = ('post',)
 
     def require_own_diary(self):
-        if self.membership.role != CompanyMembership.Role.DOCTOR:
-            raise PermissionDenied('Only a doctor can change their own working hours or time off.')
+        if not self.membership.is_clinician:
+            raise PermissionDenied('Only a clinician can change their own working hours or time off.')
 
     def invalid(self, **overrides):
         from .staff_views import StaffScheduleView

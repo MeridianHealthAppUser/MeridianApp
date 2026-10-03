@@ -29,6 +29,19 @@
 .patient-workspace-facts { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr)); margin: 0; }
 .patient-workspace-facts dt { color: var(--console-muted); font-size: .75rem; }
 .patient-workspace-facts dd { color: var(--console-ink); font-size: .85rem; margin: .35rem 0 0; overflow-wrap: anywhere; }
+/* An editable fact: a pen beside the value opens the form in its place. */
+.patient-workspace-fact-editable { align-items: center; display: flex; flex-wrap: wrap; gap: .25rem .35rem; }
+.patient-workspace-fact-editable:has(> .patient-workspace-fact-editor[open]) > .patient-workspace-fact-value { display: none; }
+.patient-workspace-fact-editor[open] { flex-basis: 100%; }
+.patient-workspace-fact-editor > summary { align-items: center; border-radius: .45rem; color: var(--console-teal-dark); cursor: pointer; display: inline-flex; height: 1.75rem; justify-content: center; list-style: none; margin-block: -.25rem; width: 1.75rem; }
+.patient-workspace-fact-editor > summary::-webkit-details-marker { display: none; }
+.patient-workspace-fact-editor > summary:hover { background: var(--console-teal-soft); }
+.patient-workspace-fact-editor > summary:focus-visible { outline: 2px solid var(--console-teal); outline-offset: 1px; }
+.patient-workspace-fact-editor > summary svg { fill: none; height: 1rem; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 2; width: 1rem; }
+.patient-workspace-fact-editor[open] > summary { display: none; }
+.patient-workspace-fact-editor .console-form { gap: .6rem; padding: 0; }
+.patient-workspace-fact-editor .helptext { color: var(--console-muted); font-size: .72rem; line-height: 1.4; }
+.patient-workspace-fact-editor__actions { display: flex; flex-wrap: wrap; gap: .5rem; }
 .patient-workspace-editor { margin-top: 1rem; }
 .patient-workspace-editor > summary { color: var(--console-teal-dark); cursor: pointer; font-size: .85rem; font-weight: 700; padding: 1rem; }
 .patient-workspace-editor .console-form { max-width: 48rem; padding: 0 1rem 1rem; }
@@ -41,3 +54,27 @@
 .patient-workspace-threads a[aria-current] { background: var(--console-teal-soft); }
 @media (max-width: 48rem) { .patient-workspace-message-grid { grid-template-columns: minmax(0, 1fr); } }
 @media (max-width: 36rem) { .patient-workspace-tabs a { font-size: .74rem; padding: .5rem .6rem; } .patient-workspace-table th, .patient-workspace-table td { padding: .65rem .75rem; } }
+
+.patient-workspace-team { margin-top: 1rem; }
+.patient-workspace-team__note { color: var(--console-muted); font-size: .8rem; margin: .3rem 0 .6rem; }
+.patient-workspace-team .console-button { margin-top: .8rem; }
+
+/* Mobile: one section picker instead of several rows of tabs; desktop keeps the tabs. */
+.patient-workspace-picker { display: none; }
+@media (max-width: 52rem) {
+  .patient-workspace-tabs { display: none; }
+  .patient-workspace-picker { display: block; margin: .25rem 0 1.2rem; }
+  .patient-workspace-picker > summary { align-items: center; background: #fff; border: 1px solid var(--console-line); border-radius: .75rem; color: var(--console-ink); cursor: pointer; display: flex; font-size: .95rem; font-weight: 700; gap: .75rem; justify-content: space-between; list-style: none; min-height: 3rem; padding: .7rem 1rem; }
+  .patient-workspace-picker > summary::-webkit-details-marker { display: none; }
+  .patient-workspace-picker > summary:focus-visible { outline: 2px solid var(--console-teal); outline-offset: 2px; }
+  .patient-workspace-picker > summary svg { fill: none; flex: 0 0 auto; height: 1.1rem; stroke: var(--console-teal-dark); stroke-linecap: round; stroke-linejoin: round; stroke-width: 2; transition: transform .15s ease; width: 1.1rem; }
+  .patient-workspace-picker[open] > summary svg { transform: rotate(180deg); }
+  /* Opens in place, pushing the page down, so no option hides behind the bottom menu bar. */
+  .patient-workspace-picker nav { background: #fff; border: 1px solid var(--console-line); border-radius: .75rem; box-shadow: 0 6px 18px rgba(21, 59, 57, .08); margin-top: .4rem; }
+  .patient-workspace-picker ul { list-style: none; margin: 0; padding: .3rem; }
+  .patient-workspace-picker a { align-items: center; border-radius: .55rem; color: var(--console-ink); display: flex; font-size: .92rem; font-weight: 650; justify-content: space-between; min-height: 2.9rem; padding: .6rem .8rem; text-decoration: none; }
+  .patient-workspace-picker a:hover, .patient-workspace-picker a:focus-visible { background: #edf6f2; }
+  .patient-workspace-picker a[aria-current="page"] { background: var(--console-teal-soft); color: var(--console-teal-dark); }
+  .patient-workspace-picker a[aria-current="page"]::after { content: '✓'; font-weight: 800; }
+}
+@media (prefers-reduced-motion: reduce) { .patient-workspace-picker > summary svg { transition: none; } }

@@ -1,60 +1,12 @@
+{% load workspace_ui %}{% staff_menu as menu %}
 <nav class="console-nav" aria-label="Staff pages" data-rail-navigation>
-  <a{% if nav_section == 'overview' %} class="is-active" aria-current="page"{% endif %} href="{% url 'portal:desktop-dashboard' %}">Overview</a>
-  <details class="console-nav__group" data-navigation-group="care" open>
-    <summary class="console-nav__toggle"><span class="console-nav__label">Care</span></summary>
+  <a class="console-nav__top{% if nav_section == 'overview' %} is-active{% endif %}"{% if nav_section == 'overview' %} aria-current="page"{% endif %} href="{% url 'portal:desktop-dashboard' %}">{% include 'portal/includes/nav_icon.html' with name='overview' %}<span>Overview</span></a>
+  {% for section in menu %}
+  <details class="console-nav__group" data-navigation-group="{{ section.key }}" open>
+    <summary class="console-nav__toggle"><span class="console-nav__label">{% include 'portal/includes/nav_icon.html' with name=section.key %}{{ section.label }}</span></summary>
     <div class="console-nav__links">
-      <a{% if nav_section == 'tasks' %} class="is-active" aria-current="page"{% endif %} href="{% url 'portal:staff-tasks' %}">{% if active_membership.role == 'doctor' %}My tasks{% else %}Tasks{% endif %}</a>
-      {% if patient %}<a{% if nav_section == 'record' %} class="is-active" aria-current="page"{% endif %} href="{% url 'portal:patient-detail' patient.pk %}">Patient record</a>{% endif %}
-      <a{% if nav_section == 'patients' %} class="is-active" aria-current="page"{% endif %} href="{% url 'portal:patient-list' %}">Patients</a>
-      {% if active_membership.role == 'doctor' or active_membership.role == 'super_admin' %}
-        <a{% if nav_section == 'consultations' %} class="is-active" aria-current="page"{% endif %} href="{% url 'portal:clinical-consultations' %}">Consultations</a>
-        <a{% if nav_section == 'labs' %} class="is-active" aria-current="page"{% endif %} href="{% url 'portal:clinical-labs' %}">Blood tests</a>
-        <a{% if nav_section == 'authorisations' %} class="is-active" aria-current="page"{% endif %} href="{% url 'portal:treatment-authorisations' %}">Authorisations</a>
-        <a{% if nav_section == 'compounding' %} class="is-active" aria-current="page"{% endif %} href="{% url 'portal:compounding-list' %}">Compounding records</a>
-      {% endif %}
-      <a{% if nav_section == 'schedule' %} class="is-active" aria-current="page"{% endif %} href="{% url 'portal:staff-schedule' %}">Schedule and availability</a>
-      <a{% if nav_section == 'messages' %} class="is-active" aria-current="page"{% endif %} href="{% url 'portal:staff-inbox' %}">Messages</a>
+      {% for item in section.items %}<a{% if item.current %} class="is-active" aria-current="{{ item.current }}"{% endif %} href="{{ item.url }}">{{ item.label }}</a>{% endfor %}
     </div>
   </details>
-  <details class="console-nav__group" data-navigation-group="operations" open>
-    <summary class="console-nav__toggle"><span class="console-nav__label">Operations</span></summary>
-    <div class="console-nav__links">
-      <a{% if nav_section == 'subscriptions' %} class="is-active" aria-current="page"{% endif %} href="{% url 'portal:treatment-subscriptions' %}">Subscriptions</a>
-      <a{% if nav_section == 'orders' %} class="is-active" aria-current="page"{% endif %} href="{% url 'portal:ops-orders' %}">Supply requests</a>
-      <a{% if nav_section == 'shipping' %} class="is-active" aria-current="page"{% endif %} href="{% url 'portal:ops-shipping' %}">Weekly shipping list</a>
-      <a{% if nav_section == 'history' %} class="is-active" aria-current="page"{% endif %} href="{% url 'portal:ops-history' %}">Dispatch history</a>
-      <a{% if nav_section == 'stock' %} class="is-active" aria-current="page"{% endif %} href="{% url 'portal:ops-stock' %}">Batches and stock</a>
-      <a{% if nav_section == 'catalogue' %} class="is-active" aria-current="page"{% endif %} href="{% url 'portal:ops-catalogue' %}">Catalogue</a>
-    </div>
-  </details>
-  {% if active_membership.role == 'practice_admin' or active_membership.role == 'super_admin' %}
-  <details class="console-nav__group" data-navigation-group="administration" open>
-    <summary class="console-nav__toggle"><span class="console-nav__label">Administration</span></summary>
-    <div class="console-nav__links">
-      <a{% if nav_section == 'leads' %} class="is-active" aria-current="page"{% endif %} href="{% url 'portal:staff-leads' %}">Leads</a>
-      <a{% if nav_section == 'dropouts' %} class="is-active" aria-current="page"{% endif %} href="{% url 'portal:dropouts' %}">Dropouts</a>
-      <a{% if nav_section == 'privacy_requests' %} class="is-active" aria-current="page"{% endif %} href="{% url 'portal:staff-data-requests' %}">Data requests</a>
-    </div>
-  </details>
-  {% endif %}
-  <details class="console-nav__group" data-navigation-group="insights" open>
-    <summary class="console-nav__toggle"><span class="console-nav__label">Insights</span></summary>
-    <div class="console-nav__links">
-      <a{% if nav_section == 'metrics' %} class="is-active" aria-current="page"{% endif %} href="{% url 'portal:metrics' %}">Metrics and cohorts</a>
-      {% if active_membership.role == 'doctor' or active_membership.role == 'super_admin' %}<a{% if nav_section == 'statements' %} class="is-active" aria-current="page"{% endif %} href="{% url 'portal:activity-statements' %}">Doctor activity statements</a>{% endif %}
-    </div>
-  </details>
-  {% if active_membership.role == 'doctor' or active_membership.role == 'super_admin' %}
-  <details class="console-nav__group" data-navigation-group="settings" open>
-    <summary class="console-nav__toggle"><span class="console-nav__label">Settings</span></summary>
-    <div class="console-nav__links">
-      <a{% if nav_section == 'review_rules' %} class="is-active" aria-current="page"{% endif %} href="{% url 'portal:treatment-review-rules' %}">Review rules</a>
-      {% if active_membership.role == 'super_admin' %}
-        {% if multi_practice_enabled %}<a{% if nav_section == 'practices' %} class="is-active" aria-current="page"{% endif %} href="{% url 'portal:management-practices' %}">Practices</a>{% endif %}
-        <a{% if nav_section == 'users' %} class="is-active" aria-current="page"{% endif %} href="{% url 'portal:management-users' %}">Users and roles</a>
-        <a{% if nav_section == 'policies' %} class="is-active" aria-current="page"{% endif %} href="{% url 'portal:policy-list' %}">Policy versions</a>
-      {% endif %}
-    </div>
-  </details>
-  {% endif %}
+  {% endfor %}
 </nav>

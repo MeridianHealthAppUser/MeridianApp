@@ -8,6 +8,7 @@ from django.test import RequestFactory, TestCase
 from django.urls import reverse
 from django.utils import timezone
 
+from care.messaging import add_participant
 from care.models import (
     Appointment,
     AuditEvent,
@@ -15,6 +16,7 @@ from care.models import (
     ClinicalTask,
     MessageThread,
     PatientMessage,
+    PracticeSettings,
 )
 from practices.models import Company, CompanyMembership, Patient
 from practices.services import ACTIVE_COMPANY_SESSION_KEY, ACTIVE_PATIENT_COMPANY_SESSION_KEY
@@ -65,6 +67,8 @@ class PortalWorkflowTests(TestCase):
             company=cls.company, patient=cls.other_patient,
             subject='Another patient question', opened_by=cls.other_patient_user,
         )
+        for thread in (cls.thread, cls.other_practice_thread, cls.other_patient_thread):
+            add_participant(thread, cls.doctor)
         cls.task = ClinicalTask.objects.create(
             company=cls.company, patient=cls.patient, title='Contact patient', assigned_to=cls.administrator,
         )
@@ -145,8 +149,11 @@ class PortalWorkflowTests(TestCase):
                 self.assertEqual(self.client.post(reverse(f'portal:{route}', args=[pk]), {}).status_code, 404)
         self.assertFalse(AuditEvent.objects.exists())
 
-    def test_record_view_is_audited_without_clinical_content(self):
+    def test_record_view_is_stored_only_when_the_practice_keeps_a_view_log(self):
         self.login(self.doctor)
+        self.assertEqual(self.client.get(self.patient_url()).status_code, 200)
+        self.assertFalse(AuditEvent.objects.filter(action='patient.record_viewed').exists())
+        PracticeSettings.objects.update_or_create(company=self.company, defaults={'store_view_log': True})
         self.assertEqual(self.client.get(self.patient_url()).status_code, 200)
         event = AuditEvent.objects.get(action='patient.record_viewed')
         self.assertEqual((event.company_id, event.patient_id, event.actor_id),
@@ -357,12 +364,20 @@ class PortalWorkflowTests(TestCase):
         self.assertEqual(response.context['message_form']['body'].value(), draft)
         self.assertFalse(PatientMessage.objects.exists())
 
-    def test_administrator_can_send_message_and_invalid_draft_is_preserved(self):
+    def test_administrator_messages_only_in_their_own_conversations(self):
         self.login(self.administrator)
-        url = reverse('portal:staff-message-create', args=[self.thread.pk])
+        # The doctor's conversation with the patient is private to them.
+        self.assertEqual(self.client.post(reverse('portal:staff-message-create', args=[self.thread.pk]), {'body': 'Not mine'}).status_code, 404)
+        self.assertFalse(PatientMessage.objects.exists())
+        self.client.post(reverse('portal:staff-thread-create', args=[self.patient.pk]),
+                         {'subject': 'Delivery details', 'body': 'Your delivery is booked.'})
+        own = MessageThread.objects.get(subject='Delivery details')
+        self.assertEqual(list(own.participants.all()), [self.administrator])
+        PatientMessage.objects.all().delete()
+        url = reverse('portal:staff-message-create', args=[own.pk])
         self.assertRedirects(
             self.client.post(url, {'body': 'Your appointment details are ready.'}),
-            self.patient_url() + f'?tab=messages&thread={self.thread.pk}', fetch_redirect_response=False,
+            self.patient_url() + f'?tab=messages&thread={own.pk}', fetch_redirect_response=False,
         )
         message = PatientMessage.objects.get()
         self.assertEqual((message.company_id, message.sender_id), (self.company.pk, self.administrator.pk))
@@ -373,15 +388,15 @@ class PortalWorkflowTests(TestCase):
         self.assertEqual(response.context['message_form']['body'].value(), draft)
         self.assertEqual(PatientMessage.objects.count(), 1)
 
-    def test_shared_staff_inbox_counts_only_unread_patient_origin_messages(self):
+    def test_unread_count_covers_only_the_staff_members_own_conversations(self):
         incoming = self.add_message(body='Patient question to team')
         self.add_message(sender=self.administrator, body='Administrative reply')
         other_practice = self.add_message(thread=self.other_practice_thread, body='Beta message')
-        for user in (self.doctor, self.second_doctor):
+        for user, expected in ((self.second_doctor, 0), (self.doctor, 1)):
             with self.subTest(user=user.email):
                 self.login(user)
                 response = self.client.get(reverse('portal:desktop-dashboard'))
-                self.assertEqual(response.context['metrics']['unread_messages'], 1)
+                self.assertEqual(response.context['metrics']['unread_messages'], expected)
         self.client.get(self.patient_url(), {'tab': 'messages', 'thread': self.thread.pk})
         incoming.refresh_from_db()
         other_practice.refresh_from_db()

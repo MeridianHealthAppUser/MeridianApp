@@ -53,9 +53,9 @@ def book_patient_appointment(*, company, patient, actor, clinician_id, starts_at
         raise PermissionDenied('Your account is no longer active.')
     _own_active_patient(company, patient, actor)
     if clinician is None or not clinician.is_active or not CompanyMembership.objects.filter(
-        user=clinician, company=company, is_active=True, role=CompanyMembership.Role.DOCTOR,
+        user=clinician, company=company, is_active=True, clinician_type__in=CompanyMembership.CLINICIAN_TYPES,
     ).exists():
-        raise ValidationError('This doctor is no longer available in this practice.')
+        raise ValidationError('This clinician is no longer available in this practice.')
     if appointment_type not in (Appointment.Type.REVIEW, Appointment.Type.FOLLOW_UP, Appointment.Type.AD_HOC):
         raise ValidationError('Choose a review, follow-up or ad-hoc appointment.')
     if not isinstance(starts_at, datetime) or timezone.is_naive(starts_at) or starts_at <= timezone.now():

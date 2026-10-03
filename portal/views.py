@@ -25,6 +25,7 @@ from care.forms import (
     PatientThreadForm,
     WeightEntryForm,
 )
+from care.messaging import staff_threads, start_conversation
 from care.models import (
     Appointment,
     ClinicalNote,
@@ -106,11 +107,9 @@ class StaffDashboardContextMixin(StaffCompanyRequiredMixin):
         if self.membership.role == self.membership.Role.DOCTOR:
             upcoming_appointments = upcoming_appointments.filter(clinician=self.request.user)
 
-        recent_threads = MessageThread.objects.for_company(self.company).filter(
-            patient__company=self.company, patient__is_active=True,
-        ).select_related('patient').order_by('-last_message_at', '-created_at', '-pk')
+        recent_threads = staff_threads(self.company, self.request.user).select_related('patient').order_by('-last_message_at', '-created_at', '-pk')
         incoming_unread = PatientMessage.objects.for_company(self.company).filter(
-            read_at__isnull=True, sender_id=F('thread__patient__user_id'),
+            read_at__isnull=True, sender_id=F('thread__patient__user_id'), thread__participants=self.request.user,
         )
 
         context.update(
@@ -201,7 +200,7 @@ class ActivateCompanyView(LoginRequiredMixin, View):
         for destination in ('portal:clinical-consultations', 'portal:clinical-labs', 'portal:treatment-authorisations', 'portal:treatment-review-rules', 'portal:compounding-list', 'portal:activity-statements'):
             if next_path.startswith(reverse(destination)):
                 membership = active_membership_for(request, company)
-                if membership.role in (CompanyMembership.Role.DOCTOR, CompanyMembership.Role.SUPER_ADMIN):
+                if membership.has_clinical_access:
                     return redirect(destination)
         for destination in ('portal:management-practices', 'portal:management-users', 'portal:policy-list'):
             if next_path.startswith(reverse(destination)):
@@ -276,12 +275,15 @@ class PatientDetailView(LoginRequiredMixin, StaffCompanyRequiredMixin, DetailVie
         return context
 
 
-def _conversation_threads(company, patient, *, patient_view, mark_read=False):
+def _conversation_threads(company, patient, *, patient_view, viewer=None, mark_read=False):
     """Load the complete conversation and mark only displayed incoming rows read.
 
-    For staff this is a shared team inbox receipt, not a per-user read receipt.
+    Staff see only conversations they take part in; the receipt is shared by its participants.
     """
-    threads = list(MessageThread.objects.for_company(company).filter(patient=patient).prefetch_related(
+    threads = MessageThread.objects.for_company(company).filter(patient=patient)
+    if not patient_view:
+        threads = threads.filter(participants=viewer)
+    threads = list(threads.prefetch_related(
         Prefetch(
             'messages',
             queryset=PatientMessage.objects.for_company(company).select_related('sender').order_by('created_at', 'pk'),
@@ -348,8 +350,8 @@ def _patient_record_context(request, company, membership, patient, **overrides):
     from .video_links import safe_video_link
     from .workflow_context import make_workflow_context
 
-    can_add_note = membership.role == CompanyMembership.Role.DOCTOR
-    can_view_notes = membership.role in (CompanyMembership.Role.DOCTOR, CompanyMembership.Role.SUPER_ADMIN)
+    can_add_note = membership.is_clinician
+    can_view_notes = membership.has_clinical_access
     notes = []
     if can_view_notes:
         note_queryset = ClinicalNote.objects.for_company(company).filter(patient=patient).filter(
@@ -367,7 +369,7 @@ def _patient_record_context(request, company, membership, patient, **overrides):
     appointments = list(Appointment.objects.for_company(company).filter(patient=patient).select_related('clinician')[:8])
     for appointment in appointments:
         appointment.video_link = safe_video_link(appointment.video_link)
-    attach_video_join(appointments, request.user.pk, allowed_role='doctor' if membership.role == 'doctor' else None)
+    attach_video_join(appointments, request.user.pk, allowed_role='doctor' if membership.is_clinician else None)
     context = {
         'patient': patient,
         'company': company,
@@ -379,7 +381,7 @@ def _patient_record_context(request, company, membership, patient, **overrides):
             'assigned_to', 'encounter_signing', 'lab_review_request',
         ).prefetch_related('tags')[:8]), request.user, membership),
         'notes': notes,
-        'message_threads': _conversation_threads(company, patient, patient_view=False, mark_read=request.method == 'GET'),
+        'message_threads': _conversation_threads(company, patient, patient_view=False, viewer=request.user, mark_read=request.method == 'GET'),
         'task_form': ClinicalTaskForm(company=company, patient=patient),
         'appointment_form': AppointmentForm(company=company, patient=patient),
         'legacy_appointment_context': (
@@ -490,8 +492,8 @@ class PatientNoteCreateView(StaffPatientActionMixin, View):
 
     def post(self, request, *args, **kwargs):
         patient = self.get_patient()
-        if self.membership.role != CompanyMembership.Role.DOCTOR:
-            raise PermissionDenied('Only a doctor in this practice can add a clinical note.')
+        if not self.membership.is_clinician:
+            raise PermissionDenied('Only a clinician in this practice can add a clinical note.')
         form = ClinicalNoteForm(request.POST, company=self.company, patient=patient, author=request.user)
         if not form.is_valid():
             return self.invalid_form(patient, 'note_form', form)
@@ -527,11 +529,9 @@ class StaffMessageCreateView(LoginRequiredMixin, StaffCompanyRequiredMixin, View
         from .inbox import staff_inbox_context, staff_inbox_redirect
 
         thread = get_object_or_404(
-            MessageThread.objects.for_company(self.company).select_related('patient'),
+            staff_threads(self.company, request.user).select_related('patient'),
             pk=pk,
             is_closed=False,
-            patient__is_active=True,
-            patient__company=self.company,
         )
         from_inbox = request.POST.get('return_to') == 'inbox'
         form = PatientMessageForm(request.POST, auto_id='inbox_%s' if from_inbox else 'id_%s')
@@ -608,7 +608,7 @@ class PatientMessageCreateView(LoginRequiredMixin, PatientPortalRequiredMixin, V
             except ValidationError as error:
                 form.add_error(None, error)
             else:
-                messages.success(request, 'Your message has been sent to your care team.')
+                messages.success(request, 'Your message has been sent.')
                 return patient_messages_redirect(thread)
         return _invalid_patient_form(request, self.patient_company, self.patient, 'message_form', form, reply_thread_id=thread.pk)
 
@@ -619,24 +619,20 @@ class PatientThreadCreateView(LoginRequiredMixin, PatientPortalRequiredMixin, Vi
     def post(self, request):
         from .patient_views import patient_messages_redirect
 
-        form = PatientThreadForm(request.POST, auto_id='thread_%s')
+        form = PatientThreadForm(request.POST, auto_id='thread_%s', patient=self.patient)
         try:
             validate_patient_context(request, self.patient_company, self.patient)
         except ValidationError as error:
             form.add_error(None, error)
         if not form.is_valid():
             return _invalid_patient_form(request, self.patient_company, self.patient, 'thread_form', form)
-        with transaction.atomic():
-            thread = MessageThread(
-                company=self.patient_company,
-                patient=self.patient,
-                subject=form.cleaned_data['subject'],
-                opened_by=request.user,
-            )
-            thread.full_clean()
-            thread.save()
-            post_patient_message(thread=thread, sender=request.user, body=form.cleaned_data['body'], request=request)
-        messages.success(request, 'Your secure conversation has been started.')
+        try:
+            thread = start_conversation(patient=self.patient, opened_by=request.user, recipient=form.cleaned_data['recipient'],
+                                        subject=form.cleaned_data['subject'], body=form.cleaned_data['body'], request=request)
+        except ValidationError as error:
+            form.add_error(None, error)
+            return _invalid_patient_form(request, self.patient_company, self.patient, 'thread_form', form)
+        messages.success(request, f"Your message has been sent to {form.cleaned_data['recipient'].full_name}.")
         return patient_messages_redirect(thread)
 
 
@@ -648,12 +644,13 @@ class StaffThreadCreateView(StaffPatientActionMixin, View):
         form = PatientThreadForm(request.POST, auto_id='thread_%s')
         if not form.is_valid():
             return self.invalid_form(patient, 'thread_form', form)
-        with transaction.atomic():
-            thread = MessageThread(company=self.company, patient=patient, subject=form.cleaned_data['subject'], opened_by=request.user)
-            thread.full_clean()
-            thread.save()
-            post_patient_message(thread=thread, sender=request.user, body=form.cleaned_data['body'], request=request)
-        messages.success(request, 'Secure conversation started.')
+        try:
+            thread = start_conversation(patient=patient, opened_by=request.user, subject=form.cleaned_data['subject'],
+                                        body=form.cleaned_data['body'], request=request)
+        except ValidationError as error:
+            form.add_error(None, error)
+            return self.invalid_form(patient, 'thread_form', form)
+        messages.success(request, 'Secure conversation started. Only you and the patient can read it.')
         from .patient_workspace import workspace_url
         return redirect(workspace_url(patient, 'messages', thread=thread.pk))
 

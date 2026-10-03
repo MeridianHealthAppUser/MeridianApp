@@ -325,6 +325,8 @@ def seed_demo_care(*, meridian, orion, users, nadia):
             subject='Your care plan',
             defaults={'opened_by': sam},
         )
+        from .messaging import add_participant
+        add_participant(thread, sam)
         _message(thread=thread, sender=sam, body='Welcome — your care plan is ready in your Meridian portal.')
         shipment, _ = Shipment.objects.update_or_create(
             company=company,

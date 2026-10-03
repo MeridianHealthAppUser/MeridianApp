@@ -26,7 +26,7 @@ from django.views.generic import TemplateView
 
 from care.models import (
     AuditEvent, ClinicalEncounter, ClinicalNote, ConsentRecord, LabRequest, LabResult,
-    MessageThread, PatientEvent, PatientMedicalProfile, PatientMedicalProfileRevision,
+    PatientEvent, PatientMedicalProfile, PatientMedicalProfileRevision,
     PatientSubscription, TreatmentAuthorization, WeightEntry,
 )
 from care.services import record_audit
@@ -37,13 +37,19 @@ from .record_forms import ClinicalRecordFilterForm, RECORD_CATEGORIES, RECORD_PU
 from .views import StaffCompanyRequiredMixin
 
 
-CLINICAL_ROLES = (CompanyMembership.Role.DOCTOR, CompanyMembership.Role.SUPER_ADMIN)
 RECORD_TIMEZONE = ZoneInfo('Africa/Johannesburg')
-AUDIT_LABELS = {
+# The record timeline lists changes only. Views, downloads and exports are still
+# audited and appear in privacy access history, but not in the clinical History.
+ACCESS_AUDIT_LABELS = {
     'patient.record_viewed': 'Patient record viewed',
     'patient.clinical_record_viewed': 'Clinical record viewed',
     'patient.clinical_record_exported': 'Clinical record exported',
+    'lab_result.downloaded': 'Blood test report downloaded',
+    'message.thread_viewed': 'Secure conversation viewed',
+}
+AUDIT_LABELS = {
     'patient.contact_updated': 'Contact details updated',
+    'patient.doctor_assigned': 'Assigned clinician changed',
     'weight_entry.created': 'Weight entry recorded',
     'appointment.created': 'Appointment created',
     'appointment.patient_booked': 'Appointment booked by patient',
@@ -54,11 +60,8 @@ AUDIT_LABELS = {
     'lab_request.created': 'Blood test requested',
     'lab_result.uploaded': 'Blood test report uploaded',
     'lab_request.reviewed': 'Blood test report reviewed',
-    'lab_result.downloaded': 'Blood test report downloaded',
     'treatment.authorized': 'Treatment authorization recorded',
     'subscription.enrolled_local': 'Local subscription recorded',
-    'message.sent': 'Secure message sent',
-    'message.thread_viewed': 'Secure conversation viewed',
     'shipment.created': 'Shipment created',
     'shipment.locked': 'Shipment contents locked',
     'shipment.dispatched': 'Shipment dispatched',
@@ -71,8 +74,10 @@ AUDIT_LABELS = {
 def staff_memberships(actor, *, clinical=False):
     queryset = CompanyMembership.objects.filter(
         user=actor, user__is_active=True, is_active=True, company__is_active=True,
-        role__in=CLINICAL_ROLES if clinical else CompanyMembership.Role.values,
+        role__in=CompanyMembership.Role.values,
     ).select_related('company')
+    if clinical:
+        queryset = queryset.filter(Q(role=CompanyMembership.Role.SUPER_ADMIN) | Q(**{'clinician_type__in': CompanyMembership.CLINICIAN_TYPES}))
     return {membership.company_id: membership for membership in scope_queryset(queryset)}
 
 
@@ -128,7 +133,6 @@ def patient_directory_context(view):
         patient.record_authorization = authorizations.get(patient.pk)
         patient.record_subscription = subscriptions.get(patient.pk)
         patient.in_current_practice = patient.company_id == view.company.pk
-        patient.can_open_clinical_record = patient.in_current_practice and memberships[patient.company_id].role in CLINICAL_ROLES
     context.update(filter_form=form, patients=patients, patient_count=patient_count,
                    directory_all_practices=scope_all, directory_company_count=len(companies))
     return context
@@ -141,19 +145,18 @@ class RecordTimeline:
         self.companies = {patient.company_id: patient.company for patient in patients}
         self.current_company = current_company
         self.filters = filters
-        doctor_companies = [company_id for company_id, member in memberships.items()
-                            if member.role == CompanyMembership.Role.DOCTOR]
+        doctor_companies = [company_id for company_id, member in memberships.items() if member.is_clinician]
         event_category = Case(
             When(category='clinical', then=Value('clinical')),
             When(category__in=('medication', 'delivery'), then=Value('supply')),
             When(category='appointment', then=Value('appointments')),
-            When(category='message', then=Value('messages')),
             default=Value('system'), output_field=CharField(),
         )
         # Only explicitly shared events enter this record. Typed sources below
         # add the clinical content; opaque internal event text is not a backdoor
         # to another doctor's drafts, private notes or task descriptions.
-        events = scoped_source(PatientEvent, patients).filter(is_patient_visible=True)
+        # Messages are not part of the record history; conversations stay with the people in them.
+        events = scoped_source(PatientEvent, patients).filter(is_patient_visible=True).exclude(category=PatientEvent.Category.MESSAGE)
         notes = scoped_source(ClinicalNote, patients).filter(is_private=False, signed_encounter__isnull=True)
         encounters = scoped_source(ClinicalEncounter, patients).filter(status=ClinicalEncounter.Status.SIGNED)
         labs = scoped_source(LabRequest, patients)
@@ -278,7 +281,7 @@ class RecordTimeline:
                          actor=obj.recorded_by.full_name if obj.recorded_by else 'Recorded user')
         elif kind == 'audit':
             entry.update(title=AUDIT_LABELS[obj.action], actor=obj.actor.full_name if obj.actor else 'System',
-                         detail='Access or activity recorded in this practice’s audit trail.')
+                         detail='Change recorded in this practice’s audit trail.')
         return entry
 
 
@@ -286,8 +289,8 @@ class ClinicalRecordAccessMixin(LoginRequiredMixin, StaffCompanyRequiredMixin):
     http_method_names = ('get', 'head', 'options')
 
     def resolve_record(self, filter_data=None):
-        if self.membership.role not in CLINICAL_ROLES:
-            raise PermissionDenied('Clinical records are available to doctors and Super Admins only.')
+        if not self.membership.has_clinical_access:
+            raise PermissionDenied('Clinical records are available to clinicians and Super Admins only.')
         self.patient = get_object_or_404(
             Patient.objects.select_related('user', 'company', 'assigned_doctor'),
             pk=self.kwargs['pk'], company=self.company, is_active=True,
@@ -337,7 +340,7 @@ class ClinicalRecordAccessMixin(LoginRequiredMixin, StaffCompanyRequiredMixin):
                 seen.add(consent.consent_type)
         weights = list(scoped_source(WeightEntry, [patient]).order_by('-recorded_on', '-pk')[:5])
         profile = None
-        if self.membership.role == CompanyMembership.Role.DOCTOR:
+        if self.membership.is_clinician:
             profile = scoped_source(PatientMedicalProfile, [patient]).first()
         return {'authorization': authorization, 'record_consents': consents, 'record_weights': weights,
                 'medical_profile': profile, 'profile_answers': safe_profile_answers(profile.answers) if profile else []}
@@ -351,7 +354,6 @@ class ClinicalRecordView(ClinicalRecordAccessMixin, TemplateView):
         self.resolve_record()
         context = super().get_context_data(**kwargs)
         page = Paginator(self.timeline.index() if self.timeline else [], 20).get_page(self.request.GET.get('page'))
-        thread = MessageThread.objects.filter(company=self.company, patient=self.patient).order_by('-last_message_at', '-pk').first()
         query = self.query_string()
         context.update(company=self.company, active_membership=self.membership, nav_section='record',
                        page_title='Clinical record', patient=self.patient, filter_form=self.filter_form,
@@ -360,8 +362,7 @@ class ClinicalRecordView(ClinicalRecordAccessMixin, TemplateView):
                        timeline_entries=self.timeline.render_rows(page.object_list) if self.timeline else [],
                        export_url=f'{reverse("portal:staff-patient-record-export", args=[self.patient.pk])}?{query}' if self.valid_filters else '',
                        care_purpose=dict(RECORD_PURPOSES).get(self.filters.get('reason', ''), ''),
-                       messages_url=f'{reverse("portal:staff-inbox")}?{urlencode({"thread": thread.pk})}' if thread else reverse('portal:staff-inbox'),
-                       is_doctor=self.membership.role == CompanyMembership.Role.DOCTOR)
+                       is_doctor=self.membership.is_prescriber, is_clinician=self.membership.is_clinician)
         if self.valid_filters:
             from .record_history import timeline_links
             context.update(timeline_links(self, list(page.object_list), has_next=page.has_next()))

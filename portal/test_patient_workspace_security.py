@@ -7,6 +7,7 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
+from care.messaging import add_participant
 from care.models import (Appointment, AppointmentProposal, AuditEvent, ClinicalEncounter,
     ClinicalNote, ClinicalNoteTagAssignment, ClinicalTask, MessageThread, PatientMessage,
     RecordTag, TaskTagAssignment)
@@ -26,6 +27,8 @@ class PatientWorkspaceSecurityTests(TestCase):
         self.thread = MessageThread.objects.create(company=self.alpha, patient=self.patient, subject='Owned conversation')
         self.message = PatientMessage.objects.create(company=self.alpha, thread=self.thread, sender=self.user, body='Owned unread patient message')
         self.foreign_thread = MessageThread.objects.create(company=self.beta, patient=self.beta_patient, subject='FOREIGN_THREAD_SECRET')
+        add_participant(self.thread, self.doctor)
+        add_participant(self.foreign_thread, self.doctor)
         self.foreign_message = PatientMessage.objects.create(company=self.beta, thread=self.foreign_thread, sender=self.user, body='FOREIGN_MESSAGE_SECRET')
 
     def get(self, tab='overview', **query):
@@ -59,7 +62,7 @@ class PatientWorkspaceSecurityTests(TestCase):
         self.assertContains(response, 'Shared clinician note')
 
     def test_super_admin_cannot_view_own_private_note_from_a_previous_doctor_role(self):
-        CompanyMembership.objects.filter(company=self.alpha, user=self.doctor).update(role='super_admin')
+        CompanyMembership.objects.filter(company=self.alpha, user=self.doctor).update(role='super_admin', clinician_type='')
         response = self.get('notes')
         self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, 'OWN_PRIVATE_NOTE_SECRET')

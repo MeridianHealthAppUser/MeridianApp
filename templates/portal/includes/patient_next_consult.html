@@ -9,7 +9,7 @@
     <div class="patient-bar__actions">
       {% if consult.video_room_url %}<a class="console-button console-button--primary" href="{{ consult.video_room_url }}">Join the consult</a>{% endif %}
       <a class="console-button console-button--secondary" href="{% url 'portal:patient-appointment-detail' consult.pk %}">Details</a>
-      <a class="console-button console-button--secondary" href="{% url 'portal:patient-appointment-calendar' consult.pk %}">Add to calendar</a>
+      <a class="console-button console-button--secondary" data-no-loader href="{% url 'portal:patient-appointment-calendar' consult.pk %}">Add to calendar</a>
     </div>
   </section>
 {% endif %}

@@ -1,10 +1,11 @@
 {% extends 'portal/patient_page_base.html' %}
-{% load static %}
+{% load static workspace_ui %}
 {% block title %}Your blood tests | Meridian{% endblock %}
 {% block patient_extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/clinical_workflow.css' %}">{% endblock %}
 
+{% block patient_breadcrumbs %}{% breadcrumbs 'My Treatment' 'portal:patient-treatment' 'Blood tests' %}{% endblock %}
 {% block patient_heading %}
-  <header class="patient-page-heading"><div><p class="console-kicker"><a class="patient-inline-link" href="{% url 'portal:patient-treatment' %}">My Treatment</a> · Blood tests</p><h1>Your blood tests</h1><p>See the tests your doctor has requested at {{ patient_company.name }} and upload your report when it is ready.</p></div></header>
+  <header class="patient-page-heading"><div><h1>Your blood tests</h1><p>See the tests your doctor has requested at {{ patient_company.name }} and upload your report when it is ready.</p></div></header>
 {% endblock %}
 
 {% block patient_content %}

@@ -18,7 +18,7 @@ RECORD_PURPOSES = (
 )
 RECORD_CATEGORIES = (
     ('all', 'Everything'), ('clinical', 'Clinical'), ('supply', 'Supply'),
-    ('appointments', 'Appointments'), ('messages', 'Messages'), ('system', 'System and consent'),
+    ('appointments', 'Appointments'), ('system', 'System and consent'),
 )
 
 
@@ -73,5 +73,5 @@ class ScopedPatientDirectoryFilterForm(PatientDirectoryFilterForm):
         self.fields['clinician'].queryset = get_user_model().objects.filter(
             is_active=True, company_memberships__company__in=companies,
             company_memberships__company__is_active=True, company_memberships__is_active=True,
-            company_memberships__role=CompanyMembership.Role.DOCTOR,
+            company_memberships__clinician_type__in=CompanyMembership.CLINICIAN_TYPES,
         ).distinct().order_by('first_name', 'last_name', 'email')

@@ -1,6 +1,6 @@
 from django.urls import include, path
 
-from . import appointment_views, availability_views, clinical_views, intake_views, lead_views, message_management_views, patient_views, staff_views, task_views, views
+from . import appointment_views, availability_views, clinical_views, intake_views, lead_views, menu_views, message_management_views, patient_assignment_views, patient_views, practice_settings_views, staff_views, task_views, team_views, views
 from .patient_workspace import PatientWorkspaceView
 
 app_name = 'portal'
@@ -25,6 +25,12 @@ urlpatterns = [
     path('desktop/', views.DesktopDashboardView.as_view(), name='desktop-dashboard'),
     path('mobile/', views.MobileDashboardView.as_view(), name='mobile-dashboard'),
     path('messages/', views.StaffInboxView.as_view(), name='staff-inbox'),
+    path('settings/practice/', practice_settings_views.PracticeSettingsView.as_view(), name='practice-settings'),
+    path('menu/<slug:section>/', menu_views.StaffMenuSectionView.as_view(), name='staff-menu-section'),
+    path('messages/team/', team_views.TeamInboxView.as_view(), name='team-inbox'),
+    path('messages/team/new/', team_views.TeamThreadCreateView.as_view(), name='team-thread-create'),
+    path('messages/team/<int:pk>/', team_views.TeamMessageCreateView.as_view(), name='team-message-create'),
+    path('messages/team/<int:pk>/members/', team_views.TeamMemberAddView.as_view(), name='team-member-add'),
     path('tasks/', staff_views.StaffTaskListView.as_view(), name='staff-tasks'),
     path('tasks/new/', task_views.TaskEditorView.as_view(), name='task-create'),
     path('tasks/<int:pk>/', task_views.TaskEditorView.as_view(), name='task-edit'),
@@ -54,6 +60,7 @@ urlpatterns = [
     path('patient/messages/', patient_views.PatientMessagesView.as_view(), name='patient-messages'),
     path('patient/messages/new/', views.PatientThreadCreateView.as_view(), name='patient-thread-create'),
     path('patients/<int:pk>/', PatientWorkspaceView.as_view(), name='patient-detail'),
+    path('patients/<int:patient_pk>/doctor/', patient_assignment_views.PatientDoctorAssignmentView.as_view(), name='patient-doctor-assign'),
     path('patients/<int:patient_pk>/tasks/', views.PatientTaskCreateView.as_view(), name='patient-task-create'),
     path('patients/<int:patient_pk>/appointments/', views.PatientAppointmentCreateView.as_view(), name='patient-appointment-create'),
     path('patients/<int:patient_pk>/notes/', views.PatientNoteCreateView.as_view(), name='patient-note-create'),

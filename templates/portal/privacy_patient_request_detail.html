@@ -1,4 +1,5 @@
-{% extends 'portal/patient_page_base.html' %}{% load static %}
+{% extends 'portal/patient_page_base.html' %}{% load static workspace_ui %}
 {% block patient_extra_css %}<link rel="stylesheet" href="{% static 'css/privacy.css' %}">{% endblock %}
-{% block patient_heading %}<header class="patient-page-heading"><div><p class="console-kicker"><a class="patient-inline-link" href="{% url 'portal:patient-account' %}">Account settings</a> · Privacy request</p><h1>Your request</h1><p>{{ patient_company.name }}</p></div><a class="console-button console-button--secondary" href="{% url 'portal:patient-data-requests' %}">All your requests</a></header>{% endblock %}
+{% block patient_breadcrumbs %}{% breadcrumbs 'My data requests' 'portal:patient-data-requests' 'Request' %}{% endblock %}
+{% block patient_heading %}<header class="patient-page-heading"><div><h1>Your request</h1><p>{{ patient_company.name }}</p></div></header>{% endblock %}
 {% block patient_content %}<div class="privacy-workspace">{% include 'portal/privacy_replies.html' %}<p class="privacy-help">A status update records the practice’s response. No information is automatically deleted or corrected by this workflow.</p></div>{% endblock %}

@@ -34,7 +34,7 @@
             <div><dt>Your medicine</dt><dd>{% if current_authorization %}{{ current_authorization.product }}{% else %}Not prescribed yet{% endif %}</dd></div>
             <div><dt>Next delivery</dt><dd>{% if next_delivery %}{% if next_delivery.status == 'dispatched' %}On its way{% if next_delivery.tracking_number %} · {{ next_delivery.tracking_number }}{% endif %}{% elif next_delivery.status == 'held' %}On hold · planned {{ next_delivery.scheduled_for|date:"D j M" }}{% else %}Dispatch on {{ next_delivery.scheduled_for|date:"D j M" }}{% endif %}{% else %}Nothing scheduled{% endif %}</dd></div>
             <div><dt>Authorisation expires</dt><dd{% if current_authorization %} class="patient-kv__amber"{% endif %}>{% if current_authorization %}{{ current_authorization.expires_on|date:"j M Y" }}{% else %}—{% endif %}</dd></div>
-            <div><dt>Your doctor</dt><dd>{% if care_doctor %}{{ care_doctor.full_name }}{% else %}Your care team{% endif %}</dd></div>
+            <div><dt>Your clinician</dt><dd>{% if care_doctor %}{{ care_doctor.full_name }}{% else %}Your care team{% endif %}</dd></div>
           </dl>
           <a class="patient-inline-link patient-home__more" href="{% url 'portal:patient-updates' %}">See everything that’s happened</a>
         </div>

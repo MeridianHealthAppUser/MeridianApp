@@ -17,7 +17,7 @@ from care.models import DoctorActivityStatement
 from care.reporting import (ACTIVITIES, approve_activity_statement, create_activity_statement,
                             explicit_rates, operational_metrics, period_bounds, refresh_activity_statement, reporting_today)
 from care.services import record_audit
-from practices.models import Company
+from practices.models import Company, CompanyMembership
 from practices.tenancy import multi_practice_enabled
 from .operations_views import _csv_response
 from .views import StaffCompanyRequiredMixin
@@ -54,7 +54,7 @@ class StatementCreateForm(forms.Form):
 
     def __init__(self, *args, company, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields['doctor'].queryset = get_user_model().objects.filter(is_active=True, company_memberships__company=company, company_memberships__is_active=True, company_memberships__role='doctor').distinct().order_by('first_name', 'last_name')
+        self.fields['doctor'].queryset = get_user_model().objects.filter(is_active=True, company_memberships__company=company, company_memberships__is_active=True, company_memberships__clinician_type__in=CompanyMembership.CLINICIAN_TYPES).distinct().order_by('first_name', 'last_name')
 
     def clean(self):
         data = super().clean()
@@ -110,10 +110,10 @@ class StatementView(ReportingView):
     nav_section = 'statements'
 
     def statements(self):
-        if self.membership.role not in ('doctor', 'super_admin'):
-            raise PermissionDenied('Activity statements are available to the doctor and practice Super Admin.')
+        if not (self.membership.is_clinician or self.membership.role == 'super_admin'):
+            raise PermissionDenied('Activity statements are available to the clinician and practice Super Admin.')
         queryset = DoctorActivityStatement.objects.for_company(self.company).select_related('doctor', 'prepared_by', 'approved_by').order_by('-period_end', 'doctor_id', '-pk')
-        return queryset.filter(doctor=self.request.user) if self.membership.role == 'doctor' else queryset
+        return queryset if self.membership.role == 'super_admin' else queryset.filter(doctor=self.request.user)
 
     def require_editor(self):
         if self.membership.role != 'super_admin':

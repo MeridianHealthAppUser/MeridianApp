@@ -44,6 +44,11 @@ class PracticeSettings(CompanyScopedModel):
     payment_grace_days = models.PositiveSmallIntegerField(default=7)
     support_email = models.EmailField(blank=True)
     timezone_name = models.CharField(max_length=64, default='Africa/Johannesburg')
+    # Off by default: access is governed by permissions, and every change is logged regardless.
+    store_view_log = models.BooleanField(
+        'Store view log on database', default=False,
+        help_text='Also record when people view, download or export records. Stored for the practice audit only and never shown in the app.',
+    )
 
     class Meta:
         constraints = [models.UniqueConstraint(fields=('company',), name='one_practice_settings_per_company')]
@@ -220,7 +225,7 @@ class TreatmentAuthorization(PatientCompanyScopedModel):
         if self.prescribed_by_id and self.company_id and not CompanyMembership.objects.filter(
             user_id=self.prescribed_by_id,
             company_id=self.company_id,
-            role=CompanyMembership.Role.DOCTOR,
+            clinician_type__in=CompanyMembership.PRESCRIBER_TYPES,
             is_active=True,
         ).exists():
             raise ValidationError({'prescribed_by': 'Only an active doctor in this practice can prescribe treatment.'})
@@ -370,10 +375,10 @@ class Appointment(PatientCompanyScopedModel):
         if self.clinician_id and self.company_id and not CompanyMembership.objects.filter(
             user_id=self.clinician_id,
             company_id=self.company_id,
-            role=CompanyMembership.Role.DOCTOR,
+            clinician_type__in=CompanyMembership.CLINICIAN_TYPES,
             is_active=True,
         ).exists():
-            raise ValidationError({'clinician': 'The clinician must be an active doctor in this practice.'})
+            raise ValidationError({'clinician': 'The clinician must be active in this practice.'})
 
 
 class AvailabilitySlot(CompanyScopedModel):
@@ -396,10 +401,10 @@ class AvailabilitySlot(CompanyScopedModel):
         if self.clinician_id and self.company_id and not CompanyMembership.objects.filter(
             user_id=self.clinician_id,
             company_id=self.company_id,
-            role=CompanyMembership.Role.DOCTOR,
+            clinician_type__in=CompanyMembership.CLINICIAN_TYPES,
             is_active=True,
         ).exists():
-            raise ValidationError({'clinician': 'The clinician must be an active doctor in this practice.'})
+            raise ValidationError({'clinician': 'The clinician must be active in this practice.'})
 
 
 class DoctorWorkingPattern(CompanyScopedModel):
@@ -438,9 +443,9 @@ class DoctorWorkingPattern(CompanyScopedModel):
         super().clean()
         if self.company_id and self.clinician_id and not CompanyMembership.objects.filter(
             company_id=self.company_id, company__is_active=True, user_id=self.clinician_id,
-            user__is_active=True, role=CompanyMembership.Role.DOCTOR, is_active=True,
+            user__is_active=True, clinician_type__in=CompanyMembership.CLINICIAN_TYPES, is_active=True,
         ).exists():
-            raise ValidationError({'clinician': 'The clinician must be an active doctor in this practice.'})
+            raise ValidationError({'clinician': 'The clinician must be active in this practice.'})
         if self.is_working:
             if not isinstance(self.starts_at, time) or not isinstance(self.ends_at, time):
                 raise ValidationError('Set a start and end time for every working day.')
@@ -498,9 +503,9 @@ class DoctorTimeOff(CompanyScopedModel):
         super().clean()
         if self.company_id and self.clinician_id and not CompanyMembership.objects.filter(
             company_id=self.company_id, company__is_active=True, user_id=self.clinician_id,
-            user__is_active=True, role=CompanyMembership.Role.DOCTOR, is_active=True,
+            user__is_active=True, clinician_type__in=CompanyMembership.CLINICIAN_TYPES, is_active=True,
         ).exists():
-            raise ValidationError({'clinician': 'The clinician must be an active doctor in this practice.'})
+            raise ValidationError({'clinician': 'The clinician must be active in this practice.'})
         if isinstance(self.starts_at, datetime) and isinstance(self.ends_at, datetime):
             if timezone.is_naive(self.starts_at) or timezone.is_naive(self.ends_at):
                 raise ValidationError({
@@ -561,10 +566,10 @@ class ClinicalEncounter(PatientCompanyScopedModel):
         if self.clinician_id and self.company_id and not CompanyMembership.objects.filter(
             user_id=self.clinician_id,
             company_id=self.company_id,
-            role=CompanyMembership.Role.DOCTOR,
+            clinician_type__in=CompanyMembership.CLINICIAN_TYPES,
             is_active=True,
         ).exists():
-            raise ValidationError({'clinician': 'The clinician must be an active doctor in this practice.'})
+            raise ValidationError({'clinician': 'The clinician must be active in this practice.'})
 
 
 class RecordTag(CompanyScopedModel):
@@ -705,7 +710,7 @@ class LabRequest(PatientCompanyScopedModel):
         super().clean()
         if self.requested_by_id and self.company_id and not CompanyMembership.objects.filter(
             company_id=self.company_id, user_id=self.requested_by_id,
-            role=CompanyMembership.Role.DOCTOR, is_active=True, user__is_active=True,
+            clinician_type__in=CompanyMembership.PRESCRIBER_TYPES, is_active=True, user__is_active=True,
         ).exists():
             raise ValidationError({'requested_by': 'The requesting clinician must be an active doctor in this practice.'})
         if self.review_task_id and (
@@ -752,14 +757,99 @@ class WeightEntry(PatientCompanyScopedModel):
 
 
 class MessageThread(PatientCompanyScopedModel):
+    """A conversation between one patient and the staff members taking part in it.
+
+    Staff see a conversation only when they are a participant; there is no
+    practice-wide view, for administrators or Super Admins alike.
+    """
+
     subject = models.CharField(max_length=255)
     opened_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name='opened_message_threads')
+    participants = models.ManyToManyField(
+        settings.AUTH_USER_MODEL, through='MessageThreadParticipant', through_fields=('thread', 'user'),
+        related_name='message_threads', blank=True,
+    )
     is_closed = models.BooleanField(default=False)
     last_message_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         indexes = [models.Index(fields=('company', 'patient', 'is_closed', 'last_message_at'))]
         ordering = ('-last_message_at', '-created_at')
+
+
+class MessageThreadParticipant(CompanyScopedModel):
+    """A staff member in a conversation; added_by is empty for the first recipient."""
+
+    thread = models.ForeignKey(MessageThread, on_delete=models.CASCADE, related_name='participant_links')
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='message_thread_links')
+    added_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name='+')
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=('thread', 'user'), name='one_participant_link_per_thread')]
+        ordering = ('created_at', 'pk')
+
+    def clean(self):
+        super().clean()
+        if self.thread_id and self.company_id and self.thread.company_id != self.company_id:
+            raise ValidationError({'thread': 'The conversation must belong to the same company.'})
+
+
+class ClinicianAssignment(PatientCompanyScopedModel):
+    """Each period a clinician was assigned to a patient; the open row is the current one."""
+
+    clinician = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='clinician_assignments')
+    ended_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=('patient',), condition=models.Q(ended_at__isnull=True),
+                                               name='one_open_clinician_assignment_per_patient')]
+        ordering = ('-created_at', '-pk')
+
+
+class TeamThread(CompanyScopedModel):
+    """A conversation between staff members of one practice.
+
+    Patients never see these, even when one is linked to them. Like patient
+    conversations, only the members can list or read it.
+    """
+
+    subject = models.CharField(max_length=255)
+    patient = models.ForeignKey(Patient, null=True, blank=True, on_delete=models.PROTECT, related_name='team_threads')
+    opened_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name='+')
+    members = models.ManyToManyField(settings.AUTH_USER_MODEL, through='TeamThreadMember', through_fields=('thread', 'user'),
+                                     related_name='team_threads', blank=True)
+    last_message_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        indexes = [models.Index(fields=('company', 'last_message_at'))]
+        ordering = ('-last_message_at', '-created_at')
+
+    def clean(self):
+        super().clean()
+        if self.patient_id and self.company_id and self.patient.company_id != self.company_id:
+            raise ValidationError({'patient': 'The patient must belong to the same practice.'})
+
+
+class TeamThreadMember(CompanyScopedModel):
+    """A staff member in a team conversation, with their own read position."""
+
+    thread = models.ForeignKey(TeamThread, on_delete=models.CASCADE, related_name='member_links')
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='team_thread_links')
+    added_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name='+')
+    last_read_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=('thread', 'user'), name='one_member_link_per_team_thread')]
+        ordering = ('created_at', 'pk')
+
+
+class TeamMessage(CompanyScopedModel):
+    thread = models.ForeignKey(TeamThread, on_delete=models.CASCADE, related_name='messages')
+    sender = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name='sent_team_messages')
+    body = models.TextField()
+
+    class Meta:
+        ordering = ('created_at', 'pk')
 
 
 class PatientMessage(CompanyScopedModel):
@@ -1340,9 +1430,9 @@ class AppointmentProposal(PatientCompanyScopedModel):
                     errors[field] = 'Both participants need active accounts.'
             if self.original_clinician_id and self.company_id and not CompanyMembership.objects.filter(
                 company_id=self.company_id, user_id=self.original_clinician_id,
-                role=CompanyMembership.Role.DOCTOR, is_active=True,
+                clinician_type__in=CompanyMembership.CLINICIAN_TYPES, is_active=True,
             ).exists():
-                errors['original_clinician'] = 'The clinician must be an active doctor in this practice.'
+                errors['original_clinician'] = 'The clinician must be active in this practice.'
         if errors:
             raise ValidationError(errors)
 

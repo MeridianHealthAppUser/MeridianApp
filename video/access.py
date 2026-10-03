@@ -72,7 +72,7 @@ def _authorized_appointments(user_id):
         raise VideoAccessDenied()
     active_doctor = CompanyMembership.objects.filter(
         company_id=OuterRef('company_id'), user_id=OuterRef('clinician_id'),
-        is_active=True, role=CompanyMembership.Role.DOCTOR,
+        is_active=True, clinician_type__in=CompanyMembership.CLINICIAN_TYPES,
     )
     # Both identities must still be active, even when only one is connecting.
     # No session-selected practice or staff override grants room access.

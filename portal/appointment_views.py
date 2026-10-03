@@ -31,8 +31,8 @@ class AppointmentProposalActionMixin:
         return self.actor_role == 'doctor' and self.request.POST.get('return_to') == 'inbox'
 
     def require_doctor(self):
-        if self.actor_role == 'doctor' and self.membership.role != CompanyMembership.Role.DOCTOR:
-            raise PermissionDenied('Only the appointment doctor or patient can suggest or agree a change.')
+        if self.actor_role == 'doctor' and not self.membership.is_clinician:
+            raise PermissionDenied('Only the appointment clinician or patient can suggest or agree a change.')
 
     def scoped_threads(self):
         queryset = MessageThread.objects.for_company(self.action_company()).filter(
@@ -40,6 +40,8 @@ class AppointmentProposalActionMixin:
         )
         if self.actor_role == 'patient':
             queryset = queryset.filter(patient=self.patient)
+        else:
+            queryset = queryset.filter(participants=self.request.user)
         return queryset.select_related('patient')
 
     def invalid_proposal_form(self, thread, form):
@@ -116,6 +118,8 @@ class RespondToAppointmentMixin(AppointmentProposalActionMixin):
         )
         if self.actor_role == 'patient':
             queryset = queryset.filter(patient=self.patient)
+        else:
+            queryset = queryset.filter(thread__participants=request.user)
         proposal = get_object_or_404(queryset.select_related('patient', 'thread'), pk=pk)
         self.require_doctor()
         decision = request.POST.get('decision', '')

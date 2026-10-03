@@ -29,8 +29,8 @@ from .views import PatientPortalRequiredMixin, StaffCompanyRequiredMixin
 
 class ClinicalAccessMixin:
     def dispatch(self, request, *args, **kwargs):
-        if self.membership.role not in (CompanyMembership.Role.DOCTOR, CompanyMembership.Role.SUPER_ADMIN):
-            raise PermissionDenied('Clinical records are available to doctors and practice Super Admins only.')
+        if not self.membership.has_clinical_access:
+            raise PermissionDenied('Clinical records are available to clinicians and practice Super Admins only.')
         return super().dispatch(request, *args, **kwargs)
 
 
@@ -41,15 +41,24 @@ class StaffClinicalView(LoginRequiredMixin, StaffCompanyRequiredMixin, ClinicalA
     page_title = ''
 
     @property
+    def is_clinician(self):
+        return self.membership.is_clinician
+
+    @property
     def is_doctor(self):
-        return self.membership.role == CompanyMembership.Role.DOCTOR
+        # Blood tests, treatment and compounding stay with doctors.
+        return self.membership.is_prescriber
+
+    def require_clinician(self, owner_id=None):
+        if not self.is_clinician or (owner_id is not None and owner_id != self.request.user.pk):
+            raise PermissionDenied('Only the responsible clinician can change this clinical record.')
 
     def require_doctor(self, owner_id=None):
         if not self.is_doctor or (owner_id is not None and owner_id != self.request.user.pk):
             raise PermissionDenied('Only the responsible doctor can change this clinical record.')
 
     def context(self, **kwargs):
-        return dict(company=self.company, active_membership=self.membership, is_doctor=self.is_doctor,
+        return dict(company=self.company, active_membership=self.membership, is_doctor=self.is_doctor, is_clinician=self.is_clinician,
                     nav_section=self.nav_section, page_title=self.page_title, **kwargs)
 
     def patient_for(self, pk):
@@ -60,7 +69,7 @@ class StaffClinicalView(LoginRequiredMixin, StaffCompanyRequiredMixin, ClinicalA
             patient__company=self.company, patient__is_active=True,
         ).select_related('patient', 'clinician', 'signed_by', 'appointment')
         visible = Q(status=ClinicalEncounter.Status.SIGNED)
-        if self.is_doctor:
+        if self.is_clinician:
             visible |= Q(clinician=self.request.user)
         return queryset.filter(visible)
 
@@ -108,7 +117,7 @@ class ConsultationListView(StaffClinicalView):
 
     def get(self, request):
         context = self.context(**_listing(request, self.company, self.consultations().order_by('-occurred_at', '-pk'),
-                                          ClinicalEncounter.Status.choices), can_create=self.is_doctor)
+                                          ClinicalEncounter.Status.choices), can_create=self.is_clinician)
         rows = list(context['page_obj'].object_list)
         for row in rows:
             row.detail_url = reverse('portal:clinical-consultation-detail', args=[row.pk])
@@ -124,13 +133,13 @@ class ConsultationEditorView(StaffClinicalView):
         if pk is not None:
             encounter = get_object_or_404(self.consultations(), pk=pk)
             return encounter.patient, encounter
-        self.require_doctor()
+        self.require_clinician()
         return self.patient_for(patient_pk), None
 
     def display(self, request, patient, encounter, form=None, status=200):
         from .patient_workspace import patient_workspace_context
 
-        can_edit = self.is_doctor and (encounter is None or (
+        can_edit = self.is_clinician and (encounter is None or (
             encounter.clinician_id == request.user.pk and encounter.status != ClinicalEncounter.Status.SIGNED
         ))
         if form is None:
@@ -146,7 +155,7 @@ class ConsultationEditorView(StaffClinicalView):
 
     def post(self, request, patient_pk=None, pk=None):
         patient, encounter = self.record(patient_pk, pk)
-        self.require_doctor(encounter.clinician_id if encounter else None)
+        self.require_clinician(encounter.clinician_id if encounter else None)
         form = ConsultationForm(request.POST, company=self.company, patient=patient, actor=request.user, encounter=encounter)
         valid = form.is_valid()
         try:

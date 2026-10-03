@@ -1,10 +1,10 @@
 {% extends 'portal/staff_page_base.html' %}
-{% load static %}
+{% load static workspace_ui %}
 {% block title %}Users and roles | {{ company.name }} | Meridian{% endblock %}
 {% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/management.css' %}">{% endblock %}
-{% block breadcrumb %}<span>Setup · Users and roles</span><span class="console-breadcrumb__dot" aria-hidden="true"></span><span>{{ company.name }}</span>{% endblock %}
+{% block breadcrumbs %}{% breadcrumbs 'Users and roles' %}{% endblock %}
 {% block page_heading %}
-<header class="staff-page-header"><div><p class="console-kicker">Super Admin · Staff access</p><h1>Who has access to this practice</h1><p>{% if multi_practice_enabled %}One shared login, a role in each practice. Add and remove practice access without changing someone’s identity or their other memberships.{% else %}Manage your team's roles and access to Meridian Health without changing their account details.{% endif %}</p></div><a class="console-button console-button--primary" href="{% url 'portal:management-user-create' %}">Add staff access</a></header>
+<header class="staff-page-header"><div><h1>Users and roles</h1><p>{% if multi_practice_enabled %}One shared login, a role in each practice. Add and remove practice access without changing someone’s identity or their other memberships.{% else %}Manage your team's roles and access to Meridian Health without changing their account details.{% endif %}</p></div><a class="console-button console-button--primary" href="{% url 'portal:management-user-create' %}">Add staff access</a></header>
 {% endblock %}
 {% block page_content %}
   <section class="staff-page-card management-filter-card"><form method="get" class="management-filters">
@@ -13,7 +13,7 @@
   </form></section>
   <section class="staff-page-card"><header class="staff-page-card__header"><div><h2>{{ company.name }}</h2><p>{{ page_obj.paginator.count }} staff membership{{ page_obj.paginator.count|pluralize }} in view</p></div></header>
     <div class="management-table-wrap"><table class="management-table"><thead><tr><th scope="col">Name</th><th scope="col">Email</th><th scope="col">Practice role</th><th scope="col">Access</th><th scope="col">Action</th></tr></thead><tbody>
-      {% for member in memberships %}<tr><td><strong>{{ member.user.full_name }}</strong>{% if member.user_id == user.pk %}<span class="management-help">You</span>{% endif %}</td><td>{{ member.user.email }}</td><td>{{ member.get_role_display }}</td><td>{% if not member.user.is_active %}<span class="management-status management-status--inactive">Account disabled</span>{% elif member.is_active %}<span class="management-status">Active</span>{% else %}<span class="management-status management-status--inactive">Inactive in this practice</span>{% endif %}</td><td><a class="console-button console-button--quiet" href="{% url 'portal:management-membership-edit' member.pk %}">Edit access</a></td></tr>
+      {% for member in memberships %}<tr><td><strong>{{ member.user.full_name }}</strong>{% if member.user_id == user.pk %}<span class="management-help">You</span>{% endif %}</td><td>{{ member.user.email }}</td><td>{{ member.get_role_display }}{% if member.clinician_type %} · {{ member.get_clinician_type_display }}{% endif %}</td><td>{% if not member.user.is_active %}<span class="management-status management-status--inactive">Account disabled</span>{% elif member.is_active %}<span class="management-status">Active</span>{% else %}<span class="management-status management-status--inactive">Inactive in this practice</span>{% endif %}</td><td><a class="console-button console-button--quiet" href="{% url 'portal:management-membership-edit' member.pk %}">Edit access</a></td></tr>
       {% empty %}<tr><td colspan="5">{% if filter_form.errors %}Correct the filters above.{% else %}No staff memberships match these filters.{% endif %}</td></tr>{% endfor %}
     </tbody></table></div>
   </section>

@@ -178,8 +178,8 @@ def create_activity_statement(*, company, actor, doctor, start, end, rates, requ
     period_bounds(start, end)
     if end >= reporting_today():
         raise ValidationError('Statements can only cover completed dates, ending before today.')
-    if not CompanyMembership.objects.filter(company=company, user=doctor, user__is_active=True, is_active=True, role='doctor').exists():
-        raise ValidationError('Choose an active doctor in this practice.')
+    if not CompanyMembership.objects.filter(company=company, user=doctor, user__is_active=True, is_active=True, clinician_type__in=CompanyMembership.CLINICIAN_TYPES).exists():
+        raise ValidationError('Choose an active clinician in this practice.')
     # Never pay/count the same period twice through overlapping statements.
     if DoctorActivityStatement.objects.for_company(company).filter(doctor=doctor, period_start__lte=end, period_end__gte=start).exists():
         raise ValidationError('A statement already overlaps these dates for this doctor. Open that statement instead.')

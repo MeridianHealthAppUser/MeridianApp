@@ -1,13 +1,12 @@
 {% extends 'portal/staff_page_base.html' %}
-{% load static %}
+{% load static workspace_ui %}
 
 {% block title %}{{ lead }} | Leads | {{ company.name }}{% endblock %}
 {% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/leads.css' %}">{% endblock %}
-{% block breadcrumb %}<span>Leads</span><span class="console-breadcrumb__dot" aria-hidden="true"></span><span>{{ company.name }}</span>{% endblock %}
-{% block topbar_actions %}<a class="console-icon-button" href="{% url 'portal:staff-leads' %}"><span aria-hidden="true">←</span><span>All leads</span></a>{% endblock %}
 
+{% block breadcrumbs %}{% with lead.first_name|add:' '|add:lead.last_name as lead_name %}{% breadcrumbs 'Leads' 'portal:staff-leads' lead_name %}{% endwith %}{% endblock %}
 {% block page_heading %}
-  <header class="staff-page-header"><div><p class="console-kicker">Practice enquiry · {{ company.name }}</p><h1>{{ lead.first_name }} {{ lead.last_name }}</h1><p>Submitted {{ lead.created_at|date:"j F Y, H:i" }} SAST</p></div><span class="lead-status lead-status--{{ lead.screening_status }}">{{ lead.get_screening_status_display }}</span></header>
+  <header class="staff-page-header"><div><h1>{{ lead.first_name }} {{ lead.last_name }}</h1><p>Submitted {{ lead.created_at|date:"j F Y, H:i" }} SAST</p></div><span class="lead-status lead-status--{{ lead.screening_status }}">{{ lead.get_screening_status_display }}</span></header>
 {% endblock %}
 
 {% block page_content %}

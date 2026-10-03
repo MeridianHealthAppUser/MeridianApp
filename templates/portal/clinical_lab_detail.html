@@ -15,7 +15,7 @@
           {% if result %}
             {{ upload_form.non_field_errors }}
             {{ upload_form.report.errors }}
-            <div class="clinical-file-card"><div><strong>{{ result.filename }}</strong><p>PDF report · {{ result.size|filesizeformat }}{% if result.created_at %} · Uploaded {{ result.created_at|date:"j M Y, H:i" }} SAST{% endif %}</p></div><a class="console-button console-button--secondary" href="{{ report_download_url }}">Download PDF</a></div>
+            <div class="clinical-file-card"><div><strong>{{ result.filename }}</strong><p>PDF report · {{ result.size|filesizeformat }}{% if result.created_at %} · Uploaded {{ result.created_at|date:"j M Y, H:i" }} SAST{% endif %}</p></div><a class="console-button console-button--secondary" data-no-loader href="{{ report_download_url }}">Download PDF</a></div>
             <p class="clinical-file-help">The uploaded report is retained and cannot be replaced here. Contact the care team if a correction is needed.</p>
           {% elif can_upload %}
             <p class="clinical-panel-description">Upload the patient's report against this request. The original report is retained for review.</p>

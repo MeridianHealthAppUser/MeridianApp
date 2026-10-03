@@ -47,8 +47,7 @@ class AppointmentDetailPageTests(AppointmentLifecycleFixture):
         return data
 
     def management_data(self, token, **overrides):
-        data = {'workflow_context': token, 'action': 'escalate', 'doctor': self.doctor.pk,
-                'priority': 'high', 'note': 'Please review.', 'confirm': 'on'}
+        data = {'workflow_context': token, 'action': 'handover', 'doctor': self.colleague.pk, 'confirm': 'on'}
         data.update(overrides)
         return data
 
@@ -272,11 +271,12 @@ class AppointmentDetailPageTests(AppointmentLifecycleFixture):
 
     def test_get_and_head_do_not_write_and_all_forms_require_csrf(self):
         appointment = self.appointment()
-        self.login(self.admin)
         urls = [self.url('appointment-book'), self.url('appointment-detail', appointment.pk),
                 self.url('conversation-manage', self.thread.pk)]
         before = AuditEvent.objects.count()
         for url in urls:
+            # Conversations are managed by the people in them; the administrator handles bookings.
+            self.login(self.doctor if 'messages' in url else self.admin)
             self.assertEqual(self.client.get(url).status_code, 200)
             self.assertEqual(self.client.head(url).status_code, 200)
         self.login(self.patient_user)
@@ -287,40 +287,45 @@ class AppointmentDetailPageTests(AppointmentLifecycleFixture):
         for url in urls:
             self.assertEqual(secure.post(url, {'confirm': 'on'}).status_code, 403)
 
-    def test_conversation_page_routes_escalation_and_disallows_patient_management(self):
-        self.login(self.admin)
+    def test_conversation_page_adds_a_clinician_and_stays_private(self):
         url = self.url('conversation-manage', self.thread.pk)
+        for actor in (self.admin, self.super_admin, self.colleague):
+            self.login(actor)
+            self.assertEqual(self.client.get(url).status_code, 404)
+        self.login(self.doctor)
         response = self.client.get(url)
         self.assertTemplateUsed(response, 'portal/message_management.html')
         token = response.context['workflow_context']
         self.assertEqual(self.client.post(url, self.management_data('missing')).status_code, 400)
         response = self.client.post(url, self.management_data(token))
-        task = ClinicalTask.objects.get()
-        self.assertRedirects(response, self.url('task-edit', task.pk), fetch_redirect_response=False)
+        self.assertRedirects(response, url, fetch_redirect_response=False)
+        self.assertEqual(set(self.thread.participants.all()), {self.doctor, self.colleague})
         self.assertFalse(PatientMessage.objects.exists())
-        self.assertEqual(self.client.post(url, self.management_data(token)).status_code, 302)
-        self.assertEqual(ClinicalTask.objects.count(), 1)
+        self.assertFalse(ClinicalTask.objects.exists())
+        # Someone already in the conversation cannot be added again.
+        self.assertEqual(self.client.post(url, self.management_data(token)).status_code, 400)
+        self.login(self.colleague)
+        self.assertEqual(self.client.get(url).status_code, 200)
         self.login(self.patient_user)
         self.assertEqual(self.client.get(url).status_code, 403)
 
-    def test_conversation_new_message_stales_form_and_preserves_draft(self):
-        self.login(self.admin)
+    def test_conversation_new_message_stales_form(self):
+        self.login(self.doctor)
         url = self.url('conversation-manage', self.thread.pk)
         token = self.client.get(url).context['workflow_context']
         post_patient_message(thread=self.thread, sender=self.patient_user, body='Newer question')
-        response = self.client.post(url, self.management_data(token, note='Retain this draft'))
+        response = self.client.post(url, self.management_data(token))
         self.assertContains(response, 'record changed in another tab', status_code=400)
-        self.assertContains(response, 'Retain this draft', status_code=400)
-        self.assertFalse(ClinicalTask.objects.exists())
+        self.assertEqual(list(self.thread.participants.all()), [self.doctor])
 
     def test_conversation_pending_proposal_error_and_other_practice_token(self):
         self.proposal(self.appointment())
-        self.login(self.admin)
+        self.login(self.doctor)
         url = self.url('conversation-manage', self.thread.pk)
         token = self.client.get(url).context['workflow_context']
         response = self.client.post(url, self.management_data(token, action='close'))
         self.assertContains(response, 'pending appointment suggestions', status_code=400)
-        self.login(self.admin, self.beta)
+        self.login(self.doctor, self.beta)
         self.assertEqual(self.client.post(url, self.management_data(token)).status_code, 404)
         beta_url = self.url('conversation-manage', self.beta_thread.pk)
         self.assertEqual(self.client.post(beta_url, self.management_data(token, action='close')).status_code, 400)
@@ -337,7 +342,7 @@ class AppointmentDetailPageTests(AppointmentLifecycleFixture):
             ('colleague-readonly', self.colleague, self.url('appointment-detail', appointment.pk)),
             ('patient-cancellation', self.patient_user, self.url('patient-appointment-detail', appointment.pk)),
             ('patient-past-readonly', self.patient_user, self.url('patient-appointment-detail', past.pk)),
-            ('conversation-management', self.admin, self.url('conversation-manage', self.thread.pk)),
+            ('conversation-management', self.doctor, self.url('conversation-manage', self.thread.pk)),
         ):
             self.login(actor)
             response = self.client.get(url)

@@ -1,11 +1,11 @@
 {% extends 'base.html' %}
-{% load static %}
+{% load static workspace_ui %}
 {% block title %}My profile | Meridian{% endblock %}
 {% block extra_css %}<link rel="stylesheet" href="{% static 'css/management.css' %}"><link rel="stylesheet" href="{% static 'css/account_profile.css' %}">{% endblock %}
 {% block content %}
 <section class="account-profile" aria-labelledby="profile-heading">
+  {% breadcrumbs 'My profile' %}
   <header class="account-profile__heading">
-    <p class="eyebrow">Your account</p>
     <h1 id="profile-heading">My profile</h1>
     <p>{% if multi_practice_enabled %}One login across your practices. {% endif %}Manage your account name and security here.</p>
   </header>
@@ -35,7 +35,7 @@
     <h2 id="profile-practices-heading">Your practice access</h2>
     <p class="management-help">Current active access is shown below. Names can be edited above; roles and practice access cannot be changed here.</p>
     <ul class="account-profile__practice-list">
-      {% for practice in membership_page %}<li><strong>{{ practice.name }}</strong><div class="account-profile__roles">{% for membership in practice.profile_memberships %}<span class="account-profile__role">{{ membership.get_role_display }}</span>{% endfor %}{% if practice.profile_patients %}<span class="account-profile__role">Patient</span>{% endif %}</div></li>{% empty %}<li>You do not currently have active practice access. Your account security settings remain available.</li>{% endfor %}
+      {% for practice in membership_page %}<li><strong>{{ practice.name }}</strong><div class="account-profile__roles">{% for membership in practice.profile_memberships %}<span class="account-profile__role">{{ membership.title }}</span>{% endfor %}{% if practice.profile_patients %}<span class="account-profile__role">Patient</span>{% endif %}</div></li>{% empty %}<li>You do not currently have active practice access. Your account security settings remain available.</li>{% endfor %}
     </ul>
     {% if membership_page.has_other_pages %}<nav class="account-profile__pagination" aria-label="Practice access pages">{% if membership_page.has_previous %}<a class="button button-secondary" href="?page={{ membership_page.previous_page_number }}#profile-practices-heading">Previous</a>{% endif %}<span>Page {{ membership_page.number }} of {{ membership_page.paginator.num_pages }}</span>{% if membership_page.has_next %}<a class="button button-secondary" href="?page={{ membership_page.next_page_number }}#profile-practices-heading">Next</a>{% endif %}</nav>{% endif %}
   </section>

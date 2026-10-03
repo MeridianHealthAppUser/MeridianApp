@@ -39,15 +39,22 @@ def _lock_context(company, patient, actor):
     return company, patient
 
 
-def _require_doctor(company, actor, owner_id=None):
+def _require_clinician(company, actor, owner_id=None, *, prescriber=False):
     require_enabled_company(company)
     _active_actor(actor)
     if owner_id is not None and actor.pk != owner_id:
         raise PermissionDenied('Only the clinician responsible for this record can change it.')
+    types = CompanyMembership.PRESCRIBER_TYPES if prescriber else CompanyMembership.CLINICIAN_TYPES
     if not CompanyMembership.objects.filter(
-        company=company, company__is_active=True, user=actor, is_active=True, role=CompanyMembership.Role.DOCTOR,
+        company=company, company__is_active=True, user=actor, is_active=True, clinician_type__in=types,
     ).exists():
-        raise PermissionDenied('An active doctor membership in this practice is required.')
+        raise PermissionDenied('An active doctor membership in this practice is required.' if prescriber
+                               else 'An active clinician membership in this practice is required.')
+
+
+def _require_doctor(company, actor, owner_id=None):
+    # Treatment, compounding and blood tests stay with doctors.
+    _require_clinician(company, actor, owner_id, prescriber=True)
 
 
 def _submission_key(value):
@@ -121,7 +128,7 @@ def is_clinical_workflow_task(task):
 def save_consultation(*, company, patient, actor, summary, occurred_at, appointment=None,
                       encounter=None, expected_revision=None, submission_key=None, sign=False, request=None):
     company, patient = _lock_context(company, patient, actor)
-    _require_doctor(company, actor)
+    _require_clinician(company, actor)
     if type(sign) is not bool:
         raise ValidationError('Choose whether to save a draft or explicitly sign the consultation.')
     summary = _text(summary, label='The consultation note', required=sign)
@@ -138,7 +145,7 @@ def save_consultation(*, company, patient, actor, summary, occurred_at, appointm
         record = ClinicalEncounter.objects.select_for_update().filter(pk=encounter.pk, company=company, patient=patient).first()
         if record is None:
             raise PermissionDenied('This consultation is not available in this patient record.')
-        _require_doctor(company, actor, record.clinician_id)
+        _require_clinician(company, actor, record.clinician_id)
         if appointment is not None and appointment.pk != record.appointment_id:
             raise ValidationError('An existing consultation cannot be moved to another appointment.')
         if record.status == ClinicalEncounter.Status.SIGNED:
@@ -252,7 +259,7 @@ def submit_lab_result(*, lab_request, actor, filename, content, request=None):
         raise ValidationError('This request no longer accepts a new report. Contact your clinician.')
     doctor = lab.requested_by
     if not doctor.is_active or not CompanyMembership.objects.filter(
-        company=company, user=doctor, is_active=True, role=CompanyMembership.Role.DOCTOR,
+        company=company, user=doctor, is_active=True, clinician_type__in=CompanyMembership.PRESCRIBER_TYPES,
     ).exists():
         raise ValidationError('The requesting clinician is no longer active. Contact your practice before uploading.')
     result = LabResult(

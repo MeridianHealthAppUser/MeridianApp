@@ -57,7 +57,7 @@ def _booking_chips(filters, data):
         day = today + timedelta(days=offset)
         label = 'Today' if offset == 0 else 'Tomorrow' if offset == 1 else date_format(day, 'D j M')
         days.append({'label': label, 'url': link(date=day.isoformat()), 'active': chosen['date'] == day.isoformat()})
-    doctors = [{'label': 'Any doctor', 'url': link(clinician=''), 'active': not chosen['clinician']}]
+    doctors = [{'label': 'Any clinician', 'url': link(clinician=''), 'active': not chosen['clinician']}]
     doctors += [{'label': doctor.full_name, 'url': link(clinician=str(doctor.pk)), 'active': chosen['clinician'] == str(doctor.pk)}
                 for doctor in filters.fields['clinician'].queryset]
     types = [{'label': label.split(' · ')[0], 'url': link(appointment_type=value), 'active': chosen['appointment_type'] == value}

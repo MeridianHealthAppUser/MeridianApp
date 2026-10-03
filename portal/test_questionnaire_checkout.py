@@ -9,7 +9,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from care.models import (
-    Appointment, AuditEvent, ConsentDocument, ConsentRecord, DoctorWorkingPattern, Invoice, Lead, Payment,
+    Appointment, AuditEvent, ClinicianAssignment, ConsentDocument, ConsentRecord, DoctorWorkingPattern, Invoice, Lead, Payment,
     PatientEvent, PracticeSettings,
 )
 from practices.models import Company, CompanyMembership, Patient
@@ -89,6 +89,8 @@ class QuestionnaireCheckoutTests(TestCase):
              appointment.appointment_type, appointment.status),
             (self.doctor, page.context['slots'][0]['starts_at'], 30, Appointment.Type.INITIAL, Appointment.Status.BOOKED),
         )
+        self.assertEqual(patient.assigned_doctor, self.doctor)
+        self.assertEqual(list(ClinicianAssignment.objects.filter(patient=patient, ended_at__isnull=True).values_list('clinician', flat=True)), [self.doctor.pk])
         invoice = Invoice.objects.get(patient=patient)
         self.assertEqual((invoice.status, invoice.subtotal, invoice.total), (Invoice.Status.PAID, Decimal('630'), Decimal('0')))
         self.assertEqual(list(invoice.lines.values_list('line_total', flat=True)), [Decimal('630'), Decimal('-630')])
@@ -104,7 +106,10 @@ class QuestionnaireCheckoutTests(TestCase):
         self.assertEqual(set(PatientEvent.objects.filter(patient=patient).values_list('category', flat=True)),
                          {PatientEvent.Category.APPOINTMENT, PatientEvent.Category.PAYMENT})
         self.assertEqual(set(AuditEvent.objects.filter(patient=patient).values_list('action', flat=True)),
-                         {'patient.account_created', 'appointment.patient_booked', 'lead.converted'})
+                         {'patient.account_created', 'appointment.patient_booked', 'patient.doctor_assigned', 'lead.converted'})
+        self.assertEqual(AuditEvent.objects.get(patient=patient, action='patient.doctor_assigned').metadata,
+                         {'previous_doctor_id': None, 'doctor_id': self.doctor.pk, 'source': 'questionnaire.checkout',
+                          'appointment_id': appointment.pk})
 
         self.assertEqual(int(self.client.session['_auth_user_id']), user.pk)
         profile = self.client.get(reverse('portal:patient-medical-profile'))

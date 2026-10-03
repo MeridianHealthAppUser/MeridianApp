@@ -1,0 +1,8 @@
+{% extends 'portal/staff_page_base.html' %}{% load workspace_ui %}
+{% block title %}{{ section.label }} | {{ company.name }} | Meridian{% endblock %}
+{% block page_heading %}<header class="staff-page-header"><div><h1>{{ section.label }}</h1></div></header>{% endblock %}
+{% block page_content %}
+<nav class="staff-menu-section" aria-label="{{ section.label }}">
+  <ul>{% for item in section.items %}<li><a href="{{ item.url }}">{{ item.label }}<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="m9 6 6 6-6 6"/></svg></a></li>{% endfor %}</ul>
+</nav>
+{% endblock %}

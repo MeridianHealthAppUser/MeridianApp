@@ -1,4 +1,4 @@
-"""The shared staff inbox lists only the selected practice's active patients."""
+"""The staff inbox lists only the selected practice's conversations that the staff member takes part in."""
 
 from django.test import override_settings
 from datetime import timedelta
@@ -10,6 +10,7 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
+from care.messaging import add_participant
 from care.models import Appointment, AppointmentProposal, AuditEvent, MessageThread, PatientMessage
 from practices.models import Company, CompanyMembership, Patient
 from practices.services import ACTIVE_COMPANY_SESSION_KEY
@@ -78,6 +79,8 @@ class StaffInboxTests(TestCase):
             company=cls.company, patient=cls.inactive_patient, subject='Archived patient discussion',
             last_message_at=now,
         )
+        for thread in (cls.recent_thread, cls.older_thread, cls.other_practice_thread, cls.inactive_patient_thread):
+            add_participant(thread, cls.doctor)
 
     def login(self, user=None):
         self.client.force_login(user or self.doctor)
@@ -119,14 +122,22 @@ class StaffInboxTests(TestCase):
         self.login(self.patient_user)
         self.assertEqual(self.client.get(self.inbox_url()).status_code, 403)
 
-    def test_all_three_active_staff_roles_can_open_inbox(self):
-        for user in (self.doctor, self.administrator, self.super_admin):
+    def test_staff_see_only_conversations_they_take_part_in(self):
+        self.login(self.doctor)
+        response = self.client.get(self.inbox_url())
+        self.assertEqual({thread.pk for thread in response.context['threads']}, {self.recent_thread.pk, self.older_thread.pk})
+        # Administrators and Super Admins have no practice-wide view of patient conversations.
+        for user in (self.administrator, self.super_admin):
             with self.subTest(user=user.email):
                 self.login(user)
                 response = self.client.get(self.inbox_url())
                 self.assertEqual(response.status_code, 200)
-                self.assertEqual({thread.pk for thread in response.context['threads']},
-                                 {self.recent_thread.pk, self.older_thread.pk})
+                self.assertEqual(list(response.context['threads']), [])
+                self.assertNotContains(response, self.recent_thread.subject)
+                self.assertEqual(self.client.get(self.inbox_url(), {'thread': self.recent_thread.pk}).status_code, 404)
+                self.assertEqual(self.client.post(reverse('portal:staff-message-create', args=[self.recent_thread.pk]),
+                                                  {'body': 'Not my conversation', 'return_to': 'inbox'}).status_code, 404)
+        self.assertFalse(PatientMessage.objects.filter(body='Not my conversation').exists())
 
     def test_revoked_membership_does_not_keep_session_access(self):
         self.login(self.administrator)
@@ -164,6 +175,8 @@ class StaffInboxTests(TestCase):
             )
             for number in range(23)
         ])
+        for thread in extra_threads:
+            add_participant(thread, self.doctor)
         self.login()
         first = self.client.get(self.inbox_url())
         self.assertEqual(first.status_code, 200)
@@ -300,7 +313,7 @@ class StaffInboxTests(TestCase):
         self.add_message(read_at=timezone.now())
         self.add_message(thread=self.older_thread)
         self.add_message(thread=self.older_thread, sender=self.administrator)
-        MessageThread.objects.create(company=self.company, patient=self.patient, subject='No messages yet')
+        add_participant(MessageThread.objects.create(company=self.company, patient=self.patient, subject='No messages yet'), self.doctor)
         self.login()
         for status, expected in (
             ('awaiting', {self.recent_thread.pk}),

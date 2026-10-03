@@ -20,7 +20,7 @@ from .workflow_context import make_workflow_context, validate_workflow_context
 
 class AppointmentStatusForm(forms.Form):
     status = forms.ChoiceField(choices=(('cancelled', 'Cancel booking'), ('completed', 'Record completed'), ('no_show', 'Record no show')))
-    reason = forms.CharField(label='Note / cancellation reason (visible to the patient)', max_length=500, required=False, widget=forms.Textarea(attrs={'rows': 3}))
+    reason = forms.CharField(label='Note / cancellation reason', max_length=500, required=False, widget=forms.Textarea(attrs={'rows': 3}))
     confirm = forms.BooleanField(label='I confirm this appointment update. A new time must be agreed separately.')
 
     def __init__(self, *args, attendance=False, **kwargs):
@@ -85,7 +85,7 @@ class AppointmentDetailMixin:
         return self.membership.role in ('practice_admin', 'super_admin') or appointment.clinician_id == self.request.user.pk
 
     def attendance(self, appointment):
-        return (not self.patient_portal and self.membership.role == 'doctor' and appointment.clinician_id == self.request.user.pk
+        return (not self.patient_portal and self.membership.is_clinician and appointment.clinician_id == self.request.user.pk
                 and appointment.starts_at + timedelta(minutes=appointment.duration_minutes) <= timezone.now())
 
     def display(self, request, appointment, form=None, status=200):
@@ -94,10 +94,13 @@ class AppointmentDetailMixin:
         company = self.patient_company if self.patient_portal else self.company
         context = patient_page_context(request, company, self.patient, 'appointments', 'Appointment details') if self.patient_portal else dict(company=company, active_membership=self.membership, nav_section='schedule')
         context.update(appointment=appointment, can_edit=self.can_edit(appointment),
-            conversation=MessageThread.objects.for_company(company).filter(patient=appointment.patient, is_closed=False).first(),
+            # Patients reach the appointment's clinician; staff reach only their own conversations.
+            conversation=MessageThread.objects.for_company(company).filter(
+                patient=appointment.patient, is_closed=False,
+                participants=appointment.clinician if self.patient_portal else request.user).first(),
             form=form if form is not None else AppointmentStatusForm(attendance=self.attendance(appointment)),
             workflow_context=request.POST.get('workflow_context', '') if request.method == 'POST' else make_workflow_context(request, company, 'appointment-status', appointment, patient=self.patient if self.patient_portal else None))
-        allowed_role = 'patient' if self.patient_portal else ('doctor' if self.membership.role == 'doctor' else None)
+        allowed_role = 'patient' if self.patient_portal else ('doctor' if self.membership.is_clinician else None)
         context.update(appointment_video_context(request, appointment, allowed_role=allowed_role))
         if not self.patient_portal:
             from .patient_workspace import patient_workspace_context

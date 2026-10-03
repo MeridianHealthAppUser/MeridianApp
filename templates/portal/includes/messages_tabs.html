@@ -1,0 +1,4 @@
+<nav class="messages-tabs" aria-label="Message type">
+  <a href="{% url 'portal:staff-inbox' %}"{% if messages_tab == 'patients' %} class="is-active" aria-current="page"{% endif %}>Patients{% if patient_unread_total %} <span class="messages-tabs__count">{{ patient_unread_total }}<span class="sr-only"> unread</span></span>{% endif %}</a>
+  <a href="{% url 'portal:team-inbox' %}"{% if messages_tab == 'team' %} class="is-active" aria-current="page"{% endif %}>Team{% if team_unread_total %} <span class="messages-tabs__count">{{ team_unread_total }}<span class="sr-only"> unread</span></span>{% endif %}</a>
+</nav>

@@ -7,6 +7,7 @@
   <div class="meridian-console console-desktop workspace-overview">
     <div class="console-shell">
       <aside class="console-sidebar" aria-label="Practice navigation">
+        {# Only shown when the app runs more than one practice. #}{% if multi_practice_enabled %}
         <div class="console-sidebar__practice">
           <span class="console-practice-mark" aria-hidden="true">M</span>
           <div>
@@ -14,37 +15,22 @@
             <strong>{{ active_company.name }}</strong>
           </div>
         </div>
+        {% endif %}
 
         {% include 'portal/includes/staff_navigation.html' with nav_section='overview' %}
 
       </aside>
 
       <div class="console-main">
-        <header class="console-topbar">
-          <div class="console-breadcrumb">
-            <span>Care workspace</span>
-            <span class="console-breadcrumb__dot" aria-hidden="true"></span>
-            <span>{{ active_company.name }}</span>
-          </div>
-          <div class="console-topbar__right">
-            <a class="console-icon-button" href="{% url 'portal:staff-inbox' %}" aria-label="View messages">
-              <span aria-hidden="true">●</span><span>Inbox</span>
-            </a>
-            <a class="console-icon-button" href="{% url 'portal:staff-tasks' %}" aria-label="View tasks">
-              <span aria-hidden="true">✓</span><span>Tasks</span>
-            </a>
-          </div>
-        </header>
 
         <main class="console-content" id="overview">
           <section class="console-welcome" aria-labelledby="workspace-heading">
             <div>
-              <p class="console-kicker">Practice overview</p>
               <h1 id="workspace-heading">Welcome, {{ user.first_name|default:user.full_name }}.</h1>
               <p class="console-welcome__subtext">A focused view of your patients, clinical follow-ups, and conversations within {{ active_company.name }}.</p>
             </div>
             <div class="console-actions">
-              {% if active_membership %}<span class="console-role-badge">{{ active_membership.get_role_display }}</span>{% endif %}
+              {% if active_membership %}<span class="console-role-badge">{{ active_membership.title }}</span>{% endif %}
               <a class="console-button console-button--primary" href="{% url 'portal:patient-list' %}">View patients</a>
               <a class="console-button console-button--secondary" href="{% url 'portal:staff-schedule' %}">View schedule</a>
             </div>

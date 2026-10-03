@@ -1,12 +1,13 @@
 {% extends 'base.html' %}
-{% load static %}
+{% load static workspace_ui %}
 
-{% block title %}Patient messages | {{ company.name }} | Meridian{% endblock %}
+{% block title %}Messages | {{ company.name }} | Meridian{% endblock %}
 {% block extra_css %}<link rel="stylesheet" href="{% static 'css/console.css' %}">{% endblock %}
 {% block content %}
   <div class="meridian-console console-desktop inbox-console">
     <div class="console-shell">
       <aside class="console-sidebar" aria-label="Practice navigation">
+        {# Only shown when the app runs more than one practice. #}{% if multi_practice_enabled %}
         <div class="console-sidebar__practice">
           <span class="console-practice-mark" aria-hidden="true">M</span>
           <div>
@@ -14,31 +15,23 @@
             <strong>{{ company.name }}</strong>
           </div>
         </div>
+        {% endif %}
 
         {% include 'portal/includes/staff_navigation.html' with nav_section='messages' %}
 
       </aside>
 
       <div class="console-main">
-        <header class="console-topbar">
-          <div class="console-breadcrumb">
-            <span>Patient messages</span>
-            <span class="console-breadcrumb__dot" aria-hidden="true"></span>
-            <span>{{ company.name }}</span>
-          </div>
-          <div class="console-topbar__right">
-            <a class="console-icon-button" href="{% url 'portal:desktop-dashboard' %}" aria-label="Back to overview"><span aria-hidden="true">←</span><span>Overview</span></a>
-          </div>
-        </header>
 
         <main class="console-content inbox-content">
+          {% breadcrumbs 'Messages' %}
           <header class="inbox-page-header">
             <div>
-              <p class="console-kicker">Secure conversations</p>
-              <h1>Patient messages</h1>
-              <p>Review and reply to conversations in {{ company.name }}.</p>
+              <h1>Messages</h1>
+              <p>Your conversations with patients at {{ company.name }}. Only the people in a conversation can read it.</p>
             </div>
           </header>
+          {% include 'portal/includes/messages_tabs.html' with messages_tab='patients' %}
 
           <section class="inbox-metrics" aria-label="Message summary">
             <article>
@@ -120,9 +113,10 @@
                     <div>
                       <p>{{ selected_thread.patient }}</p>
                       <h2>{{ selected_thread.subject|default:"Patient message" }}</h2>
+                      <p class="inbox-conversation__people">In this conversation: {% for row in selected_thread.participant_rows %}{% if row.user_id == user.pk %}you{% else %}{{ row.user.full_name }}{% endif %}{% if not forloop.last %}, {% endif %}{% endfor %}{% for row in selected_thread.participant_rows %}{% if row.added_by %} · {{ row.added_by.full_name }} added {{ row.user.full_name }} {{ row.created_at|date:'j M' }}{% endif %}{% endfor %}</p>
                     </div>
                   </div>
-                  <div class="staff-schedule-header-actions"><a class="console-button console-button--quiet" href="{% url 'portal:conversation-manage' selected_thread.pk %}">Route / manage</a><a class="console-button console-button--quiet" href="{% if active_membership.role == 'doctor' or active_membership.role == 'super_admin' %}{% url 'portal:staff-patient-record' selected_thread.patient_id %}{% else %}{% url 'portal:patient-detail' selected_thread.patient_id %}{% endif %}">Open record</a></div>
+                  <div class="staff-schedule-header-actions"><a class="console-button console-button--quiet" href="{% url 'portal:conversation-manage' selected_thread.pk %}">Add a clinician / close</a><a class="console-button console-button--quiet" href="{% url 'portal:patient-detail' selected_thread.patient_id %}">Open record</a></div>
                 </header>
 
                 <ol class="inbox-message-list" aria-label="Messages in {{ selected_thread.subject }}">
@@ -169,7 +163,7 @@
             </section>
           </section>
 
-          <p class="inbox-page-note">Administrators can handle administrative questions here. Appointment-time agreements remain between the booked doctor and patient.</p>
+          <p class="inbox-page-note">Conversations you are not part of are not shown, including other clinicians’ conversations with their patients. Appointment-time agreements stay between the booked clinician and the patient.</p>
         </main>
       </div>
     </div>

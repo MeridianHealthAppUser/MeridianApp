@@ -4,7 +4,7 @@
 {% block title %}Clinical record | {{ company.name }} | Meridian{% endblock %}
 {% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/record_pages.css' %}"><script src="{% static 'js/record_timeline.js' %}" defer></script>{% endblock %}
 {% block patient_workspace_heading_actions %}
-  {% if export_url %}<a class="console-button console-button--quiet" href="{{ export_url }}">Export clinical record</a>{% endif %}
+  {% if export_url %}<a class="console-button console-button--quiet" data-no-loader href="{{ export_url }}">Export clinical record</a>{% endif %}
 {% endblock %}
 {% block patient_workspace_content %}
   <section class="staff-page-card record-scope" aria-labelledby="record-scope-heading">
@@ -28,7 +28,7 @@
       <section class="staff-page-card record-timeline-card" aria-labelledby="record-timeline-heading" data-record-timeline data-next-url="{{ timeline_next_url }}">
         <header class="staff-page-card__header record-timeline-header">
           <div><h2 id="record-timeline-heading">Event log and audit trail</h2><p>Signed consultations and shared notes. Drafts and private notes stay outside this record.</p></div>
-          <div class="record-timeline-tools"><span class="staff-page-card__count">{{ page_obj.paginator.count }} entries</span>{% if timeline_download_url %}<a class="console-button console-button--quiet" href="{{ timeline_download_url }}" aria-describedby="record-excel-help">Download Excel</a>{% endif %}</div>
+          <div class="record-timeline-tools"><span class="staff-page-card__count">{{ page_obj.paginator.count }} entries</span>{% if timeline_download_url %}<a class="console-button console-button--quiet" data-no-loader href="{{ timeline_download_url }}" aria-describedby="record-excel-help">Download Excel</a>{% endif %}</div>
         </header>
         <p class="record-scroll-help" id="record-scroll-help">Scroll within this panel to read older entries.</p>
         <div class="record-timeline-scroll" id="record-timeline-scroll" tabindex="0" role="region" aria-labelledby="record-timeline-heading" aria-describedby="record-scroll-help" data-timeline-scroll>
@@ -66,11 +66,11 @@
         <section class="staff-page-card record-summary"><p class="console-kicker">Current consent · {{ company.name }}</p>
           <dl>{% for consent in record_consents %}<dt>{{ consent.get_consent_type_display }}</dt><dd><span class="console-status{% if consent.accepted %} console-status--active{% endif %}">{% if consent.accepted %}Accepted{% else %}Not accepted{% endif %}</span><span class="record-small">{{ consent.document_version }}{% if consent.accepted_at %} · {{ consent.accepted_at|date:"j M Y" }}{% endif %}</span></dd>{% empty %}<dt>No consent record available.</dt>{% endfor %}</dl>
         </section>
-        {% if is_doctor %}<section class="staff-page-card record-summary"><p class="console-kicker">Self-reported medical profile</p><p class="record-small">{{ company.name }} only. Patient-provided history, not a clinical assessment.</p>
+        {% if is_clinician %}<section class="staff-page-card record-summary"><p class="console-kicker">Self-reported medical profile</p><p class="record-small">{{ company.name }} only. Patient-provided history, not a clinical assessment.</p>
           {% if profile_answers %}<details class="record-profile"><summary>Read current profile · version {{ medical_profile.revision }}</summary><dl>{% for answer in profile_answers %}<dt>{{ answer.label }}</dt><dd>{{ answer.answer }}</dd>{% endfor %}</dl></details>{% else %}<p>No medical profile has been completed here yet.</p>{% endif %}
         </section>{% endif %}
         <section class="staff-page-card record-summary"><p class="console-kicker">More for this patient</p><nav class="record-care-links" aria-label="Patient care actions">
-          {% if is_doctor %}<a href="{% url 'portal:clinical-consultation-create' patient.pk %}">New consultation</a><a href="{% url 'portal:clinical-lab-create' patient.pk %}">Request a blood test</a>{% endif %}
+          {% if is_clinician %}<a href="{% url 'portal:clinical-consultation-create' patient.pk %}">New consultation</a>{% endif %}{% if is_doctor %}<a href="{% url 'portal:clinical-lab-create' patient.pk %}">Request a blood test</a>{% endif %}
           <a href="{% url 'portal:patient-detail' patient.pk %}?tab=consultations">Consultations</a><a href="{% url 'portal:patient-detail' patient.pk %}?tab=blood-tests">Blood tests</a><a href="{% url 'portal:patient-detail' patient.pk %}?tab=messages">Messages</a><a href="{% url 'portal:patient-detail' patient.pk %}?tab=appointments">Appointments</a><a href="{% url 'portal:patient-list' %}">Back to patients</a>
         </nav></section>
       </aside>

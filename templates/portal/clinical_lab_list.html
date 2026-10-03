@@ -1,11 +1,11 @@
 {% extends 'portal/staff_page_base.html' %}
-{% load static %}
+{% load static workspace_ui %}
 {% block title %}Blood tests | {{ company.name }} | Meridian{% endblock %}
 {% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/clinical_workflow.css' %}">{% endblock %}
-{% block breadcrumb %}<span>Clinical · Blood tests</span><span class="console-breadcrumb__dot" aria-hidden="true"></span><span>{{ company.name }}</span>{% endblock %}
 
+{% block breadcrumbs %}{% breadcrumbs 'Blood tests' %}{% endblock %}
 {% block page_heading %}
-  <header class="staff-page-header"><div><p class="console-kicker">Clinical · Blood tests</p><h1>Blood-test requests</h1><p>Track requested tests, uploaded reports and clinician review at {{ company.name }}.</p></div>{% if can_create %}<div class="clinical-heading-actions">{% if filter_form.cleaned_data.patient %}<a class="console-button console-button--primary" href="{% url 'portal:clinical-lab-create' filter_form.cleaned_data.patient.pk %}">Request blood tests</a>{% else %}<a class="console-button console-button--primary" href="{% url 'portal:patient-list' %}">Choose a patient</a>{% endif %}</div>{% endif %}</header>
+  <header class="staff-page-header"><div><h1>Blood tests</h1><p>Track requested tests, uploaded reports and clinician review at {{ company.name }}.</p></div>{% if can_create %}<div class="clinical-heading-actions">{% if filter_form.cleaned_data.patient %}<a class="console-button console-button--primary" href="{% url 'portal:clinical-lab-create' filter_form.cleaned_data.patient.pk %}">Request blood tests</a>{% else %}<a class="console-button console-button--primary" href="{% url 'portal:patient-list' %}">Choose a patient</a>{% endif %}</div>{% endif %}</header>
 {% endblock %}
 
 {% block page_content %}

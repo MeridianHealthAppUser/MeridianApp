@@ -143,13 +143,15 @@ class SinglePracticeSurfacesTests(TestCase):
 
     def test_staff_navigation_hides_practice_management_but_keeps_user_management(self):
         self.client.force_login(self.staff)
-        for name in ('desktop-dashboard', 'mobile-dashboard'):
+        # On mobile, Settings is a section page; its options are listed there.
+        for name, args in (('desktop-dashboard', ()), ('staff-menu-section', ('settings',))):
             with self.subTest(page=name):
-                response = self.client.get(reverse(f'portal:{name}'))
+                response = self.client.get(reverse(f'portal:{name}', args=args))
                 self.assertEqual(response.status_code, 200)
                 self.assertNotContains(response, reverse('portal:management-practices'))
                 self.assertNotContains(response, 'company-switcher')
                 self.assertContains(response, reverse('portal:management-users'))
+        self.assertContains(self.client.get(reverse('portal:mobile-dashboard')), reverse('portal:staff-menu-section', args=['settings']))
 
     def test_profile_save_does_not_modify_or_audit_other_practice_data(self):
         other_membership = CompanyMembership.objects.get(company=self.other, user=self.staff)

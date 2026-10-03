@@ -251,6 +251,7 @@ class PrivacyTests(TestCase):
         self.assertEqual(PatientDataRequestReply.objects.count(), before)
 
     def test_staff_request_head_does_not_audit_and_get_does(self):
+        PracticeSettings.objects.update_or_create(company=self.alpha, defaults={'store_view_log': True})
         self.login(self.admin)
         before = AuditEvent.objects.filter(action='privacy.request_viewed').count()
         self.client.head(self.url('staff-data-request-detail', self.request_record.pk))
@@ -292,12 +293,13 @@ class PrivacyTests(TestCase):
         AuditEvent.objects.create(company=self.alpha, actor=self.admin, action='UNKNOWN_ACTION_SECRET', target_type='UNKNOWN_TARGET_SECRET')
         self.login(self.admin)
         response = self.get('account-access-history', scope='all')
-        self.assertEqual(len(response.context['access_rows']), 3)
+        # View events are never listed, even when stored.
+        self.assertEqual(len(response.context['access_rows']), 2)
         for secret in ('METADATA_SECRET', '192.0.2.90', 'PATIENT_IDENTIFIER_SECRET', 'OTHER_ACTOR_ACTION_SECRET',
                        'INACTIVE_PRACTICE_ACTION_SECRET', 'UNKNOWN_ACTION_SECRET', 'UNKNOWN_TARGET_SECRET', 'Private Person'):
             self.assertNotContains(response, secret)
-        self.assertContains(response, 'Privacy request viewed')
-        self.assertEqual(len(self.get('account-access-history').context['access_rows']), 2)
+        self.assertNotContains(response, 'Privacy request viewed')
+        self.assertEqual(len(self.get('account-access-history').context['access_rows']), 1)
 
     def test_access_history_invalid_scope_no_data_and_no_incidental_writes(self):
         self.login(self.admin)

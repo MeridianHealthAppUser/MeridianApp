@@ -71,7 +71,7 @@ class OperationsTemplateTests(OperationsFixture):
             ('ops-batch-detail', 'Stock movement ledger', (batch.pk,)),
             ('ops-shipping', 'Weekly shipping list', ()), ('ops-shipping-create', 'Create a shipment record', ()),
             ('ops-shipment-detail', 'Shipment record', (shipment.pk,)),
-            ('ops-history', 'Dispatch history', ()), ('ops-orders', 'Patient supply requests', ()),
+            ('ops-history', 'Dispatch history', ()), ('ops-orders', '<h1>Supply requests</h1>', ()),
             ('ops-order-detail', 'Review this request', (order.pk,)),
         ):
             with self.subTest(route=route):

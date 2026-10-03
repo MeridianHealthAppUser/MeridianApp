@@ -1,4 +1,6 @@
 {% extends 'portal/compounding_base.html' %}
+{% load workspace_ui %}
 {% block title %}Compounding record {{ record.pk }} | Meridian{% endblock %}
-{% block page_heading %}<header class="staff-page-header"><div><p class="console-kicker">Clinical · Compounding</p><h1>Tracking record {{ record.pk }}</h1><p>{{ record.snapshot.patient_name }} · {{ record.get_status_display }}</p></div><div class="ops-actions"><a class="console-button console-button--secondary" href="{% url 'portal:compounding-list' %}">All tracking records</a>{% if can_edit %}<a class="console-button console-button--secondary" href="{% url 'portal:compounding-print' record.pk %}">Printable tracking summary</a>{% endif %}</div></header>{% endblock %}
+{% block breadcrumbs %}{% breadcrumbs 'Compounding records' 'portal:compounding-list' 'Tracking record' %}{% endblock %}
+{% block page_heading %}<header class="staff-page-header"><div><h1>Tracking record {{ record.pk }}</h1><p>{{ record.snapshot.patient_name }} · {{ record.get_status_display }}</p></div><div class="ops-actions">{% if can_edit %}<a class="console-button console-button--secondary" href="{% url 'portal:compounding-print' record.pk %}">Printable tracking summary</a>{% endif %}</div></header>{% endblock %}
 {% block operations_content %}{% include 'portal/includes/compounding_detail_content.html' %}{% endblock %}

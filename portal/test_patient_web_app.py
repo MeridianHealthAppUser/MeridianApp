@@ -12,6 +12,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from care.availability import SAST
+from care.messaging import add_participant
 from care.models import (
     Appointment, AppointmentProposal, AuditEvent, MedicationProduct, MessageThread, PatientEvent, PatientMessage,
     PracticeSettings, TreatmentAuthorization, WeightEntry,
@@ -37,6 +38,7 @@ class PatientWebAppTests(TestCase):
         cls.product = MedicationProduct.objects.create(company=cls.company, name='Weekly pen', strength='1 mg', price=100)
         cls.thread = MessageThread.objects.create(company=cls.company, patient=cls.patient, subject='My dose',
                                                   opened_by=cls.user)
+        add_participant(cls.thread, cls.doctor)
 
     def setUp(self):
         self.client.force_login(self.user)

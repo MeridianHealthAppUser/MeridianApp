@@ -21,19 +21,21 @@ from care.privacy import (
     create_data_request, publish_policy_version, require_privacy_admin, respond_to_data_request,
     save_communication_preference,
 )
-from care.services import record_audit
+from care.services import ACCESS_ACTIONS, record_audit
 from practices.models import Company
 from .patient_care_views import PatientCarePage, add_error
 from .privacy_forms import (
     AccessHistoryFilterForm, CommunicationPreferenceForm, DataRequestFilterForm, DataRequestForm,
     DataRequestReplyForm, PolicyVersionForm, PublicPracticeForm, privacy_context, validate_privacy_context,
 )
-from .record_views import AUDIT_LABELS, staff_memberships
+from .record_views import ACCESS_AUDIT_LABELS, AUDIT_LABELS, staff_memberships
 from .views import StaffCompanyRequiredMixin
 
 
 PRIVACY_AUDIT_LABELS = {
     **AUDIT_LABELS,
+    **ACCESS_AUDIT_LABELS,
+    'message.sent': 'Secure message sent',
     'privacy.preference_updated': 'Communication preferences updated',
     'privacy.request_submitted': 'Privacy request submitted',
     'privacy.request_viewed': 'Privacy request viewed',
@@ -93,7 +95,7 @@ class PatientPrivacyView(PatientCarePage):
         context = self.context('account', 'Privacy and preferences', form=form, privacy_context=token,
             consents=ConsentRecord.objects.filter(company=self.patient_company, patient=self.patient).order_by('-created_at', '-pk'),
             access_rows=safe_access_rows(AuditEvent.objects.filter(company=self.patient_company, patient=self.patient,
-                actor=request.user).order_by('-created_at', '-pk')[:10]))
+                actor=request.user).exclude(action__in=ACCESS_ACTIONS).order_by('-created_at', '-pk')[:10]))
         return render(request, 'portal/privacy_patient_preferences.html', context)
 
     def get(self, request):
@@ -242,7 +244,8 @@ class AccountAccessHistoryView(PrivacyStaffPage):
         if form.is_valid():
             filters = form.cleaned_data
             companies = memberships if filters['scope'] == 'all' else [self.company.pk]
-            queryset = AuditEvent.objects.filter(actor=request.user, company_id__in=companies)
+            # View, download and export events are never shown, even when the practice stores them.
+            queryset = AuditEvent.objects.filter(actor=request.user, company_id__in=companies).exclude(action__in=ACCESS_ACTIONS)
         context = self.context('My access history', section='access_history', filter_form=form,
             **paginate(request, queryset.order_by('-created_at', '-pk'), **filters))
         context['access_rows'] = safe_access_rows(context['page_obj'].object_list)

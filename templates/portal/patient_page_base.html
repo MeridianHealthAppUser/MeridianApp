@@ -1,5 +1,5 @@
 {% extends 'base.html' %}
-{% load static %}
+{% load static workspace_ui %}
 
 {% block title %}{{ page_title|default:"Your care" }} | Meridian{% endblock %}
 {% block extra_css %}
@@ -14,6 +14,7 @@
   <div class="meridian-console patient-console patient-pages-console">
     {% include 'portal/includes/patient_navigation.html' %}
     <div class="patient-console__content patient-page-content {% block patient_content_class %}{% endblock %}" id="patient-page-content">
+      {% block patient_breadcrumbs %}{% endblock %}
       {% block patient_heading %}{% endblock %}
       {% block patient_content %}{% endblock %}
       <aside class="patient-page-privacy">

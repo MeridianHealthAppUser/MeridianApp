@@ -86,9 +86,10 @@ def checkout_identity(lead, user):
 
 
 def consultation_slots(company, day, limit=100):
+    # The initial consultation decides treatment, so only doctors are bookable here.
     doctors = get_user_model().objects.filter(
         is_active=True, company_memberships__company=company, company_memberships__is_active=True,
-        company_memberships__role=CompanyMembership.Role.DOCTOR,
+        company_memberships__clinician_type__in=CompanyMembership.PRESCRIBER_TYPES,
     ).distinct()
     return open_slots_for_day(company=company, clinicians=doctors, day=day, duration_minutes=CONSULT_MINUTES, limit=limit)
 
@@ -119,13 +120,14 @@ def _create_login(lead, password):
     return user
 
 
-def _create_patient(company, lead, user):
+def _create_patient(company, lead, user, clinician):
     if Patient.objects.filter(company=company, user=user).exists():
         raise ValidationError('You already have a patient record at this practice. Book from your patient portal instead.')
     if lead.id_number and Patient.objects.filter(company=company, id_number=lead.id_number).exists():
         raise ValidationError('A patient record with this ID or passport number already exists. Contact the practice to link it to your login.')
+    # The clinician of the first booking becomes the patient's assigned clinician.
     patient = Patient(company=company, user=user, first_name=lead.first_name, last_name=lead.last_name,
-                      id_number=lead.id_number, phone=lead.phone)
+                      id_number=lead.id_number, phone=lead.phone, assigned_doctor=clinician)
     patient.full_clean()
     try:
         with transaction.atomic():
@@ -167,7 +169,7 @@ def complete_checkout(*, lead, user, password, clinician_id, starts_at, code, re
 
     clinician = locked.get(clinician_id)
     if clinician is None or not clinician.is_active or not CompanyMembership.objects.filter(
-        user=clinician, company=company, is_active=True, role=CompanyMembership.Role.DOCTOR,
+        user=clinician, company=company, is_active=True, clinician_type__in=CompanyMembership.PRESCRIBER_TYPES,
     ).exists():
         raise ValidationError('This doctor is no longer available. Choose another time.')
     if not isinstance(starts_at, datetime) or timezone.is_naive(starts_at) or starts_at <= timezone.now():
@@ -191,7 +193,9 @@ def complete_checkout(*, lead, user, password, clinician_id, starts_at, code, re
     else:
         account = _create_login(lead, password)
         account_created = True
-    patient = _create_patient(company, lead, account)
+    patient = _create_patient(company, lead, account, clinician)
+    from .patient_assignment import record_clinician_history
+    record_clinician_history(patient, clinician)
     ensure_patient_available(patient=patient, starts_at=starts_at, duration_minutes=CONSULT_MINUTES)
 
     appointment = Appointment(company=company, patient=patient, clinician=clinician, starts_at=starts_at,
@@ -245,6 +249,9 @@ def complete_checkout(*, lead, user, password, clinician_id, starts_at, code, re
                  metadata={'source': 'questionnaire.checkout', 'user_id': account.pk, 'lead_id': lead.pk})
     record_audit(company=company, actor=account, patient=patient, action='appointment.patient_booked',
                  target=appointment, request=request, metadata={'source': 'questionnaire.checkout'})
+    record_audit(company=company, actor=account, patient=patient, action='patient.doctor_assigned', target=patient,
+                 request=request, metadata={'previous_doctor_id': None, 'doctor_id': clinician.pk,
+                                            'source': 'questionnaire.checkout', 'appointment_id': appointment.pk})
     record_audit(company=company, actor=account, patient=patient, action='lead.converted', target=lead, request=request,
                  metadata={'appointment_id': appointment.pk, 'invoice_id': invoice.pk, 'payment_id': payment.pk,
                            'test_code': True, 'account_created': account_created})

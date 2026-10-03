@@ -1,12 +1,13 @@
 {% extends 'portal/patient_page_base.html' %}
+{% load workspace_ui %}
 
 {% block title %}Account settings | Meridian{% endblock %}
 
+{% block patient_breadcrumbs %}{% breadcrumbs 'Account settings' %}{% endblock %}
 {% block patient_heading %}
   <header class="patient-page-heading">
     <div>
-      <p class="console-kicker">Account settings</p>
-      <h1>Your account</h1>
+      <h1>Account settings</h1>
     </div>
     <div class="patient-page-actions"><a class="console-button console-button--secondary" href="{% url 'portal:patient-privacy' %}">Privacy and preferences</a><a class="console-button console-button--secondary" href="{% url 'accounts:password-change' %}">Change password</a></div>
   </header>
@@ -23,7 +24,7 @@
           <div><dt>ID / passport</dt><dd{% if not patient.id_number %} class="patient-kv__quiet"{% endif %}>{{ patient.id_number|default:"Not recorded" }}</dd></div>
           <div><dt>Date of birth</dt><dd{% if not patient.date_of_birth %} class="patient-kv__quiet"{% endif %}>{{ patient.date_of_birth|date:"j F Y"|default:"Not recorded" }}</dd></div>
           <div><dt>Practice</dt><dd>{{ patient_company.name }}</dd></div>
-          <div><dt>Your doctor</dt><dd>{% if patient.assigned_doctor %}{{ patient.assigned_doctor.full_name }}{% else %}Your practice will assign a doctor{% endif %}</dd></div>
+          <div><dt>Your clinician</dt><dd>{% if patient.assigned_doctor %}{{ patient.assigned_doctor.full_name }}{% else %}Your practice will assign a clinician{% endif %}</dd></div>
           {% if patient.medical_record_number %}<div><dt>Record number</dt><dd>{{ patient.medical_record_number }}</dd></div>{% endif %}
         </dl>
         <div class="patient-card-actions"><a class="console-button console-button--secondary patient-card-actions__wide" href="{{ details_change_url }}">Request a change</a></div>

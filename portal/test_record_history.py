@@ -15,7 +15,7 @@ from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils import timezone
 
-from care.models import AuditEvent, ClinicalEncounter, ClinicalNote, LabRequest, PatientEvent
+from care.models import AuditEvent, ClinicalEncounter, ClinicalNote, LabRequest, PatientEvent, PracticeSettings
 from practices.models import CompanyMembership, Patient
 from practices.services import ACTIVE_COMPANY_SESSION_KEY
 from .record_history import HISTORY_PAGE_SIZE
@@ -266,6 +266,8 @@ class RecordHistoryTests(TestCase):
         self.assertTrue(all(len(cell) <= 15000 for row in rows for cell in row))
 
     def test_excel_export_is_audited_once_per_actual_practice_without_clinical_payload(self):
+        PracticeSettings.objects.update_or_create(company=self.alpha, defaults={'store_view_log': True})
+        PracticeSettings.objects.update_or_create(company=self.beta, defaults={'store_view_log': True})
         first = self.links(scope='all', reason='covering_colleague')
         before = AuditEvent.objects.filter(action='patient.clinical_record_exported').count()
         self.xlsx(first.context['timeline_download_url'])

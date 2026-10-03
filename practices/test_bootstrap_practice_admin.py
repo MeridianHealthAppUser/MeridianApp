@@ -116,7 +116,7 @@ class BootstrapPracticeAdminTests(TestCase):
             company=company, user=self.admin, role=CompanyMembership.Role.DOCTOR,
         )
         for role in CompanyMembership.Role.values:
-            CompanyMembership.objects.filter(pk=membership.pk).update(role=role)
+            CompanyMembership.objects.filter(pk=membership.pk).update(role=role, clinician_type='' if role == 'practice_admin' else 'doctor')
             before = CompanyMembership.objects.values().get(pk=membership.pk)
             with self.subTest(role=role):
                 output = self.run_command()

@@ -96,7 +96,7 @@ class ClinicalNoteTagsView(LoginRequiredMixin, StaffCompanyRequiredMixin, View):
                 author=request.user,
             ), pk=pk,
         )
-        if self.membership.role != CompanyMembership.Role.DOCTOR:
+        if not self.membership.is_clinician:
             from django.core.exceptions import PermissionDenied
             raise PermissionDenied('Only the note author can edit its tags.')
         form = ClinicalNoteTagsForm(request.POST, company=self.company, instance=note)

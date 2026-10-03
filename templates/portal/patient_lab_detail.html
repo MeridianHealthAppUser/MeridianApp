@@ -1,10 +1,11 @@
 {% extends 'portal/patient_page_base.html' %}
-{% load static %}
+{% load static workspace_ui %}
 {% block title %}Your blood-test request | Meridian{% endblock %}
 {% block patient_extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/clinical_workflow.css' %}">{% endblock %}
 
+{% block patient_breadcrumbs %}{% breadcrumbs 'My Treatment' 'portal:patient-treatment' 'Blood tests' 'portal:patient-labs' 'Request' %}{% endblock %}
 {% block patient_heading %}
-  <header class="patient-page-heading"><div><p class="console-kicker"><a class="patient-inline-link" href="{% url 'portal:patient-treatment' %}">My Treatment</a> · Blood tests</p><h1>Your blood-test request</h1><p>Your request at {{ patient_company.name }}.</p></div><a class="console-button console-button--secondary" href="{% url 'portal:patient-labs' %}">All blood-test requests</a></header>
+  <header class="patient-page-heading"><div><h1>Your blood-test request</h1><p>Your request at {{ patient_company.name }}.</p></div><a class="console-button console-button--secondary" href="{% url 'portal:patient-labs' %}">All blood-test requests</a></header>
 {% endblock %}
 
 {% block patient_content %}
@@ -15,7 +16,7 @@
         {% if result %}
           {{ upload_form.non_field_errors }}
           {{ upload_form.report.errors }}
-          <div class="clinical-file-card"><div><strong>{{ result.filename }}</strong><p>PDF report · {{ result.size|filesizeformat }}{% if result.created_at %} · Uploaded {{ result.created_at|date:"j M Y, H:i" }} SAST{% endif %}</p></div><a class="console-button console-button--secondary" href="{{ report_download_url }}">Download PDF</a></div>
+          <div class="clinical-file-card"><div><strong>{{ result.filename }}</strong><p>PDF report · {{ result.size|filesizeformat }}{% if result.created_at %} · Uploaded {{ result.created_at|date:"j M Y, H:i" }} SAST{% endif %}</p></div><a class="console-button console-button--secondary" data-no-loader href="{{ report_download_url }}">Download PDF</a></div>
           <p class="clinical-file-help">This report has been saved and cannot be replaced here. If you uploaded the wrong file or need a correction, <a class="clinical-link" href="{% url 'portal:patient-messages' %}">contact your care team</a>.</p>
           {% if lab_request.status == 'reviewed' %}<div class="clinical-notice clinical-notice--spaced"><p>Your doctor has reviewed this report. Please contact your care team if you have questions about the results or next steps.</p></div>{% else %}<div class="clinical-notice clinical-notice--spaced"><p>Your report is awaiting review by your doctor. Uploading a file does not provide an automatic interpretation of your results.</p></div>{% endif %}
         {% elif can_upload %}

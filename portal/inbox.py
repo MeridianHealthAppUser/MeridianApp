@@ -9,20 +9,30 @@ from django.urls import reverse
 from django.utils import timezone
 
 from care.forms import PatientMessageForm
+from care.messaging import staff_threads
 from care.models import MessageThread, PatientMessage
 from care.services import record_audit
+from care.team_messaging import unread_team_messages
 from practices.models import CompanyMembership
+
+
+def message_tab_counts(company, user):
+    """Unread totals for the Patients and Team tabs of Messages."""
+    patients = PatientMessage.objects.for_company(company).filter(
+        read_at__isnull=True, sender_id=F('thread__patient__user_id'), thread__participants=user,
+        thread__patient__is_active=True,
+    ).count()
+    return {'patient_unread_total': patients, 'team_unread_total': unread_team_messages(company, user)}
 
 
 def staff_inbox_redirect(thread):
     return redirect(f'{reverse("portal:staff-inbox")}?thread={thread.pk}#inbox-conversation')
 
 
-def _inbox_threads(company):
+def _inbox_threads(company, user):
+    # Only conversations this staff member takes part in; there is no practice-wide inbox.
     latest = PatientMessage.objects.for_company(company).filter(thread_id=OuterRef('pk')).order_by('-created_at', '-pk')
-    return MessageThread.objects.for_company(company).filter(
-        patient__company=company, patient__is_active=True,
-    ).select_related('patient__user', 'patient__assigned_doctor').annotate(
+    return staff_threads(company, user).select_related('patient__user', 'patient__assigned_doctor').annotate(
         latest_sender_id=Subquery(latest.values('sender_id')[:1]),
         latest_body=Subquery(latest.values('body')[:1]),
         has_message=Exists(latest),
@@ -44,7 +54,7 @@ def staff_inbox_context(request, company, membership, *, selected_thread_id=None
     """Render a conversation only once it is chosen; listing threads never marks them read."""
     from .views import _attach_appointment_proposals
 
-    all_threads = _inbox_threads(company)
+    all_threads = _inbox_threads(company, request.user)
     metrics = {
         'total': all_threads.count(),
         'awaiting': all_threads.filter(is_awaiting_reply=True).count(),
@@ -90,6 +100,7 @@ def staff_inbox_context(request, company, membership, *, selected_thread_id=None
         'message_form': PatientMessageForm(auto_id='inbox_%s'),
         'can_propose_appointments': False,
     }
+    context.update(message_tab_counts(company, request.user))
     context.update(overrides)
     if selected is None:
         return context
@@ -97,6 +108,7 @@ def staff_inbox_context(request, company, membership, *, selected_thread_id=None
     selected.conversation_messages = list(PatientMessage.objects.for_company(company).filter(
         thread=selected,
     ).select_related('sender').order_by('created_at', 'pk'))
+    selected.participant_rows = list(selected.participant_links.select_related('user', 'added_by'))
     unread_ids = []
     for message in selected.conversation_messages:
         message.is_from_patient = message.sender_id is not None and message.sender_id == selected.patient.user_id
@@ -106,6 +118,7 @@ def staff_inbox_context(request, company, membership, *, selected_thread_id=None
         PatientMessage.objects.for_company(company).filter(
             pk__in=unread_ids, read_at__isnull=True,
         ).update(read_at=timezone.now())
+        context.update(message_tab_counts(company, request.user))
     selected.unread_count = 0
     for thread in threads:
         if thread.pk == selected.pk:
@@ -117,5 +130,5 @@ def staff_inbox_context(request, company, membership, *, selected_thread_id=None
         )
     return _attach_appointment_proposals(
         context, request, company, selected.patient, actor_role='doctor',
-        allowed=membership.role == CompanyMembership.Role.DOCTOR,
+        allowed=membership.is_clinician,
     )

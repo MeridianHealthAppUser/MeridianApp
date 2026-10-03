@@ -22,8 +22,26 @@ def request_ip_address(request):
     return request.META.get('REMOTE_ADDR') or None
 
 
+# Reading rather than changing: views, downloads and exports. These are kept only when the
+# practice turns on "Store view log on database", and are never shown in the app.
+ACCESS_ACTIONS = frozenset({
+    'patient.record_viewed', 'patient.clinical_record_viewed', 'patient.clinical_record_exported',
+    'message.thread_viewed', 'lab_result.downloaded', 'compounding.summary_viewed', 'follow_up.viewed',
+    'lead.viewed', 'privacy.request_viewed', 'activity_statement.exported', 'dispatch.history_exported',
+    'metrics.exported', 'stock.exported',
+})
+
+
+def view_log_enabled(company):
+    from .models import PracticeSettings
+
+    return bool(PracticeSettings.objects.filter(company=company).values_list('store_view_log', flat=True).first())
+
+
 def record_audit(*, company, actor, action, target=None, patient=None, request=None, metadata=None):
     """Log a non-sensitive operational event without serialising clinical content."""
+    if action in ACCESS_ACTIONS and not view_log_enabled(company):
+        return None
     return AuditEvent.objects.create(
         company=company,
         actor=actor if getattr(actor, 'is_authenticated', False) else None,
@@ -45,7 +63,8 @@ def post_patient_message(*, thread, sender, body, request=None):
         sender.is_active and thread.patient.is_active and thread.company.is_active
         and thread.patient.user_id == sender.pk
     )
-    if not owns_record and not _has_staff_access(sender, thread.company_id):
+    # Staff write only in conversations they take part in; there is no practice-wide access.
+    if not owns_record and not (_has_staff_access(sender, thread.company_id) and thread.participant_links.filter(user=sender).exists()):
         raise PermissionDenied('You do not have access to this conversation.')
     if thread.is_closed:
         raise ValidationError('This conversation is closed. Please start a new one.')

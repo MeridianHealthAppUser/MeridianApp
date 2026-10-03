@@ -10,6 +10,7 @@ from django.test import Client, TestCase
 from django.urls import reverse
 from django.utils import timezone
 
+from care.messaging import add_participant
 from care.models import Appointment, AppointmentProposal, MessageThread
 from practices.models import Company, CompanyMembership, Patient
 from practices.services import ACTIVE_COMPANY_SESSION_KEY, ACTIVE_PATIENT_COMPANY_SESSION_KEY
@@ -79,6 +80,8 @@ class AppointmentProposalPortalTests(TestCase):
             company=cls.company, patient=cls.other_patient,
             subject='Another patient arrangements', opened_by=cls.other_patient_user,
         )
+        for thread in (cls.thread, cls.other_practice_thread, cls.other_patient_thread):
+            add_participant(thread, cls.doctor)
         cls.original_start = (timezone.now() + timedelta(days=7)).replace(hour=8, minute=0, second=0, microsecond=0)
         cls.proposed_start = (cls.original_start + timedelta(days=1)).replace(hour=11)
         cls.appointment = Appointment.objects.create(
@@ -246,14 +249,14 @@ class AppointmentProposalPortalTests(TestCase):
         self.login(self.patient_user)
         self.assertEqual(self.client.post(self.respond_url(proposal), {'decision': 'withdraw'}).status_code, 403)
         self.login(self.second_doctor)
-        self.assertEqual(self.client.post(self.respond_url(proposal, 'staff'), {'decision': 'accept'}).status_code, 403)
+        self.assertEqual(self.client.post(self.respond_url(proposal, 'staff'), {'decision': 'accept'}).status_code, 404)
         self.login(self.doctor)
         self.assertEqual(self.client.post(self.respond_url(proposal, 'staff'), {'decision': 'withdraw'}).status_code, 302)
         proposal.refresh_from_db()
         self.assertEqual(proposal.status, 'withdrawn')
         self.assert_original_booking()
 
-    def test_practice_administrators_can_read_but_cannot_propose_or_respond(self):
+    def test_administrators_cannot_reach_the_conversation_or_its_proposals(self):
         proposal = self.make_proposal()
         for user in (self.administrator, self.super_admin):
             with self.subTest(user=user.email):
@@ -261,13 +264,19 @@ class AppointmentProposalPortalTests(TestCase):
                 self.assertEqual(self.client.get(reverse('portal:patient-detail', args=[self.patient.pk])).status_code, 200)
                 self.assertEqual(self.client.post(self.propose_url(), {
                     'appointment': self.appointment.pk, 'proposed_starts_at': self.proposed_start.isoformat(),
-                }).status_code, 403)
-                self.assertEqual(self.client.post(self.respond_url(proposal, 'staff'), {'decision': 'accept'}).status_code, 403)
+                }).status_code, 404)
+                self.assertEqual(self.client.post(self.respond_url(proposal, 'staff'), {'decision': 'accept'}).status_code, 404)
         self.assertEqual(AppointmentProposal.objects.count(), 1)
         self.assert_original_booking()
 
     def test_non_clinician_cannot_propose_for_another_doctors_appointment(self):
         self.login(self.second_doctor)
+        # Outside the conversation the second doctor cannot reach it at all.
+        self.assertEqual(self.client.post(self.propose_url(), {
+            'appointment': self.appointment.pk, 'proposed_starts_at': self.proposed_start.isoformat(),
+        }).status_code, 404)
+        # Inside it, they still cannot propose for another clinician's appointment.
+        add_participant(self.thread, self.second_doctor)
         response = self.client.post(self.propose_url(), {
             'appointment': self.appointment.pk, 'proposed_starts_at': self.proposed_start.isoformat(),
             'note': 'Keep my draft, but reject the appointment selection.',

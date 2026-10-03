@@ -10,6 +10,7 @@ from django.utils import timezone
 
 from practices.models import Company, CompanyMembership, Patient
 
+from .messaging import add_participant
 from .models import Appointment, AppointmentProposal, AuditEvent, AvailabilitySlot, MessageThread, PatientEvent, PatientMessage
 from .scheduling import propose_appointment_time, respond_to_appointment_proposal
 
@@ -45,6 +46,8 @@ class AppointmentProposalTests(TestCase):
         cls.other_thread = MessageThread.objects.create(
             company=cls.other_company, patient=cls.other_patient, opened_by=cls.other_user, subject='Other time',
         )
+        add_participant(cls.thread, cls.doctor)
+        add_participant(cls.other_thread, cls.doctor)
 
     def setUp(self):
         self.original_time = timezone.now().replace(microsecond=0) + timedelta(days=3)

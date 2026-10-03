@@ -1,19 +1,14 @@
 {% extends 'portal/staff_page_base.html' %}
-{% load static %}
+{% load static workspace_ui %}
 
 {% block title %}{{ title|default:page_title }} | {{ company.name }} | Meridian{% endblock %}
 {% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/schedule_availability.css' %}">{% endblock %}
 
-{% block breadcrumb %}
-  <span>Schedule</span>
-  <span class="console-breadcrumb__dot" aria-hidden="true"></span>
-  <span>{{ company.name }}</span>
-{% endblock %}
 
+{% block breadcrumbs %}{% breadcrumbs page_title %}{% endblock %}
 {% block page_heading %}
   <header class="staff-page-header staff-schedule-page-header">
     <div>
-      <p class="console-kicker">Appointments</p>
       <h1>{{ page_title }}</h1>
       <p>Times shown in South Africa time (SAST).</p>
     </div>

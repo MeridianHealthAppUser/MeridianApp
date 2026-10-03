@@ -186,6 +186,19 @@
   color: #fff;
 }
 
+/* Section icons in the staff menu, matching the patient app's navigation icons. */
+.nav-icon { fill: none; flex: 0 0 auto; height: 1.1rem; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.7; width: 1.1rem; }
+.console-nav .console-nav__toggle .console-nav__label { align-items: center; display: inline-flex; gap: .55rem; }
+.console-nav .console-nav__toggle .console-nav__label .nav-icon { height: 1rem; width: 1rem; }
+.console-nav a.console-nav__top::before { display: none; }
+
+/* A menu section's own page: the options it holds, for the mobile bar. */
+.staff-menu-section ul { background: #fff; border: 1px solid var(--console-line); border-radius: .9rem; list-style: none; margin: 0; overflow: hidden; padding: 0; }
+.staff-menu-section li + li { border-top: 1px solid var(--console-soft-line); }
+.staff-menu-section a { align-items: center; color: var(--console-ink); display: flex; font-size: .95rem; font-weight: 650; justify-content: space-between; min-height: 3.25rem; padding: .8rem 1rem; text-decoration: none; }
+.staff-menu-section a:hover, .staff-menu-section a:focus-visible { background: var(--console-teal-soft); color: var(--console-teal-dark); }
+.staff-menu-section svg { color: var(--console-muted); fill: none; flex: 0 0 auto; height: 1rem; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 2; width: 1rem; }
+
 .console-sidebar__footer {
   border-top: 1px solid var(--console-soft-line);
   margin-top: auto;
@@ -636,6 +649,15 @@
 .console-form textarea:focus,
 .console-form select:focus { border-color: var(--console-teal); box-shadow: 0 0 0 3px rgba(7, 135, 127, .12); outline: none; }
 .console-form ul.errorlist { color: var(--console-red); font-size: .71rem; line-height: 1.35; list-style: none; margin: .05rem 0 0; padding: 0; }
+/* Standard tick box: the box comes first, then its text, and the whole line is clickable. */
+.console-check > label { align-items: flex-start; cursor: pointer; display: flex; gap: .6rem; line-height: 1.45; }
+.console-form .console-check input[type="checkbox"] { accent-color: var(--console-teal); flex: 0 0 auto; height: 1.05rem; margin: .1rem 0 0; padding: 0; width: 1.05rem; }
+.console-check > :is(.helptext, .errorlist) { margin-left: 1.65rem; }
+/* A lone checkbox sits beside its label instead of stretching to the field width. */
+.console-form__field:has(> input[type="checkbox"]) { align-items: center; display: flex; flex-wrap: wrap; gap: .3rem .6rem; }
+.console-form__field > input[type="checkbox"] { flex: 0 0 auto; height: 1.05rem; margin: 0; order: -1; padding: 0; width: 1.05rem; }
+.console-form__field:has(> input[type="checkbox"]) > label { flex: 1 1 0; line-height: 1.45; }
+.console-form__field:has(> input[type="checkbox"]) > :is(.errorlist, .helptext) { flex-basis: 100%; }
 .patient-event-list .console-list__item { grid-template-columns: auto minmax(0, 1fr); }
 
 /* Patient record */
@@ -857,6 +879,22 @@
 
 /* Staff inbox */
 .inbox-content { max-width: 112rem; }
+/* Patients and Team tabs on Messages. */
+.inbox-page-header:has(> .console-button) { align-items: flex-start; display: flex; flex-wrap: wrap; gap: 1rem; justify-content: space-between; }
+.messages-tabs { border-bottom: 1px solid var(--console-line); display: flex; gap: .3rem; margin: 0 0 1.2rem; }
+.messages-tabs a { border-bottom: 2px solid transparent; color: var(--console-muted); font-size: .86rem; font-weight: 700; margin-bottom: -1px; padding: .6rem .9rem; text-decoration: none; }
+.messages-tabs a:hover { color: var(--console-teal-dark); }
+.messages-tabs a.is-active { border-bottom-color: var(--console-teal); color: var(--console-teal-dark); }
+.messages-tabs__count { background: var(--console-teal); border-radius: 999px; color: #fff; display: inline-block; font-size: .68rem; line-height: 1.4; margin-left: .3rem; min-width: 1.3rem; padding: 0 .4rem; text-align: center; }
+.inbox-reply-form .helptext { color: var(--console-muted); font-size: .72rem; line-height: 1.4; }
+.team-members-field { border: 0; margin: 0; min-width: 0; padding: 0; }
+.team-members-field legend { color: var(--console-ink); font-size: .73rem; font-weight: 750; margin-bottom: .35rem; padding: 0; }
+.team-members-field > div { display: flex; flex-wrap: wrap; gap: .4rem; }
+.team-members-field label { align-items: center; border: 1px solid var(--console-line); border-radius: .6rem; cursor: pointer; display: inline-flex; font-size: .78rem; font-weight: 650; gap: .4rem; padding: .4rem .6rem; }
+.team-members-field input[type="checkbox"] { height: 1rem; margin: 0; padding: 0; width: 1rem; }
+.team-add-member > summary { list-style: none; }
+.team-add-member > summary::-webkit-details-marker { display: none; }
+.team-add-member .console-form { max-width: 22rem; }
 .inbox-page-header { margin-bottom: 1.3rem; }
 .inbox-page-header h1 {
   color: var(--console-ink);
@@ -1263,8 +1301,16 @@
 .mobile-bottom-nav a { color: #83989a; font-size: .62rem; font-weight: 750; padding: .22rem; text-align: center; text-decoration: none; }
 .mobile-bottom-nav a::before { background: currentColor; border-radius: 50%; content: ''; display: block; height: .31rem; margin: 0 auto .28rem; width: .31rem; }
 .mobile-bottom-nav a.is-active { color: var(--console-teal-dark); }
-.staff-mobile-nav { display: none; flex-wrap: nowrap; gap: .2rem; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-color: #a7ccc4 #f3f8f6; scrollbar-width: thin; }
-.staff-mobile-nav a { border-radius: .5rem; flex: 1 0 6.2rem; font-size: .75rem; min-height: 2.6rem; padding: .45rem .5rem; white-space: nowrap; }
+/* The mobile bar shows top-level sections only: icon above label, all visible without scrolling. */
+.staff-mobile-nav { display: none; flex-wrap: nowrap; gap: .15rem; }
+.staff-mobile-nav a { align-items: center; border-radius: .5rem; display: flex; flex: 1 1 0; flex-direction: column; font-size: .62rem; gap: .2rem; justify-content: center; letter-spacing: -.01em; min-height: 2.6rem; min-width: 0; padding: .35rem .05rem; white-space: nowrap; }
+.staff-mobile-nav a::before { display: none; }
+.staff-mobile-nav a > span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+.staff-mobile-nav .nav-icon { height: 1.2rem; width: 1.2rem; }
+@media (max-width: 24rem) {
+  .meridian-console .staff-mobile-nav { gap: 0; padding-left: .15rem; padding-right: .15rem; }
+  .staff-mobile-nav a { font-size: .58rem; }
+}
 .staff-mobile-nav a.is-active { background: var(--console-teal-soft); }
 .staff-mobile-nav a:focus-visible { outline: 2px solid var(--console-teal); outline-offset: -2px; }
 .console-mobile .staff-mobile-nav { display: flex; }
@@ -1514,3 +1560,18 @@
   .console-button, .console-nav a { transition: none; }
   .console-button:hover { transform: none; }
 }
+
+.event-log-sections { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fill, minmax(18rem, 1fr)); padding: 1.1rem 1.2rem .4rem; }
+.event-log-section { border: 1px solid var(--console-soft-line); border-radius: .75rem; margin: 0; min-width: 0; padding: .8rem .9rem .6rem; }
+.event-log-section legend { color: var(--console-ink); font-size: .8rem; font-weight: 750; padding: 0 .3rem; }
+.event-log-section ul { display: grid; gap: .45rem; list-style: none; margin: 0; padding: 0; }
+.event-log-item { align-items: flex-start; color: var(--console-ink); display: flex; font-size: .78rem; gap: .5rem; line-height: 1.4; }
+.event-log-item input { accent-color: var(--console-teal); flex: 0 0 auto; height: .95rem; margin: .1rem 0 0; width: .95rem; }
+.event-log-item > span:first-of-type { flex: 1 1 auto; }
+.event-log-badge { background: var(--console-teal-soft); border-radius: 999px; color: var(--console-teal-dark); flex: 0 0 auto; font-size: .64rem; font-weight: 750; padding: .05rem .45rem; }
+.event-log-note { color: var(--console-muted); font-size: .76rem; margin: 0; padding: .2rem 1.2rem 1rem; }
+.event-log-optional { border-top: 1px solid var(--console-soft-line); padding-top: 1rem; }
+.event-log-optional h3 { color: var(--console-ink); font-size: .85rem; margin: 0; }
+.practice-settings-form { max-width: 46rem; padding: 0 1.2rem 1.2rem; }
+.practice-settings-form .helptext { color: var(--console-muted); font-size: .76rem; line-height: 1.5; }
+.practice-settings-form > .console-button { justify-self: start; }

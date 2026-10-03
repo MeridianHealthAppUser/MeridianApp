@@ -1,9 +1,9 @@
 {% extends 'portal/staff_page_base.html' %}
-{% load static %}
+{% load static workspace_ui %}
 {% block title %}{{ page_title }} | Meridian{% endblock %}
 {% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/management.css' %}">{% endblock %}
-{% block breadcrumb %}<span>Setup</span><span class="console-breadcrumb__dot" aria-hidden="true"></span><span>{{ company.name }}</span>{% endblock %}
-{% block page_heading %}<header class="staff-page-header"><div><p class="console-kicker">Super Admin · Practice setup</p><h1>{{ page_title }}</h1><p>{{ description }}</p></div></header>{% endblock %}
+{% block breadcrumbs %}{% url 'portal:management-practices' as practices_url %}{% if cancel_url == practices_url %}{% breadcrumbs 'Practices' 'portal:management-practices' page_title %}{% else %}{% breadcrumbs 'Users and roles' 'portal:management-users' page_title %}{% endif %}{% endblock %}
+{% block page_heading %}<header class="staff-page-header"><div><h1>{{ page_title }}</h1><p>{{ description }}</p></div></header>{% endblock %}
 {% block page_content %}
   <section class="staff-page-card management-form-card">
     <form method="post" class="management-form" novalidate>
@@ -12,7 +12,7 @@
       {% for field in form %}
         {% if field.is_hidden %}{{ field }}{{ field.errors }}{% else %}
         <div class="management-field{% if field.name == 'is_active' %} management-field--check{% endif %}">
-          {{ field.label_tag }}{{ field }}
+          {% if field.widget_type == 'checkbox' %}<label for="{{ field.id_for_label }}">{{ field }}<span>{{ field.label }}</span></label>{% else %}{{ field.label_tag }}{{ field }}{% endif %}
           {% if field.help_text %}<div class="management-help" id="{{ field.auto_id }}_helptext">{{ field.help_text }}</div>{% endif %}
           {% if field.errors %}<div class="management-errors" role="alert">{{ field.errors }}</div>{% endif %}
         </div>

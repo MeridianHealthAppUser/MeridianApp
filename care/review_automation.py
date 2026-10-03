@@ -42,7 +42,7 @@ def refresh_review_tasks(*, company, actor, within_days=30, request=None):
             stats['existing'] += 1
             continue
         if not authorization.prescribed_by.is_active or not CompanyMembership.objects.filter(
-            company=company, user_id=authorization.prescribed_by_id, role=CompanyMembership.Role.DOCTOR, is_active=True,
+            company=company, user_id=authorization.prescribed_by_id, clinician_type__in=CompanyMembership.PRESCRIBER_TYPES, is_active=True,
         ).exists():
             stats['skipped_inactive_doctor'] += 1
             continue

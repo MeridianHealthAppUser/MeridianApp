@@ -1,5 +1,6 @@
-{% extends 'portal/staff_page_base.html' %}{% load static %}
+{% extends 'portal/staff_page_base.html' %}{% load static workspace_ui %}
 {% block title %}Treatment authorisation | Meridian{% endblock %}
 {% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/treatment.css' %}">{% endblock %}
-{% block page_heading %}<header class="staff-page-header"><div><p class="console-kicker">Clinical · Authorisation</p><h1>Treatment authorisation</h1><p>{{ patient }} · {{ company.name }}</p></div><a class="console-button console-button--secondary" href="{% url 'portal:treatment-authorisations' %}?patient={{ patient.pk }}">Authorisation history</a></header>{% endblock %}
+{% block breadcrumbs %}{% breadcrumbs 'Authorisations' 'portal:treatment-authorisations' 'Treatment authorisation' %}{% endblock %}
+{% block page_heading %}<header class="staff-page-header"><div><h1>Treatment authorisation</h1><p>{{ patient }} · {{ company.name }}</p></div><a class="console-button console-button--secondary" href="{% url 'portal:treatment-authorisations' %}?patient={{ patient.pk }}">Authorisation history</a></header>{% endblock %}
 {% block page_content %}{% include 'portal/includes/authorisation_detail_content.html' %}{% endblock %}

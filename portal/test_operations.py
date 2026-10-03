@@ -9,7 +9,7 @@ from django.contrib.auth import get_user_model
 from django.test import Client
 from django.urls import reverse
 
-from care.models import (AuditEvent, MedicationBatch, MedicationProduct, Payment, PharmacyOrder, Shipment,
+from care.models import (AuditEvent, MedicationBatch, MedicationProduct, Payment, PharmacyOrder, PracticeSettings, Shipment,
                          StockMovement)
 from care.operations import dispatch_shipment
 from care.pharmacy import set_basket_quantity, submit_basket
@@ -245,6 +245,7 @@ class OperationsPortalTests(OperationsPortalFixture):
         self.receive(batch_number='  =1+1')
         self.receive(company=self.beta, actor=self.beta_admin, product=self.beta_product, batch_number='FOREIGN-SECRET')
         url = reverse('portal:ops-stock-export')
+        PracticeSettings.objects.update_or_create(company=self.company, defaults={'store_view_log': True})
         count = AuditEvent.objects.count()
         head = self.client.head(url)
         self.assertEqual(head.content, b'')

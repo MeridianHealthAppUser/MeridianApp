@@ -1,0 +1,155 @@
+{% extends 'base.html' %}
+{% load static workspace_ui %}
+
+{% block title %}Team messages | {{ company.name }} | Meridian{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{% static 'css/console.css' %}">{% endblock %}
+{% block content %}
+  <div class="meridian-console console-desktop inbox-console">
+    <div class="console-shell">
+      <aside class="console-sidebar" aria-label="Practice navigation">
+        {# Only shown when the app runs more than one practice. #}{% if multi_practice_enabled %}
+        <div class="console-sidebar__practice">
+          <span class="console-practice-mark" aria-hidden="true">M</span>
+          <div>
+            <p>Active practice</p>
+            <strong>{{ company.name }}</strong>
+          </div>
+        </div>
+        {% endif %}
+
+        {% include 'portal/includes/staff_navigation.html' with nav_section='messages' %}
+
+      </aside>
+
+      <div class="console-main">
+
+        <main class="console-content inbox-content">
+          {% breadcrumbs 'Messages' 'portal:staff-inbox' 'Team' %}
+          <header class="inbox-page-header">
+            <div>
+              <h1>Messages</h1>
+              <p>Conversations with colleagues at {{ company.name }}. Only the people in a conversation can read it, and patients never see team conversations.</p>
+            </div>
+            <a class="console-button console-button--primary" href="{% url 'portal:team-inbox' %}?compose=1#team-conversation">New team message</a>
+          </header>
+          {% include 'portal/includes/messages_tabs.html' with messages_tab='team' %}
+
+          <section class="inbox-workspace" aria-label="Team message workspace">
+            <aside class="inbox-thread-pane" aria-labelledby="team-thread-list-heading">
+              <div class="inbox-thread-pane__header">
+                <h2 id="team-thread-list-heading">Team conversations</h2>
+                <span>{{ page_obj.paginator.count }}</span>
+              </div>
+
+              <ol class="inbox-thread-list">
+                {% for thread in threads %}
+                  <li class="inbox-thread-list__item{% if selected_thread and selected_thread.pk == thread.pk %} is-selected{% endif %}">
+                    <a class="inbox-thread"{% if selected_thread and selected_thread.pk == thread.pk %} aria-current="page"{% endif %} href="{% url 'portal:team-inbox' %}?page={{ page_obj.number }}&amp;thread={{ thread.pk }}#team-conversation">
+                      <span class="console-patient-avatar" aria-hidden="true">{{ thread.members.count }}</span>
+                      <span class="inbox-thread__copy">
+                        <strong>{{ thread.subject }}</strong>
+                        <span>{% for member in thread.members.all %}{% if member.pk == user.pk %}You{% else %}{{ member.full_name }}{% endif %}{% if not forloop.last %}, {% endif %}{% endfor %}</span>
+                        {% if thread.patient %}<small>About {{ thread.patient }}</small>{% endif %}
+                        <span class="inbox-thread__meta">
+                          {% if thread.last_message_at %}<time datetime="{{ thread.last_message_at|date:'c' }}">{{ thread.last_message_at|timesince }} ago</time>{% endif %}
+                          {% if thread.unread_count %}<span class="inbox-thread__unread">{{ thread.unread_count }} unread</span>{% endif %}
+                        </span>
+                      </span>
+                    </a>
+                  </li>
+                {% empty %}
+                  <li class="inbox-thread-list__empty">No team conversations yet.</li>
+                {% endfor %}
+              </ol>
+
+              {% if is_paginated %}
+                <nav class="inbox-pagination" aria-label="Conversation pages">
+                  {% if page_obj.has_previous %}<a class="console-button console-button--quiet" href="{% url 'portal:team-inbox' %}?page={{ page_obj.previous_page_number }}">Previous</a>{% endif %}
+                  <span>Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+                  {% if page_obj.has_next %}<a class="console-button console-button--quiet" href="{% url 'portal:team-inbox' %}?page={{ page_obj.next_page_number }}">Next</a>{% endif %}
+                </nav>
+              {% endif %}
+            </aside>
+
+            <section class="inbox-conversation" id="team-conversation" aria-live="polite">
+              {% if composing %}
+                <header class="inbox-conversation__header">
+                  <div><h2>New team message</h2><p class="inbox-conversation__people">Only the colleagues you choose can read it.</p></div>
+                </header>
+                <form class="console-form inbox-reply-form" method="post" action="{% url 'portal:team-thread-create' %}">
+                  {% csrf_token %}
+                  {{ thread_form.non_field_errors }}
+                  <fieldset class="console-form__field team-members-field">
+                    <legend>{{ thread_form.members.label }}</legend>
+                    {{ thread_form.members }}
+                    {{ thread_form.members.errors }}
+                  </fieldset>
+                  {% for field in thread_form %}{% if field.name != 'members' %}
+                    <div class="console-form__field"><label for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}{% if field.help_text %}<span class="helptext">{{ field.help_text }}</span>{% endif %}{{ field.errors }}</div>
+                  {% endif %}{% endfor %}
+                  <div class="inbox-reply-form__footer">
+                    <a class="console-button console-button--secondary" href="{% url 'portal:team-inbox' %}">Cancel</a>
+                    <button class="console-button console-button--primary" type="submit">Send</button>
+                  </div>
+                </form>
+              {% elif selected_thread %}
+                <header class="inbox-conversation__header">
+                  <div class="inbox-conversation__identity">
+                    <span class="console-patient-avatar" aria-hidden="true">{{ selected_thread.member_rows|length }}</span>
+                    <div>
+                      {% if selected_thread.patient %}<p>About <a class="record-text-link" href="{% url 'portal:patient-detail' selected_thread.patient_id %}">{{ selected_thread.patient }}</a></p>{% endif %}
+                      <h2>{{ selected_thread.subject }}</h2>
+                      <p class="inbox-conversation__people">In this conversation: {% for row in selected_thread.member_rows %}{% if row.user_id == user.pk %}you{% else %}{{ row.user.full_name }}{% endif %}{% if not forloop.last %}, {% endif %}{% endfor %}{% for row in selected_thread.member_rows %}{% if row.added_by %} · {{ row.added_by.full_name }} added {{ row.user.full_name }} {{ row.created_at|date:'j M' }}{% endif %}{% endfor %}</p>
+                    </div>
+                  </div>
+                  {% if member_form.fields.user.queryset.exists %}
+                    <details class="team-add-member"{% if member_form.errors %} open{% endif %}>
+                      <summary class="console-button console-button--quiet">Add a colleague</summary>
+                      <form class="console-form" method="post" action="{% url 'portal:team-member-add' selected_thread.pk %}">
+                        {% csrf_token %}{{ member_form.non_field_errors }}
+                        <div class="console-form__field"><label for="{{ member_form.user.id_for_label }}">{{ member_form.user.label }}</label>{{ member_form.user }}<span class="helptext">They can read this whole conversation and reply.</span>{{ member_form.user.errors }}</div>
+                        <button class="console-button console-button--primary" type="submit">Add</button>
+                      </form>
+                    </details>
+                  {% endif %}
+                </header>
+
+                <ol class="inbox-message-list" aria-label="Messages in {{ selected_thread.subject }}">
+                  {% for message in selected_thread.conversation_messages %}
+                    <li class="inbox-message{% if message.sender_id == user.pk %} inbox-message--staff{% else %} inbox-message--patient{% endif %}">
+                      <div class="inbox-message__meta">
+                        <strong>{% if message.sender_id == user.pk %}You{% elif message.sender %}{{ message.sender.full_name }}{% else %}Former colleague{% endif %}</strong>
+                        <time datetime="{{ message.created_at|date:'c' }}">{{ message.created_at|date:"j M Y, H:i" }}</time>
+                      </div>
+                      <p>{{ message.body|linebreaksbr }}</p>
+                    </li>
+                  {% endfor %}
+                </ol>
+
+                <form class="console-form inbox-reply-form" method="post" action="{% url 'portal:team-message-create' selected_thread.pk %}">
+                  {% csrf_token %}
+                  {{ message_form.non_field_errors }}
+                  <div class="console-form__field">
+                    <label for="{{ message_form.body.id_for_label }}">{{ message_form.body.label }}</label>
+                    {{ message_form.body }}
+                    {{ message_form.body.errors }}
+                  </div>
+                  <div class="inbox-reply-form__footer">
+                    <p>Only the people in this conversation see replies. The patient never does.</p>
+                    <button class="console-button console-button--primary" type="submit">Send reply</button>
+                  </div>
+                </form>
+              {% else %}
+                <div class="inbox-conversation__empty">
+                  <h2>Choose a team conversation</h2>
+                  <p>Select a conversation to read it, or start a new team message.</p>
+                </div>
+              {% endif %}
+            </section>
+          </section>
+        </main>
+      </div>
+    </div>
+    {% include 'portal/includes/staff_mobile_navigation.html' with nav_section='messages' %}
+  </div>
+{% endblock %}

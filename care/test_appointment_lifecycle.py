@@ -16,6 +16,7 @@ from practices.models import Company, CompanyMembership, Patient
 
 from .appointment_lifecycle import book_staff_appointment, change_appointment_status
 from .clinical import save_consultation
+from .messaging import add_participant
 from .models import Appointment, AuditEvent, AvailabilitySlot, ClinicalNote, MessageThread, PatientEvent
 from .scheduling import propose_appointment_time, respond_to_appointment_proposal
 
@@ -50,6 +51,8 @@ class AppointmentLifecycleFixture(TestCase):
             opened_by=cls.patient_user, subject='Appointment discussion')
         cls.beta_thread = MessageThread.objects.create(company=cls.beta, patient=cls.beta_patient,
             opened_by=cls.patient_user, subject='Other practice discussion')
+        add_participant(cls.thread, cls.doctor)
+        add_participant(cls.beta_thread, cls.doctor)
 
     def setUp(self):
         self.starts_at = timezone.now().replace(microsecond=0) + timedelta(days=3)

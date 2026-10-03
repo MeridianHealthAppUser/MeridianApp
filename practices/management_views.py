@@ -102,7 +102,8 @@ class ManagementUserCreateView(ManagementView):
             data = form.cleaned_data
             try:
                 add_staff_user(actor=request.user, source_company=self.company, companies=data['practices'],
-                    mode=data['mode'], email=data['email'], role=data['role'], first_name=data.get('first_name', ''),
+                    mode=data['mode'], email=data['email'], role=data['role'], clinician_type=data['clinician_type'],
+                    first_name=data.get('first_name', ''),
                     last_name=data.get('last_name', ''), password=data.get('password1', ''), request=request)
             except (ValidationError, IntegrityError) as exc:
                 self.add_service_error(form, exc)
@@ -124,7 +125,7 @@ class ManagementMembershipEditView(ManagementView):
 
     def get(self, request, pk):
         record = self.get_record(pk)
-        return self.show(request, MembershipForm(initial={'role': record.role, 'is_active': record.is_active}), record)
+        return self.show(request, MembershipForm(initial={'role': record.role, 'clinician_type': record.clinician_type, 'is_active': record.is_active}), record)
 
     def post(self, request, pk):
         record = self.get_record(pk)
@@ -138,7 +139,8 @@ class ManagementMembershipEditView(ManagementView):
         if valid:
             try:
                 updated = update_membership(actor=request.user, company=self.company, membership=record,
-                    role=form.cleaned_data['role'], is_active=form.cleaned_data['is_active'],
+                    role=form.cleaned_data['role'], clinician_type=form.cleaned_data['clinician_type'],
+                    is_active=form.cleaned_data['is_active'],
                     expected_updated_at=token['updated_at'], request=request)
             except (ValidationError, IntegrityError) as exc:
                 self.add_service_error(form, exc)

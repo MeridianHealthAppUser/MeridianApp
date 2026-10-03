@@ -2,10 +2,10 @@
 {% load static workspace_ui %}
 {% block patient_extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/patient_care.css' %}?v=20261001">{% endblock %}
 
+{% block patient_breadcrumbs %}{% breadcrumbs 'Weight history' %}{% endblock %}
 {% block patient_heading %}
   <header class="patient-page-heading">
     <div>
-      <p class="console-kicker"><a class="patient-inline-link" href="{% url 'portal:patient-dashboard' %}">Home</a> · Weight history</p>
       <h1>Your weight history</h1>
       <p>Every check-in you have recorded with {{ patient_company.name }}, with a date range for the chart and the list below.</p>
     </div>
@@ -37,7 +37,7 @@
     <div class="console-card__body">
       <form method="get" action="{% url 'portal:patient-progress' %}" class="console-form patient-care-filters">
         {{ weight_filter_form.non_field_errors }}
-        {% for field in weight_filter_form %}<div class="console-form__field"><label for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}{{ field.errors }}</div>{% endfor %}
+        {% for field in weight_filter_form %}{% include 'portal/includes/form_field.html' %}{% endfor %}
         <button class="console-button console-button--secondary" type="submit">View range</button><a class="patient-inline-link" href="{% url 'portal:patient-progress' %}">All dates</a>
       </form>
       {% if weight_chart %}

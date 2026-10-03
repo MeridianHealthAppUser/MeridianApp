@@ -104,3 +104,18 @@
 @media (prefers-reduced-motion:reduce) {
   .workspace-page .meridian-console *, .workspace-page .meridian-console *::before, .workspace-page .meridian-console *::after { scroll-behavior:auto; transition:none; }
 }
+/* Page loader: the header and navigation stay put while the content area waits for the next page. */
+.is-page-loading { min-height:18rem; position:relative; }
+.workspace-page-loader { animation:workspace-page-loader-in .18s ease; -webkit-backdrop-filter:blur(2px); backdrop-filter:blur(2px); background:rgba(244,248,247,.76); inset:0; position:absolute; z-index:5; }
+.workspace-page-loader__inner { display:flex; justify-content:center; margin-top:6rem; position:sticky; top:calc(45vh - 32px); }
+.workspace-page-loader__spinner { display:block; height:64px; overflow:visible; width:64px; }
+.workspace-page-loader__spinner g { animation:workspace-page-spin 1.3s cubic-bezier(.45,.05,.55,.95) infinite; transform-origin:32px 32px; }
+/* Same speed; the outer arcs trail the inner one slightly. */
+.workspace-page-loader__spinner g:nth-child(2) { animation-delay:.07s; }
+.workspace-page-loader__spinner g:nth-child(3) { animation-delay:.14s; }
+.workspace-page-loader__label { clip:rect(0 0 0 0); height:1px; overflow:hidden; position:absolute; white-space:nowrap; width:1px; }
+@keyframes workspace-page-spin { to { transform:rotate(-360deg); } } /* anticlockwise */
+@keyframes workspace-page-loader-in { from { opacity:0; } }
+@media (prefers-reduced-motion:reduce) {
+  .workspace-page-loader__spinner g { animation-duration:2.4s; animation-timing-function:linear; }
+}

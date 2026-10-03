@@ -1,13 +1,14 @@
-{% extends 'portal/staff_page_base.html' %}{% load static l10n %}
+{% extends 'portal/staff_page_base.html' %}{% load static l10n workspace_ui %}
 {% block title %}Metrics and cohorts | Meridian{% endblock %}
 {% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/reporting_dashboard.css' %}">{% endblock %}
-{% block page_heading %}<header class="staff-page-header"><div><p class="console-kicker">Insight · Metrics and cohorts</p><h1>Your practice, in perspective</h1><p>A clear view of patient activity, care delivery and recorded progress.</p></div></header>{% endblock %}
+{% block breadcrumbs %}{% breadcrumbs 'Metrics and cohorts' %}{% endblock %}
+{% block page_heading %}<header class="staff-page-header"><div><h1>Metrics and cohorts</h1><p>A clear view of patient activity, care delivery and recorded progress.</p></div></header>{% endblock %}
 {% block page_content %}
 <div class="metrics-dashboard">
   <section class="metrics-panel metrics-filters" aria-label="Report filters"><form method="get" class="console-form" novalidate>
     {% if form.non_field_errors %}<div class="metrics-errors" role="alert">{{ form.non_field_errors }}</div>{% endif %}
     <div class="metrics-filter-row">{% for field in form %}{% if field.is_hidden %}{{ field }}{{ field.errors }}{% else %}<div class="console-form__field"><label for="{{ field.id_for_label }}">{% if field.name == 'scope' %}Practices{% else %}{{ field.label }} date{% endif %}</label>{{ field }}{% if field.errors %}<div class="metrics-errors" role="alert">{{ field.errors }}</div>{% endif %}</div>{% endif %}{% endfor %}
-      <div class="metrics-filter-actions"><button class="console-button console-button--primary" type="submit">Update report</button>{% if metrics %}<a class="console-button console-button--secondary" href="{% url 'portal:metrics-export' %}?start={{ start|date:'Y-m-d' }}&amp;end={{ end|date:'Y-m-d' }}&amp;scope={{ scope }}">Export CSV <span aria-hidden="true">↗</span></a>{% endif %}</div>
+      <div class="metrics-filter-actions"><button class="console-button console-button--primary" type="submit">Update report</button>{% if metrics %}<a class="console-button console-button--secondary" data-no-loader href="{% url 'portal:metrics-export' %}?start={{ start|date:'Y-m-d' }}&amp;end={{ end|date:'Y-m-d' }}&amp;scope={{ scope }}">Export CSV <span aria-hidden="true">↗</span></a>{% endif %}</div>
     </div>
   </form></section>
   {% if metrics %}
