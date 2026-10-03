@@ -52,6 +52,16 @@
   </svg>`;
   let showTimer;
   let giveUpTimer;
+  // WebKit (Safari, and every browser on iPhone and iPad) stops painting as soon as the next page
+  // starts loading, so a loader added after that is never seen. There it shows at once, and the
+  // page leaves only after it has been painted (one frame, about 16ms later).
+  const ua = navigator.userAgent;
+  const PAINT_FIRST = /iP(hone|ad|od)/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
+    || (/AppleWebKit/.test(ua) && !/(Chrome|Chromium|Edg|OPR|Android)/.test(ua));
+
+  function afterPaint(callback) {
+    requestAnimationFrame(() => requestAnimationFrame(callback));
+  }
 
   function contentRegion() {
     return document.querySelector('.console-content, .patient-console__content, .mobile-console__content');
@@ -95,15 +105,23 @@
     return !(samePage && (url.hash || link.getAttribute('href').includes('#')));
   }
 
-  document.addEventListener('click', (event) => {
+  // Listen on window: it hears clicks and submits last, after any other handler could cancel them.
+  window.addEventListener('click', (event) => {
     if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
     const link = event.target.closest && event.target.closest('a[href]');
     if (!link || link.closest('[data-no-loader]') || link.hasAttribute('download')) return;
     if ((link.target && link.target !== '_self') || !opensAnotherPage(link)) return;
+    if (PAINT_FIRST) {
+      event.preventDefault();
+      showLoader();
+      afterPaint(() => window.location.assign(link.href));
+      return;
+    }
     queueLoader(event);
   });
 
-  document.addEventListener('submit', (event) => {
+  window.addEventListener('submit', (event) => {
+    if (event.defaultPrevented) return;
     const form = event.target;
     const submitter = event.submitter;
     // Read attributes: a field named "target" or "method" shadows the form property.
@@ -111,6 +129,29 @@
     const method = (submitter && submitter.getAttribute('formmethod')) || form.getAttribute('method') || '';
     if (method.toLowerCase() === 'dialog' || (target && target !== '_self')) return;
     if (form.closest('[data-no-loader]') || (submitter && submitter.closest('[data-no-loader]'))) return;
+    if (PAINT_FIRST) {
+      // The second pass is our own resubmission once the loader has been painted.
+      if (form.dataset.loaderPainted) { delete form.dataset.loaderPainted; return; }
+      event.preventDefault();
+      showLoader();
+      afterPaint(() => {
+        form.dataset.loaderPainted = '1';
+        if (typeof form.requestSubmit === 'function') {
+          form.requestSubmit(submitter && submitter.form === form ? submitter : undefined);
+          return;
+        }
+        // Older Safari: keep the clicked button's name and value, which submit() would drop.
+        if (submitter && submitter.name) {
+          const field = document.createElement('input');
+          field.type = 'hidden';
+          field.name = submitter.name;
+          field.value = submitter.value;
+          form.appendChild(field);
+        }
+        HTMLFormElement.prototype.submit.call(form);
+      });
+      return;
+    }
     queueLoader(event);
   });
 
