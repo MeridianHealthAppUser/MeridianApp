@@ -44,12 +44,16 @@
 (() => {
   const SHOW_AFTER_MS = 150;
   const GIVE_UP_AFTER_MS = 15000;
-  // The three arcs and dots of the Meridian mark.
-  const SPINNER = `<svg class="workspace-page-loader__spinner" viewBox="0 0 64 64" aria-hidden="true" focusable="false">
-    <g><path d="M45.16 36.79 A14 14 0 0 0 32 18" fill="none" stroke="#48c1c9" stroke-width="3" stroke-linecap="round"/><circle cx="26.05" cy="19.33" r="2.4" fill="#48c1c9"/></g>
-    <g><path d="M50.79 38.84 A20 20 0 0 0 32 12" fill="none" stroke="#1599de" stroke-width="2.2" stroke-linecap="round"/><circle cx="26.65" cy="12.73" r="2.1" fill="#1599de"/></g>
-    <g><path d="M56.43 40.89 A26 26 0 0 0 32 6" fill="none" stroke="#29698b" stroke-width="1.5" stroke-linecap="round"/><circle cx="27.27" cy="6.43" r="1.8" fill="#29698b"/></g>
-  </svg>`;
+  // The three arcs and dots of the Meridian mark. Each arc is its own element so it can turn as a
+  // whole: Safari keeps such rotations running on the graphics layer after it stops drawing the page.
+  const ARCS = [
+    ['M45.16 36.79 A14 14 0 0 0 32 18', '#48c1c9', 3, 26.05, 19.33, 2.4],
+    ['M50.79 38.84 A20 20 0 0 0 32 12', '#1599de', 2.2, 26.65, 12.73, 2.1],
+    ['M56.43 40.89 A26 26 0 0 0 32 6', '#29698b', 1.5, 27.27, 6.43, 1.8],
+  ];
+  const SPINNER = `<span class="workspace-page-loader__spinner" aria-hidden="true">${ARCS.map(([path, colour, width, cx, cy, r]) => (
+    `<span class="workspace-page-loader__arc"><svg viewBox="0 0 64 64" focusable="false"><path d="${path}" fill="none" stroke="${colour}" stroke-width="${width}" stroke-linecap="round"/><circle cx="${cx}" cy="${cy}" r="${r}" fill="${colour}"/></svg></span>`
+  )).join('')}</span>`;
   let showTimer;
   let giveUpTimer;
   // WebKit (Safari, and every browser on iPhone and iPad) stops painting as soon as the next page
@@ -71,7 +75,8 @@
     const region = contentRegion();
     if (!region || region.classList.contains('is-page-loading')) return;
     const loader = document.createElement('div');
-    loader.className = 'workspace-page-loader';
+    // Where the page stops drawing (WebKit), a fade-in would freeze at its first, transparent frame.
+    loader.className = PAINT_FIRST ? 'workspace-page-loader workspace-page-loader--instant' : 'workspace-page-loader';
     loader.setAttribute('role', 'status');
     loader.innerHTML = `<div class="workspace-page-loader__inner">${SPINNER}<span class="workspace-page-loader__label">Loading</span></div>`;
     region.classList.add('is-page-loading');
