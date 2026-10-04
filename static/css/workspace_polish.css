@@ -113,12 +113,14 @@
 /* Each arc turns as a whole element, so Safari keeps it spinning on the graphics layer even after it
    stops drawing the page because the next one is loading. Same speed; outer arcs trail slightly. */
 .workspace-page-loader__arc { animation:workspace-page-spin 1.3s cubic-bezier(.45,.05,.55,.95) infinite; display:block; inset:0; position:absolute; will-change:transform; }
-.workspace-page-loader__arc:nth-child(2) { animation-delay:.07s; }
-.workspace-page-loader__arc:nth-child(3) { animation-delay:.14s; }
+/* The outer arcs trail by .07s and .14s. They start already that far into the 1.3s turn rather than
+   waiting: Safari never starts an animation that is still waiting once the next page is loading. */
+.workspace-page-loader__arc:nth-child(2) { animation-delay:-1.23s; }
+.workspace-page-loader__arc:nth-child(3) { animation-delay:-1.16s; }
 .workspace-page-loader__arc svg { display:block; height:100%; overflow:visible; width:100%; }
 .workspace-page-loader__label { clip:rect(0 0 0 0); height:1px; overflow:hidden; position:absolute; white-space:nowrap; width:1px; }
 @keyframes workspace-page-spin { to { transform:rotate(-360deg); } } /* anticlockwise */
 @keyframes workspace-page-loader-in { from { opacity:0; } }
 @media (prefers-reduced-motion:reduce) {
-  .workspace-page-loader__arc { animation-duration:2.4s; animation-timing-function:linear; }
+  .workspace-page-loader__arc, .workspace-page-loader__arc:nth-child(n) { animation-delay:0s; animation-duration:2.4s; animation-timing-function:linear; }
 }
