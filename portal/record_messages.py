@@ -16,7 +16,7 @@ from care.models import PatientMessage
 from care.services import record_audit
 
 from .inbox import _inbox_threads, latest_from, search_text, search_threads
-from .people_tags import people_tags, staff_kinds
+from .people_tags import in_join_order, people_tags, staff_kinds
 from .record_access import can_change_record, can_view_record
 
 
@@ -32,7 +32,7 @@ def new_thread_subject(actor, membership):
 def record_messages_context(request, company, membership, patient, *, selected_id=None, list_only=False, **overrides):
     from .patient_workspace import workspace_url
 
-    conversations = _inbox_threads(company, request.user).filter(patient=patient).prefetch_related('participants')
+    conversations = _inbox_threads(company, request.user).filter(patient=patient).prefetch_related(in_join_order('participants'))
     has_threads = conversations.exists()
     # A search narrows the list; the open conversation stays open even when it doesn't match.
     search = search_text(request.GET.get('q'))

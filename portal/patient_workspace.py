@@ -28,6 +28,7 @@ from practices.models import CompanyMembership, Patient
 from .clinical_tasks import attach_clinical_task_links
 from .filter_menus import choice_section, filter_menu
 from .patient_assignment_views import AssignedDoctorForm
+from .people_tags import in_join_order
 from .record_access import require_record_view
 from .record_weight import record_weight_tab_context
 from .views import StaffCompanyRequiredMixin
@@ -172,7 +173,7 @@ def workspace_messages(request, company, membership, patient, **overrides):
     context = record_messages_context(request, company, membership, patient, **overrides)
     if raw is not None and not overrides.get('reply_thread_id') and context['record_thread'] is None:
         raise Http404
-    team = team_threads(company, request.user).filter(patient=patient).prefetch_related('members').order_by('-last_message_at', '-pk')[:10]
+    team = team_threads(company, request.user).filter(patient=patient).prefetch_related(in_join_order('members')).order_by('-last_message_at', '-pk')[:10]
     context['team_threads_about_patient'] = list(team)
     return context
 

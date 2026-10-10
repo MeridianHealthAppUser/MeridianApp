@@ -28,6 +28,7 @@ from video.access import attach_video_join
 
 from .inbox import latest_from, search_text, search_threads
 from .patient_context import make_patient_context, validate_patient_context
+from .people_tags import in_join_order
 from .video_links import safe_video_link
 from .views import PatientPortalRequiredMixin, PatientThreadCreateView, _attach_appointment_proposals
 
@@ -231,7 +232,7 @@ def patient_messages_context(request, company, patient, *, selected_thread_id=No
         unread_count=Count('messages', filter=(
             Q(messages__company=company, messages__read_at__isnull=True) & ~Q(messages__sender=request.user)
         )),
-    ).prefetch_related('participants').order_by('-last_activity', '-pk')
+    ).prefetch_related(in_join_order('participants')).order_by('-last_activity', '-pk')
     form, status = _filter(request, MessageFilterForm, 'all')
     filtered = all_threads
     if status in ('open', 'closed'):

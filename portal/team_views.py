@@ -25,7 +25,7 @@ from care.team_messaging import (
 from practices.models import CompanyMembership, Patient
 from .filter_menus import choice_section, filter_menu, one_ticked
 from .inbox import latest_from, message_tab_counts, search_text
-from .people_tags import people_tags, person_tag, staff_kinds
+from .people_tags import in_join_order, people_tags, person_tag, staff_kinds
 from .navigation import messages_title
 from .views import StaffCompanyRequiredMixin
 from .workflow_context import make_workflow_context, validate_workflow_context
@@ -116,7 +116,7 @@ def search_team_threads(threads, search):
 def team_inbox_context(request, company, membership, *, selected_id=None, **overrides):
     """Team messages: the conversations on the left and the one being read on the right, as on Patient messages."""
     latest = TeamMessage.objects.filter(thread=OuterRef('pk')).order_by('-created_at', '-pk')
-    threads = team_threads(company, request.user).select_related('patient').prefetch_related('members').annotate(
+    threads = team_threads(company, request.user).select_related('patient').prefetch_related(in_join_order('members')).annotate(
         latest_body=Subquery(latest.values('body')[:1]),
         latest_sender_id=Subquery(latest.values('sender_id')[:1]),
         latest_sender_first_name=Subquery(latest.values('sender__first_name')[:1]),

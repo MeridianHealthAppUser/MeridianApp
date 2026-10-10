@@ -143,12 +143,12 @@ def staff_inbox_url(thread=None, *, status=(), page=1, search='', patients=()):
 def staff_inbox_context(request, company, membership, *, selected_id=None, **overrides):
     """Patient messages: the conversations on the left and the one being read on the right, as on the record."""
     from .patient_workspace import workspace_url
-    from .people_tags import people_tags, staff_kinds
+    from .people_tags import in_join_order, people_tags, staff_kinds
     from .record_messages import open_conversation, read_state_url
 
     from .filter_menus import choice_section, filter_menu, one_ticked, ticked_ids
 
-    all_threads = _inbox_threads(company, request.user).prefetch_related('participants')
+    all_threads = _inbox_threads(company, request.user).prefetch_related(in_join_order('participants'))
     # Open or Closed, and which patients; a reply or suggestion that wasn't sent comes back to the same filters.
     status = one_ticked(request.POST.getlist('status') or request.GET.getlist('status'), STATUS_CHOICES)
     patients = ticked_ids(request.POST.getlist('patients') or request.GET.getlist('patients'))

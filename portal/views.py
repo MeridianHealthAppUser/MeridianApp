@@ -144,15 +144,15 @@ class StaffDashboardContextMixin(StaffCompanyRequiredMixin):
             patients=patients.select_related('assigned_doctor')[:8],
             upcoming_appointments=upcoming_appointments[:8],
             open_tasks=attach_clinical_task_links(list(open_tasks[:8]), self.request.user, self.membership),
-            recent_messages=self.tagged(recent_threads.prefetch_related('participants')[:6]),
+            recent_messages=self.tagged(recent_threads[:6]),
         )
         return context
 
     def tagged(self, threads):
         """Recent conversations with who's in them as tags: the patient, then anyone else besides you."""
-        from .people_tags import people_tags, staff_kinds
+        from .people_tags import in_join_order, people_tags, staff_kinds
 
-        threads = list(threads)
+        threads = list(threads.prefetch_related(in_join_order('participants')))
         kinds = staff_kinds(self.company, [person.pk for thread in threads for person in thread.participants.all()])
         for thread in threads:
             others = [person for person in thread.participants.all() if person.pk not in (self.request.user.pk, thread.patient.user_id)]
