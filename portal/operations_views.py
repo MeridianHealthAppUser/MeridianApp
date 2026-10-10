@@ -61,6 +61,7 @@ def _errors(request, form, error):
 
 @method_decorator(never_cache, name='dispatch')
 class OperationsView(LoginRequiredMixin, StaffCompanyRequiredMixin, View):
+    admin_only = True
     nav_section = ''
     page_title = ''
     http_method_names = ('get', 'post', 'head', 'options')

@@ -35,8 +35,8 @@
 .privacy-response-meta { display:flex; flex-wrap:wrap; gap:.5rem 1rem; align-items:center; }
 .privacy-response-meta time { color:var(--privacy-muted); font-size:.76rem; }
 .privacy-public { margin:0 auto; max-width:58rem; padding:2.5rem 1.25rem 4rem; }
-.privacy-public h1 { font-family:Georgia,serif; font-size:clamp(1.8rem,4vw,2.6rem); line-height:1.2; margin:.8rem 0; }
-.privacy-public h2 { font-family:Georgia,serif; font-size:1.65rem; margin:1.5rem 0 1rem; }
+.privacy-public h1 { font-family:inherit; font-weight:500; font-size:clamp(1.8rem,4vw,2.6rem); line-height:1.2; margin:.8rem 0; }
+.privacy-public h2 { font-family:inherit; font-weight:500; font-size:1.65rem; margin:1.5rem 0 1rem; }
 .privacy-public .privacy-filters { grid-template-columns:minmax(0,1fr) auto; }
 .privacy-public-button { background:#07877f; border:0; border-radius:.65rem; color:#fff; cursor:pointer; font:inherit; font-size:.85rem; font-weight:700; min-height:2.75rem; padding:.65rem 1rem; }
 .privacy-not-published { background:#fff8ec; border-color:#ecd3aa; }

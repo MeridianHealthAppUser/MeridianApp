@@ -1,6 +1,10 @@
 {% load static workspace_ui %}{% staff_menu as menu %}
-{# Mobile shows only the top-level sections; each opens a page listing its options. #}
+{# Clinicians see their flat menu; everyone else sees the top-level sections, each opening a page of its options. #}
 <nav class="mobile-bottom-nav staff-mobile-nav" aria-label="Mobile staff pages">
+  {% if menu.flat %}
+  {% for item in menu.flat %}<a{% if item.current %} class="is-active" aria-current="{{ item.current }}"{% endif %} href="{{ item.mobile_url }}" title="{{ item.label }}">{% include 'portal/includes/nav_icon.html' with name=item.key %}<span>{{ item.short_label }}</span>{% include 'portal/includes/nav_badge.html' with count=item.badge %}</a>{% endfor %}
+  {% else %}
   <a{% if nav_section == 'overview' %} class="is-active" aria-current="page"{% endif %} href="{% url 'portal:mobile-dashboard' %}">{% include 'portal/includes/nav_icon.html' with name='overview' %}<span>Overview</span></a>
-  {% for section in menu %}<a{% if section.active %} class="is-active"{% if nav_section == 'section:'|add:section.key %} aria-current="page"{% else %} aria-current="true"{% endif %}{% endif %} href="{{ section.url }}" title="{{ section.label }}">{% include 'portal/includes/nav_icon.html' with name=section.key %}<span>{{ section.short_label }}</span></a>{% endfor %}
+  {% for section in menu.sections %}<a{% if section.active %} class="is-active"{% if nav_section == 'section:'|add:section.key %} aria-current="page"{% else %} aria-current="true"{% endif %}{% endif %} href="{{ section.url }}" title="{{ section.label }}">{% include 'portal/includes/nav_icon.html' with name=section.key %}<span>{{ section.short_label }}</span>{% include 'portal/includes/nav_badge.html' with count=section.badge %}</a>{% endfor %}
+  {% endif %}
 </nav>

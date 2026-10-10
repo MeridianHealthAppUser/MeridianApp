@@ -4,7 +4,6 @@
 .schedule-diary-stack .staff-schedule-table { min-width: 0; }
 .schedule-diary-stack .staff-schedule-table th { white-space: normal; }
 .schedule-diary-stack .staff-schedule-table__actions { min-width: 0; }
-.schedule-diary-stack .staff-row-link { white-space: normal; }
 .schedule-diary-stack > .staff-page-card, .schedule-availability-panels > .staff-page-card { margin-top: 1rem; }
 .schedule-panel-body { padding: 1rem 1.15rem; }
 .schedule-panel-description { color: #577276; font-size: .79rem; line-height: 1.6; margin: 0 0 .9rem; }
@@ -38,7 +37,7 @@
 .schedule-readonly-week dd { color: #577276; font-size: .75rem; line-height: 1.4; margin: 0; }
 .schedule-panel-subheading { border-top: 1px solid var(--console-line); color: var(--console-ink); font-size: .81rem; margin: 1.2rem 0 .4rem; padding-top: 1rem; }
 .schedule-time-off-list { display: grid; list-style: none; margin: 0; padding: 0; }
-.schedule-time-off-list li { border-bottom: 1px solid var(--console-soft-line); display: grid; gap: .55rem; padding: .8rem 0; }
+.schedule-time-off-list li { align-items: center; border-bottom: 1px solid var(--console-soft-line); display: flex; flex-wrap: wrap; gap: .55rem; justify-content: space-between; padding: .8rem 0; }
 .schedule-time-off-list li:last-child { border-bottom: 0; }
 .schedule-time-off-list strong { color: var(--console-ink); font-size: .78rem; }
 .schedule-time-off-dates { align-items: baseline; color: #577276; display: flex; flex-wrap: wrap; font-size: .73rem; gap: .25rem .4rem; line-height: 1.5; }
@@ -68,6 +67,140 @@
 .schedule-panel-pagination span { color: #657f82; font-size: .73rem; }
 .schedule-attention-card > .schedule-panel-pagination { padding-inline: 1.15rem; }
 
+/* Rev 3.10: bookings card with Day / Month views, day states, the clash banner and special days. */
+.schedule-bookings__header { align-items: center; border-bottom: 1px solid var(--console-soft-line); display: flex; flex-wrap: wrap; gap: .7rem 1rem; justify-content: space-between; padding: .9rem 1.15rem; }
+.schedule-bookings__nav { align-items: center; display: flex; gap: .45rem; min-width: 0; }
+.schedule-bookings__nav h2 { color: var(--console-ink); font-size: .98rem; letter-spacing: -.01em; margin: 0; }
+.schedule-step { align-items: center; background: #fff; border: 1px solid var(--console-line); border-radius: .55rem; color: var(--console-ink); display: inline-flex; flex: 0 0 auto; font-size: 1.15rem; height: 2.1rem; justify-content: center; line-height: 1; text-decoration: none; width: 2.1rem; }
+.schedule-step:hover, .schedule-step:focus-visible { background: var(--console-teal-soft); border-color: #a9d8cf; color: var(--console-teal-dark); outline: none; }
+.schedule-bookings__tools { align-items: center; display: flex; flex-wrap: wrap; gap: .7rem; }
+.schedule-bookings__count { color: var(--console-muted); font-size: .74rem; }
+.schedule-today { color: var(--console-teal-dark); font-size: .74rem; font-weight: 750; text-underline-offset: .15em; }
+/* Day view: Leave, special hours or not working fills a band across the card above the table, its words centred. */
+.schedule-day-state { align-items: center; border-bottom: 1px solid var(--console-line); display: flex; flex-wrap: wrap; font-size: .78rem; font-weight: 750; gap: .35rem; justify-content: center; line-height: 1.3; margin: 0; padding: .65rem 1.15rem; text-align: center; }
+.schedule-day-state--off { background: #fff3e6; border-color: #f5d3ae; color: #a14b0b; }
+.schedule-day-state--special { background: #edf6fc; border-color: #c9e2f3; color: #1072aa; font-variant-numeric: tabular-nums; }
+.schedule-day-state--not-working { background: var(--console-canvas); color: #5b7175; }
+.schedule-pill { align-items: center; background: #f3f6f6; border: 1px solid var(--console-line); border-radius: 99rem; color: #5b7175; display: inline-flex; font-size: .66rem; font-weight: 750; gap: .35rem; line-height: 1.3; padding: .28rem .6rem; white-space: nowrap; }
+.schedule-pill::before { background: currentColor; border-radius: 50%; content: ''; height: .38rem; width: .38rem; }
+.schedule-pill--grey::before { display: none; }
+.schedule-pill--rose { background: #fcedeb; border-color: #efccc8; color: #a73f37; }
+/* Leave is orange everywhere (days, tags, and bookings left on leave); red is kept for cancelled bookings. */
+.schedule-pill--leave { background: #fde3c6; border-color: #f0c08a; color: #a14b0b; }
+.schedule-pill--blue { background: #e8f4fc; border-color: #bce0f5; color: #1072aa; }
+.schedule-pill--blue::before { display: none; }
+/* Special hours: the same clock-and-star wherever they appear, so the calendar relates back to the Special days card. */
+.special-hours-icon { fill: none; flex: 0 0 auto; height: 1.2em; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 2; width: 1.2em; }
+.special-hours-icon__star { fill: currentColor; stroke-width: 1; }
+.schedule-special-days h2 { align-items: center; display: flex; gap: .4rem; }
+.schedule-special-days h2 .special-hours-icon { color: #1072aa; }
+.schedule-pill--amber { background: #fff4df; border-color: #eed8ac; color: #916111; }
+.schedule-room-closed { color: #8ba0a2; font-size: .7rem; }
+.schedule-join.console-button { font-size: .7rem; min-height: 2rem; padding: .35rem .75rem; }
+/* Day view: a booking's actions are buttons side by side at the end of its row; Open record is the main one. */
+.staff-schedule-table .staff-schedule-table__actions { align-items: center; flex-direction: row; flex-wrap: wrap; gap: .4rem; justify-content: flex-end; }
+.schedule-action.console-button { font-size: .68rem; min-height: 2rem; padding: .35rem .65rem; white-space: nowrap; }
+/* Wide enough for the table to give them room: always one row. The table with a Clinician column needs more width. */
+@media (min-width: 80rem) {
+  .staff-schedule-table:not(.staff-schedule-table--clinicians) .staff-schedule-table__actions { flex-wrap: nowrap; }
+}
+@media (min-width: 88rem) {
+  .staff-schedule-table--clinicians .staff-schedule-table__actions { flex-wrap: nowrap; }
+}
+/* Where the table becomes one card per booking, the buttons take the card's full width, left to right. */
+@media (max-width: 52rem) {
+  .staff-schedule-table td.staff-schedule-table__actions-cell { grid-template-columns: minmax(0, 1fr); padding-top: .65rem; }
+  .staff-schedule-table td.staff-schedule-table__actions-cell::before { display: none; }
+  .staff-schedule-table .staff-schedule-table__actions { justify-content: flex-start; }
+}
+.schedule-month { padding: 1rem 1.15rem 1.1rem; }
+.schedule-month__grid { display: grid; gap: .4rem; grid-template-columns: repeat(7, minmax(0, 1fr)); }
+.schedule-month__weekday { color: #8ba0a2; font-size: .62rem; font-weight: 800; letter-spacing: .07em; padding-bottom: .1rem; text-align: center; text-transform: uppercase; }
+/* Each week's row grows to its busiest day, and every day in it matches. */
+.schedule-month__day { align-content: start; align-items: center; background: #fff; border: 1px solid var(--console-line); border-radius: .6rem; color: var(--console-ink); display: grid; font-size: .7rem; gap: .25rem; grid-template-columns: auto minmax(0, 1fr); min-height: 4.9rem; min-width: 0; padding: .45rem .5rem; position: relative; text-decoration: none; }
+/* The date and the day's tag (Leave, or special hours) share the top line, the tag on the right; the rest sit below. */
+.schedule-month__day > * { grid-column: 1 / -1; min-width: 0; }
+.schedule-month__day > .schedule-month__date { grid-column: 1; }
+.schedule-month__day > .schedule-month__tag { grid-column: 2; justify-self: end; }
+.schedule-month__day:has(> a.schedule-month__date:hover), .schedule-month__day:has(> a.schedule-month__date:focus-visible) { border-color: #91c9c1; }
+.schedule-month__day:has(> a.schedule-month__date:focus-visible) { box-shadow: 0 0 0 3px rgba(7, 135, 127, .25); }
+.schedule-month__date { color: inherit; font-variant-numeric: tabular-nums; font-weight: 800; text-decoration: none; }
+a.schedule-month__date:focus-visible { outline: none; }
+/* The date's link covers the whole day; booking chips sit above it. */
+a.schedule-month__date::after { border-radius: .6rem; content: ''; inset: 0; position: absolute; }
+.schedule-month__bookings { display: grid; gap: .2rem; grid-template-columns: minmax(0, 1fr); list-style: none; margin: 0; padding: 0; position: relative; z-index: 1; }
+.schedule-month__chip { align-items: baseline; background: var(--console-teal-soft, #e4f5f1); border: 1px solid #c4e4de; border-radius: .4rem; color: var(--console-teal-dark, #056f69); display: flex; font-size: .66rem; font-weight: 650; gap: .3rem; line-height: 1.3; min-width: 0; padding: .16rem .38rem; text-decoration: none; white-space: nowrap; }
+.schedule-month__chip time { flex: 0 0 auto; font-variant-numeric: tabular-nums; font-weight: 800; }
+.schedule-month__chip span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.schedule-month__chip:hover { background: #d3eee8; border-color: #91c9c1; }
+.schedule-month__chip:focus-visible { outline: 2px solid var(--console-teal, #07877f); outline-offset: 1px; }
+/* A booking's colour is its status: booked teal, completed green, cancelled red (struck through), no show grey. */
+.schedule-month__chip-swatch { background: var(--console-teal-soft, #e4f5f1); border: 1px solid #c4e4de; border-radius: .2rem; display: inline-block; height: .62rem; margin-right: .35rem; vertical-align: -.05rem; width: .62rem; }
+/* Booked: white with a teal border and text, so it stands apart from the filled completed, cancelled and no-show chips. */
+.schedule-month__chip--booked { background: #fff; border-color: var(--console-teal, #07877f); color: var(--console-teal-dark, #056f69); }
+.schedule-month__chip--booked:hover { background: var(--console-teal-soft, #e4f5f1); border-color: var(--console-teal-dark, #056f69); }
+/* Completed: Booked's teal border and text, filled light teal. */
+.schedule-month__chip--completed { background: var(--console-teal-soft, #e4f5f1); border-color: var(--console-teal, #07877f); color: var(--console-teal-dark, #056f69); }
+.schedule-month__chip--completed:hover { background: #d3eee8; border-color: var(--console-teal-dark, #056f69); }
+.schedule-month__chip--cancelled { background: #fde9e6; border-color: #efc4be; color: #a73f37; text-decoration: line-through; }
+.schedule-month__chip--cancelled:hover { background: #fadad5; border-color: #e3a8a0; }
+.schedule-month__chip--no_show { background: #eef1f1; border-color: #d3dcdc; color: #5b7175; }
+.schedule-month__chip--no_show:hover { background: #e3e9e9; border-color: #bccaca; }
+/* The day's tag has an outline; Leave days are filled orange and special-hours days blue. */
+.schedule-month__tag { align-items: center; border: 1px solid transparent; border-radius: .35rem; display: inline-flex; font-size: .62rem; font-weight: 700; gap: .2rem; line-height: 1.25; max-width: 100%; padding: .12rem .32rem; }
+.schedule-month__day--off { background: #fff3e6; border-color: #f5d3ae; }
+.schedule-month__day--off .schedule-month__tag { background: #fde3c6; border-color: #f0c08a; color: #a14b0b; }
+.schedule-month__day--special { background: #edf6fc; border-color: #c9e2f3; }
+.schedule-month__day--special .schedule-month__tag { background: #dbedf9; border-color: #b9daf1; color: #1072aa; }
+.schedule-month__day--not-working { background: var(--console-canvas); color: #8ba0a2; }
+.schedule-month__day--today { outline: 2px solid var(--console-teal-dark); outline-offset: -1px; }
+.schedule-month__day--blank { background: transparent; border: 0; }
+.schedule-month__day--disabled { opacity: .5; }
+.schedule-month__key { color: #7b9093; display: flex; flex-wrap: wrap; font-size: .68rem; gap: .4rem 1rem; list-style: none; margin: .85rem 0 0; padding: 0; }
+/* Month view: what booking colours mean, then (for one doctor's diary) what day colours mean, on one line when they fit. */
+.schedule-month__keys { display: flex; flex-wrap: wrap; gap: .4rem 2rem; margin-top: .85rem; }
+.schedule-month__keys > .schedule-month__key { margin: 0; }
+.schedule-month__swatch { background: #fff; border: 1px solid var(--console-line); border-radius: .2rem; display: inline-block; height: .62rem; margin-right: .35rem; vertical-align: -.05rem; width: .62rem; }
+.schedule-month__swatch--off { background: #fff3e6; border-color: #f5d3ae; }
+.schedule-month__swatch--not-working { background: var(--console-canvas); }
+.schedule-month__swatch--special { background: #edf6fc; border-color: #c9e2f3; }
+.schedule-clash { align-items: flex-start; background: #fcedeb; border: 1px solid #efccc8; border-radius: .85rem; display: flex; gap: .85rem; margin-top: 1rem; padding: 1rem 1.15rem; }
+.schedule-clash > .schedule-pill { background: #fff; flex: 0 0 auto; }
+.schedule-clash__body { min-width: 0; }
+.schedule-clash h2 { color: var(--console-ink); font-size: .88rem; margin: 0; }
+.schedule-clash p { color: #6b5654; font-size: .76rem; line-height: 1.55; margin: .3rem 0 0; }
+.schedule-clash form { margin-top: .75rem; }
+.schedule-clash .console-button { font-size: .72rem; min-height: 2.2rem; }
+.schedule-field-pair { display: grid; gap: .6rem; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.schedule-field-pair .console-form__field { min-width: 0; }
+.schedule-availability-panels .schedule-field-pair input, .schedule-availability-panels .schedule-special-day-form input { min-width: 0; width: 100%; }
+.schedule-special-list li > div { display: grid; gap: .15rem; min-width: 0; }
+.schedule-special-list span { color: #577276; font-size: .72rem; font-variant-numeric: tabular-nums; }
+
+/* Rev 3.11: Calendar & Bookings and Working Pattern & Availability are two tabs. */
+.schedule-tabs { margin: 0 0 1rem; }
+.schedule-diary-stack > .staff-page-card:first-child { margin-top: 1rem; }
+.schedule-availability-panels.schedule-availability-tab { align-items: start; display: grid; gap: 1.1rem; grid-template-columns: repeat(2, minmax(0, 1fr)); margin-top: 1rem; }
+.schedule-availability-tab__column { display: grid; gap: 1rem; min-width: 0; }
+.schedule-availability-tab__column > .staff-page-card { margin-top: 0; }
+.schedule-availability-tab .schedule-select-doctor { grid-column: 1 / -1; margin-top: 0; }
+@media (max-width: 62rem) {
+  .schedule-availability-panels.schedule-availability-tab { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 38.75rem) {
+  .schedule-month { padding: .8rem .6rem .9rem; }
+  .schedule-month__grid { gap: 3px; }
+  .schedule-month__weekday { font-size: .56rem; letter-spacing: 0; }
+  .schedule-month__day { font-size: .66rem; min-height: 3.4rem; padding: .3rem; }
+  .schedule-month__tag { display: none; }
+  /* Too narrow for names: chips show the start time, and still read out the patient. */
+  .schedule-month__chip { font-size: .58rem; justify-content: center; padding: .12rem .15rem; }
+  .schedule-month__chip span { display: none; }
+  .schedule-bookings__header { padding: .8rem; }
+  .schedule-clash { flex-direction: column; gap: .55rem; padding: .9rem; }
+}
+
 @media (max-width: 88rem) {
   .staff-schedule-grid.schedule-workspace-grid { grid-template-columns: minmax(0, 1.3fr) minmax(19.5rem, .85fr); }
   .schedule-pattern-day { grid-template-columns: 1fr; }
@@ -96,5 +229,87 @@
 @media (max-width: 25rem) {
   .schedule-pattern-day { grid-template-columns: 1fr; }
   .schedule-working-toggle { margin-top: 0; }
-  .schedule-time-off-form input[type='datetime-local'] { font-size: .82rem !important; }
+  .schedule-time-off-form input[type='date'] { font-size: .82rem !important; }
+}
+/* Special days and Days off list what's coming up; the dashed button opens the form to add one. */
+.schedule-panel-empty { color: #7b9093; font-size: .78rem; margin: 0; padding: .35rem 0 .2rem; }
+.schedule-add { margin-top: .75rem; }
+.schedule-add > summary { align-items: center; border: 1.5px dashed #9fcfc7; border-radius: .7rem; color: var(--console-teal-dark, #056f69); cursor: pointer; display: flex; font-size: .82rem; font-weight: 750; gap: .4rem; justify-content: center; list-style: none; min-height: 2.75rem; padding: .6rem 1rem; }
+.schedule-add > summary::-webkit-details-marker { display: none; }
+.schedule-add > summary span { font-size: 1.05rem; line-height: 1; }
+.schedule-add > summary:hover { background: var(--console-teal-soft, #e4f5f1); border-color: var(--console-teal, #07877f); }
+.schedule-add > summary:focus-visible { outline: 2px solid var(--console-teal, #07877f); outline-offset: 2px; }
+.schedule-add[open] > summary { display: none; }
+.schedule-add .console-form { border-top: 1px solid var(--console-soft-line); padding-top: .85rem; }
+.schedule-add__actions { display: flex; flex-wrap: wrap; gap: .5rem; }
+.schedule-add__actions .console-button--primary { flex: 1 1 auto; }
+
+/* Week view: Monday to Sunday side by side. A day's heading opens it in Day view; each booking opens its details.
+   Leave days are filled orange and special-hours days blue, each with its tag top right. */
+.schedule-bookings .schedule-view-toggle { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.schedule-week { padding: 1rem 1.15rem 1.1rem; }
+.schedule-week__grid { display: grid; gap: .4rem; grid-template-columns: repeat(7, minmax(0, 1fr)); list-style: none; margin: 0; padding: 0; }
+.schedule-week__day { align-content: start; background: #fff; border: 1px solid var(--console-line); border-radius: .6rem; color: var(--console-ink); display: grid; gap: .45rem; grid-template-columns: minmax(0, 1fr); min-height: 12rem; min-width: 0; padding: .5rem .45rem .55rem; }
+.schedule-week__head { align-items: flex-start; display: flex; flex-wrap: wrap; gap: .25rem; justify-content: space-between; min-width: 0; padding: 0 .1rem; }
+.schedule-week__date { border-radius: .3rem; color: inherit; display: grid; gap: .1rem; min-width: 0; text-decoration: none; }
+.schedule-week__weekday { color: #8ba0a2; font-size: .62rem; font-weight: 800; letter-spacing: .07em; text-transform: uppercase; }
+.schedule-week__day-date { font-size: .82rem; font-variant-numeric: tabular-nums; font-weight: 800; white-space: nowrap; }
+a.schedule-week__date:hover .schedule-week__day-date { color: var(--console-teal-dark); text-decoration: underline; text-underline-offset: .15em; }
+a.schedule-week__date:focus-visible { outline: 2px solid var(--console-teal); outline-offset: 2px; }
+.schedule-week__day--today { outline: 2px solid var(--console-teal-dark); outline-offset: -1px; }
+.schedule-week__day--today .schedule-week__weekday { color: var(--console-teal-dark); }
+.schedule-week__day--off { background: #fff3e6; border-color: #f5d3ae; }
+.schedule-week__day--special { background: #edf6fc; border-color: #c9e2f3; }
+.schedule-week__tag { border: 1px solid transparent; border-radius: .4rem; display: inline-flex; flex: 0 1 auto; font-size: .6rem; font-weight: 750; line-height: 1.25; margin-left: auto; max-width: 100%; padding: .14rem .32rem; }
+.schedule-week__tag--off { background: #fde3c6; border-color: #f0c08a; color: #a14b0b; }
+/* Special hours on two lines: the words, then the clock icon and the hours. */
+.schedule-week__tag--special { background: #dbedf9; border-color: #b9daf1; color: #1072aa; display: inline-grid; gap: .06rem; }
+.schedule-week__tag-label { font-size: .56rem; font-weight: 700; justify-self: end; }
+.schedule-week__tag-hours { align-items: center; display: inline-flex; font-variant-numeric: tabular-nums; font-weight: 800; gap: .15rem; white-space: nowrap; }
+.schedule-week__tag-hours .special-hours-icon { height: 1.05em; width: 1.05em; }
+.schedule-week__day--not-working { background: var(--console-canvas); }
+.schedule-week__day--not-working .schedule-week__day-date { color: #8ba0a2; }
+.schedule-week__day--disabled { opacity: .5; }
+.schedule-week__bookings { display: grid; gap: .3rem; grid-template-columns: minmax(0, 1fr); list-style: none; margin: 0; padding: 0; }
+.schedule-week__booking { align-content: start; background: var(--console-teal-soft); border: 1px solid #c4e4de; border-radius: .45rem; color: var(--console-ink); display: grid; gap: .12rem; justify-items: start; line-height: 1.3; min-width: 0; padding: .4rem .45rem .45rem; position: relative; text-decoration: none; }
+.schedule-week__booking:hover { background: #d3eee8; border-color: #91c9c1; }
+.schedule-week__booking:focus-visible { outline: 2px solid var(--console-teal); outline-offset: 1px; }
+/* The time on the left; any status but Booked on the right. */
+.schedule-week__top { align-items: center; display: flex; flex-wrap: wrap; gap: .2rem .3rem; justify-self: stretch; min-width: 0; }
+.schedule-week__top .console-status { margin-left: auto; }
+.schedule-week__booking time { color: var(--console-teal-dark); font-size: .72rem; font-variant-numeric: tabular-nums; font-weight: 800; }
+.schedule-week__patient { font-size: .72rem; font-weight: 800; max-width: 100%; overflow-wrap: anywhere; }
+.schedule-week__meta { color: var(--console-muted); font-size: .64rem; max-width: 100%; }
+.schedule-week__booking .schedule-status-stack { gap: .2rem; margin-top: .2rem; max-width: 100%; }
+.schedule-week__booking .console-status { font-size: .6rem; padding: .3rem .45rem; }
+/* On the tinted card the status needs its own white ground to read as a pill. */
+.schedule-week__booking--booked .console-status, .schedule-week__booking--completed .console-status { background: #fff; }
+.schedule-week__booking .schedule-pill { border-radius: .5rem; font-size: .6rem; padding: .25rem .45rem; white-space: normal; }
+.schedule-week__duration, .schedule-week__range { white-space: nowrap; }
+.schedule-week__booking .schedule-attention-badge { margin-top: 0; }
+/* Cancelled and no-show bookings stay listed, quieter, with their status as in Day view. */
+.schedule-week__booking--cancelled, .schedule-week__booking--no_show { background: #fff; border-color: var(--console-line); }
+.schedule-week__booking--cancelled:hover, .schedule-week__booking--no_show:hover { background: #f5faf8; border-color: #b9d9d3; }
+.schedule-week__booking--cancelled time, .schedule-week__booking--no_show time,
+.schedule-week__booking--cancelled .schedule-week__patient, .schedule-week__booking--no_show .schedule-week__patient { color: #7b9093; }
+.schedule-week__booking--attention { box-shadow: inset .2rem 0 0 #d59c38; padding-left: .6rem; }
+.schedule-week__empty { color: #a3b3b4; font-size: .68rem; margin: 0; padding: 0 .1rem; }
+
+/* Too narrow for seven columns: each day is a row, its date on the left and its bookings beside it. */
+@media (max-width: 75rem) {
+  .schedule-week__grid { gap: .35rem; grid-template-columns: minmax(0, 1fr); }
+  .schedule-week__day { align-items: start; column-gap: .8rem; grid-template-columns: 6.5rem minmax(0, 1fr); min-height: 0; padding: .55rem .6rem; }
+  .schedule-week__head { align-items: flex-start; flex-direction: column; grid-column: 1; grid-row: 1; }
+  .schedule-week__tag { margin-left: 0; }
+  .schedule-week__day > :not(.schedule-week__head) { grid-column: 2; grid-row: 1; }
+  .schedule-week__bookings { grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr)); }
+  .schedule-week__empty { align-self: center; }
+}
+
+/* Phones: the date column narrows and bookings stack. */
+@media (max-width: 40rem) {
+  .schedule-week { padding: .8rem .6rem .9rem; }
+  .schedule-week__day { column-gap: .6rem; grid-template-columns: 5.4rem minmax(0, 1fr); padding: .5rem; }
+  .schedule-week__tag { font-size: .58rem; padding-inline: .32rem; }
+  .schedule-week__bookings { grid-template-columns: minmax(0, 1fr); }
 }

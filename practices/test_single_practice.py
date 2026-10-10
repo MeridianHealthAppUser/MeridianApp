@@ -152,7 +152,14 @@ class SinglePracticeDemoTests(TestCase):
         call_command('seed_demo', stdout=StringIO())
         self.assertEqual(list(Company.objects.values_list('slug', flat=True)), ['meridian-health'])
         self.assertEqual(CompanyMembership.objects.count(), 3)
-        self.assertEqual(get_user_model().objects.count(), 4)
+        # Four staff and patient accounts, plus three more of Sam's patients.
+        self.assertEqual(get_user_model().objects.count(), 7)
+        self.assertEqual(
+            list(Patient.objects.filter(assigned_doctor__email='sam.marchant@meridianhealth.co.za').order_by('medical_record_number')
+                 .values_list('first_name', 'medical_record_number')),
+            [('Nadia', 'MH-DEMO-001'), ('Ayesha', 'MH-DEMO-002'), ('Pieter', 'MH-DEMO-003'), ('Zanele', 'MH-DEMO-004')],
+        )
+        self.assertFalse(Patient.objects.filter(user__isnull=True).exists())
 
     def test_demo_seed_never_reactivates_an_archived_other_practice(self):
         other = Company.objects.create(name='Archived Orion', slug='orion-mens-health', is_active=False)

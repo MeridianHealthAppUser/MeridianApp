@@ -29,10 +29,15 @@ def active_doctors(company):
     ).distinct().order_by('first_name', 'last_name', 'email')
 
 
-def record_clinician_history(patient, clinician):
-    """Close the current assignment and open the new one; past clinicians stay reachable by message."""
+def record_clinician_history(patient, clinician, previous_id=None):
+    """Close the current assignment and open the new one. Past clinicians stay reachable by message and can
+    still read the record."""
     now = timezone.now()
     ClinicianAssignment.objects.filter(patient=patient, ended_at__isnull=True).update(ended_at=now, updated_at=now)
+    if previous_id and not ClinicianAssignment.objects.filter(patient=patient, clinician_id=previous_id).exists():
+        # Assigned without a history row (an older or imported record): keep them as a past clinician too.
+        ClinicianAssignment.objects.create(company_id=patient.company_id, patient=patient, clinician_id=previous_id,
+                                           ended_at=now)
     if clinician is not None:
         ClinicianAssignment.objects.create(company_id=patient.company_id, patient=patient, clinician=clinician)
         from .messaging import adopt_unattended_threads
@@ -57,7 +62,7 @@ def assign_doctor(*, patient, actor, doctor, expected_updated, request=None):
         return patient
     patient.assigned_doctor = doctor
     patient.save(update_fields=('assigned_doctor', 'updated_at'))
-    record_clinician_history(patient, doctor)
+    record_clinician_history(patient, doctor, previous_id)
     record_audit(company=company, actor=actor, patient=patient, action='patient.doctor_assigned', target=patient,
                  request=request, metadata={'previous_doctor_id': previous_id, 'doctor_id': patient.assigned_doctor_id})
     return patient

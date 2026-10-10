@@ -3,8 +3,8 @@
 .compounding-note { overflow-wrap: anywhere; line-height: 1.65; }
 .compounding-status { margin: .7rem 0; }
 .compounding-step { border-top: 1px solid #e1eaea; padding-top: 1.25rem; margin-top: 1.25rem; }
-.compounding-print { background: #fff; color: #15343b; font: 15px/1.6 Arial, sans-serif; margin: 0 auto; max-width: 850px; padding: 2rem; }
-.compounding-print h1 { font-family: Georgia, serif; font-size: 1.8rem; font-weight: 500; }
+.compounding-print { background: #fff; color: #15343b; font: 15px/1.6 var(--meridian-font); margin: 0 auto; max-width: 850px; padding: 2rem; }
+.compounding-print h1 { font-family: inherit; font-size: 1.8rem; font-weight: 500; }
 .compounding-print table { border-collapse: collapse; width: 100%; }
 .compounding-print th, .compounding-print td { border-bottom: 1px solid #dce6e8; padding: .65rem 0; text-align: left; vertical-align: top; }
 .compounding-print th { width: 40%; }

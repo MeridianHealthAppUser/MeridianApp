@@ -1,7 +1,7 @@
 {% extends 'portal/staff_page_base.html' %}
 {% load static workspace_ui %}
 {% block title %}{{ page_title }} | Meridian{% endblock %}
-{% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/management.css' %}">{% endblock %}
+{% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/management.css' %}?v=20261007">{% endblock %}
 {% block breadcrumbs %}{% url 'portal:management-practices' as practices_url %}{% if cancel_url == practices_url %}{% breadcrumbs 'Practices' 'portal:management-practices' page_title %}{% else %}{% breadcrumbs 'Users and roles' 'portal:management-users' page_title %}{% endif %}{% endblock %}
 {% block page_heading %}<header class="staff-page-header"><div><h1>{{ page_title }}</h1><p>{{ description }}</p></div></header>{% endblock %}
 {% block page_content %}

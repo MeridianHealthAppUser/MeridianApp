@@ -1,0 +1,44 @@
+/* Filters menus over record tables (templates/portal/includes/filter_menu.html, static/js/filter_menu.js). */
+.filter-menu { position: relative; }
+.filter-menu__toggle { align-items: center; background: #fff; border: 1px solid var(--console-line, #deebe8); border-radius: .65rem; color: var(--console-teal-dark, #056f69); cursor: pointer; display: inline-flex; font-size: .84rem; font-weight: 750; gap: .45rem; list-style: none; min-height: 2.65rem; padding: .55rem .8rem; user-select: none; }
+.filter-menu__toggle::-webkit-details-marker { display: none; }
+.filter-menu__toggle:hover, .filter-menu[open] > .filter-menu__toggle { background: #f5fbfa; border-color: #b9d9d3; }
+.filter-menu__toggle:focus-visible { outline: 3px solid rgba(7, 135, 127, .24); outline-offset: 2px; }
+.filter-menu__chevron { flex: 0 0 auto; transition: transform .15s ease; }
+.filter-menu[open] > .filter-menu__toggle .filter-menu__chevron, .filter-menu__section[open] > summary .filter-menu__chevron { transform: rotate(180deg); }
+.filter-menu__badge, .filter-menu__count { background: var(--console-teal, #07877f); border-radius: 999px; color: #fff; font-size: .7rem; font-weight: 750; line-height: 1; min-width: 1.15rem; padding: .2rem .4rem; text-align: center; }
+
+.filter-menu__panel { background: #fff; border: 1px solid var(--console-line, #deebe8); border-radius: 1rem; box-shadow: 0 18px 44px rgba(18, 56, 60, .16); display: grid; gap: .85rem; padding: 1rem; position: absolute; right: 0; top: calc(100% + .45rem); width: min(23rem, calc(100vw - 2rem)); z-index: 40; }
+.filter-menu__head { align-items: center; display: flex; justify-content: space-between; }
+.filter-menu__head h3 { color: var(--console-ink, #12383c); font-size: 1rem; margin: 0; }
+.filter-menu__clear { color: #b2443b; font-size: .8rem; font-weight: 700; text-decoration: none; }
+.filter-menu__clear:hover { text-decoration: underline; }
+.filter-menu__error { background: #fdf0ee; border-radius: .6rem; color: #a84139; font-size: .78rem; line-height: 1.5; margin: 0; padding: .55rem .7rem; }
+
+.filter-menu__sections { border: 1px solid var(--console-line, #deebe8); border-radius: .8rem; max-height: min(60vh, 26rem); overflow: auto; }
+.filter-menu__section + .filter-menu__section { border-top: 1px solid var(--console-line, #deebe8); }
+.filter-menu__section > summary { align-items: center; color: var(--console-ink, #12383c); cursor: pointer; display: flex; font-size: .86rem; font-weight: 650; gap: .6rem; list-style: none; padding: .8rem .9rem; }
+.filter-menu__section > summary::-webkit-details-marker { display: none; }
+.filter-menu__section > summary:hover { background: #f7fbfa; }
+.filter-menu__section > summary:focus-visible { outline: 3px solid rgba(7, 135, 127, .24); outline-offset: -3px; }
+.filter-menu__section > summary .filter-menu__chevron { color: var(--console-muted, #6e8588); margin-left: auto; }
+.filter-menu__icon { color: var(--console-muted, #6e8588); display: inline-flex; }
+.filter-menu__label { min-width: 0; }
+
+.filter-menu__options { display: grid; gap: .5rem; padding: 0 .9rem .9rem; }
+.filter-menu__search { border: 1px solid var(--console-line, #deebe8); border-radius: .55rem; font: inherit; font-size: .84rem; min-height: 2.4rem; padding: .45rem .65rem; width: 100%; }
+.filter-menu__options ul { background: #f6f9f9; border-radius: .6rem; list-style: none; margin: 0; max-height: 13rem; overflow: auto; padding: .35rem; }
+.filter-menu__options li[hidden] { display: none; }
+.filter-menu__options label { align-items: center; border-radius: .45rem; color: var(--console-ink, #12383c); cursor: pointer; display: flex; font-size: .84rem; gap: .6rem; padding: .45rem .5rem; }
+.filter-menu__options label:hover { background: #fff; }
+.filter-menu__options :is(input[type="checkbox"], input[type="radio"]) { accent-color: var(--console-teal, #07877f); flex: 0 0 auto; height: 1.05rem; margin: 0; width: 1.05rem; }
+.filter-menu__field { display: grid; gap: .3rem; }
+.filter-menu__field label { color: var(--console-ink, #12383c); font-size: .78rem; font-weight: 700; }
+.filter-menu__field :is(input, select) { background: #fff; border: 1px solid var(--console-line, #deebe8); border-radius: .55rem; color: var(--console-ink, #12383c); font: inherit; font-size: .84rem; min-height: 2.4rem; padding: .4rem .6rem; width: 100%; }
+.filter-menu__options .errorlist { color: #a84139; font-size: .76rem; line-height: 1.45; list-style: none; margin: 0; padding: 0; }
+.filter-menu__none { color: var(--console-muted, #6e8588); font-size: .8rem; padding: .45rem .5rem; }
+
+.filter-menu__actions { display: grid; gap: .6rem; grid-template-columns: 1fr 1fr; }
+
+/* Beside a search (Messages, the patient directory): the same height as the search, square-cornered like the others. */
+.filter-menu--compact .filter-menu__toggle { font-size: .76rem; gap: .4rem; min-height: 2.15rem; padding: .35rem .8rem; }

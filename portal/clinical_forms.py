@@ -8,6 +8,7 @@ from django.core.exceptions import ValidationError
 from django.utils import timezone
 
 from care.models import Appointment
+from care.widgets import QuarterHourDateTimeField, floor_quarter_hour
 from practices.models import Patient
 
 
@@ -56,10 +57,7 @@ class ConsultationAppointmentChoice(forms.ModelChoiceField):
 class ConsultationForm(forms.Form):
     appointment = ConsultationAppointmentChoice(queryset=Appointment.objects.none(), required=False,
                                          empty_label='General consultation (no appointment link)')
-    occurred_at = forms.DateTimeField(
-        label='Consultation date and time (SAST)',
-        widget=forms.DateTimeInput(format='%Y-%m-%dT%H:%M', attrs={'type': 'datetime-local'}),
-    )
+    occurred_at = QuarterHourDateTimeField(label='Consultation date and time (SAST)')
     summary = forms.CharField(label='Consultation note', required=False, max_length=10000,
                               strip=False, widget=forms.Textarea(attrs={'rows': 12}))
     confirm_signature = forms.BooleanField(label='I confirm this is the final note', required=False)
@@ -77,7 +75,8 @@ class ConsultationForm(forms.Form):
                                 summary=encounter.clinical_summary)
         else:
             appointments = appointments.filter(encounter__isnull=True)
-            self.initial.setdefault('occurred_at', timezone.localtime().replace(second=0, microsecond=0))
+            # Now, to the quarter hour just gone, as the picker offers only 00, 15, 30 and 45.
+            self.initial.setdefault('occurred_at', floor_quarter_hour(timezone.localtime()))
         self.fields['appointment'].queryset = appointments
 
     def clean_occurred_at(self):

@@ -50,21 +50,36 @@ class PatientDoctorAssignmentTests(TestCase):
                                 {'doctor': doctor.pk if doctor else '', 'workflow_context': token})
 
     def test_care_team_sees_only_active_clinicians_in_this_practice(self):
-        for actor in (self.doctor, self.admin, self.super_admin):
+        for actor in (self.admin, self.super_admin):
             with self.subTest(actor=actor.email):
                 self.login(actor)
                 response = self.overview()
                 self.assertContains(response, '<dt>Assigned clinician</dt>')
                 self.assertContains(response, 'Assign a clinician')
                 self.assertEqual(list(response.context['doctor_form'].fields['doctor'].queryset), [self.doctor, self.second_doctor])
+        # A clinician opens only their own patients' records, so they change the clinician of those only.
+        self.login(self.doctor)
+        self.assertRedirects(self.overview(), reverse('portal:patient-list'), fetch_redirect_response=False)
+        Patient.objects.filter(pk=self.patient.pk).update(assigned_doctor=self.doctor)
+        response = self.overview()
+        self.assertContains(response, 'Change assigned clinician')
+        self.assertEqual(list(response.context['doctor_form'].fields['doctor'].queryset), [self.doctor, self.second_doctor])
 
     def test_doctor_can_hand_a_patient_to_a_colleague(self):
+        Patient.objects.filter(pk=self.patient.pk).update(assigned_doctor=self.doctor)
         self.login(self.doctor)
-        self.assign(self.doctor)
         self.assign(self.second_doctor)
         self.patient.refresh_from_db()
         self.assertEqual(self.patient.assigned_doctor, self.second_doctor)
-        self.assertEqual(AuditEvent.objects.filter(action='patient.doctor_assigned', actor=self.doctor).count(), 2)
+        self.assertEqual(AuditEvent.objects.filter(action='patient.doctor_assigned', actor=self.doctor).count(), 1)
+        # Once handed over, the record is read-only to them: no clinician editor, and a change is refused.
+        self.assertNotIn('doctor_form', self.overview().context)
+        refused = self.client.post(reverse('portal:patient-doctor-assign', args=[self.patient.pk]),
+                                   {'doctor': self.doctor.pk, 'workflow_context': 'unused'})
+        self.assertRedirects(refused, reverse('portal:patient-detail', args=[self.patient.pk]) + '?tab=overview',
+                             fetch_redirect_response=False)
+        self.patient.refresh_from_db()
+        self.assertEqual(self.patient.assigned_doctor, self.second_doctor)
 
     def test_admin_assigns_changes_and_clears_the_doctor_with_an_audit_trail(self):
         self.login(self.admin)
@@ -94,13 +109,14 @@ class PatientDoctorAssignmentTests(TestCase):
         self.assertEqual(AuditEvent.objects.filter(action='patient.doctor_assigned').count(), 1)
 
     def test_a_deactivated_team_member_cannot_assign_with_an_open_form(self):
+        Patient.objects.filter(pk=self.patient.pk).update(assigned_doctor=self.doctor)
         self.login(self.doctor)
         token = self.overview().context['doctor_assignment_context']
         CompanyMembership.objects.filter(company=self.company, user=self.doctor).update(is_active=False)
         response = self.assign(self.second_doctor, token=token)
         self.assertEqual(response.status_code, 403)
         self.patient.refresh_from_db()
-        self.assertIsNone(self.patient.assigned_doctor)
+        self.assertEqual(self.patient.assigned_doctor, self.doctor)
 
     def test_reassignment_keeps_history_and_the_new_clinician_sees_it(self):
         Patient.objects.filter(pk=self.patient.pk).update(assigned_doctor=self.doctor)

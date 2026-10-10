@@ -1,0 +1,11 @@
+/* My tasks (templates/portal/staff_tasks.html): Filters beside Create task, and each row's buttons side by side,
+   ending with a tick that completes the task. */
+.staff-page-header__actions { align-items: center; display: flex; flex-wrap: wrap; gap: .65rem; }
+.staff-task-table__actions { align-items: center; flex-direction: row; flex-wrap: nowrap; justify-content: flex-end; }
+.staff-task-table__actions .console-button { white-space: nowrap; }
+.staff-task-table__actions .task-complete { padding: 0; position: relative; width: 2rem; }
+/* "Complete" in a small bubble above the tick, lined up with its right edge so the table's edge can't cut it off. */
+.task-complete::after, .task-complete::before { left: 50%; opacity: 0; pointer-events: none; position: absolute; transition: opacity .12s ease; z-index: 5; }
+.task-complete::after { background: var(--console-ink, #12383c); border-radius: .45rem; bottom: calc(100% + 8px); color: #fff; content: attr(data-tooltip); font-size: .72rem; font-weight: 700; left: auto; padding: .3rem .55rem; right: 0; white-space: nowrap; }
+.task-complete::before { border: 5px solid transparent; border-top-color: var(--console-ink, #12383c); bottom: calc(100% - 2px); content: ''; transform: translateX(-50%); }
+.task-complete:hover::after, .task-complete:hover::before, .task-complete:focus-visible::after, .task-complete:focus-visible::before { opacity: 1; }

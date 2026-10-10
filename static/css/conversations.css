@@ -1,0 +1,118 @@
+/* Conversations: the list on the left and the open conversation on the right, the same on the
+   record's Messages tab and the Patient messages and Team messages tabs. */
+.record-inbox { background: var(--console-card, #fff); border: 1px solid var(--console-line); border-radius: 1rem; display: grid; grid-template-columns: minmax(15rem, 19.5rem) minmax(0, 1fr); margin-top: .85rem; overflow: hidden; }
+.record-inbox--single { grid-template-columns: minmax(0, 1fr); }
+.record-inbox__threads { border-right: 1px solid var(--console-line); display: flex; flex-direction: column; min-width: 0; }
+.record-inbox__list { flex: 1 1 auto; list-style: none; margin: 0; max-height: 36rem; overflow-y: auto; padding: 0; }
+.record-inbox__list > li { position: relative; }
+.record-inbox__list > li + li { border-top: 1px solid var(--console-soft-line); }
+.record-inbox__none { color: var(--console-muted); font-size: .8rem; padding: 1.2rem 1rem; }
+.record-inbox-thread { color: var(--console-ink); display: grid; gap: .2rem; padding: .9rem 1rem; text-decoration: none; }
+.record-inbox-thread:hover { background: var(--console-canvas); }
+.record-inbox-thread:focus-visible { outline: 2px solid var(--console-teal); outline-offset: -3px; }
+.record-inbox-thread.is-selected { background: var(--console-teal-soft); }
+.record-inbox-thread > strong { align-items: flex-start; display: flex; font-size: .86rem; font-weight: 500; gap: .5rem; justify-content: space-between; line-height: 1.4; overflow-wrap: anywhere; }
+.record-inbox-thread.is-unread > strong { font-weight: 700; }
+.record-inbox-thread > strong .nav-badge { font-size: .68rem; height: 1.15rem; margin-top: .05rem; min-width: 1.15rem; padding: 0 .35rem; }
+.record-inbox__item--marks .record-inbox-thread > strong { padding-right: 2.1rem; }
+/* Mark as read or unread: a round envelope button at the top right of the row. */
+.record-inbox__mark { position: absolute; right: .8rem; top: .8rem; }
+.record-inbox__mark button { align-items: center; background: #fff; border: 1px solid var(--console-line); border-radius: 50%; color: var(--console-teal-dark); cursor: pointer; display: inline-flex; height: 1.75rem; justify-content: center; padding: 0; width: 1.75rem; }
+.record-inbox__mark button:hover, .record-inbox__mark button:focus-visible { background: var(--console-teal-soft); border-color: #a9d8cf; outline: none; }
+.record-inbox__mark .read-state-icon { height: .95rem; width: .95rem; }
+/* Who's in a conversation, as tags (static/css/person_tags.css), and on its own line under them the patient a team
+   conversation is about. */
+.record-inbox-thread__people, .record-messages__tags { display: flex; flex-wrap: wrap; gap: .3rem; margin: .2rem 0 0; min-width: 0; }
+.record-messages__tags { margin-top: .45rem; }
+.record-inbox-thread__about, .record-messages__about { display: flex; margin: .3rem 0 0; min-width: 0; }
+/* Last line: the latest message on the left, its time (today) or date on the right. */
+.record-inbox-thread__last { align-items: baseline; display: flex; gap: .75rem; margin-top: .3rem; min-width: 0; }
+.record-inbox-thread__preview { color: #526f74; flex: 1 1 auto; font-size: .76rem; line-height: 1.45; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.record-inbox-thread__last time { color: var(--console-muted); flex: 0 0 auto; font-size: .72rem; white-space: nowrap; }
+/* "Closed", then any unread count, at the top right beside the subject. */
+.record-inbox-thread > strong > span:first-child { margin-right: auto; }
+.record-inbox-thread > strong .record-inbox-pill { flex: 0 0 auto; margin-top: .05rem; }
+.record-inbox-pill { background: var(--console-canvas); border: 1px solid var(--console-line); border-radius: 99rem; color: #526f74; display: inline-block; font-size: .64rem; font-weight: 500; line-height: 1.35; padding: .1rem .45rem; white-space: nowrap; }
+.record-inbox-empty { align-items: center; display: grid; gap: .6rem; justify-items: center; margin: auto; max-width: 28rem; padding: 2.5rem 1.5rem; text-align: center; }
+.record-inbox-empty h3 { color: var(--console-ink); font-size: 1.05rem; font-weight: 500; margin: 0; }
+.record-inbox-empty p { color: var(--console-muted); font-size: .84rem; line-height: 1.6; margin: 0; }
+.record-inbox-empty .console-button { margin-top: .2rem; }
+.record-messages__pane { display: flex; flex-direction: column; min-height: 22rem; min-width: 0; padding: .9rem 1rem; }
+.record-inbox--single .record-messages__pane { min-height: 0; }
+.record-messages__pane-head { align-items: center; display: flex; flex-wrap: wrap; gap: .4rem .8rem; justify-content: space-between; }
+.record-messages__pane-head h3, .record-messages__pane-title { color: var(--console-ink); font-size: .86rem; margin: 0; }
+.record-messages__tools { align-items: center; display: inline-flex; flex-wrap: wrap; gap: .4rem; }
+.record-messages__people { color: var(--console-muted); font-size: .72rem; line-height: 1.5; margin: .3rem 0 0; overflow-wrap: anywhere; }
+/* The conversation's actions (Open record, Mark as unread, Message action, Add clinician) are small secondary buttons. */
+.record-messages__tool.console-button { font-size: .7rem; gap: .3rem; min-height: 2rem; padding: .35rem .7rem; white-space: nowrap; }
+.record-messages__tool .read-state-icon { height: .95rem; width: .95rem; }
+.record-messages__read { display: inline-flex; margin: 0; }
+.record-conversation--empty { justify-content: center; }
+.record-conversation { background: #f7faf9; border: 1px solid var(--console-soft-line); border-radius: .8rem; display: flex; flex-direction: column; gap: .55rem; list-style: none; margin: .7rem 0 0; max-height: 300px; min-height: 6rem; overflow-y: auto; padding: .85rem; }
+.record-conversation:focus-visible { outline: 2px solid var(--console-teal); outline-offset: 2px; }
+/* Everyone else's messages sit on the left, each person in their own colour (message_tones.css); yours sit on the right in white. */
+.record-bubble { align-self: flex-start; border: 1px solid var(--console-line); border-radius: .85rem; max-width: min(36rem, 85%); padding: .6rem .8rem; }
+.record-bubble p { color: var(--console-ink); font-size: .8rem; line-height: 1.5; margin: 0; overflow-wrap: anywhere; }
+.record-bubble__meta { color: #6f8587; display: block; font-size: .66rem; margin-top: .3rem; }
+.record-bubble--mine { align-self: flex-end; background: #fff; }
+.record-bubble--mine .record-bubble__meta { text-align: right; }
+.record-conversation__empty { align-self: center; color: var(--console-muted); font-size: .78rem; margin: auto 0; }
+.record-messages__pane .appointment-proposals { margin-top: .85rem; }
+.record-reply { align-items: flex-end; display: grid; gap: .55rem; grid-template-columns: minmax(0, 1fr) auto; margin-top: .75rem; }
+.record-reply .record-error { background: #fff4f2; border: 1px solid #eccbc5; border-radius: .6rem; color: #a8433d; font-size: .74rem; grid-column: 1 / -1; line-height: 1.5; margin: 0; padding: .55rem .7rem; }
+.record-reply textarea { border: 1px solid var(--console-line); border-radius: .7rem; font: inherit; font-size: .82rem; line-height: 1.45; max-height: 160px; min-height: 2.6rem; padding: .6rem .75rem; resize: none; width: 100%; }
+.record-reply textarea:focus { border-color: var(--console-teal); box-shadow: 0 0 0 3px rgba(7, 135, 127, .18); outline: none; }
+.record-reply .console-button { min-height: 2.6rem; }
+.record-messages__note { color: var(--console-muted); font-size: .74rem; margin: .7rem 0 0; }
+.record-messages__note a { color: var(--console-teal-dark); font-weight: 500; text-underline-offset: .2em; }
+.record-inbox__threads .inbox-pagination { border-top: 1px solid var(--console-soft-line); margin: 0; padding: .65rem 1rem; }
+/* Team messages: starting a conversation happens in the right-hand pane. */
+.record-messages__pane .console-form { display: grid; gap: .8rem; margin-top: .8rem; }
+.record-messages__form-actions { display: flex; flex-wrap: wrap; gap: .5rem; justify-content: flex-end; }
+.record-messages__pane .helptext { color: var(--console-muted); font-size: .72rem; line-height: 1.4; }
+
+@media (max-width: 40rem) {
+  .record-inbox { grid-template-columns: 1fr; }
+  .record-inbox__threads { border-bottom: 1px solid var(--console-line); border-right: 0; }
+  .record-inbox__list { max-height: 14rem; }
+  .record-messages__pane { min-height: 0; padding: .75rem; }
+}
+
+/* Patient notes under an open conversation (clinical staff): closed until opened, then a scrolling list. */
+.conversation-notes { border: 1px solid var(--console-line); border-radius: .8rem; margin-top: .85rem; }
+.conversation-notes > summary { align-items: center; cursor: pointer; display: flex; flex-wrap: wrap; gap: .35rem .6rem; list-style: none; padding: .7rem .9rem; }
+.conversation-notes > summary::-webkit-details-marker { display: none; }
+.conversation-notes > summary::before { border-bottom: 2px solid var(--console-teal-dark); border-right: 2px solid var(--console-teal-dark); content: ''; height: .4rem; margin-right: .15rem; transform: rotate(-45deg); transition: transform .15s ease; width: .4rem; }
+.conversation-notes[open] > summary::before { transform: rotate(45deg); }
+.conversation-notes > summary:focus-visible { border-radius: .8rem; outline: 2px solid var(--console-teal); outline-offset: -2px; }
+.conversation-notes__title { color: var(--console-ink); font-size: .82rem; font-weight: 600; }
+.conversation-notes__count { background: var(--console-teal-soft); border-radius: 99rem; color: var(--console-teal-dark); font-size: .68rem; font-weight: 600; padding: .05rem .45rem; }
+.conversation-notes__hint { color: var(--console-muted); font-size: .7rem; margin-left: auto; }
+.conversation-notes__list { border-top: 1px solid var(--console-soft-line); list-style: none; margin: 0; max-height: 24rem; overflow-y: auto; padding: 0 .9rem; }
+.conversation-notes__list:focus-visible { outline: 2px solid var(--console-teal); outline-offset: -2px; }
+.conversation-notes__note { padding: .7rem 0; }
+.conversation-notes__note + .conversation-notes__note { border-top: 1px solid var(--console-soft-line); }
+.conversation-notes__meta { color: var(--console-muted); font-size: .7rem; line-height: 1.5; margin: 0; }
+.conversation-notes__meta strong { color: var(--console-ink); font-weight: 600; }
+.conversation-notes__text { color: var(--console-ink); font-size: .8rem; line-height: 1.55; margin: .25rem 0 0; overflow-wrap: anywhere; }
+.conversation-notes__foot a { color: var(--console-teal-dark); font-size: .72rem; font-weight: 600; text-underline-offset: .15em; }
+/* A private note carries a grey Private tag on the right; Open consultation is a small button on the right. */
+.conversation-notes__head { align-items: flex-start; display: flex; gap: .5rem; justify-content: space-between; }
+.note-private { flex: 0 0 auto; font-size: .62rem; padding: .28rem .5rem; }
+.note-actions { display: flex; justify-content: flex-end; margin-top: .4rem; }
+.note-actions__button.console-button { font-size: .7rem; min-height: 2rem; padding: .35rem .7rem; }
+.conversation-notes__empty { border-top: 1px solid var(--console-soft-line); color: var(--console-muted); font-size: .78rem; margin: 0; padding: .8rem .9rem; }
+.conversation-notes__foot { border-top: 1px solid var(--console-soft-line); color: var(--console-muted); font-size: .7rem; margin: 0; padding: .6rem .9rem; }
+
+/* Desktop: Patient messages and Team messages run to the bottom of the window. The list and the
+   conversation scroll inside it. Opened Patient notes drop down below without shrinking the
+   conversation (conversations.js keeps its height); the pane scrolls to them. */
+@media (min-width: 64rem) and (min-height: 36rem) {
+  .record-inbox--fill { grid-template-rows: minmax(0, 1fr); height: max(30rem, calc(100dvh - var(--inbox-top, 22rem) - 1.5rem)); }
+  .record-inbox--fill .record-inbox__threads { min-height: 0; }
+  .record-inbox--fill .record-inbox__list { max-height: none; min-height: 0; }
+  .record-inbox--fill .record-messages__pane { min-height: 0; overflow-y: auto; }
+  .record-inbox--fill .record-conversation { flex: 1 1 0; max-height: none; min-height: 10rem; }
+  .record-inbox--fill .record-messages__pane:has(.conversation-notes[open]) .record-conversation { flex: 0 0 auto; height: var(--conversation-height, 24rem); }
+  .record-inbox--fill .conversation-notes__list { max-height: none; overflow: visible; }
+}

@@ -1,0 +1,16 @@
+{% comment %}A booking's fields (care/forms.py AppointmentForm), on the booking page and in the booking modals: Patient (unless the
+  record already says who), Clinician and Appointment type each on a line, then Date, Time and Duration in thirds. Time
+  waits for a date and a clinician, then lists the clinician's free quarter hours that day for the chosen length
+  (static/js/appointment_booking.js); without scripts it lists every quarter hour and booking checks the time.{% endcomment %}
+<div class="booking-fields" data-booking-form data-times-url="{% url 'portal:appointment-book-times' %}">
+  {% if form.non_field_errors %}<div role="alert">{{ form.non_field_errors }}</div>{% endif %}
+  {% for field in form.hidden_fields %}{{ field }}{{ field.errors }}{% endfor %}
+  {% if not form.patient.is_hidden %}{% include 'portal/includes/form_field.html' with field=form.patient %}{% endif %}
+  {% include 'portal/includes/form_field.html' with field=form.clinician %}
+  {% include 'portal/includes/form_field.html' with field=form.appointment_type %}
+  <div class="booking-fields__when">
+    {% include 'portal/includes/form_field.html' with field=form.date %}
+    <div class="console-form__field"><label for="{{ form.time.id_for_label }}">Time</label>{{ form.time }}{{ form.time.errors }}{{ form.starts_at.errors }}</div>
+    {% include 'portal/includes/form_field.html' with field=form.duration_minutes %}
+  </div>
+</div>

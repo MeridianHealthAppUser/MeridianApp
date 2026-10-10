@@ -49,6 +49,7 @@ class AuthorizationListView(StaffClinicalView):
     http_method_names = ('get', 'head', 'options')
     nav_section = 'authorisations'
     page_title = 'Treatment authorisations'
+    clinician_redirect_message = 'Treatment authorisations are on each patient’s record, under Treatment.'
 
     def get(self, request):
         listing = _listing(request, self.company, _authorizations(self.company), TreatmentAuthorization.Status.choices)
@@ -65,6 +66,7 @@ class AuthorizationEditorView(StaffClinicalView):
         if pk is None:
             return self.patient_for(patient_pk), None
         previous = get_object_or_404(_authorizations(self.company), pk=pk)
+        self.check_record(previous.patient)
         self.require_doctor(previous.prescribed_by_id)
         return previous.patient, previous
 
@@ -125,7 +127,9 @@ class AuthorizationDetailView(StaffClinicalView):
         return render(request, 'portal/patient_workspace_action.html' if context.get('patient_workspace') else 'portal/treatment_authorisation_detail.html', context, status=status)
 
     def get(self, request, pk):
-        return self.display(request, get_object_or_404(_authorizations(self.company), pk=pk))
+        authorization = get_object_or_404(_authorizations(self.company), pk=pk)
+        self.check_record(authorization.patient)
+        return self.display(request, authorization)
 
 
 class AuthorizationStatusView(AuthorizationDetailView):
@@ -133,6 +137,7 @@ class AuthorizationStatusView(AuthorizationDetailView):
 
     def post(self, request, pk):
         authorization = get_object_or_404(_authorizations(self.company), pk=pk)
+        self.check_record(authorization.patient)
         self.require_doctor(authorization.prescribed_by_id)
         form = ConfirmTreatmentForm(request.POST)
         valid = form.is_valid()
@@ -149,6 +154,7 @@ class AuthorizationStatusView(AuthorizationDetailView):
 
 @method_decorator(never_cache, name='dispatch')
 class SubscriptionListView(LoginRequiredMixin, StaffCompanyRequiredMixin, View):
+    admin_only = True
     http_method_names = ('get', 'head', 'options')
 
     def get(self, request):

@@ -9,11 +9,13 @@ from django.urls import reverse
 from django.utils import timezone
 
 from care.messaging import add_participant
+from care.widgets import floor_quarter_hour
 from care.models import (
     Appointment,
     AuditEvent,
     ClinicalNote,
     ClinicalTask,
+    ClinicianAssignment,
     MessageThread,
     PatientMessage,
     PracticeSettings,
@@ -185,6 +187,9 @@ class PortalWorkflowTests(TestCase):
         ClinicalNote.objects.create(
             company=self.company, patient=self.patient, author=self.doctor, body=shared_body,
         )
+        # The second doctor looked after Alice before, so still reads her record.
+        ClinicianAssignment.objects.create(company=self.company, patient=self.patient, clinician=self.second_doctor,
+                                           ended_at=timezone.now())
         for user in (self.doctor, self.second_doctor, self.super_admin, self.administrator):
             with self.subTest(user=user.email):
                 self.login(user)
@@ -242,7 +247,7 @@ class PortalWorkflowTests(TestCase):
             'workflow_context': token,
             'patient': self.patient.pk, 'clinician': self.doctor.pk,
             'appointment_type': Appointment.Type.FOLLOW_UP,
-            'starts_at': (timezone.now() + timedelta(days=3)).isoformat(), 'duration_minutes': 30,
+            'starts_at': floor_quarter_hour(timezone.now() + timedelta(days=3)).isoformat(), 'duration_minutes': 30,
             'video_link': 'https://example.test/consult',
         })
         self.assertRedirects(response, self.patient_url() + '?tab=appointments', fetch_redirect_response=False)
@@ -257,7 +262,7 @@ class PortalWorkflowTests(TestCase):
             'workflow_context': token,
             'patient': self.patient.pk, 'clinician': self.administrator.pk,
             'appointment_type': Appointment.Type.FOLLOW_UP,
-            'starts_at': (timezone.now() + timedelta(days=3)).isoformat(), 'duration_minutes': 30,
+            'starts_at': floor_quarter_hour(timezone.now() + timedelta(days=3)).isoformat(), 'duration_minutes': 30,
             'video_link': 'https://example.test/keep-this-draft',
         })
         self.assertEqual(response.status_code, 200)
@@ -392,7 +397,8 @@ class PortalWorkflowTests(TestCase):
         incoming = self.add_message(body='Patient question to team')
         self.add_message(sender=self.administrator, body='Administrative reply')
         other_practice = self.add_message(thread=self.other_practice_thread, body='Beta message')
-        for user, expected in ((self.second_doctor, 0), (self.doctor, 1)):
+        # Unread is anything someone else sent, the patient or a colleague, in conversations you are in.
+        for user, expected in ((self.second_doctor, 0), (self.doctor, 2)):
             with self.subTest(user=user.email):
                 self.login(user)
                 response = self.client.get(reverse('portal:desktop-dashboard'))

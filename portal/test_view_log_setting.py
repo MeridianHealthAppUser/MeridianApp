@@ -22,7 +22,7 @@ class ViewLogSettingTests(TestCase):
         CompanyMembership.objects.create(company=cls.company, user=cls.super_admin, role='super_admin')
         CompanyMembership.objects.create(company=cls.company, user=cls.admin, role='practice_admin')
         CompanyMembership.objects.create(company=cls.company, user=cls.doctor, role='doctor')
-        cls.patient = Patient.objects.create(company=cls.company, first_name='Pat', last_name='Patient')
+        cls.patient = Patient.objects.create(company=cls.company, first_name='Pat', last_name='Patient', assigned_doctor=cls.doctor)
 
     def login(self, user):
         self.client.force_login(user)
@@ -59,11 +59,15 @@ class ViewLogSettingTests(TestCase):
         self.login(self.doctor)
         self.client.get(reverse('portal:patient-detail', args=[self.patient.pk]))
         self.assertTrue(AuditEvent.objects.filter(action='patient.record_viewed').exists())
+        record = self.client.get(reverse('portal:patient-detail', args=[self.patient.pk]), {'tab': 'history'})
+        self.assertNotContains(record, 'record viewed')
+        # The access history (administrators and Super Admins) leaves view events out too.
+        self.login(self.super_admin)
+        self.client.get(reverse('portal:patient-detail', args=[self.patient.pk]))
+        self.assertTrue(AuditEvent.objects.filter(action='patient.record_viewed', actor=self.super_admin).exists())
         history = self.client.get(reverse('portal:account-access-history'))
         self.assertEqual(history.context['access_rows'], [])
         self.assertNotContains(history, 'Patient record viewed')
-        record = self.client.get(reverse('portal:patient-detail', args=[self.patient.pk]), {'tab': 'history'})
-        self.assertNotContains(record, 'record viewed')
 
     def test_event_log_settings_list_what_is_always_stored_and_only_the_view_log_changes(self):
         from .practice_settings_views import EVENT_LOG_SECTIONS

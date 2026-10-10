@@ -62,6 +62,8 @@ class StaffUserForm(forms.Form):
     clinician_type = clinician_type_field()
     practices = forms.ModelMultipleChoiceField(queryset=Company.objects.none(),
         widget=forms.CheckboxSelectMultiple, help_text='Only practices where you are a Super Admin appear here.')
+    title = forms.ChoiceField(choices=get_user_model().Title.choices, initial=get_user_model().Title.DR, required=False,
+                              label='Title (new accounts only)')
     first_name = forms.CharField(max_length=150, required=False, label='First name (new accounts only)')
     last_name = forms.CharField(max_length=150, required=False, label='Last name (new accounts only)')
     password1 = forms.CharField(required=False, strip=False, label='Password (new accounts only)',
@@ -101,11 +103,27 @@ class StaffUserForm(forms.Form):
         return data
 
 
+STAFF_DETAIL_FIELDS = ('title', 'first_name', 'last_name', 'contact_number', 'hpcsa_number', 'note_signature', 'pathcare_name', 'pathcare_code')
+
+
 class MembershipForm(forms.Form):
     role = forms.ChoiceField(choices=CompanyMembership.Role.choices)
     clinician_type = clinician_type_field()
     is_active = forms.BooleanField(required=False, label='Active in this practice',
         help_text='Turning this off removes only this practice’s staff access. The shared login and other practices stay unchanged.')
+    # Staff read these on My profile; a clinician can change their note signature and PathCare details there.
+    title = forms.ChoiceField(choices=(('', 'Not recorded'), *get_user_model().Title.choices), required=False, label='Title')
+    first_name = forms.CharField(max_length=150, required=False, label='First name')
+    last_name = forms.CharField(max_length=150, required=False, label='Last name')
+    contact_number = forms.CharField(max_length=30, required=False, label='Contact number')
+    hpcsa_number = forms.CharField(max_length=20, required=False, label='HPCSA registration number',
+        help_text='Clinicians only.')
+    note_signature = forms.CharField(max_length=120, required=False, label='How consult notes are signed',
+        help_text='Clinicians only. For example: S. Marchant, MBChB')
+    pathcare_name = forms.CharField(max_length=60, required=False, label='PathCare referring name',
+        help_text='Doctors only, as PathCare holds it: SURNAME,DR INITIALS, for example CZECH,DR J C. Needed to request blood tests.')
+    pathcare_code = forms.CharField(max_length=20, required=False, label='PathCare doctor code',
+        help_text='Doctors only, for example CZEJC0. Needed to request blood tests.')
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)

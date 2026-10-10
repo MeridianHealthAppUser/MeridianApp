@@ -42,9 +42,10 @@ class TaskFilterForm(forms.Form):
         required=False, initial='open',
         choices=(('open', 'Open'), ('done', 'Completed'), ('cancelled', 'Cancelled'), ('all', 'Everything')),
     )
-    patient = forms.ModelChoiceField(label='Patient', required=False, queryset=Patient.objects.none(), empty_label='All patients')
+    # Any number of patients and tags; the task matches one of each that's ticked.
+    patient = forms.ModelMultipleChoiceField(label='Patient', required=False, queryset=Patient.objects.none())
     kind = forms.ChoiceField(label='Task type', required=False, choices=(('all', 'All tasks'), ('patient', 'Patient tasks'), ('general', 'General practice tasks')))
-    tag = forms.ModelChoiceField(label='Status tag', required=False, queryset=RecordTag.objects.none(), empty_label='All tags')
+    tag = forms.ModelMultipleChoiceField(label='Free-form tag', required=False, queryset=RecordTag.objects.none())
 
     def __init__(self, *args, company, **kwargs):
         super().__init__(*args, **kwargs)

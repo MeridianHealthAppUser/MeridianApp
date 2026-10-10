@@ -14,6 +14,7 @@ from .compounding_forms import ReviewRunForm
 
 
 class ReviewPlanningView(StaffClinicalView):
+    admin_only = True
     nav_section = 'review_rules'
     page_title = 'Review planning rules'
 

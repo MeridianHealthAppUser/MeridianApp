@@ -1,5 +1,5 @@
 .patient-workspace-heading { align-items: start; display: flex; flex-wrap: wrap; gap: 1rem; justify-content: space-between; margin-bottom: 1.25rem; }
-.patient-workspace-heading h1 { color: var(--console-ink); font-family: Georgia, serif; font-size: clamp(1.8rem, 3vw, 2.5rem); font-weight: 500; line-height: 1.1; margin: 0; }
+.patient-workspace-heading h1 { color: var(--console-ink); font-family: inherit; letter-spacing: -.02em; font-size: clamp(1.8rem, 3vw, 2.5rem); font-weight: 500; line-height: 1.1; margin: 0; }
 .patient-workspace-heading p:last-child { color: var(--console-muted); font-size: .8rem; line-height: 1.6; margin: .6rem 0 0; overflow-wrap: anywhere; }
 .patient-workspace-heading > div { min-width: 0; }
 .patient-workspace-actions { align-items: center; display: flex; flex-wrap: wrap; gap: .65rem; }
@@ -10,8 +10,6 @@
 .patient-workspace-content { min-width: 0; }
 .patient-workspace-toolbar { align-items: center; display: flex; flex-wrap: wrap; gap: .7rem; justify-content: space-between; margin-bottom: 1rem; }
 .patient-workspace-toolbar h2 { color: var(--console-ink); font-size: 1.15rem; margin: 0; }
-.patient-workspace-filter { align-items: center; display: flex; flex-wrap: wrap; gap: .5rem; }
-.patient-workspace-filter label { font-size: .8rem; }
 .patient-workspace-panel { background: #fff; border: 1px solid var(--console-line); border-radius: .85rem; margin-bottom: 1rem; overflow: hidden; }
 .patient-workspace-panel__body { padding: 1rem 1.2rem; }
 .patient-workspace-table-wrap { overflow-x: auto; }
@@ -22,6 +20,8 @@
 .patient-workspace-table small { color: var(--console-muted); display: block; margin-top: .2rem; }
 .patient-workspace-empty, .patient-workspace-notice { color: var(--console-muted); font-size: .85rem; line-height: 1.6; margin: 0; padding: 1.1rem; }
 .patient-workspace-notice { background: #edf6f2; border: 1px solid #cce2d7; border-radius: .75rem; margin-bottom: 1rem; }
+/* A past clinician reads the record but can't change it. */
+.patient-workspace-notice--read-only { background: #fff8eb; border-color: #f0dcb0; color: #6b5217; }
 .patient-workspace-pagination { align-items: center; display: flex; flex-wrap: wrap; font-size: .8rem; gap: .6rem; justify-content: space-between; padding: 1rem; }
 .patient-workspace-summary { display: grid; gap: .8rem; grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); margin-bottom: 1rem; }
 .patient-workspace-summary a { background: #fff; border: 1px solid var(--console-line); border-radius: .85rem; color: var(--console-muted); font-size: .8rem; padding: 1rem; text-decoration: none; }
@@ -78,3 +78,8 @@
   .patient-workspace-picker a[aria-current="page"]::after { content: '✓'; font-weight: 800; }
 }
 @media (prefers-reduced-motion: reduce) { .patient-workspace-picker > summary svg { transition: none; } }
+/* As in the conversation's Patient notes: a grey Private tag on the right, and Open consultation as a small button on the right. */
+.patient-workspace-note__head { align-items: flex-start; display: flex; gap: .5rem; justify-content: space-between; }
+.patient-workspace-note .note-private { flex: 0 0 auto; font-size: .64rem; padding: .3rem .55rem; }
+.patient-workspace-note .note-actions { display: flex; justify-content: flex-end; margin-top: .5rem; }
+.patient-workspace-note .note-actions__button.console-button { font-size: .72rem; min-height: 2.1rem; padding: .35rem .75rem; }

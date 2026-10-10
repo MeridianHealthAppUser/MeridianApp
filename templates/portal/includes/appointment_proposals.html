@@ -1,6 +1,6 @@
 {% comment %}
   Included inside an open secure-conversation thread. The parent supplies
-  `thread`, `is_patient_portal`, `can_propose_appointments`, `failed_form`,
+  `thread`, `is_patient_portal`, `can_propose_appointments`, `failed_form`, `conversation_return_to`,
   `reply_thread_id`, `proposal_error`, and `failed_proposal_id`.
 {% endcomment %}
 <section class="appointment-proposals" aria-labelledby="appointment-proposals-{{ thread.pk }}">
@@ -54,7 +54,7 @@
           {% endif %}
           <form class="proposal-actions" method="post" action="{{ appointment_response_url }}">
             {% csrf_token %}
-            {% if is_staff_inbox %}<input type="hidden" name="return_to" value="inbox">{% endif %}
+            {% if conversation_return_to %}<input type="hidden" name="return_to" value="{{ conversation_return_to }}">{% endif %}
             <button class="console-button console-button--primary" type="submit" name="decision" value="accept">Accept</button>
             <button class="console-button console-button--secondary" type="submit" name="decision" value="decline">Decline</button>
           </form>
@@ -68,7 +68,7 @@
           {% endif %}
           <form class="proposal-actions proposal-actions--withdraw" method="post" action="{{ appointment_withdraw_url }}">
             {% csrf_token %}
-            {% if is_staff_inbox %}<input type="hidden" name="return_to" value="inbox">{% endif %}
+            {% if conversation_return_to %}<input type="hidden" name="return_to" value="{{ conversation_return_to }}">{% endif %}
             <button class="console-button console-button--quiet" type="submit" name="decision" value="withdraw">Withdraw suggestion</button>
           </form>
         {% endif %}
@@ -78,8 +78,10 @@
     {% endfor %}
   </div>
 
-  {% if not thread.is_closed and can_propose_appointments %}
-    <details class="proposal-create"{% if failed_form == 'proposal_form' and reply_thread_id == thread.pk %} open{% elif is_patient_portal and request.GET.appointment %} open{% endif %}>
+  {# Patients suggest new times here. A doctor gets the form only after choosing "Offer a new time" or #}
+  {# "Discuss rebooking" for an appointment on the calendar; the practice moves appointments from Calendar & Bookings. #}
+  {% if not thread.is_closed and can_propose_appointments and thread.proposal_form %}
+    <details class="proposal-create"{% if failed_form == 'proposal_form' and reply_thread_id == thread.pk %} open{% elif request.GET.appointment %} open{% endif %}>
       <summary>Suggest a different appointment time</summary>
       {% if thread.has_selectable_appointments or thread.proposal_form.is_bound %}
         {% if is_patient_portal %}
@@ -89,7 +91,7 @@
         {% endif %}
         <form class="console-form proposal-create__form" method="post" action="{{ appointment_proposal_url }}">
           {% csrf_token %}
-          {% if is_staff_inbox %}<input type="hidden" name="return_to" value="inbox">{% endif %}
+          {% if conversation_return_to %}<input type="hidden" name="return_to" value="{{ conversation_return_to }}">{% endif %}
           {{ thread.proposal_form.non_field_errors }}
           <div class="console-form__field">
             <label for="{{ thread.proposal_form.appointment.id_for_label }}">{{ thread.proposal_form.appointment.label }}</label>

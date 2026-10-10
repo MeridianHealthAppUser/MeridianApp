@@ -14,7 +14,8 @@ from django.utils import timezone
 from practices.models import Company, CompanyMembership, Patient
 
 from .clinical import create_lab_request, review_lab_request, save_consultation, submit_lab_result
-from .models import Appointment, AuditEvent, AvailabilitySlot, ClinicalEncounter, ClinicalNote, ClinicalTask, LabRequest, LabResult, PatientEvent
+from .models import Appointment, AuditEvent, AvailabilitySlot, ClinicalEncounter, ClinicalNote, ClinicalTask, LabRequest, LabResult, PatientEvent, PatientFile
+from .patient_files import read_patient_file
 
 
 @override_settings(MULTI_PRACTICE_ENABLED=True)
@@ -91,12 +92,14 @@ class ClinicalAdminSafeguardTests(TestCase):
         self.draft.refresh_from_db()
         self.result.refresh_from_db()
         self.assertEqual(self.draft.status, ClinicalEncounter.Status.DRAFT)
-        self.assertEqual(bytes(self.result.content), self.report_bytes)
+        self.assertEqual(read_patient_file(self.result.file), self.report_bytes)
 
     def test_lab_admin_renders_only_metadata_and_defers_pdf_bytes(self):
         model_admin = admin.site._registry[LabResult]
-        loaded = model_admin.get_queryset(self.request).get(pk=self.result.pk)
-        self.assertIn('content', loaded.get_deferred_fields())
+        # The PDF bytes live in PatientFile, which has no admin, and the report's admin never shows the file.
+        self.assertNotIn(PatientFile, admin.site._registry)
+        self.assertNotIn('file', model_admin.get_fields(self.request, self.result))
+        self.assertNotIn('file', model_admin.get_form(self.request, self.result).base_fields)
         self.assertNotIn('content', model_admin.get_fields(self.request, self.result))
         self.assertNotIn('content', model_admin.get_form(self.request, self.result).base_fields)
         self.assertNotIn('delete_selected', model_admin.get_actions(self.request))

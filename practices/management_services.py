@@ -90,7 +90,7 @@ def update_practice(*, actor, company, name, slug, expected_updated_at=None, req
 
 @transaction.atomic
 def add_staff_user(*, actor, source_company, companies, mode, email, role, clinician_type=None,
-                   first_name='', last_name='', password='', request=None):
+                   title='', first_name='', last_name='', password='', request=None):
     """New login or explicit SSO link. Existing identities are never edited here."""
     companies = list(companies)
     if not companies:
@@ -104,7 +104,7 @@ def add_staff_user(*, actor, source_company, companies, mode, email, role, clini
     if mode == 'create':
         if matches:
             raise ValidationError('This email already has an account. Use “Link an existing account”.')
-        user = User(email=email, first_name=first_name.strip(), last_name=last_name.strip(),
+        user = User(email=email, title=title, first_name=first_name.strip(), last_name=last_name.strip(),
                     is_staff=False, is_superuser=False)
         if not user.first_name or not user.last_name:
             raise ValidationError('A new staff account needs a first and last name.')
@@ -163,3 +163,23 @@ def update_membership(*, actor, company, membership, role, is_active, clinician_
                          'role': role, 'previous_clinician_type': old_type, 'clinician_type': clinician_type,
                          'previous_active': old_active, 'is_active': is_active, 'user_id': membership.user_id})
     return membership
+
+
+@transaction.atomic
+def update_staff_details(*, actor, company, membership, details, request=None):
+    """A Super Admin corrects a staff member's details; the person reads them on My profile."""
+    _lock_practices(actor, [company])
+    if membership.company_id != company.pk:
+        raise PermissionDenied('This membership belongs to another practice.')
+    user = get_user_model().objects.select_for_update().get(pk=membership.user_id)
+    changed = []
+    for field, value in details.items():
+        clean_value = user._meta.get_field(field).clean((value or '').strip(), user)
+        if getattr(user, field) != clean_value:
+            setattr(user, field, clean_value)
+            changed.append(field)
+    if changed:
+        user.save(update_fields=changed)
+        record_audit(company=company, actor=actor, action='staff.details_updated', target=membership,
+                     request=request, metadata={'changed_fields': changed, 'user_id': user.pk})
+    return changed

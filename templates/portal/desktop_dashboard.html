@@ -2,7 +2,7 @@
 {% load static workspace_ui %}
 
 {% block title %}{{ active_company.name }} | Meridian{% endblock %}
-{% block extra_css %}<link rel="stylesheet" href="{% static 'css/console.css' %}">{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{% static 'css/console.css' %}?v=20261008n"><link rel="stylesheet" href="{% static 'css/person_tags.css' %}?v=20261009e">{% endblock %}
 {% block content %}
   <div class="meridian-console console-desktop workspace-overview">
     <div class="console-shell">
@@ -27,15 +27,11 @@
           <section class="console-welcome" aria-labelledby="workspace-heading">
             <div>
               <h1 id="workspace-heading">Welcome, {{ user.first_name|default:user.full_name }}.</h1>
-              <p class="console-welcome__subtext">A focused view of your patients, clinical follow-ups, and conversations within {{ active_company.name }}.</p>
-            </div>
-            <div class="console-actions">
-              {% if active_membership %}<span class="console-role-badge">{{ active_membership.title }}</span>{% endif %}
-              <a class="console-button console-button--primary" href="{% url 'portal:patient-list' %}">View patients</a>
-              <a class="console-button console-button--secondary" href="{% url 'portal:staff-schedule' %}">View schedule</a>
+              <p class="console-welcome__subtext">A focused view of your patients, clinical follow-ups and conversations.</p>
             </div>
           </section>
 
+          {# Clinicians don't need the count cards; administrators keep them. #}{% if active_membership.role != 'doctor' %}
           <section class="console-metrics" aria-label="Practice metrics">
             {% for metric_name, metric_value in metrics.items %}
               <article class="metric-card">
@@ -50,15 +46,16 @@
               </article>
             {% endfor %}
           </section>
+          {% endif %}
 
           <div class="console-grid" id="schedule">
             <section class="console-card" aria-labelledby="appointments-heading">
               <header class="console-card__header">
                 <div class="console-card__heading">
                   <h2 id="appointments-heading">Upcoming appointments</h2>
-                  <p>Scheduled care at {{ active_company.name }}</p>
+                  <p>{% if active_membership.role == 'doctor' %}Your booked appointments{% else %}Booked appointments{% endif %}</p>
                 </div>
-                <a class="console-button console-button--quiet" href="{% url 'portal:staff-schedule' %}">Full schedule</a>
+                <a class="console-button console-button--quiet" href="{% url 'portal:staff-schedule' %}">View calendar</a>
               </header>
               <div class="console-card__body">
                 <ul class="console-list">
@@ -72,7 +69,7 @@
                       <span class="console-status console-status--{{ appointment.status }}">{{ appointment.get_status_display }}</span>
                     </li>
                   {% empty %}
-                    <li class="console-empty"><p>There are no upcoming appointments in this practice yet.</p></li>
+                    <li class="console-empty"><p>{% if active_membership.role == 'doctor' %}You have no upcoming appointments.{% else %}There are no upcoming appointments yet.{% endif %}</p></li>
                   {% endfor %}
                 </ul>
               </div>
@@ -120,9 +117,9 @@
             <header class="console-card__header">
               <div class="console-card__heading">
                 <h2 id="patients-heading">Patients</h2>
-                <p>People currently receiving care at {{ active_company.name }}</p>
+                <p>{% if active_membership.role == 'doctor' %}Patients assigned to you{% else %}People currently receiving care{% endif %}</p>
               </div>
-              <a class="console-button console-button--primary" href="{% url 'portal:patient-list' %}">Patient directory</a>
+              <a class="console-button console-button--primary" href="{% url 'portal:patient-list' %}">View patients</a>
             </header>
             <div class="patient-table-wrap">
               <table class="patient-table">
@@ -147,11 +144,11 @@
                       <td>{{ listed_patient.medical_record_number|default:"Record pending" }}</td>
                       <td>{% if listed_patient.assigned_doctor %}{{ listed_patient.assigned_doctor.full_name }}{% else %}Unassigned{% endif %}</td>
                       <td>{% if listed_patient.is_active %}<span class="console-status console-status--active">Active</span>{% else %}<span class="console-status">Inactive</span>{% endif %}</td>
-                      <td><a class="patient-table__action" href="{% url 'portal:patient-detail' listed_patient.pk %}">Open</a></td>
+                      <td class="patient-table__action-cell"><a class="console-button console-button--secondary" href="{% url 'portal:patient-detail' listed_patient.pk %}">Open record<span class="sr-only"> for {{ listed_patient }}</span></a></td>
                     </tr>
                   {% empty %}
                     <tr>
-                      <td colspan="5"><div class="console-empty"><p>There are no patient records in this practice yet. Add the first patient to begin a secure clinical record.</p></div></td>
+                      <td colspan="5"><div class="console-empty"><p>{% if active_membership.role == 'doctor' %}No patients are assigned to you yet.{% else %}There are no patient records yet. Add the first patient to begin a secure clinical record.{% endif %}</p></div></td>
                     </tr>
                   {% endfor %}
                 </tbody>
@@ -163,9 +160,9 @@
             <header class="console-card__header">
               <div class="console-card__heading">
                 <h2 id="messages-heading">Recent conversations</h2>
-                <p>Patient messages in this practice</p>
+                <p>Your latest patient conversations</p>
               </div>
-              <a class="console-button console-button--quiet" href="{% url 'portal:staff-inbox' %}">Open inbox</a>
+              <a class="console-button console-button--quiet" href="{% url 'portal:staff-inbox' %}">View patient messages</a>
             </header>
             <div class="console-card__body">
               <ul class="console-list message-list">
@@ -174,11 +171,12 @@
                     <span class="console-patient-avatar" aria-hidden="true">{{ message.patient.first_name|slice:":1"|upper }}{{ message.patient.last_name|slice:":1"|upper }}</span>
                     <div class="message-list__copy">
                       <strong>{{ message.subject|default:"Patient message" }}</strong>
-                      <span>{{ message.patient }}{% if message.is_closed %} · Conversation closed{% endif %}</span>
+                      <span class="person-tags"><span class="sr-only">With </span>{% for tag in message.people_tags %}{% include 'portal/includes/person_tag.html' %}{% endfor %}</span>
                     </div>
                     <div class="message-list__meta">
                       {% if message.last_message_at %}<time class="message-list__time" datetime="{{ message.last_message_at|date:'c' }}">{{ message.last_message_at|timesince }} ago</time>{% endif %}
-                      <a class="message-list__action" href="{% url 'portal:patient-detail' message.patient_id %}?thread={{ message.pk }}#conversation-{{ message.pk }}">Open conversation<span class="sr-only"> with {{ message.patient }}</span></a>
+                      {# A closed conversation has the same "Closed" tag as in Patient messages, beside its button. #}
+                      <div class="message-list__actions">{% if message.is_closed %}<span class="record-inbox-pill">Closed</span>{% endif %}<a class="console-button console-button--secondary" href="{% url 'portal:patient-detail' message.patient_id %}?thread={{ message.pk }}#conversation-{{ message.pk }}">View conversation<span class="sr-only"> with {{ message.patient }}</span></a></div>
                     </div>
                   </li>
                 {% empty %}
@@ -188,9 +186,11 @@
             </div>
           </section>
 
+          {# Only shown when the app runs more than one practice. #}{% if multi_practice_enabled %}
           <section id="insights" class="patient-summary">
             <strong>Practice privacy.</strong> This workspace is filtered to {{ active_company.name }}. Switch practices from the header to view a different company’s records.
           </section>
+          {% endif %}
         </main>
       </div>
     </div>

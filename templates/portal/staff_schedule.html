@@ -2,7 +2,7 @@
 {% load static workspace_ui %}
 
 {% block title %}{{ title|default:page_title }} | {{ company.name }} | Meridian{% endblock %}
-{% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/schedule_availability.css' %}">{% endblock %}
+{% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/schedule_availability.css' %}?v=20261008g"><link rel="stylesheet" href="{% static 'css/dialogs.css' %}?v=20261008b"><script src="{% static 'js/dialogs.js' %}?v=20261008a" defer></script><script src="{% static 'js/appointment_booking.js' %}?v=20261010b" defer></script>{% endblock %}
 
 
 {% block breadcrumbs %}{% breadcrumbs page_title %}{% endblock %}
@@ -10,180 +10,231 @@
   <header class="staff-page-header staff-schedule-page-header">
     <div>
       <h1>{{ page_title }}</h1>
-      <p>Times shown in South Africa time (SAST).</p>
     </div>
     <div class="staff-schedule-header-actions">
-      <a class="console-button console-button--primary" href="{% url 'portal:appointment-book' %}">Book appointment</a>
-      <nav class="staff-view-toggle" aria-label="Schedule view">
-        <a{% if schedule_view == 'table' %} class="is-active" aria-current="page"{% endif %} href="{{ table_view_url }}">Table</a>
-        <a{% if schedule_view == 'calendar' %} class="is-active" aria-current="page"{% endif %} href="{{ calendar_view_url }}">Calendar</a>
-      </nav>
+      <a class="console-button console-button--primary" href="{% url 'portal:appointment-book' %}" data-modal-open="create-appointment" aria-haspopup="dialog">Create appointment</a>
       {% if next_appointment_date and next_appointment_url %}
         <a class="console-button console-button--secondary" href="{{ next_appointment_url }}">Next appointment day: {{ next_appointment_date|date:"j M" }}</a>
       {% endif %}
     </div>
   </header>
+  <nav class="records-tabs schedule-tabs" aria-label="Calendar &amp; Bookings">
+    <a href="{{ bookings_tab_url }}"{% if schedule_section == 'bookings' %} class="is-active" aria-current="page"{% endif %}>Calendar &amp; Bookings</a>
+    <a href="{{ availability_tab_url }}"{% if schedule_section == 'availability' %} class="is-active" aria-current="page"{% endif %}>Working Pattern &amp; Availability</a>
+  </nav>
 {% endblock %}
 
 {% block page_content %}
-  <section class="staff-metrics staff-metrics--four" aria-label="Selected day appointment summary">
-    <article><span>Booked</span><strong>{{ metrics.booked }}</strong></article>
-    <article><span>Completed</span><strong>{{ metrics.completed }}</strong></article>
-    <article><span>Cancelled</span><strong>{{ metrics.cancelled }}</strong></article>
-    <article><span>No show</span><strong>{{ metrics.no_show }}</strong></article>
-  </section>
-
-  <section class="staff-page-card" aria-labelledby="schedule-filters-heading">
-    <header class="staff-page-card__header">
-      <div>
-        <h2 id="schedule-filters-heading">View schedule</h2>
-        <p>{% if selected_clinician %}Showing {{ selected_clinician.full_name }}'s appointments.{% else %}Showing appointments for all clinicians.{% endif %}</p>
-      </div>
-    </header>
-    <form class="staff-filter-form staff-filter-form--schedule" method="get" action="{% url 'portal:staff-schedule' %}">
-      <input type="hidden" name="view" value="{{ schedule_view }}">
-      {{ filter_form.non_field_errors }}
-      <div class="staff-filter-form__field">
-        <label for="{{ filter_form.date.id_for_label }}">{{ filter_form.date.label }}</label>
-        {{ filter_form.date }}
-        {{ filter_form.date.errors }}
-      </div>
-      <div class="staff-filter-form__field">
-        <label for="{{ filter_form.clinician.id_for_label }}">{{ filter_form.clinician.label }}</label>
-        {{ filter_form.clinician }}
-        {{ filter_form.clinician.errors }}
-      </div>
-      <button class="console-button console-button--primary" type="submit">View schedule</button>
-    </form>
-  </section>
+  {% if not is_doctor %}
+    <section class="staff-page-card" aria-labelledby="schedule-filters-heading">
+      <header class="staff-page-card__header">
+        <div>
+          <h2 id="schedule-filters-heading">View schedule</h2>
+          <p>{% if selected_clinician %}Showing {{ selected_clinician.full_name }}'s appointments.{% else %}Showing appointments for all clinicians.{% endif %}</p>
+        </div>
+      </header>
+      <form class="staff-filter-form staff-filter-form--schedule" method="get" action="{% url 'portal:staff-schedule' %}">
+        <input type="hidden" name="view" value="{{ schedule_view }}">
+        {% if schedule_section == 'availability' %}<input type="hidden" name="section" value="availability">{% endif %}
+        {{ filter_form.non_field_errors }}
+        <div class="staff-filter-form__field">
+          <label for="{{ filter_form.date.id_for_label }}">{{ filter_form.date.label }}</label>
+          {{ filter_form.date }}
+          {{ filter_form.date.errors }}
+        </div>
+        <div class="staff-filter-form__field">
+          <label for="{{ filter_form.clinician.id_for_label }}">{{ filter_form.clinician.label }}</label>
+          {{ filter_form.clinician }}
+          {{ filter_form.clinician.errors }}
+        </div>
+        <button class="console-button console-button--primary" type="submit">View schedule</button>
+      </form>
+    </section>
+  {% endif %}
 
   {% if filter_form.errors %}
-    <div class="staff-filter-error" role="alert">Correct the filter fields above to view appointments.</div>
+    <div class="staff-filter-error" role="alert">{% if is_doctor %}That date can't be shown. <a href="{% url 'portal:staff-schedule' %}">Go to today</a>.{% else %}Correct the filter fields above to view appointments.{% endif %}</div>
   {% else %}
-    {% if schedule_view == 'calendar' %}
-      <section class="staff-page-card staff-calendar-card" aria-labelledby="calendar-heading">
-        <header class="staff-calendar-card__header">
-          <div>
-            <p class="console-kicker">Month view</p>
-            <h2 id="calendar-heading">{{ calendar_month|date:"F Y" }}</h2>
-            <p>Select a day to see its appointments and recorded availability below.</p>
-          </div>
-          <nav class="staff-calendar-nav" aria-label="Calendar month">
-            {% if prev_month_url %}<a class="console-button console-button--quiet" href="{{ prev_month_url }}">Previous<span class="sr-only"> month</span></a>{% endif %}
-            <a class="console-button console-button--secondary" href="{{ today_url }}">Today</a>
-            {% if next_month_url %}<a class="console-button console-button--quiet" href="{{ next_month_url }}">Next<span class="sr-only"> month</span></a>{% endif %}
-          </nav>
-        </header>
-        <div class="staff-calendar" aria-label="{{ calendar_month|date:'F Y' }} calendar">
-          <div class="staff-calendar__weekdays" aria-hidden="true">
-            <span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span>
-          </div>
-          <div class="staff-calendar__days">
-            {% for week in calendar_weeks %}
-              {% for day in week %}
-                <article class="staff-calendar__day{% if not day.is_current_month %} staff-calendar__day--outside{% endif %}{% if day.is_selected %} staff-calendar__day--selected{% endif %}{% if day.is_today %} staff-calendar__day--today{% endif %}{% if not day.is_enabled %} staff-calendar__day--disabled{% endif %}">
-                  {% if day.is_enabled and day.url %}
-                    <a class="staff-calendar__date" href="{{ day.url }}#appointment-list-heading"{% if day.is_selected %} aria-current="date"{% endif %} aria-label="{{ day.date|date:'l, j F Y' }}{% if day.count %}, {{ day.count }} appointment{{ day.count|pluralize }}{% endif %}">
-                      <time datetime="{{ day.date|date:'Y-m-d' }}">{{ day.date|date:"j" }}</time>
-                      {% if day.count %}<span class="staff-calendar__count" aria-hidden="true">{{ day.count }}</span>{% endif %}
-                    </a>
-                  {% else %}
-                    <span class="staff-calendar__date" aria-disabled="true" aria-label="{{ day.date|date:'l, j F Y' }}">
-                      <time datetime="{{ day.date|date:'Y-m-d' }}">{{ day.date|date:"j" }}</time>
-                    </span>
-                  {% endif %}
-                  {% if day.is_current_month and day.appointments %}
-                    <ul class="staff-calendar__preview-list" aria-label="Appointments on {{ day.date|date:'j F' }}">
-                      {% for appointment in day.appointments %}
-                        <li>
-                          <time datetime="{{ appointment.starts_at|date:'c' }}">{{ appointment.starts_at|date:"H:i" }}</time>
-                          <span class="staff-calendar__preview-patient">{{ appointment.patient }}</span>
-                          <span class="staff-calendar__preview-status">{{ appointment.get_status_display }}</span>
-                        </li>
-                      {% endfor %}
-                    </ul>
-                  {% endif %}
-                  {% if day.is_current_month and day.more_count %}
-                    <a class="staff-calendar__more" href="{{ day.url }}#appointment-list-heading">+{{ day.more_count }} more<span class="sr-only"> appointment{{ day.more_count|pluralize }} on {{ day.date|date:"j F" }}</span></a>
-                  {% endif %}
-                </article>
-              {% endfor %}
-            {% empty %}
-              <p class="staff-empty-state">No calendar dates are available for these filters.</p>
-            {% endfor %}
-          </div>
+    {% if clash_count %}
+      <section class="schedule-clash" aria-labelledby="schedule-clash-heading">
+        <span class="schedule-pill schedule-pill--rose">Action needed</span>
+        <div class="schedule-clash__body">
+          <h2 id="schedule-clash-heading">{{ clash_count }} appointment{{ clash_count|pluralize }} sitting on {% if day_state.kind == 'off' %}{% if is_doctor %}a day you are now unavailable{% else %}a day this doctor is now unavailable{% endif %}{% elif is_doctor %}time outside your special hours{% else %}time outside this day's special hours{% endif %}</h2>
+          <p>{% if is_doctor %}The practice has been notified. Nobody is moved automatically: you or the practice can offer each patient a new time, and nothing changes until the patient confirms.{% else %}Nobody is moved automatically. Agree a new time with each patient, then cancel and rebook the appointment. Nothing changes for the patient until then.{% endif %}</p>
+          {% if can_manage_days %}
+            <form method="post" action="{{ undo_url }}">
+              {% csrf_token %}
+              <input type="hidden" name="schedule_context" value="{{ schedule_context }}">
+              <button class="console-button console-button--secondary" type="submit">Undo the change</button>
+            </form>
+          {% endif %}
         </div>
       </section>
     {% endif %}
 
-    <div class="staff-schedule-grid schedule-workspace-grid">
+    {% if schedule_section == 'availability' %}
+      {% include 'portal/includes/schedule_availability.html' %}
+    {% else %}
       <div class="schedule-diary-stack">
-      <section class="staff-page-card staff-page-card--list" aria-labelledby="appointment-list-heading">
-        <header class="staff-page-card__header">
-          <div>
-            <h2 id="appointment-list-heading" tabindex="-1">Appointments{% if selected_date %} on {{ selected_date|date:"j F" }}{% endif %}</h2>
-            <p>{% if selected_date %}{{ selected_date|date:"l, j F Y" }} · {{ page_obj.paginator.count }} appointment{{ page_obj.paginator.count|pluralize }} · SAST{% else %}Selected date · SAST{% endif %}</p>
+      <section class="staff-page-card schedule-bookings" aria-labelledby="{% if schedule_view == 'calendar' %}calendar-heading{% elif schedule_view == 'week' %}week-heading{% else %}appointment-list-heading{% endif %}">
+        <header class="schedule-bookings__header">
+          <div class="schedule-bookings__nav">
+            {% if schedule_view == 'calendar' %}
+              {% if prev_month_url %}<a class="schedule-step" href="{{ prev_month_url }}" aria-label="Previous month">&lsaquo;</a>{% endif %}
+              <h2 id="calendar-heading" tabindex="-1">{{ calendar_month|date:"F Y" }}</h2>
+              {% if next_month_url %}<a class="schedule-step" href="{{ next_month_url }}" aria-label="Next month">&rsaquo;</a>{% endif %}
+            {% elif schedule_view == 'week' %}
+              {% if prev_week_url %}<a class="schedule-step" href="{{ prev_week_url }}" aria-label="Previous week">&lsaquo;</a>{% endif %}
+              <h2 id="week-heading" tabindex="-1">Week {{ week_number }} &middot; <span class="schedule-week__range">{{ week_start|date:"j M Y" }} &ndash; {{ week_end|date:"j M Y" }}</span></h2>
+              {% if next_week_url %}<a class="schedule-step" href="{{ next_week_url }}" aria-label="Next week">&rsaquo;</a>{% endif %}
+            {% else %}
+              {% if prev_day_url %}<a class="schedule-step" href="{{ prev_day_url }}" aria-label="Previous day">&lsaquo;</a>{% endif %}
+              <h2 id="appointment-list-heading" tabindex="-1">Booked &middot; {{ selected_date|date:"l j F" }}</h2>
+              {% if next_day_url %}<a class="schedule-step" href="{{ next_day_url }}" aria-label="Next day">&rsaquo;</a>{% endif %}
+            {% endif %}
+          </div>
+          <div class="schedule-bookings__tools">
+            <span class="schedule-bookings__count">{% if schedule_view == 'calendar' %}{{ month_booked }} booked this month{% elif schedule_view == 'week' %}{{ week_booked }} booked this week{% elif day_booked %}{{ day_booked }} booked{% else %}Nothing booked{% endif %}</span>
+            {% if schedule_view == 'week' %}
+              {% if week_start and not week_has_today %}<a class="schedule-today" href="{{ today_url }}">This week</a>{% endif %}
+            {% elif selected_date and selected_date != today %}<a class="schedule-today" href="{{ today_url }}">Today</a>{% endif %}
+            <nav class="staff-view-toggle schedule-view-toggle" aria-label="Calendar view">
+              <a{% if schedule_view == 'table' %} class="is-active" aria-current="page"{% endif %} href="{{ table_view_url }}">Day</a>
+              <a{% if schedule_view == 'week' %} class="is-active" aria-current="page"{% endif %} href="{{ week_view_url }}">Week</a>
+              <a{% if schedule_view == 'calendar' %} class="is-active" aria-current="page"{% endif %} href="{{ calendar_view_url }}">Month</a>
+            </nav>
           </div>
         </header>
-        <div class="staff-schedule-table-wrap">
-          <table class="staff-schedule-table">
-            <thead>
-              <tr>
-                <th scope="col">Time</th>
-                <th scope="col">Patient</th>
-                <th scope="col">Type</th>
-                <th scope="col">Clinician</th>
-                <th scope="col">Duration</th>
-                <th scope="col">Status</th>
-                <th scope="col"><span class="sr-only">Appointment actions</span></th>
-              </tr>
-            </thead>
-            <tbody>
-              {% for appointment in appointments %}
-                <tr{% if appointment.needs_attention %} class="schedule-appointment-attention"{% endif %}>
-                  <td data-label="Time"><time class="staff-schedule-table__time" datetime="{{ appointment.starts_at|date:'c' }}">{{ appointment.starts_at|date:"H:i" }}</time></td>
-                  <td data-label="Patient"><a class="staff-schedule-table__patient" href="{% url 'portal:patient-detail' appointment.patient_id %}">{{ appointment.patient }}</a></td>
-                  <td data-label="Type">{{ appointment.get_appointment_type_display }}</td>
-                  <td data-label="Clinician">{% if appointment.clinician %}{{ appointment.clinician.full_name }}{% else %}Clinician pending{% endif %}</td>
-                  <td data-label="Duration">{{ appointment.duration_minutes }} min</td>
-                  <td data-label="Status"><div class="schedule-status-stack"><span class="console-status console-status--{{ appointment.status }}">{{ appointment.get_status_display }}</span>{% if appointment.needs_attention %}<span class="schedule-attention-badge">Needs rescheduling</span>{% endif %}</div></td>
-                  <td class="staff-schedule-table__actions-cell" data-label="Actions">
-                    <div class="staff-schedule-table__actions">
-                      <a class="staff-row-link" href="{% url 'portal:appointment-detail' appointment.pk %}">Appointment details</a>
-                      {% include 'portal/includes/video_join_link.html' %}
-                      {% if appointment.proposal_url %}<a class="staff-row-link" href="{{ appointment.proposal_url }}">{{ appointment.proposal_label }}</a>{% endif %}
-                      <a class="staff-row-link" href="{% url 'portal:patient-detail' appointment.patient_id %}">Open record<span class="sr-only"> for {{ appointment.patient }}</span></a>
+
+        {% if schedule_view == 'calendar' %}
+          <div class="schedule-month">
+            <div class="schedule-month__grid" role="list" aria-label="{{ calendar_month|date:'F Y' }}">
+              {% for label in weekday_labels %}<span class="schedule-month__weekday" aria-hidden="true">{{ label }}</span>{% endfor %}
+              {% for week in calendar_weeks %}
+                {% for day in week %}
+                  {% if not day.is_current_month %}
+                    <span class="schedule-month__day schedule-month__day--blank" aria-hidden="true"></span>
+                  {% elif day.is_enabled and day.url %}
+                    {# The whole day opens it in Day view; each booking is a chip that opens its appointment details. #}
+                    <div role="listitem" class="schedule-month__day{% if day.state.kind == 'off' %} schedule-month__day--off{% elif day.state.kind == 'special' %} schedule-month__day--special{% elif day.state.kind == 'not_working' %} schedule-month__day--not-working{% endif %}{% if day.is_today %} schedule-month__day--today{% endif %}">
+                      <a class="schedule-month__date" href="{{ day.url }}#appointment-list-heading"{% if day.is_today %} aria-current="date"{% endif %} aria-label="{{ day.date|date:'l j F' }}: {% if day.count %}{{ day.count }} booked{% else %}nothing booked{% endif %}{% if day.state.kind == 'off' %}, on leave{% elif day.state.kind == 'special' %}, special hours {{ day.state.starts_at|time:'H:i' }} to {{ day.state.ends_at|time:'H:i' }}{% elif day.state.kind == 'not_working' %}, not a working day{% endif %}">{{ day.date|date:"j" }}</a>
+                      {% if day.state.kind == 'off' %}<span class="schedule-month__tag">Leave</span>{% elif day.state.kind == 'special' %}<span class="schedule-month__tag">{% include 'portal/includes/special_hours_icon.html' %}{{ day.state.starts_at|time:"H:i" }}&ndash;{{ day.state.ends_at|time:"H:i" }}</span>{% endif %}
+                      {% if day.appointments %}<ul class="schedule-month__bookings">
+                        {% for appointment in day.appointments %}<li><a class="schedule-month__chip schedule-month__chip--{{ appointment.status }}" href="{% url 'portal:appointment-detail' appointment.pk %}" aria-label="Appointment details: {{ appointment.starts_at|time:'H:i' }}, {{ appointment.patient }}, {{ appointment.get_status_display|lower }}"><time datetime="{{ appointment.starts_at|date:'c' }}">{{ appointment.starts_at|time:"H:i" }}</time> <span>{{ appointment.patient }}</span></a></li>{% endfor %}
+                      </ul>{% endif %}
                     </div>
-                  </td>
-                </tr>
-              {% empty %}
-                <tr><td class="staff-schedule-table__empty" colspan="7"><div class="staff-empty-state"><p>There are no appointments for this date.</p></div></td></tr>
+                  {% else %}
+                    <span role="listitem" class="schedule-month__day schedule-month__day--disabled" aria-label="{{ day.date|date:'l j F Y' }}"><span class="schedule-month__date">{{ day.date|date:"j" }}</span></span>
+                  {% endif %}
+                {% endfor %}
               {% endfor %}
-            </tbody>
-          </table>
-        </div>
+            </div>
+            <div class="schedule-month__keys">
+              {% include 'portal/includes/schedule_booking_key.html' %}
+              {% if selected_clinician %}{% include 'portal/includes/schedule_key.html' %}{% endif %}
+            </div>
+          </div>
+        {% elif schedule_view == 'week' %}
+          <div class="schedule-week">
+            <ol class="schedule-week__grid" aria-label="Week {{ week_number }}, Monday to Sunday">
+              {% for day in week_days %}
+                {# The day's heading opens it in Day view; each booking opens its appointment details. #}
+                <li class="schedule-week__day{% if day.state.kind == 'off' %} schedule-week__day--off{% elif day.state.kind == 'special' %} schedule-week__day--special{% elif day.state.kind == 'not_working' %} schedule-week__day--not-working{% endif %}{% if day.is_today %} schedule-week__day--today{% endif %}{% if not day.is_enabled %} schedule-week__day--disabled{% endif %}">
+                  <div class="schedule-week__head">
+                    {% if day.url %}<a class="schedule-week__date" href="{{ day.url }}#appointment-list-heading"{% if day.is_today %} aria-current="date"{% endif %} aria-label="{{ day.date|date:'l j F' }}{% if day.is_today %}, today{% endif %}: {% if day.count %}{{ day.count }} booked{% else %}nothing booked{% endif %}{% if day.state.kind == 'off' %}, on leave{% elif day.state.kind == 'special' %}, special hours {{ day.state.starts_at|time:'H:i' }} to {{ day.state.ends_at|time:'H:i' }}{% elif day.state.kind == 'not_working' %}, not a working day{% endif %}">{% else %}<span class="schedule-week__date">{% endif %}<span class="schedule-week__weekday">{{ day.date|date:"D" }}</span> <span class="schedule-week__day-date">{{ day.date|date:"j M" }}</span>{% if day.url %}</a>{% else %}</span>{% endif %}
+                    {% if day.state.kind == 'off' %}<span class="schedule-week__tag schedule-week__tag--off">Leave</span>{% elif day.state.kind == 'special' %}<span class="schedule-week__tag schedule-week__tag--special"><span class="schedule-week__tag-label">Special hours</span> <span class="schedule-week__tag-hours">{% include 'portal/includes/special_hours_icon.html' %}{{ day.state.starts_at|time:"H:i" }}&ndash;{{ day.state.ends_at|time:"H:i" }}</span></span>{% endif %}
+                  </div>
+                  {% if day.appointments %}
+                    <ul class="schedule-week__bookings">
+                      {% for appointment in day.appointments %}
+                        <li><a class="schedule-week__booking schedule-week__booking--{{ appointment.status }}{% if appointment.needs_attention %} schedule-week__booking--attention{% endif %}" href="{% url 'portal:appointment-detail' appointment.pk %}"><span class="sr-only">Appointment details: </span><span class="schedule-week__top"><time datetime="{{ appointment.starts_at|date:'c' }}">{{ appointment.starts_at|time:"H:i" }}</time>{% if appointment.status != 'booked' %} <span class="console-status console-status--{{ appointment.status }}">{{ appointment.get_status_display }}</span>{% endif %}</span> <span class="schedule-week__patient">{{ appointment.patient }}</span> <span class="schedule-week__meta">{{ appointment.get_appointment_type_display }} &middot; <span class="schedule-week__duration">{{ appointment.duration_minutes }} min</span></span>{% if not is_doctor and not selected_clinician %} <span class="schedule-week__meta">{% if appointment.clinician %}{{ appointment.clinician.full_name }}{% else %}Clinician pending{% endif %}</span>{% endif %}{% if appointment.needs_attention %} {% include 'portal/includes/schedule_appointment_status.html' with hide_booked=True %}{% endif %}</a></li>
+                      {% endfor %}
+                    </ul>
+                  {% elif day.is_enabled %}
+                    <p class="schedule-week__empty">{% if day.state.kind == 'not_working' %}Not working{% else %}Nothing booked{% endif %}</p>
+                  {% endif %}
+                </li>
+              {% endfor %}
+            </ol>
+            {% if selected_clinician %}{% include 'portal/includes/schedule_key.html' %}{% endif %}
+          </div>
+        {% else %}
+          {% if day_state.kind == 'off' %}
+            <p class="schedule-day-state schedule-day-state--off">Leave</p>
+          {% elif day_state.kind == 'special' %}
+            <p class="schedule-day-state schedule-day-state--special">Special hours {% include 'portal/includes/special_hours_icon.html' %}{{ day_state.starts_at|time:"H:i" }} &ndash; {{ day_state.ends_at|time:"H:i" }}</p>
+          {% elif day_state.kind == 'not_working' %}
+            <p class="schedule-day-state schedule-day-state--not-working">Not a working day</p>
+          {% endif %}
+          <div class="staff-schedule-table-wrap">
+            <table class="staff-schedule-table{% if not is_doctor %} staff-schedule-table--clinicians{% endif %}">
+              <thead>
+                <tr>
+                  <th scope="col">Time</th>
+                  <th scope="col">Patient</th>
+                  <th scope="col">Type</th>
+                  {% if not is_doctor %}<th scope="col">Clinician</th>{% endif %}
+                  <th scope="col">Status</th>
+                  <th scope="col">Room</th>
+                  <th scope="col"><span class="sr-only">Appointment actions</span></th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for appointment in appointments %}
+                  <tr{% if appointment.needs_attention %} class="schedule-appointment-attention"{% endif %}>
+                    <td data-label="Time"><time class="staff-schedule-table__time" datetime="{{ appointment.starts_at|date:'c' }}">{{ appointment.starts_at|date:"H:i" }}</time></td>
+                    <td data-label="Patient"><a class="staff-schedule-table__patient" href="{% url 'portal:patient-detail' appointment.patient_id %}">{{ appointment.patient }}</a></td>
+                    <td data-label="Type">{{ appointment.get_appointment_type_display }} &middot; {{ appointment.duration_minutes }} min</td>
+                    {% if not is_doctor %}<td data-label="Clinician">{% if appointment.clinician %}{{ appointment.clinician.full_name }}{% else %}Clinician pending{% endif %}</td>{% endif %}
+                    <td data-label="Status">{% include 'portal/includes/schedule_appointment_status.html' %}</td>
+                    <td data-label="Room">{% if appointment.attention == 'day_off' or appointment.attention == 'special_hours' %}<span class="schedule-room-closed">Not open</span>{% elif appointment.video_room_url %}<a class="console-button console-button--secondary schedule-join" href="{{ appointment.video_room_url }}">Join<span class="sr-only"> video consultation with {{ appointment.patient }}</span></a>{% elif appointment.video_join_message %}<span class="schedule-room-closed" title="{{ appointment.video_join_message }}">Not open</span>{% else %}<span class="schedule-room-closed">&mdash;</span>{% endif %}</td>
+                    <td class="staff-schedule-table__actions-cell" data-label="Actions">
+                      <div class="staff-schedule-table__actions">
+                        <a class="console-button console-button--secondary schedule-action" href="{% url 'portal:appointment-detail' appointment.pk %}">Appointment details</a>
+                        {% if appointment.proposal_url %}<a class="console-button console-button--secondary schedule-action" href="{{ appointment.proposal_url }}">{{ appointment.proposal_label }}</a>{% endif %}
+                        <a class="console-button console-button--primary schedule-action" href="{% url 'portal:patient-detail' appointment.patient_id %}">Open record<span class="sr-only"> for {{ appointment.patient }}</span></a>
+                      </div>
+                    </td>
+                  </tr>
+                {% empty %}
+                  <tr><td class="staff-schedule-table__empty" colspan="{% if is_doctor %}6{% else %}7{% endif %}"><div class="staff-empty-state"><p>{% if day_state.kind == 'not_working' %}Not a working day.{% else %}Nothing booked on this day.{% endif %}</p></div></td></tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        {% endif %}
       </section>
 
-      <section class="staff-page-card staff-availability-card" aria-labelledby="availability-heading">
-        <header class="staff-page-card__header">
-          <div><h2 id="availability-heading">Available time</h2><p>Open availability for the selected day, after appointments and time off.</p></div>
-        </header>
-        <ul class="staff-availability-list">
-          {% for slot in open_slots %}
-            <li>
-              <time datetime="{{ slot.starts_at|date:'c' }}">{{ slot.starts_at|date:"H:i" }}–{{ slot.ends_at|date:"H:i" }}</time>
-              <span>{% if slot.clinician %}{{ slot.clinician.full_name }}{% else %}Clinician pending{% endif %}</span>
-            </li>
-          {% empty %}
-            <li class="staff-availability-list__empty">No available times for this date.</li>
-          {% endfor %}
-        </ul>
-        <p class="staff-availability-card__note">Where a working pattern is saved, these are 30-minute consultation windows with start times every 15 minutes. Up to 100 available windows are shown. These times are not bookings or reservations.</p>
-      </section>
+      {% if schedule_view == 'table' and is_paginated %}
+        <nav class="staff-pagination" aria-label="Schedule pages">
+          {% if page_obj.has_previous %}<a class="console-button console-button--quiet" href="?{{ pagination_query }}{% if pagination_query %}&amp;{% endif %}page={{ page_obj.previous_page_number }}">Previous</a>{% endif %}
+          <span>Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
+          {% if page_obj.has_next %}<a class="console-button console-button--quiet" href="?{{ pagination_query }}{% if pagination_query %}&amp;{% endif %}page={{ page_obj.next_page_number }}">Next</a>{% endif %}
+        </nav>
+      {% endif %}
+
+      {% if not is_doctor %}
+        <section class="staff-page-card staff-availability-card" aria-labelledby="availability-heading">
+          <header class="staff-page-card__header">
+            <div><h2 id="availability-heading">Available time</h2><p>Open availability for the selected day, after appointments and leave.</p></div>
+          </header>
+          <ul class="staff-availability-list">
+            {% for slot in open_slots %}
+              <li>
+                <time datetime="{{ slot.starts_at|date:'c' }}">{{ slot.starts_at|date:"H:i" }}–{{ slot.ends_at|date:"H:i" }}</time>
+                <span>{% if slot.clinician %}{{ slot.clinician.full_name }}{% else %}Clinician pending{% endif %}</span>
+              </li>
+            {% empty %}
+              <li class="staff-availability-list__empty">No available times for this date.</li>
+            {% endfor %}
+          </ul>
+          <p class="staff-availability-card__note">Where a working pattern is saved, these are 30-minute consultation windows with start times every 15 minutes. Up to 100 available windows are shown. These times are not bookings or reservations.</p>
+        </section>
+      {% endif %}
 
         <section class="staff-page-card schedule-attention-card" aria-labelledby="affected-appointments-heading">
           <header class="staff-page-card__header">
-            <div><h2 id="affected-appointments-heading">Appointments needing attention</h2><p>Future bookings at {{ company.name }} outside working hours or during time off.</p></div>
+            <div><h2 id="affected-appointments-heading">Appointments needing attention</h2><p>Future bookings at {{ company.name }} outside working hours, outside special hours or on leave.</p></div>
             {% if affected_count %}<span class="schedule-attention-count">{{ affected_count }} affected</span>{% endif %}
           </header>
           <ul class="schedule-attention-list">
@@ -193,7 +244,7 @@
                 {% if appointment.attention_url %}<a class="console-button console-button--secondary" href="{{ appointment.attention_url }}">Review appointment<span class="sr-only"> for {{ appointment.patient }}</span></a>{% endif %}
               </li>
             {% empty %}
-              <li class="schedule-attention-empty">No future bookings in this view need attention because of working hours or time off.</li>
+              <li class="schedule-attention-empty">No future bookings in this view need attention because of working hours, special hours or leave.</li>
             {% endfor %}
           </ul>
           {% if affected_page_obj.has_other_pages %}
@@ -205,16 +256,19 @@
           {% endif %}
           <p class="schedule-attention-note">Existing appointments stay booked. Agree a new time with the patient before changing an appointment.</p>
         </section>
-
-      {% if is_paginated %}
-        <nav class="staff-pagination" aria-label="Schedule pages">
-          {% if page_obj.has_previous %}<a class="console-button console-button--quiet" href="?{{ pagination_query }}{% if pagination_query %}&amp;{% endif %}page={{ page_obj.previous_page_number }}">Previous</a>{% endif %}
-          <span>Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
-          {% if page_obj.has_next %}<a class="console-button console-button--quiet" href="?{{ pagination_query }}{% if pagination_query %}&amp;{% endif %}page={{ page_obj.next_page_number }}">Next</a>{% endif %}
-        </nav>
-      {% endif %}
       </div>
-      {% include 'portal/includes/schedule_availability.html' %}
-    </div>
+    {% endif %}
   {% endif %}
+
+  {# Opened by Create appointment above; without scripts that link opens the booking page, which also shows any mistake. #}
+  <dialog class="app-dialog" id="create-appointment" aria-labelledby="create-appointment-title">
+    <div class="app-dialog__body">
+      <h2 id="create-appointment-title">Create appointment</h2>
+      <p class="app-dialog__sub">Times are SAST. Working hours, time off and both people’s other bookings are checked again when you save.</p>
+      <form class="console-form" method="post" action="{% url 'portal:appointment-book' %}">{% csrf_token %}<input type="hidden" name="workflow_context" value="{{ booking_context }}">
+        {% include 'portal/includes/appointment_booking_fields.html' with form=booking_form %}
+        <div class="app-dialog__actions"><button class="console-button console-button--secondary" type="button" data-dialog-close>Cancel</button><button class="console-button console-button--primary" type="submit">Confirm booking</button></div>
+      </form>
+    </div>
+  </dialog>
 {% endblock %}

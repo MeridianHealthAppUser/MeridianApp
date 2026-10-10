@@ -1,5 +1,7 @@
+{% comment %}join_tip: in a list of appointments, when the room isn't open the note sits behind an (i) (static/js/info_tips.js).
+  window_shown: the list has a Join window column, so the note leaves the window out.{% endcomment %}
 {% if appointment.video_room_url %}
   <a class="console-button console-button--primary" href="{{ appointment.video_room_url }}">Join video consultation</a>
 {% elif appointment.video_join_message %}
-  <span class="backoffice-muted">{{ appointment.video_join_message }}{% if appointment.video_join_opens_at %} Join window: {{ appointment.video_join_opens_at|date:'j M, H:i' }}–{{ appointment.video_join_closes_at|date:'H:i' }} SAST.{% endif %}</span>
+  {% if join_tip %}<span class="info-tip" data-info-tip><button class="info-tip__button" type="button" aria-label="When the video room opens" aria-describedby="video-join-{{ appointment.pk }}">i</button>{% endif %}<span {% if join_tip %}class="info-tip__bubble" id="video-join-{{ appointment.pk }}" role="tooltip"{% else %}class="backoffice-muted"{% endif %}>{{ appointment.video_join_message }}{% if appointment.video_join_opens_at and not window_shown %} Join window: {{ appointment.video_join_opens_at|date:'j M, H:i' }}–{{ appointment.video_join_closes_at|date:'H:i' }} SAST.{% endif %}</span>{% if join_tip %}</span>{% endif %}
 {% endif %}

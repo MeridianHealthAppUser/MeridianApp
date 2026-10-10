@@ -1,20 +1,45 @@
 """Small presentation helpers; public pages retain their own design."""
 from django import template
 from django.urls import reverse
+from django.utils import dateformat, timezone
 
 register = template.Library()
 
 
+def _message_counts(context):
+    """Unread patient and team messages for the signed-in member, worked out once per request."""
+    request = context.get('request')
+    membership = context.get('active_membership')
+    if request is None or membership is None or not request.user.is_authenticated:
+        return {'patient_unread_total': 0, 'team_unread_total': 0}
+    if not hasattr(request, '_staff_message_counts'):
+        from portal.inbox import message_tab_counts
+
+        request._staff_message_counts = message_tab_counts(membership.company, request.user)
+    return request._staff_message_counts
+
+
+def staff_unread_messages(context):
+    counts = _message_counts(context)
+    return counts['patient_unread_total'] + counts['team_unread_total']
+
+
+@register.simple_tag(takes_context=True)
+def message_counts(context):
+    """The unread counts for the Messages and Team tabs."""
+    return _message_counts(context)
+
+
 @register.simple_tag(takes_context=True)
 def staff_menu(context):
-    """The member's menu sections, with the current page marked."""
+    """The member's menu: a flat list for clinicians, sections for everyone else, with the current page marked."""
     membership = context.get('active_membership')
     if membership is None:
-        return []
-    from portal.navigation import build_staff_menu
+        return {'flat': [], 'sections': []}
+    from portal.navigation import build_staff_navigation
 
-    return build_staff_menu(membership, multi_practice=context.get('multi_practice_enabled', False),
-                            nav_section=context.get('nav_section') or '')
+    return build_staff_navigation(membership, multi_practice=context.get('multi_practice_enabled', False),
+                                  nav_section=context.get('nav_section') or '', unread=staff_unread_messages(context))
 
 
 @register.inclusion_tag('includes/breadcrumbs.html', takes_context=True)
@@ -56,6 +81,17 @@ def metric_label(value):
 def kg(value):
     from portal.patient_summary import format_kg
     return format_kg(value)
+
+
+@register.filter
+def list_when(value):
+    """A conversation list's time column: the time for today, otherwise the date (with the year if not this one)."""
+    if not value:
+        return ''
+    local, today = timezone.localtime(value), timezone.localdate()
+    if local.date() == today:
+        return dateformat.format(local, 'H:i')
+    return dateformat.format(local, 'j M' if local.year == today.year else 'j M Y')
 
 
 @register.simple_tag(takes_context=True)

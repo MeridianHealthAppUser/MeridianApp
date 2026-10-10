@@ -20,6 +20,9 @@
           <p class="clinical-file-help">This report has been saved and cannot be replaced here. If you uploaded the wrong file or need a correction, <a class="clinical-link" href="{% url 'portal:patient-messages' %}">contact your care team</a>.</p>
           {% if lab_request.status == 'reviewed' %}<div class="clinical-notice clinical-notice--spaced"><p>Your doctor has reviewed this report. Please contact your care team if you have questions about the results or next steps.</p></div>{% else %}<div class="clinical-notice clinical-notice--spaced"><p>Your report is awaiting review by your doctor. Uploading a file does not provide an automatic interpretation of your results.</p></div>{% endif %}
         {% elif can_upload %}
+          {% if pathcare_form_url %}
+            <div class="clinical-file-card clinical-file-card--form"><div><strong>Your PathCare form</strong><p>Take it, printed or on your phone, to any PathCare collection point. We also emailed it to you{% if pathcare_form.emailed_at %} on {{ pathcare_form.emailed_at|date:"j M Y" }}{% endif %}.</p></div><div class="clinical-file-card__actions"><a class="console-button console-button--secondary" data-no-loader href="{{ pathcare_form_url }}" target="_blank" rel="noopener">Open form</a><a class="console-button console-button--secondary" data-no-loader href="{{ pathcare_form_url }}?download=1">Download PDF</a></div></div>
+          {% endif %}
           <p class="clinical-panel-description">Once your results are ready, upload the report here for your doctor to review. Check that the report is yours and matches this request.</p>
           <form class="console-form" method="post" enctype="multipart/form-data" action="{{ request.path }}">
             {% csrf_token %}<input type="hidden" name="clinical_context" value="{{ clinical_context }}">

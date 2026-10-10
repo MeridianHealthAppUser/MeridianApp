@@ -184,9 +184,22 @@ class StaffPagesTests(TestCase):
                 self.assertEqual(self.client.post(reverse(f'portal:{name}'), {}).status_code, 405)
 
     def test_directory_lists_only_active_patients_in_current_practice(self):
-        self.login()
+        self.login(self.administrator)
         response = self.page('patient-list')
         self.assertEqual({patient.pk for patient in response.context['patients']}, {self.patient.pk, self.second_patient.pk})
+
+    def test_doctors_patient_records_list_only_their_own_patients_without_a_clinician_filter(self):
+        self.login()
+        response = self.page('patient-list')
+        self.assertEqual([patient.pk for patient in response.context['patients']], [self.patient.pk])
+        self.assertNotIn('clinician', response.context['filter_form'].fields)
+        self.assertContains(response, 'Your patients: the people assigned to you, and those you looked after before or are covering.')
+        # A clinician filter in the address cannot widen the list.
+        response = self.page('patient-list', clinician=self.second_doctor.pk)
+        self.assertEqual([patient.pk for patient in response.context['patients']], [self.patient.pk])
+        overview = self.page('desktop-dashboard')
+        self.assertEqual(overview.context['metrics']['patients'], 1)
+        self.assertEqual([patient.pk for patient in overview.context['patients']], [self.patient.pk])
 
     def test_directory_search_and_clinician_filter_work_within_practice(self):
         self.login(self.administrator)
@@ -196,6 +209,34 @@ class StaffPagesTests(TestCase):
         self.assertEqual({patient.pk for patient in response.context['patients']}, {self.second_patient.pk})
         response = self.page('patient-list', q='Needle', clinician=self.second_doctor.pk)
         self.assertEqual(list(response.context['patients']), [])
+
+    def test_directory_search_is_a_search_bar_with_filters_beside_it_for_administrators(self):
+        self.login(self.administrator)
+        directory = reverse('portal:patient-list')
+        response = self.page('patient-list', q='Alpha', clinician=self.doctor.pk)
+        html = response.content.decode()
+        self.assertNotContains(response, 'Find a patient')
+        # The search at the top right of the table, as in Messages, searching as you type.
+        self.assertContains(response, '<label class="sr-only" for="conversation-search">Search patients</label>')
+        self.assertContains(response, 'placeholder="Search" autocomplete="off"')
+        self.assertContains(response, 'value="Alpha"')
+        self.assertContains(response, 'js/conversation_search.js')
+        self.assertContains(response, f'<input type="hidden" name="clinician" value="{self.doctor.pk}">')
+        self.assertLess(html.index('data-filter-menu'), html.index('data-conversation-search'))
+        self.assertLess(html.index('id="patient-directory-heading"'), html.index('data-conversation-search'))
+        self.assertNotContains(response, 'matching</span>')
+        for region in ('list', 'pages'):
+            self.assertContains(response, f'data-search-region="{region}"')
+        # Filters has the clinician to pick, and keeps the search.
+        self.assertContains(response, '<span class="filter-menu__label">Clinician</span>')
+        self.assertContains(response, f'<input type="radio" name="clinician" value="{self.doctor.pk}" checked>')
+        self.assertContains(response, f'<a class="filter-menu__clear" href="{directory}?q=Alpha">Clear all</a>')
+        # A clinician sees only their own patients, so there's no clinician to filter by (with one practice, the
+        # search is all there is).
+        self.login()
+        response = self.page('patient-list')
+        self.assertContains(response, 'data-conversation-search')
+        self.assertNotContains(response, '<span class="filter-menu__label">Clinician</span>')
 
     def test_invalid_directory_filters_show_errors_without_falling_back_to_all_patients(self):
         self.login(self.administrator)
@@ -207,7 +248,7 @@ class StaffPagesTests(TestCase):
         additional = Patient.objects.bulk_create([
             Patient(company=self.company, first_name=f'Extra {number}', last_name='Directory') for number in range(22)
         ])
-        self.login()
+        self.login(self.administrator)
         first = self.page('patient-list')
         second = self.page('patient-list', page=2)
         first_ids = {patient.pk for patient in first.context['patients']}
@@ -225,10 +266,13 @@ class StaffPagesTests(TestCase):
         self.assertEqual(response.context['metrics']['open'], 2)
         self.assertEqual(response.context['metrics']['overdue'], 1)
         self.assertEqual(response.context['metrics']['completed'], 1)
+        # Doctors don't get the count cards above the filters; administrators do.
+        self.assertNotContains(response, 'aria-label="Task summary"')
 
     def test_administrator_task_page_includes_unassigned_and_other_doctor_tasks(self):
         self.login(self.administrator)
         response = self.page('staff-tasks', status='all')
+        self.assertContains(response, 'aria-label="Task summary"')
         self.assertEqual({task.pk for task in response.context['tasks']}, {
             self.own_open.pk, self.own_progress.pk, self.own_done.pk, self.own_cancelled.pk,
             self.other_task.pk, self.unassigned_task.pk,
@@ -339,19 +383,22 @@ class StaffPagesTests(TestCase):
             company=self.other_company, clinician=self.doctor,
             starts_at=self.day_start + timedelta(hours=13), ends_at=self.day_start + timedelta(hours=13, minutes=30),
         )
-        self.login()
-        response = self.page('staff-schedule', date=self.day.isoformat())
+        # Open time is shown to the practice, who book patients in; a doctor's calendar doesn't list it.
+        self.login(self.administrator)
+        response = self.page('staff-schedule', date=self.day.isoformat(), clinician=self.doctor.pk)
         self.assertEqual({slot.pk for slot in response.context['open_slots']}, {valid.pk})
+        self.login()
+        self.assertEqual(self.page('staff-schedule', date=self.day.isoformat()).context['open_slots'], [])
 
     def test_primary_navigation_routes_to_real_sections_on_desktop_and_mobile(self):
-        expected = {reverse(f'portal:{name}') for name in (*self.section_names, 'staff-inbox')}
+        # Patient Records & Messages opens on its first tab, All patients.
+        expected = {reverse(f'portal:{name}') for name in ('staff-tasks', 'staff-schedule', 'patient-list')}
         self.login()
-        # The mobile bar holds only the sections; Care's page lists the same destinations.
+        # A clinician's mobile bar holds the same flat menu as the sidebar; there are no section pages.
         mobile = StaffNavigationParser()
         mobile.feed(self.page('mobile-dashboard').content.decode())
-        self.assertIn(reverse('portal:staff-menu-section', args=['care']), {href for href, label in mobile.links})
-        care = self.client.get(reverse('portal:staff-menu-section', args=['care'])).content.decode()
-        self.assertTrue(all(url in care for url in expected))
+        self.assertTrue(expected.issubset({href for href, label in mobile.links}))
+        self.assertEqual(self.client.get(reverse('portal:staff-menu-section', args=['care'])).status_code, 404)
         for name in ('desktop-dashboard', *self.section_names, 'staff-inbox'):
             with self.subTest(page=name):
                 response = self.page(name)
@@ -370,9 +417,9 @@ class StaffPagesTests(TestCase):
         self.assertEqual(response.status_code, 200)
         parser = StaffNavigationParser()
         parser.feed(response.content.decode())
-        expected = {reverse(f'portal:{name}') for name in (*self.section_names, 'staff-inbox')}
+        expected = {reverse(f'portal:{name}') for name in ('staff-tasks', 'staff-schedule', 'patient-list')}
         self.assertTrue(expected.issubset({href for href, label in parser.links}))
-        # An open record highlights Patients rather than adding its own menu item.
+        # An open record highlights Patient Records & Messages rather than adding its own menu item.
         self.assertIn(reverse('portal:patient-list'), parser.active_links)
         self.assertNotIn(reverse('portal:patient-detail', args=[self.patient.pk]), {href for href, label in parser.links})
         self.assertNotIn(reverse('portal:staff-patient-record', args=[self.patient.pk]), parser.active_links)
@@ -387,21 +434,31 @@ class StaffPagesTests(TestCase):
         response = self.page('staff-schedule', date=self.day.isoformat())
         appointment = next(item for item in response.context['appointments'] if item.pk == self.midnight_appointment.pk)
         proposal_url = urlsplit(appointment.proposal_url)
-        self.assertEqual(proposal_url.path, reverse('portal:staff-inbox'))
+        # The conversation opens on the record's Messages tab.
+        self.assertEqual(proposal_url.path, reverse('portal:patient-detail', args=[self.patient.pk]))
         self.assertEqual(parse_qs(proposal_url.query)['appointment'], [str(appointment.pk)])
         self.assertEqual(parse_qs(proposal_url.query)['thread'], [str(thread.pk)])
+        self.assertEqual(proposal_url.fragment, f'appointment-proposals-{thread.pk}')
         response = self.client.get(appointment.proposal_url)
         self.assertEqual(response.status_code, 200)
-        form = response.context['selected_thread'].proposal_form
+        form = response.context['record_thread'].proposal_form
         self.assertEqual(str(form['appointment'].value()), str(appointment.pk))
         self.assertTrue(form.fields['appointment'].queryset.filter(pk=appointment.pk).exists())
-        response = self.client.get(reverse('portal:staff-inbox'), {
-            'thread': thread.pk, 'appointment': self.foreign_appointment.pk,
+        response = self.client.get(reverse('portal:patient-detail', args=[self.patient.pk]), {
+            'tab': 'messages', 'thread': thread.pk, 'appointment': self.foreign_appointment.pk,
         })
         self.assertEqual(response.status_code, 200)
-        form = response.context['selected_thread'].proposal_form
+        form = response.context['record_thread'].proposal_form
         self.assertFalse(form.fields['appointment'].queryset.filter(pk=self.foreign_appointment.pk).exists())
         self.assertNotIn(f'<option value="{self.foreign_appointment.pk}"', str(form['appointment']))
+
+    def test_practice_switch_sends_a_doctor_from_admin_only_pages_to_the_overview(self):
+        for name in ('ops-stock', 'treatment-subscriptions', 'metrics', 'treatment-review-rules', 'activity-statements'):
+            with self.subTest(section=name):
+                self.login()
+                response = self.client.post(reverse('portal:activate-company', args=[self.other_company.slug]),
+                                            {'next': reverse(f'portal:{name}')})
+                self.assertRedirects(response, reverse('portal:desktop-dashboard'), fetch_redirect_response=False)
 
     def test_practice_switch_preserves_each_section_and_removes_old_filters(self):
         for name in self.section_names:

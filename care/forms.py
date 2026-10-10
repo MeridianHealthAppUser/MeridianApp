@@ -1,3 +1,4 @@
+from datetime import datetime, time as time_of_day
 from decimal import Decimal
 from urllib.parse import urlsplit
 
@@ -5,13 +6,14 @@ from django import forms
 from django.contrib.auth import get_user_model
 from django.core.exceptions import NON_FIELD_ERRORS, ValidationError
 from django.core.validators import MaxLengthValidator
-from django.db.models import Q
+from django.db.models import Case, Q, When
 from django.utils import timezone
 
 from practices.models import Company, CompanyMembership, Patient
 
 from .models import Appointment, AppointmentProposal, ClinicalNote, ClinicalTask, WeightEntry
 from .tag_forms import TagFieldsMixin
+from .widgets import QUARTER_HOUR_CHOICES, QuarterHourDateTimeField, quarter_hour_text
 
 
 class CompanyBoundModelForm(forms.ModelForm):
@@ -80,8 +82,8 @@ class ClinicalTaskForm(TagFieldsMixin, PatientBoundModelForm):
         fields = ('patient', 'title', 'description', 'assigned_to', 'priority', 'due_at')
         widgets = {
             'description': forms.Textarea(attrs={'rows': 3}),
-            'due_at': forms.DateTimeInput(attrs={'type': 'datetime-local'}),
         }
+        field_classes = {'due_at': QuarterHourDateTimeField}
 
     def __init__(self, *args, company, **kwargs):
         kwargs.setdefault('auto_id', 'task_%s')
@@ -105,21 +107,26 @@ class ClinicalTaskForm(TagFieldsMixin, PatientBoundModelForm):
         return data
 
 
+BOOKING_DURATIONS = (15, 30, 45, 60)
+
+
 class AppointmentForm(PatientBoundModelForm):
-    duration_minutes = forms.IntegerField(
-        min_value=5,
-        max_value=120,
-        initial=15,
-        label='Duration (minutes)',
+    """Booking: the patient, clinician and type, then a date, a time from the clinician's free quarter hours on it,
+    and how long. A single start time (`starts_at`) is still accepted, as older forms send it."""
+
+    duration_minutes = forms.TypedChoiceField(
+        label='Duration', coerce=int, initial=15, choices=[(minutes, f'{minutes} minutes') for minutes in BOOKING_DURATIONS],
     )
+    date = forms.DateField(label='Date', required=False, widget=forms.DateInput(format='%Y-%m-%d', attrs={'type': 'date'}))
+    time = forms.ChoiceField(label='Time', required=False, choices=[('', 'Choose a time'), *QUARTER_HOUR_CHOICES])
 
     class Meta:
         model = Appointment
         fields = ('patient', 'clinician', 'appointment_type', 'starts_at', 'duration_minutes', 'video_link')
         widgets = {
-            'starts_at': forms.DateTimeInput(attrs={'type': 'datetime-local'}),
             'video_link': forms.URLInput(attrs={'placeholder': 'https://'}),
         }
+        field_classes = {'starts_at': QuarterHourDateTimeField}
 
     def __init__(self, *args, company, **kwargs):
         kwargs.setdefault('auto_id', 'appointment_%s')
@@ -130,12 +137,17 @@ class AppointmentForm(PatientBoundModelForm):
             company_memberships__clinician_type__in=CompanyMembership.CLINICIAN_TYPES,
             company_memberships__is_active=True,
         ).distinct().order_by('first_name', 'last_name', 'email')
-
-    def clean_starts_at(self):
-        starts_at = self.cleaned_data['starts_at']
-        if starts_at <= timezone.now():
-            raise ValidationError('Choose a future appointment time.')
-        return starts_at
+        # Clinicians by name, with their title; nothing chosen to start with.
+        self.fields['clinician'].label_from_instance = lambda person: f'{person.get_title_display()} {person.full_name}'.strip() if person.title else person.full_name
+        self.fields['clinician'].empty_label = 'Choose a clinician'
+        self.fields['patient'].empty_label = 'Choose a patient'
+        self.fields['starts_at'].required = False
+        self.fields['starts_at'].widget = forms.HiddenInput()
+        starts_at = self.initial.get('starts_at') or self.instance.starts_at
+        if starts_at:
+            local = timezone.localtime(starts_at) if timezone.is_aware(starts_at) else starts_at
+            self.initial.setdefault('date', local.date())
+            self.initial.setdefault('time', quarter_hour_text(local))
 
     def clean_video_link(self):
         link = self.cleaned_data['video_link']
@@ -145,10 +157,20 @@ class AppointmentForm(PatientBoundModelForm):
 
     def clean(self):
         cleaned = super().clean()
+        day, at = cleaned.get('date'), cleaned.get('time')
+        if day and at:
+            cleaned['starts_at'] = timezone.make_aware(datetime.combine(day, time_of_day.fromisoformat(at)))
+        elif day or at or not cleaned.get('starts_at'):
+            if not any(name in self.errors for name in ('date', 'time', 'starts_at')):
+                self.add_error('time', 'Choose a date and a time.')
+            return cleaned
         clinician = cleaned.get('clinician')
         starts_at = cleaned.get('starts_at')
         duration = cleaned.get('duration_minutes')
-        if clinician and starts_at and duration:
+        if starts_at <= timezone.now():
+            self.add_error('starts_at', 'Choose a future appointment time.')
+            return cleaned
+        if clinician and duration:
             from .scheduling import ensure_clinician_available
             try:
                 ensure_clinician_available(
@@ -160,6 +182,9 @@ class AppointmentForm(PatientBoundModelForm):
                     self.add_error('starts_at', 'This clinician already has an appointment during that time.')
                 else:
                     self.add_error('starts_at', error)
+        # The date and time are now the start; what's left is what booking takes.
+        cleaned.pop('date', None)
+        cleaned.pop('time', None)
         return cleaned
 
 
@@ -234,19 +259,24 @@ class PatientThreadForm(PatientMessageForm):
         self.has_recipients = True
         if patient is None:
             return  # Staff start conversations with themselves in them.
-        # Patients write to their assigned clinician by default, or a past clinician or one they are booked with.
+        # Patients write to their assigned clinician by default, a clinician who was assigned to them before,
+        # or a practice administrator.
         from .messaging import recipient_choices
 
-        clinicians = recipient_choices(patient)
+        people = recipient_choices(patient)
+        ids = [person.pk for person in people]
+        notes = {person.pk: person.recipient_note for person in people}
         self.fields['recipient'] = forms.ModelChoiceField(
-            label='To', queryset=get_user_model().objects.filter(pk__in=[clinician.pk for clinician in clinicians]),
-            empty_label=None, initial=clinicians[0].pk if clinicians else None, required=False,
+            label='To', empty_label=None, initial=ids[0] if ids else None, required=False,
+            # In the order recipient_choices gives: the assigned clinician, past clinicians, then administrators.
+            queryset=get_user_model().objects.filter(pk__in=ids).order_by(
+                Case(*[When(pk=pk, then=position) for position, pk in enumerate(ids)])) if ids else get_user_model().objects.none(),
         )
-        self.default_recipient = clinicians[0] if clinicians else None
+        self.default_recipient = people[0] if people else None
         self.fields['recipient'].label_from_instance = (
-            lambda user: f'{user.full_name} (your clinician)' if user.pk == patient.assigned_doctor_id else user.full_name)
+            lambda user: f'{user.full_name} ({notes[user.pk]})' if notes.get(user.pk) else user.full_name)
         self.order_fields(['recipient', 'subject', 'body'])
-        self.has_recipients = bool(clinicians)
+        self.has_recipients = bool(people)
 
     def clean_recipient(self):
         # Older forms and links post no recipient: they reach the assigned clinician.
@@ -267,10 +297,7 @@ class ProposalAppointmentChoiceField(forms.ModelChoiceField):
 
 class AppointmentProposalForm(forms.Form):
     appointment = ProposalAppointmentChoiceField(queryset=Appointment.objects.none(), label='Appointment')
-    proposed_starts_at = forms.DateTimeField(
-        label='Suggested date and time (SAST)',
-        widget=forms.DateTimeInput(format='%Y-%m-%dT%H:%M', attrs={'type': 'datetime-local'}),
-    )
+    proposed_starts_at = QuarterHourDateTimeField(label='Suggested date and time (SAST)')
     note = forms.CharField(
         label='Message (optional)', max_length=2000, required=False,
         widget=forms.Textarea(attrs={'rows': 2, 'placeholder': 'Add a note about the suggested time…'}),
@@ -337,6 +364,8 @@ class EligibilityQuestionnaireForm(forms.Form):
 
     practice = forms.ModelChoiceField(queryset=Company.objects.none(), label='Practice', empty_label='Choose a practice')
     submission_token = forms.CharField(widget=forms.HiddenInput, max_length=8000)
+    # Printed on blood-test request forms. Optional, so it never stops someone enquiring.
+    title = forms.ChoiceField(label='Title', required=False, choices=[('', 'Choose a title'), *Patient.Title.choices])
     first_name = forms.CharField(max_length=150, label='First name')
     last_name = forms.CharField(max_length=150, label='Last name')
     email = forms.EmailField(label='Email address')
@@ -396,6 +425,7 @@ class EligibilityQuestionnaireForm(forms.Form):
         height_m = data['height_cm'] / 100
         bmi = (data['weight_kg'] / (height_m * height_m)).quantize(Decimal('0.01'))
         return {
+            'title': data.get('title', ''),
             'adult': data['adult'],
             'weight_related_condition': data['weight_related_condition'],
             'pregnancy': data['pregnancy'],

@@ -5,6 +5,8 @@ from django.core import signing
 from django.core.exceptions import ValidationError
 from django.forms import BaseFormSet, formset_factory
 
+from care.widgets import QuarterHourTimeField
+
 
 WEEKDAYS = ('Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday')
 SCHEDULE_CONTEXT_SALT = 'portal.schedule-form-context.v1'
@@ -36,8 +38,8 @@ def validate_schedule_context(request, company, clinician):
 
 class WorkingDayForm(forms.Form):
     is_working = forms.BooleanField(label='Working', required=False)
-    starts_at = forms.TimeField(label='From', required=False, widget=forms.TimeInput(format='%H:%M', attrs={'type': 'time'}))
-    ends_at = forms.TimeField(label='To', required=False, widget=forms.TimeInput(format='%H:%M', attrs={'type': 'time'}))
+    starts_at = QuarterHourTimeField(label='From', required=False)
+    ends_at = QuarterHourTimeField(label='To', required=False)
 
     def clean(self):
         data = super().clean()
@@ -72,27 +74,39 @@ WorkingPatternFormSet = formset_factory(
 
 
 class TimeOffForm(forms.Form):
-    reason = forms.ChoiceField(choices=(('leave', 'Leave'), ('sick', 'Sick leave'), ('other', 'Other time off')))
-    starts_at = forms.DateTimeField(
-        label='From (SAST)',
-        widget=forms.DateTimeInput(format='%Y-%m-%dT%H:%M', attrs={'type': 'datetime-local'}),
-    )
-    ends_at = forms.DateTimeField(
-        label='Until (SAST)',
-        widget=forms.DateTimeInput(format='%Y-%m-%dT%H:%M', attrs={'type': 'datetime-local'}),
-    )
+    """Days off are whole South Africa days, from one date to another inclusive."""
+
+    starts_on = forms.DateField(label='From', widget=forms.DateInput(format='%Y-%m-%d', attrs={'type': 'date'}))
+    ends_on = forms.DateField(label='To', widget=forms.DateInput(format='%Y-%m-%d', attrs={'type': 'date'}))
 
     def clean(self):
-        from datetime import timedelta
         from django.utils import timezone
 
         data = super().clean()
-        starts_at, ends_at = data.get('starts_at'), data.get('ends_at')
-        if starts_at and ends_at:
-            if ends_at <= starts_at:
-                self.add_error('ends_at', 'The end must be after the start.')
-            elif ends_at <= timezone.now():
-                self.add_error('ends_at', 'Time off must end in the future.')
-            elif ends_at - starts_at > timedelta(days=366):
-                self.add_error('ends_at', 'Add at most one year of time off at a time.')
+        starts_on, ends_on = data.get('starts_on'), data.get('ends_on')
+        if starts_on and ends_on:
+            if ends_on < starts_on:
+                self.add_error('ends_on', 'The To date must be on or after the From date.')
+            elif ends_on < timezone.localdate():
+                self.add_error('ends_on', 'Leave must include today or a later date.')
+            elif (ends_on - starts_on).days + 1 > 366:
+                self.add_error('ends_on', 'Add at most one year of leave at a time.')
+        return data
+
+
+class SpecialDayForm(forms.Form):
+    """Different hours on one date; they replace the working pattern for that date only."""
+
+    date = forms.DateField(label='Date', widget=forms.DateInput(format='%Y-%m-%d', attrs={'type': 'date'}))
+    starts_at = QuarterHourTimeField(label='From')
+    ends_at = QuarterHourTimeField(label='To')
+
+    def clean(self):
+        from django.utils import timezone
+
+        data = super().clean()
+        if data.get('date') and data['date'] < timezone.localdate():
+            self.add_error('date', 'Choose today or a later date.')
+        if data.get('starts_at') and data.get('ends_at') and data['ends_at'] <= data['starts_at']:
+            self.add_error('ends_at', 'The To time must be after the From time.')
         return data

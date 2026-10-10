@@ -2,7 +2,7 @@ from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.exceptions import ValidationError
 from django.core.paginator import Paginator
-from django.db import IntegrityError
+from django.db import IntegrityError, transaction
 from django.db.models import Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -11,10 +11,10 @@ from django.views import View
 from django.views.decorators.cache import never_cache
 from django.views.decorators.debug import sensitive_post_parameters
 
-from .management_forms import (MembershipForm, PracticeForm, StaffUserForm, UserFilterForm,
+from .management_forms import (STAFF_DETAIL_FIELDS, MembershipForm, PracticeForm, StaffUserForm, UserFilterForm,
                               make_management_context, validate_management_context)
 from .management_services import (add_staff_user, create_practice, manageable_practices,
-                                  require_super_admin, update_membership, update_practice)
+                                  require_super_admin, update_membership, update_practice, update_staff_details)
 from .models import Company, CompanyMembership
 from .services import active_membership_for, get_active_company
 from .tenancy import multi_practice_enabled, require_multi_practice
@@ -103,7 +103,7 @@ class ManagementUserCreateView(ManagementView):
             try:
                 add_staff_user(actor=request.user, source_company=self.company, companies=data['practices'],
                     mode=data['mode'], email=data['email'], role=data['role'], clinician_type=data['clinician_type'],
-                    first_name=data.get('first_name', ''),
+                    title=data.get('title', '') if data['mode'] == 'create' else '', first_name=data.get('first_name', ''),
                     last_name=data.get('last_name', ''), password=data.get('password1', ''), request=request)
             except (ValidationError, IntegrityError) as exc:
                 self.add_service_error(form, exc)
@@ -120,12 +120,14 @@ class ManagementMembershipEditView(ManagementView):
     def show(self, request, form, record, status=200):
         return self.form_page(request, form=form, record=record, kind='membership',
             title=f'Staff access: {record.user.full_name}',
-            description=f'{record.user.email} · These changes affect only {self.company.name}. '
-                        'The shared account’s name, email and password are not editable here.', status=status)
+            description=f'{record.user.email} · Role and access affect only {self.company.name}. '
+                        'They see their name and details on My profile, where a clinician can also change their note signature and PathCare details. '
+                        'The sign-in email and password are not editable here.', status=status)
 
     def get(self, request, pk):
         record = self.get_record(pk)
-        return self.show(request, MembershipForm(initial={'role': record.role, 'clinician_type': record.clinician_type, 'is_active': record.is_active}), record)
+        return self.show(request, MembershipForm(initial={'role': record.role, 'clinician_type': record.clinician_type, 'is_active': record.is_active,
+                                                          **{field: getattr(record.user, field) for field in STAFF_DETAIL_FIELDS}}), record)
 
     def post(self, request, pk):
         record = self.get_record(pk)
@@ -138,10 +140,15 @@ class ManagementMembershipEditView(ManagementView):
             return self.show(request, form, record, status=400)
         if valid:
             try:
-                updated = update_membership(actor=request.user, company=self.company, membership=record,
-                    role=form.cleaned_data['role'], clinician_type=form.cleaned_data['clinician_type'],
-                    is_active=form.cleaned_data['is_active'],
-                    expected_updated_at=token['updated_at'], request=request)
+                with transaction.atomic():
+                    # Details first: a Super Admin demoting themselves loses the right to edit straight after.
+                    # Only submitted fields change, so a form without them never blanks anyone's details.
+                    update_staff_details(actor=request.user, company=self.company, membership=record, request=request,
+                        details={field: form.cleaned_data[field] for field in STAFF_DETAIL_FIELDS if field in request.POST})
+                    updated = update_membership(actor=request.user, company=self.company, membership=record,
+                        role=form.cleaned_data['role'], clinician_type=form.cleaned_data['clinician_type'],
+                        is_active=form.cleaned_data['is_active'],
+                        expected_updated_at=token['updated_at'], request=request)
             except (ValidationError, IntegrityError) as exc:
                 self.add_service_error(form, exc)
             else:

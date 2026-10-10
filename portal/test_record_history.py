@@ -293,7 +293,7 @@ class RecordHistoryTests(TestCase):
         for query in queries:
             sql = query['sql'].lower()
             if sql.lstrip().startswith('select'):
-                self.assertNotIn('"care_labresult"."content"', sql)
+                self.assertNotIn('"care_patientfile"."content"', sql)
                 self.assertNotIn('"care_labresult"."sha256"', sql)
                 self.assertNotIn('"care_auditevent"."metadata"', sql)
                 self.assertNotIn('"care_auditevent"."ip_address"', sql)

@@ -9,10 +9,11 @@ from practices.models import Patient
 class ProductForm(forms.ModelForm):
     class Meta:
         model = MedicationProduct
-        fields = ('name', 'strength', 'description', 'category', 'price', 'allowance', 'allowance_group',
+        fields = ('name', 'strength', 'dose_frequency', 'description', 'category', 'price', 'allowance', 'allowance_group',
                   'requires_authorisation', 'requires_cold_chain', 'is_compounded', 'is_active')
         widgets = {'description': forms.Textarea(attrs={'rows': 3})}
-        labels = {'is_active': 'Published in the patient catalogue', 'allowance_group': 'Shared allowance group (optional)'}
+        labels = {'is_active': 'Published in the patient catalogue', 'allowance_group': 'Shared allowance group (optional)',
+                  'dose_frequency': 'How often a dose is taken'}
 
     def __init__(self, *args, company, **kwargs):
         super().__init__(*args, **kwargs)

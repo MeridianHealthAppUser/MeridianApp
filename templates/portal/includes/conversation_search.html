@@ -1,0 +1,15 @@
+{% comment %}
+  The search above a list of conversations: Patient messages, Team messages, the record's Messages
+  tab and My Messages. It searches as you type (static/js/conversation_search.js); without scripts,
+  Enter searches. The parent passes `search`, `search_action`, `search_clear_url`, `search_hidden`
+  (fields kept with the search, such as the filter), `search_placeholder` (just "Search" unless given) and `search_url` when
+  the list comes from somewhere other than the page itself. The patient directory uses it too, with
+  `search_label`.
+{% endcomment %}
+<form class="conversation-search" method="get" action="{{ search_action }}" role="search" data-conversation-search{% if search_url %} data-search-url="{{ search_url }}"{% endif %}>
+  {% for name, value in search_hidden.items %}<input type="hidden" name="{{ name }}" value="{{ value }}">{% endfor %}
+  <label class="sr-only" for="conversation-search">{{ search_label|default:'Search conversations' }}</label>
+  <svg class="conversation-search__icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4.5 4.5"/></svg>
+  <input id="conversation-search" type="search" name="q" value="{{ search }}" maxlength="100" placeholder="{{ search_placeholder|default:'Search' }}" autocomplete="off">
+  <a class="conversation-search__clear" href="{{ search_clear_url }}" aria-label="Clear search" title="Clear search" data-conversation-search-clear{% if not search %} hidden{% endif %}>&times;</a>
+</form>

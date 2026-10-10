@@ -4,6 +4,8 @@ from django import forms
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.exceptions import ValidationError
+from django.db.models import Q
+from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.utils.decorators import method_decorator
@@ -11,11 +13,51 @@ from django.views import View
 from django.views.decorators.cache import never_cache
 
 from care.appointment_lifecycle import book_staff_appointment, change_appointment_status
-from care.forms import AppointmentForm
-from care.models import Appointment, MessageThread
+from care.availability import bookable_start_times
+from care.forms import BOOKING_DURATIONS, AppointmentForm
+from care.models import Appointment, ClinicalEncounter, MessageThread
+from practices.models import Patient
+from .clinical_forms import ConsultationForm, make_clinical_context
 from .patient_views import patient_page_context
 from .views import PatientPortalRequiredMixin, StaffCompanyRequiredMixin
 from .workflow_context import make_workflow_context, validate_workflow_context
+
+
+class BookingTimesForm(forms.Form):
+    """What the booking form's Time list asks for: a practice clinician, a date, a length and, if chosen, the patient."""
+
+    clinician = forms.ModelChoiceField(queryset=None)
+    date = forms.DateField()
+    duration = forms.TypedChoiceField(coerce=int, choices=[(minutes, minutes) for minutes in BOOKING_DURATIONS])
+    patient = forms.ModelChoiceField(queryset=None, required=False)
+
+    def __init__(self, *args, company, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['clinician'].queryset = AppointmentForm(company=company).fields['clinician'].queryset
+        self.fields['patient'].queryset = Patient.objects.for_company(company).filter(is_active=True)
+
+
+def staff_booking_form(company, *args, **kwargs):
+    """The booking form as staff see it: no external meeting link, as the native video room is used."""
+    form = AppointmentForm(*args, company=company, **kwargs)
+    form.fields['video_link'].widget = forms.HiddenInput()
+    return form
+
+
+@method_decorator(never_cache, name='dispatch')
+class BookingTimesView(LoginRequiredMixin, StaffCompanyRequiredMixin, View):
+    """The clinician's free quarter hours on a date, for the booking form's Time list."""
+
+    http_method_names = ('get', 'head', 'options')
+
+    def get(self, request):
+        form = BookingTimesForm(request.GET, company=self.company)
+        if not form.is_valid():
+            return JsonResponse({'times': []}, status=400)
+        data = form.cleaned_data
+        return JsonResponse({'times': bookable_start_times(
+            company=self.company, clinician=data['clinician'], day=data['date'], duration_minutes=data['duration'],
+            patient=data['patient'])})
 
 
 class AppointmentStatusForm(forms.Form):
@@ -34,11 +76,7 @@ class StaffBookingView(LoginRequiredMixin, StaffCompanyRequiredMixin, View):
     http_method_names = ('get', 'post', 'head', 'options')
 
     def booking_form(self, *args, **kwargs):
-        form = AppointmentForm(*args, company=self.company, **kwargs)
-        # Retain validation/storage compatibility for existing callers, while
-        # the new booking page uses the native appointment room by default.
-        form.fields['video_link'].widget = forms.HiddenInput()
-        return form
+        return staff_booking_form(self.company, *args, **kwargs)
 
     def display(self, request, form, status=200):
         return render(request, 'portal/appointment_booking.html', dict(company=self.company, active_membership=self.membership, nav_section='schedule', form=form,
@@ -88,6 +126,22 @@ class AppointmentDetailMixin:
         return (not self.patient_portal and self.membership.is_clinician and appointment.clinician_id == self.request.user.pk
                 and appointment.starts_at + timedelta(minutes=appointment.duration_minutes) <= timezone.now())
 
+    def consultation_note(self, request, company, appointment, can_write_notes):
+        """Write consultation note opens a modal with a new note's form: this appointment chosen when it's yours,
+        the time now. When the appointment already has a note you can read, the button opens that instead."""
+        if not self.membership.is_clinician:
+            return {}
+        note = ClinicalEncounter.objects.for_company(company).filter(appointment=appointment).filter(
+            Q(status=ClinicalEncounter.Status.SIGNED) | Q(clinician=request.user)).first()
+        if note is not None:
+            return dict(consultation_note=note)
+        if not can_write_notes:
+            return {}
+        form = ConsultationForm(company=company, patient=appointment.patient, actor=request.user,
+                                initial={'appointment': appointment.pk}, auto_id='consultation_%s')
+        form.fields['summary'].widget.attrs['rows'] = 8
+        return dict(consultation_form=form, consultation_context=make_clinical_context(request, company, appointment.patient, 'consultation'))
+
     def display(self, request, appointment, form=None, status=200):
         from video.views import appointment_video_context
 
@@ -106,6 +160,7 @@ class AppointmentDetailMixin:
             from .patient_workspace import patient_workspace_context
 
             context.update(patient_workspace_context(request, company, self.membership, appointment.patient, 'appointments'))
+            context.update(self.consultation_note(request, company, appointment, context.get('can_write_notes')))
             context['page_title'] = 'Appointment details'
         return render(request, 'portal/patient_appointment_detail.html' if self.patient_portal else 'portal/appointment_detail.html', context, status=status)
 

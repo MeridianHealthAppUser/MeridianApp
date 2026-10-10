@@ -235,6 +235,16 @@ class ManagementViewTests(ManagementFixture):
         self.assertFalse(Patient.objects.filter(user=user).exists())
         self.assertEqual(len(mail.outbox), 0)
 
+    def test_new_staff_title_defaults_to_dr_and_can_be_chosen(self):
+        page = self.client.get(reverse('portal:management-user-create'))
+        self.assertEqual(page.context['form']['title'].value(), 'DR')
+        html = page.content.decode()
+        self.assertLess(html.index('name="title"'), html.index('name="first_name"'))
+        response = self.client.post(reverse('portal:management-user-create'), self.new_staff_data(
+            management_context=self.token('portal:management-user-create'), title='PROF'))
+        self.assertRedirects(response, reverse('portal:management-users'), fetch_redirect_response=False)
+        self.assertEqual(get_user_model().objects.get(email='new.staff@example.test').title, 'PROF')
+
     def test_form_cannot_select_unauthorized_practice_or_patient_role(self):
         for extra in ({'practices': [self.foreign.pk]}, {'role': 'patient'}):
             response = self.client.post(reverse('portal:management-user-create'), self.new_staff_data(
@@ -277,8 +287,29 @@ class ManagementViewTests(ManagementFixture):
         self.assertEqual(self.doctor_alpha.role, 'practice_admin')
         self.assertEqual(self.doctor_beta.role, 'doctor')
         self.assertEqual(self.doctor.email, 'doctor@example.test')
-        self.assertEqual(self.doctor.first_name, 'Sam')
         self.assertTrue(self.doctor.check_password('Prior-Ocean!8Birds'))
+        # A Super Admin keeps the person's name and details here; the change is audited.
+        self.assertEqual(self.doctor.first_name, 'Hijacked')
+        self.assertEqual(AuditEvent.objects.get(action='staff.details_updated').metadata,
+                         {'changed_fields': ['first_name'], 'user_id': self.doctor.pk})
+
+    def test_staff_details_are_kept_here_and_shown_read_only_on_my_profile(self):
+        url = reverse('portal:management-membership-edit', args=[self.doctor_alpha.pk])
+        page = self.client.get(url)
+        for field in ('title', 'first_name', 'last_name', 'contact_number', 'hpcsa_number', 'note_signature'):
+            self.assertContains(page, f'name="{field}"')
+        token = self.token('portal:management-membership-edit', [self.doctor_alpha.pk])
+        self.client.post(url, {'role': 'doctor', 'clinician_type': 'doctor', 'is_active': 'on', 'management_context': token,
+                               'title': 'DR', 'first_name': 'Sam', 'last_name': self.doctor.last_name, 'contact_number': '082 441 7730',
+                               'hpcsa_number': 'MP 0728145', 'note_signature': 'S. Marchant, MBChB'})
+        self.doctor.refresh_from_db()
+        self.assertEqual((self.doctor.title, self.doctor.contact_number, self.doctor.hpcsa_number, self.doctor.note_signature),
+                         ('DR', '082 441 7730', 'MP 0728145', 'S. Marchant, MBChB'))
+        # A form without the detail fields leaves them alone.
+        token = self.token('portal:management-membership-edit', [self.doctor_alpha.pk])
+        self.client.post(url, {'role': 'doctor', 'clinician_type': 'doctor', 'is_active': 'on', 'management_context': token})
+        self.doctor.refresh_from_db()
+        self.assertEqual(self.doctor.hpcsa_number, 'MP 0728145')
 
     def test_last_admin_form_error_and_self_demote_redirects_out_after_second_admin_added(self):
         url = reverse('portal:management-membership-edit', args=[self.owner_alpha.pk])

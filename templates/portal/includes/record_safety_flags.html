@@ -1,0 +1,7 @@
+{% if safety_flags %}
+  <div class="record-dialog__flags" role="alert">
+    <p><strong>Safety flag</strong></p>
+    <ul>{% for flag in safety_flags %}<li>{{ flag.label }}: {{ flag.value }}</li>{% endfor %}</ul>
+    <label class="record-dialog__tick" for="record-{{ prefix }}-acknowledge"><input id="record-{{ prefix }}-acknowledge" type="checkbox" name="acknowledge_flags" value="on" required> I have reviewed this and still want to prescribe.</label>
+  </div>
+{% endif %}

@@ -67,16 +67,20 @@ class PrivateConversationTests(TestCase):
         rows = ClinicianAssignment.objects.filter(patient=self.patient).order_by('created_at', 'pk')
         self.assertEqual([(row.clinician, row.ended_at is None) for row in rows], [(self.past, False), (self.current, True)])
 
-    def test_patient_can_write_to_current_past_and_booked_clinicians_only(self):
+    def test_patient_can_write_to_current_and_past_clinicians_only(self):
+        # Being booked with a clinician doesn't make them a choice; only an assignment, now or before, does.
         self.assertEqual(recipient_choices(self.patient)[0], self.current)
-        self.assertEqual(set(recipient_choices(self.patient)), {self.current, self.past, self.booked})
+        self.assertEqual(set(recipient_choices(self.patient)), {self.current, self.past})
         self.login_patient()
         page = self.client.get(reverse('portal:patient-messages'), {'compose': 1})
         field = page.context['thread_form'].fields['recipient']
-        self.assertEqual(set(field.queryset), {self.current, self.past, self.booked})
+        self.assertEqual(set(field.queryset), {self.current, self.past})
         self.assertEqual(page.context['thread_form'].initial.get('recipient', field.initial), self.current.pk)
         self.assertContains(page, 'Cara Current (your clinician)')
-        self.assertEqual(self.start(recipient=self.stranger.pk).status_code, 200)
+        self.assertNotContains(page, 'Bo Booked')
+        self.assertNotContains(page, 'Sid Stranger')
+        for clinician in (self.stranger, self.booked):
+            self.assertEqual(self.start(recipient=clinician.pk).status_code, 200)
         self.assertFalse(MessageThread.objects.exists())
         self.assertEqual(self.start(recipient=self.past.pk).status_code, 302)
         thread = MessageThread.objects.get()
@@ -100,6 +104,65 @@ class PrivateConversationTests(TestCase):
         self.assertContains(page, 'once Private Messages assigns one to you')
         self.assertNotContains(page, 'action="%s"' % reverse('portal:patient-thread-create'))
 
+    def test_patient_can_also_write_to_the_practice_administrators(self):
+        User = get_user_model()
+        practice_admin = User.objects.create_user(email='paula@private.test', first_name='Paula', last_name='Practice')
+        CompanyMembership.objects.create(company=self.company, user=practice_admin, role='practice_admin')
+        # Not offered: an administrator whose access has ended, or one at another practice.
+        former = User.objects.create_user(email='former@private.test', first_name='Fay', last_name='Former')
+        CompanyMembership.objects.create(company=self.company, user=former, role='practice_admin', is_active=False)
+        elsewhere = Company.objects.create(name='Elsewhere', slug='elsewhere')
+        CompanyMembership.objects.create(company=elsewhere, user=User.objects.create_user(email='else@private.test'),
+                                         role='practice_admin')
+        self.assertEqual(recipient_choices(self.patient), [self.current, self.past, practice_admin])
+        self.login_patient()
+        page = self.client.get(reverse('portal:patient-messages'), {'compose': 1})
+        field = page.context['thread_form'].fields['recipient']
+        self.assertEqual(list(field.queryset), [self.current, self.past, practice_admin])
+        self.assertContains(page, 'Paula Practice (practice administrator)')
+        self.assertNotContains(page, 'Fay Former')
+        self.assertEqual(self.start(recipient=practice_admin.pk).status_code, 302)
+        thread = MessageThread.objects.get()
+        self.assertEqual(list(thread.participants.all()), [practice_admin])
+        # The administrator finds it in Patient messages and can reply.
+        self.login_staff(practice_admin)
+        self.assertContains(self.client.get(reverse('portal:staff-inbox'), {'thread': thread.pk}), 'A question')
+        reply = self.client.post(reverse('portal:staff-message-create', args=[thread.pk]),
+                                 {'body': 'Happy to help', 'return_to': 'patient_messages'})
+        self.assertEqual(reply.status_code, 302)
+        self.assertTrue(thread.messages.filter(sender=practice_admin, body='Happy to help').exists())
+
+    def test_super_admins_are_offered_only_as_a_clinician_assigned_to_the_patient(self):
+        # self.admin is a Super Admin who isn't a clinician: never offered.
+        self.assertNotIn(self.admin, recipient_choices(self.patient))
+        doctor_admin = get_user_model().objects.create_user(email='doc-admin@private.test', first_name='Dot', last_name='Admin')
+        CompanyMembership.objects.create(company=self.company, user=doctor_admin, role='super_admin', clinician_type='doctor')
+        self.assertNotIn(doctor_admin, recipient_choices(self.patient))
+        self.patient.refresh_from_db()
+        assign_doctor(patient=self.patient, actor=self.admin, doctor=doctor_admin, expected_updated=self.patient.updated_at.isoformat())
+        self.patient.refresh_from_db()
+        self.assertEqual(recipient_choices(self.patient)[0], doctor_admin)
+        self.assertEqual(recipient_choices(self.patient)[0].recipient_note, 'your clinician')
+
+    def test_patient_without_a_clinician_can_write_to_a_practice_administrator(self):
+        practice_admin = get_user_model().objects.create_user(email='paula@private.test', first_name='Paula', last_name='Practice')
+        CompanyMembership.objects.create(company=self.company, user=practice_admin, role='practice_admin')
+        other = Patient.objects.create(company=self.company, user=get_user_model().objects.create_user(email='new@private.test'),
+                                       first_name='New', last_name='Patient')
+        self.assertEqual(recipient_choices(other), [practice_admin])
+        self.client.force_login(other.user)
+        session = self.client.session
+        session[ACTIVE_PATIENT_COMPANY_SESSION_KEY] = self.company.pk
+        session.save()
+        page = self.client.get(reverse('portal:patient-messages'), {'compose': 1})
+        self.assertContains(page, 'action="%s"' % reverse('portal:patient-thread-create'))
+        request = RequestFactory().get('/patient/')
+        request.user = other.user
+        response = self.client.post(reverse('portal:patient-thread-create'), {
+            'patient_context': make_patient_context(request, self.company, other), 'subject': 'Getting started', 'body': 'Hello'})
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(list(MessageThread.objects.get().participants.all()), [practice_admin])
+
     def test_only_participants_see_the_conversation_and_patient_sees_who_joined(self):
         self.login_patient()
         self.start()
@@ -108,22 +171,44 @@ class PrivateConversationTests(TestCase):
             self.login_staff(user)
             self.assertEqual(self.client.get(reverse('portal:staff-inbox'), {'thread': thread.pk}).status_code, 404)
             overview = self.client.get(reverse('portal:patient-detail', args=[self.patient.pk]))
-            self.assertEqual([card['count'] for card in overview.context['overview_cards'] if card['label'] == 'Conversations'], [0])
+            if user == self.stranger:
+                # Never Nadia's clinician: her record doesn't open for them at all.
+                self.assertRedirects(overview, reverse('portal:patient-list'), fetch_redirect_response=False)
+                continue
+            # Administrators' Overview counts conversations; a clinician's clinical Overview doesn't list them at all.
+            if 'overview_cards' in overview.context:
+                self.assertEqual([card['count'] for card in overview.context['overview_cards'] if card['label'] == 'Conversations'], [0])
+            else:
+                self.assertNotContains(overview, thread.subject)
         hand_over(thread=thread, actor=self.current, clinician=self.stranger)
         self.login_staff(self.stranger)
-        self.assertEqual(self.client.get(reverse('portal:staff-inbox'), {'thread': thread.pk}).status_code, 200)
+        # A conversation link opens it in Patient messages, now that the stranger takes part.
+        opened = self.client.get(reverse('portal:staff-inbox'), {'thread': thread.pk})
+        self.assertEqual(opened.status_code, 200)
+        self.assertEqual(opened.context['inbox_thread'].pk, thread.pk)
+        # They read and reply in the conversation, but never Nadia's record or notes: they weren't her clinician.
+        self.assertIsNone(opened.context['conversation_notes'])
+        self.assertEqual(opened.context['inbox_record_url'], '')
+        self.assertNotContains(opened, 'Patient notes')
         self.login_patient()
         page = self.client.get(reverse('portal:patient-messages'), {'thread': thread.pk})
         self.assertContains(page, 'With Cara Current, Sid Stranger')
         self.assertContains(page, 'Cara Current added Sid Stranger')
 
     def test_suggesting_a_new_time_opens_a_conversation_with_that_appointments_clinician(self):
+        Appointment.objects.create(company=self.company, patient=self.patient, clinician=self.past,
+                                   starts_at=timezone.now() + timedelta(days=4), duration_minutes=15)
         add_participant(MessageThread.objects.create(company=self.company, patient=self.patient, subject='Dose'), self.current)
         self.login_patient()
         appointments = self.client.get(reverse('portal:patient-appointments')).context['appointments']
+        past = next(appointment for appointment in appointments if appointment.clinician_id == self.past.pk)
+        self.assertIn(f'to={self.past.pk}', past.proposal_url)
+        self.assertEqual(past.proposal_label, 'Message Pat Past')
+        # A clinician who was never assigned can't be messaged, so the patient asks their own clinician instead.
         booked = next(appointment for appointment in appointments if appointment.clinician_id == self.booked.pk)
-        self.assertIn(f'to={self.booked.pk}', booked.proposal_url)
-        self.assertEqual(booked.proposal_label, 'Message Bo Booked')
+        self.assertNotIn('appointment=', booked.proposal_url)
+        self.assertIn(f'to={self.current.pk}', booked.proposal_url)
+        self.assertEqual(booked.proposal_label, 'Message Cara Current')
 
     def test_migration_gives_existing_conversations_their_people(self):
         replied = MessageThread.objects.create(company=self.company, patient=self.patient, subject='Replied', opened_by=self.patient_user)
@@ -140,3 +225,17 @@ class PrivateConversationTests(TestCase):
         self.assertTrue(ClinicianAssignment.objects.filter(patient=self.patient, clinician=self.past, ended_at__isnull=False).exists())
         self.assertEqual(MessageThreadParticipant.objects.filter(thread=replied).count(), 1)
         self.assertFalse(AuditEvent.objects.filter(action='message.participant_added').exists())
+
+    def test_each_conversation_shows_its_unread_count_as_a_badge(self):
+        thread = MessageThread.objects.create(company=self.company, patient=self.patient, subject='Dose question')
+        add_participant(thread, self.current)
+        for number in range(3):
+            PatientMessage.objects.create(company=self.company, thread=thread, sender=self.current, body=f'Reply {number}')
+        self.login_patient()
+        badge = '<span class="patient-inbox-thread__badge" aria-hidden="true">{}</span>'
+        self.assertContains(self.client.get(reverse('portal:patient-messages')), badge.format(3), html=True)
+        for number in range(8):
+            PatientMessage.objects.create(company=self.company, thread=thread, sender=self.current, body=f'More {number}')
+        self.assertContains(self.client.get(reverse('portal:patient-messages')), badge.format('9+'), html=True)
+        page = self.client.get(reverse('portal:patient-messages'), {'thread': thread.pk})
+        self.assertNotContains(page, 'patient-inbox-thread__badge')

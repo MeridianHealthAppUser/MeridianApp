@@ -9,6 +9,7 @@ from practices.models import Company, CompanyMembership, Patient
 
 from .forms import AppointmentForm, ClinicalNoteForm, ClinicalTaskForm, WeightEntryForm
 from .models import Appointment, WeightEntry
+from .widgets import floor_quarter_hour
 
 
 @override_settings(MULTI_PRACTICE_ENABLED=True)
@@ -56,7 +57,7 @@ class PatientWorkflowFormTests(TestCase):
             'patient': self.patient.pk,
             'clinician': self.doctor.pk,
             'appointment_type': 'follow_up',
-            'starts_at': timezone.now() + timedelta(days=2),
+            'starts_at': floor_quarter_hour(timezone.now() + timedelta(days=2)),
             'duration_minutes': 30,
             **overrides,
         }
@@ -156,7 +157,7 @@ class PatientWorkflowFormTests(TestCase):
                 self.assertIn(field, form.errors)
 
     def test_appointment_detects_overlap_across_practices(self):
-        starts_at = timezone.now() + timedelta(days=2)
+        starts_at = floor_quarter_hour(timezone.now() + timedelta(days=2))
         Appointment.objects.create(
             company=self.other_company, patient=self.other_patient, clinician=self.doctor,
             starts_at=starts_at - timedelta(minutes=15), duration_minutes=30,
@@ -167,7 +168,7 @@ class PatientWorkflowFormTests(TestCase):
         self.assertNotIn(self.other_company.name, str(form.errors))
 
     def test_appointment_detects_earlier_long_appointment_still_in_progress(self):
-        starts_at = timezone.now() + timedelta(days=2)
+        starts_at = floor_quarter_hour(timezone.now() + timedelta(days=2))
         Appointment.objects.create(
             company=self.company, patient=self.patient, clinician=self.doctor,
             starts_at=starts_at - timedelta(days=1), duration_minutes=1450,
@@ -177,7 +178,7 @@ class PatientWorkflowFormTests(TestCase):
         self.assertIn('starts_at', form.errors)
 
     def test_appointment_detects_overlap_with_later_booking(self):
-        starts_at = timezone.now() + timedelta(days=2)
+        starts_at = floor_quarter_hour(timezone.now() + timedelta(days=2))
         Appointment.objects.create(
             company=self.company, patient=self.patient, clinician=self.doctor,
             starts_at=starts_at + timedelta(minutes=15), duration_minutes=15,
@@ -187,7 +188,7 @@ class PatientWorkflowFormTests(TestCase):
         self.assertIn('starts_at', form.errors)
 
     def test_appointment_allows_touching_boundaries_and_ignores_cancelled_and_no_show(self):
-        starts_at = timezone.now() + timedelta(days=2)
+        starts_at = floor_quarter_hour(timezone.now() + timedelta(days=2))
         for offset, duration, status in (
             (-30, 30, Appointment.Status.BOOKED),
             (30, 15, Appointment.Status.BOOKED),
@@ -203,7 +204,7 @@ class PatientWorkflowFormTests(TestCase):
         self.assertEqual(form.save().company, self.company)
 
     def test_updating_an_appointment_does_not_conflict_with_itself(self):
-        starts_at = timezone.now() + timedelta(days=2)
+        starts_at = floor_quarter_hour(timezone.now() + timedelta(days=2))
         appointment = Appointment.objects.create(
             company=self.company, patient=self.patient, clinician=self.doctor,
             starts_at=starts_at, duration_minutes=30,

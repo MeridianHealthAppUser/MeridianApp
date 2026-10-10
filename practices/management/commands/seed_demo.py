@@ -1,3 +1,5 @@
+from datetime import date
+
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand, CommandError
@@ -9,6 +11,14 @@ from practices.tenancy import multi_practice_enabled
 
 
 DEMO_PASSWORD = 'MeridianDemo!2026'
+
+# More of Sam's patients, each with their own portal login, so lists, bookings and messages have more than
+# one person in them. Only their basic details are seeded; Nadia keeps the full clinical history.
+DEMO_PATIENTS = (
+    ('ayesha.p@example.co.za', 'Ayesha', 'Patel', 'MH-DEMO-002', date(1985, 3, 14), '+27 82 555 0102', 'Johannesburg'),
+    ('pieter.vdm@example.co.za', 'Pieter', 'van der Merwe', 'MH-DEMO-003', date(1974, 8, 2), '+27 82 555 0103', 'Durban'),
+    ('zanele.n@example.co.za', 'Zanele', 'Ndlovu', 'MH-DEMO-004', date(1997, 11, 23), '+27 82 555 0104', 'Pretoria'),
+)
 
 
 class Command(BaseCommand):
@@ -66,6 +76,8 @@ class Command(BaseCommand):
                 'is_staff': False,
                 'is_superuser': False,
             },
+            *({'email': email, 'first_name': first_name, 'last_name': last_name, 'is_staff': False, 'is_superuser': False}
+              for email, first_name, last_name, *_ in DEMO_PATIENTS),
         )
 
         users = {}
@@ -112,10 +124,26 @@ class Command(BaseCommand):
             },
         )
 
+        for email, first_name, last_name, record_number, born, phone, city in DEMO_PATIENTS:
+            Patient.objects.update_or_create(
+                company=meridian,
+                user=users[email],
+                defaults={
+                    'first_name': first_name,
+                    'last_name': last_name,
+                    'medical_record_number': record_number,
+                    'date_of_birth': born,
+                    'phone': phone,
+                    'city': city,
+                    'assigned_doctor': users['sam.marchant@meridianhealth.co.za'],
+                    'is_active': True,
+                },
+            )
+
         seed_demo_care(meridian=meridian, orion=orion, users=users, nadia=nadia)
 
         self.stdout.write(self.style.SUCCESS(
-            f'Demo data is ready: {2 if orion else 1} practices, 4 accounts, '
+            f'Demo data is ready: {2 if orion else 1} practices, {len(people)} accounts, '
             f'{5 if orion else 3} staff memberships, patient portals, and clinical demo records. '
             f'New demo accounts use: {DEMO_PASSWORD}. Existing passwords are preserved unless --reset-passwords is supplied.'
         ))

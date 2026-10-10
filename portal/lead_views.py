@@ -7,7 +7,7 @@ from django.views.decorators.cache import never_cache
 
 from care.models import ConsentRecord, Lead, ScreeningQuestionnaire
 from care.services import record_audit
-from practices.models import CompanyMembership
+from practices.models import CompanyMembership, Patient
 
 from .staff_views import StaffPageView
 from .followup_views import with_follow_up
@@ -78,7 +78,7 @@ class LeadDetailView(LeadPageView):
         context = super().get_context_data(**kwargs)
         lead = get_object_or_404(Lead.objects.for_company(self.company), pk=self.kwargs['pk'])
         questionnaire = ScreeningQuestionnaire.objects.for_company(self.company).filter(lead=lead, stage=1).first()
-        fields = (('height_cm', 'Height (cm)'), ('weight_kg', 'Weight (kg)'), ('bmi', 'BMI at submission'),
+        fields = (('title', 'Title'), ('height_cm', 'Height (cm)'), ('weight_kg', 'Weight (kg)'), ('bmi', 'BMI at submission'),
                   ('adult', '18 or older'), ('weight_related_condition', 'Weight-related condition'),
                   ('pregnancy', 'Pregnant, breastfeeding or planning pregnancy within a year'),
                   ('thyroid_history', 'Personal/family history of medullary thyroid cancer or MEN2'),
@@ -89,6 +89,8 @@ class LeadDetailView(LeadPageView):
             value = answers.get(key)
             if key in ('adult', 'weight_related_condition', 'pregnancy', 'thyroid_history', 'pancreatitis'):
                 value = {'yes': 'Yes', 'no': 'No', 'unsure': 'Not sure'}.get(value, 'Not recorded')
+            if key == 'title':
+                value = dict(Patient.Title.choices).get(value, '')
             display.append((label, value or 'Not recorded'))
         context.update(lead=lead, questionnaire=questionnaire, answers_display=display,
                        screening_reasons=answers.get('screening_reasons', []),

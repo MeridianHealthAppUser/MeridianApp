@@ -28,6 +28,11 @@ The local demo creates Meridian Health only. Demo accounts share password `Merid
 | Sam, Doctor | sam.marchant@meridianhealth.co.za | Meridian Health |
 | Lindiwe, Practice Administrator | lindiwe.mahlangu@meridianhealth.co.za | Meridian Health |
 | Nadia, Patient | nadia.m@example.co.za | Own Meridian Health patient record |
+| Ayesha, Patient | ayesha.p@example.co.za | Own Meridian Health patient record |
+| Pieter, Patient | pieter.vdm@example.co.za | Own Meridian Health patient record |
+| Zanele, Patient | zanele.n@example.co.za | Own Meridian Health patient record |
+
+All four patients are Sam's. Nadia has the full demo history (consultations, notes, messages, supply); the other three have their details only, so there's more than one patient to book, message and search for.
 
 `seed_demo` is a development-only demonstration command. Existing passwords are preserved unless you explicitly pass `--reset-passwords`; example records can be refreshed, so do not rerun it against a working database just to obtain new screens. It refuses to run with `DEBUG=False`. Use a separate account created with `manage.py createsuperuser` for Django's site-wide technical administration.
 

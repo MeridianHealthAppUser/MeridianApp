@@ -1,0 +1,31 @@
+{% extends 'base.html' %}
+{% load static %}
+{% comment %}Sign-in and password reset pages: the Meridian logo centred above one form card.{% endcomment %}
+{% block extra_css %}<link rel="stylesheet" href="{% static 'css/auth.css' %}?v=20261007">{% endblock %}
+
+{# The logo sits above the card instead of in a header bar. #}
+{% block site_header %}{% endblock %}
+
+{% block content %}
+  <section class="login-layout" aria-labelledby="login-title">
+    {% comment %}
+    Intro panel, hidden for now. To bring it back, remove these comment tags and uncomment the
+    "Intro panel" styles in static/css/auth.css.
+    <aside class="login-intro">
+      <div>
+        <p class="eyebrow">Meridian Health</p>
+        <h2>Care that stays connected.</h2>
+        <p>Sign in to access your care journey or the practice workspace for the company you are working in.</p>
+      </div>
+      <p class="login-assurance"><span aria-hidden="true">⌁</span> {% if multi_practice_enabled %}Your account is shared securely across the Meridian practices you are authorised to access.{% else %}Secure access to your Meridian Health account.{% endif %}</p>
+    </aside>
+    {% endcomment %}
+
+    <div class="login-column">
+      <a class="login-brand" href="{% url 'landing' %}">{% include "includes/brand_logo.html" %}</a>
+      <div class="login-card">
+{% block card %}{% endblock %}
+      </div>
+    </div>
+  </section>
+{% endblock %}

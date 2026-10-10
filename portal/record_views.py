@@ -31,9 +31,11 @@ from care.models import (
 )
 from care.services import record_audit
 from practices.models import CompanyMembership, Patient
-from practices.tenancy import scope_queryset
+from practices.tenancy import multi_practice_enabled, scope_queryset
+from .navigation import uses_flat_menu
 from .patient_care_forms import PROFILE_FIELDS
 from .record_forms import ClinicalRecordFilterForm, RECORD_CATEGORIES, RECORD_PURPOSES, ScopedPatientDirectoryFilterForm
+from .record_access import label_access, openable_patients, require_record_view
 from .views import StaffCompanyRequiredMixin
 
 
@@ -105,10 +107,16 @@ def patient_directory_context(view):
     queryset = Patient.objects.filter(company__in=companies, is_active=True).select_related(
         'user', 'assigned_doctor', 'company',
     ).order_by('last_name', 'first_name', 'company__name', 'pk')
+    # Clinicians see only their own patients: assigned to them now or before, or booked with them as cover.
+    # So there is no clinician to filter by.
+    own_patients_only = uses_flat_menu(view.membership)
+    if own_patients_only:
+        queryset = openable_patients(queryset, view.request.user)
+        del form.fields['clinician']
     patient_count = queryset.count()
     filters = {}
     if form.is_valid():
-        query, clinician = form.cleaned_data['q'], form.cleaned_data['clinician']
+        query, clinician = form.cleaned_data['q'], form.cleaned_data.get('clinician')
         for term in query.split():
             queryset = queryset.filter(
                 Q(first_name__icontains=term) | Q(last_name__icontains=term)
@@ -133,9 +141,38 @@ def patient_directory_context(view):
         patient.record_authorization = authorizations.get(patient.pk)
         patient.record_subscription = subscriptions.get(patient.pk)
         patient.in_current_practice = patient.company_id == view.company.pk
-    context.update(filter_form=form, patients=patients, patient_count=patient_count,
+    if own_patients_only:
+        label_access(patients, view.request.user)  # "Covering" or "Past patient" beside those who aren't theirs now.
+    context.update(filter_form=form, patients=patients, patient_count=patient_count, own_patients_only=own_patients_only,
                    directory_all_practices=scope_all, directory_company_count=len(companies))
+    context.update(directory_search_context(form, data))
     return context
+
+
+def directory_search_context(form, data):
+    """The directory's search at the top right of its table, as in Messages, with a Filters menu before it for whoever
+    can filter by clinician (and, with several practices, choose which practices to search)."""
+    from .filter_menus import choice_section, fields_section, filter_menu
+
+    search = data.get('q', '')
+    kept = {}
+    sections = []
+    if 'clinician' in form.fields:
+        kept['clinician'] = data.get('clinician', '')
+        people = [('', 'All clinicians')] + [(person.pk, person.full_name) for person in form.fields['clinician'].queryset]
+        sections.append(choice_section('clinician', 'Clinician', people, [kept['clinician']], icon='person', pick=True,
+                                       default='', errors=form['clinician'].errors))
+    if multi_practice_enabled():
+        kept['scope'] = data.get('scope', 'current')
+        sections.append(fields_section('scope', 'Practices', [form['scope']], icon='practice', count=int(kept['scope'] == 'all')))
+    directory = reverse('portal:patient-list')
+    filters = urlencode({key: value for key, value in kept.items() if value})
+    return dict(
+        search=search, search_hidden=kept, search_action=directory,
+        search_clear_url=f'{directory}?{filters}' if filters else directory,
+        filter_menu=filter_menu(action=directory, hidden=[('q', search)], form=form, label='Filter patients', sections=sections,
+                                clear_url=f'{directory}?{urlencode({"q": search})}' if search else directory) if sections else None,
+    )
 
 
 class RecordTimeline:
@@ -162,7 +199,7 @@ class RecordTimeline:
         labs = scoped_source(LabRequest, patients)
         results = scoped_source(LabResult, patients).filter(
             lab_request__patient_id=F('patient_id'), lab_request__company_id=F('company_id'),
-        ).defer('content', 'sha256')
+        ).defer('sha256')
         revisions = scoped_source(PatientMedicalProfileRevision, patients).filter(
             company_id__in=doctor_companies, profile__patient_id=F('patient_id'),
             profile__company_id=F('company_id'),
@@ -285,6 +322,25 @@ class RecordTimeline:
         return entry
 
 
+def history_filters(form, patient):
+    """The History tab's Filters menu: pick one Activity, a date range and, with several practices, which records."""
+    from .filter_menus import choice_section, fields_section, filter_menu
+    from .patient_workspace import workspace_url
+
+    data = form.data
+    sections = [
+        choice_section('category', 'Activity', form.fields['category'].choices, [data.get('category') or 'all'],
+                       icon='type', pick=True, default='all', errors=form['category'].errors),
+        fields_section('dates', 'Date', [form['date_from'], form['date_to']],
+                       count=int(bool(data.get('date_from') or data.get('date_to')))),
+    ]
+    if multi_practice_enabled():
+        sections.insert(0, fields_section('scope', 'Practices', [form['scope'], form['reason']], icon='practice',
+                                          count=int(data.get('scope') == 'all')))
+    return filter_menu(action=reverse('portal:patient-detail', args=[patient.pk]), hidden=[('tab', 'history')], form=form,
+                       clear_url=workspace_url(patient, 'history'), label='Filter patient history', sections=sections)
+
+
 class ClinicalRecordAccessMixin(LoginRequiredMixin, StaffCompanyRequiredMixin):
     http_method_names = ('get', 'head', 'options')
 
@@ -295,6 +351,7 @@ class ClinicalRecordAccessMixin(LoginRequiredMixin, StaffCompanyRequiredMixin):
             Patient.objects.select_related('user', 'company', 'assigned_doctor'),
             pk=self.kwargs['pk'], company=self.company, is_active=True,
         )
+        require_record_view(self.membership, self.request.user, self.patient)
         data = self.request.GET.copy() if filter_data is None else filter_data.copy()
         data.setdefault('scope', 'current')
         data.setdefault('category', 'all')
@@ -369,6 +426,7 @@ class ClinicalRecordView(ClinicalRecordAccessMixin, TemplateView):
             context.update(self.sidebar())
         from .patient_workspace import patient_workspace_context
         context.update(patient_workspace_context(self.request, self.company, self.membership, self.patient, 'history'))
+        context['filter_menu'] = history_filters(self.filter_form, self.patient)
         self.audit_access('patient.clinical_record_viewed')
         return context
 

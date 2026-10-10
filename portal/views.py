@@ -5,8 +5,8 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import IntegrityError, transaction
-from django.db.models import F, Prefetch, Q
-from django.http import HttpResponseRedirect
+from django.db.models import Prefetch, Q
+from django.http import HttpResponseBadRequest, HttpResponseRedirect
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
@@ -17,7 +17,6 @@ from django.views.decorators.cache import never_cache
 from django.views.generic import DetailView, TemplateView
 
 from care.forms import (
-    AppointmentForm,
     AppointmentProposalForm,
     ClinicalNoteForm,
     ClinicalTaskForm,
@@ -25,7 +24,7 @@ from care.forms import (
     PatientThreadForm,
     WeightEntryForm,
 )
-from care.messaging import staff_threads, start_conversation
+from care.messaging import staff_threads, start_conversation, unread_for_staff
 from care.models import (
     Appointment,
     ClinicalNote,
@@ -64,12 +63,22 @@ class StaffCompanyRequiredMixin:
 
     company = None
     membership = None
+    # Operations, Insights and Settings pages are for practice admins and Super Admins only.
+    admin_only = False
+    # Practice-wide clinical lists the Clinician role's menu leaves out, as they work from each patient's
+    # record: opened by URL, a clinician goes back to the Overview with this message as an error toast.
+    clinician_redirect_message = ''
 
     def dispatch(self, request, *args, **kwargs):
         self.company = get_active_company(request)
         self.membership = active_membership_for(request, self.company)
         if self.company is None or self.membership is None:
             raise PermissionDenied('You need an active practice membership to access this workspace.')
+        if self.admin_only and not self.membership.is_admin:
+            raise PermissionDenied('This page is for practice administrators.')
+        if self.clinician_redirect_message and self.membership.role == CompanyMembership.Role.DOCTOR:
+            messages.error(request, self.clinician_redirect_message)
+            return redirect('portal:desktop-dashboard')
         return super().dispatch(request, *args, **kwargs)
 
 
@@ -108,30 +117,47 @@ class StaffDashboardContextMixin(StaffCompanyRequiredMixin):
             upcoming_appointments = upcoming_appointments.filter(clinician=self.request.user)
 
         recent_threads = staff_threads(self.company, self.request.user).select_related('patient').order_by('-last_message_at', '-created_at', '-pk')
-        incoming_unread = PatientMessage.objects.for_company(self.company).filter(
-            read_at__isnull=True, sender_id=F('thread__patient__user_id'), thread__participants=self.request.user,
-        )
+        # What the patient or a colleague sent since this member last read each conversation, as in the menu badge.
+        incoming_unread = unread_for_staff(self.company, self.request.user)
 
+        patients = Patient.objects.filter(company=self.company, is_active=True)
+        # Clinicians' patient records are the patients assigned to them.
+        if self.membership.role == self.membership.Role.DOCTOR:
+            patients = patients.filter(assigned_doctor=self.request.user)
+        metrics = {
+            'patients': patients.count(),
+            'appointments': upcoming_appointments.filter(starts_at__date=today).count(),
+            'open_tasks': open_tasks.count(),
+            'unread_messages': incoming_unread.count(),
+        }
+        # Shipping is Operations work, which the Clinician role doesn't see.
+        if self.membership.is_admin:
+            metrics['shipments_due'] = Shipment.objects.for_company(self.company).filter(
+                scheduled_for__lte=today + timedelta(days=7),
+                status__in=(Shipment.Status.DRAFT, Shipment.Status.HELD, Shipment.Status.READY),
+            ).count()
         context.update(
             company=self.company,
             active_membership=self.membership,
             today=today,
-            metrics={
-                'patients': Patient.objects.filter(company=self.company, is_active=True).count(),
-                'appointments': upcoming_appointments.filter(starts_at__date=today).count(),
-                'open_tasks': open_tasks.count(),
-                'unread_messages': incoming_unread.count(),
-                'shipments_due': Shipment.objects.for_company(self.company).filter(
-                    scheduled_for__lte=today + timedelta(days=7),
-                    status__in=(Shipment.Status.DRAFT, Shipment.Status.HELD, Shipment.Status.READY),
-                ).count(),
-            },
-            patients=Patient.objects.filter(company=self.company, is_active=True).select_related('assigned_doctor')[:8],
+            metrics=metrics,
+            patients=patients.select_related('assigned_doctor')[:8],
             upcoming_appointments=upcoming_appointments[:8],
             open_tasks=attach_clinical_task_links(list(open_tasks[:8]), self.request.user, self.membership),
-            recent_messages=recent_threads[:6],
+            recent_messages=self.tagged(recent_threads.prefetch_related('participants')[:6]),
         )
         return context
+
+    def tagged(self, threads):
+        """Recent conversations with who's in them as tags: the patient, then anyone else besides you."""
+        from .people_tags import people_tags, staff_kinds
+
+        threads = list(threads)
+        kinds = staff_kinds(self.company, [person.pk for thread in threads for person in thread.participants.all()])
+        for thread in threads:
+            others = [person for person in thread.participants.all() if person.pk not in (self.request.user.pk, thread.patient.user_id)]
+            thread.people_tags = people_tags(others, kinds, patient=thread.patient)
+        return threads
 
 
 class DesktopDashboardView(LoginRequiredMixin, StaffDashboardContextMixin, TemplateView):
@@ -164,7 +190,7 @@ class MobileDashboardView(LoginRequiredMixin, StaffDashboardContextMixin, Templa
 
 @method_decorator(never_cache, name='dispatch')
 class StaffInboxView(LoginRequiredMixin, StaffCompanyRequiredMixin, TemplateView):
-    """Open a selected conversation in the active practice's secure inbox."""
+    """Patient messages: the conversations this staff member is in, with the chosen one open beside them."""
 
     template_name = 'portal/staff_inbox.html'
     http_method_names = ('get', 'head', 'options')
@@ -197,28 +223,30 @@ class ActivateCompanyView(LoginRequiredMixin, View):
         # Record URLs belong to the previous practice. Switch to an overview so
         # the user can choose a record in the newly selected practice.
         next_path = request.POST.get('next', '').split('?', 1)[0].split('#', 1)[0]
-        for destination in ('portal:clinical-consultations', 'portal:clinical-labs', 'portal:treatment-authorisations', 'portal:treatment-review-rules', 'portal:compounding-list', 'portal:activity-statements'):
+        for destination in ('portal:clinical-consultations', 'portal:clinical-labs', 'portal:treatment-authorisations', 'portal:compounding-list'):
             if next_path.startswith(reverse(destination)):
                 membership = active_membership_for(request, company)
                 if membership.has_clinical_access:
                     return redirect(destination)
-        for destination in ('portal:management-practices', 'portal:management-users', 'portal:policy-list'):
+        for destination in ('portal:management-practices', 'portal:management-users', 'portal:policy-list',
+                            'portal:treatment-review-rules', 'portal:activity-statements'):
             if next_path.startswith(reverse(destination)):
                 membership = active_membership_for(request, company)
                 if membership.role == CompanyMembership.Role.SUPER_ADMIN:
                     return redirect(destination)
-        for destination in ('portal:staff-leads', 'portal:dropouts', 'portal:staff-data-requests'):
+        # Admin, Operations and Insights pages; the Clinician role is sent to the overview instead.
+        for destination in ('portal:staff-leads', 'portal:dropouts', 'portal:staff-data-requests',
+                            'portal:ops-catalogue', 'portal:ops-stock', 'portal:ops-shipping', 'portal:ops-history', 'portal:ops-orders',
+                            'portal:treatment-subscriptions', 'portal:metrics'):
             if next_path.startswith(reverse(destination)):
                 membership = active_membership_for(request, company)
-                if membership.role in (CompanyMembership.Role.PRACTICE_ADMIN, CompanyMembership.Role.SUPER_ADMIN):
+                if membership.is_admin:
                     return redirect(destination)
-        for destination in ('portal:ops-catalogue', 'portal:ops-stock', 'portal:ops-shipping', 'portal:ops-history', 'portal:ops-orders', 'portal:metrics', 'portal:staff-schedule'):
-            if next_path.startswith(reverse(destination)):
-                return redirect(destination)
+        if next_path.startswith(reverse('portal:staff-schedule')):
+            return redirect('portal:staff-schedule')
         for destination in (
             'portal:mobile-dashboard', 'portal:staff-inbox', 'portal:staff-tasks',
-            'portal:patient-list', 'portal:staff-schedule', 'portal:treatment-subscriptions',
-            'portal:account-access-history',
+            'portal:patient-list', 'portal:account-access-history',
         ):
             if next_path == reverse(destination):
                 return redirect(destination)
@@ -278,7 +306,8 @@ class PatientDetailView(LoginRequiredMixin, StaffCompanyRequiredMixin, DetailVie
 def _conversation_threads(company, patient, *, patient_view, viewer=None, mark_read=False):
     """Load the complete conversation and mark only displayed incoming rows read.
 
-    Staff see only conversations they take part in; the receipt is shared by its participants.
+    Staff see only conversations they take part in, and each keeps their own read position: showing them reads
+    what the patient and colleagues sent for this staff member only.
     """
     threads = MessageThread.objects.for_company(company).filter(patient=patient)
     if not patient_view:
@@ -290,14 +319,20 @@ def _conversation_threads(company, patient, *, patient_view, viewer=None, mark_r
             to_attr='conversation_messages',
         ),
     ))
-    read_ids = []
-    for thread in threads:
-        for message in thread.conversation_messages:
-            incoming = message.sender_id != patient.user_id if patient_view else message.sender_id == patient.user_id
-            if incoming and message.read_at is None:
-                read_ids.append(message.pk)
-    if read_ids and mark_read:
-        PatientMessage.objects.for_company(company).filter(pk__in=read_ids, read_at__isnull=True).update(read_at=timezone.now())
+    if not mark_read:
+        return threads
+    if patient_view:
+        read_ids = [message.pk for thread in threads for message in thread.conversation_messages
+                    if message.sender_id != patient.user_id and message.read_at is None]
+        if read_ids:
+            PatientMessage.objects.for_company(company).filter(pk__in=read_ids, read_at__isnull=True).update(read_at=timezone.now())
+    else:
+        from care.messaging import mark_read_by_staff
+
+        # Read up to the latest message shown, whoever sent it; colleagues' messages count too.
+        for thread in threads:
+            if thread.conversation_messages:
+                mark_read_by_staff(thread, viewer, [message.pk for message in thread.conversation_messages])
     return threads
 
 
@@ -329,8 +364,14 @@ def _attach_appointment_proposals(context, request, company, patient, *, actor_r
         thread.appointment_proposals_list = by_thread.get(thread.pk, [])
         thread.proposal_form = None
         thread.has_selectable_appointments = False
-        if allowed and not thread.is_closed:
-            if context.get('failed_form') == 'proposal_form' and context.get('reply_thread_id') == thread.pk:
+        failed_here = context.get('failed_form') == 'proposal_form' and context.get('reply_thread_id') == thread.pk
+        # Patients can always suggest a time. Staff suggest one only when they come from the calendar's
+        # "Offer a new time" or "Discuss rebooking" link (which opens this conversation for that appointment).
+        thread.offers_proposal_form = actor_role == 'patient' or failed_here or (
+            bool(request.GET.get('appointment')) and request.GET.get('thread') == str(thread.pk)
+        )
+        if allowed and not thread.is_closed and thread.offers_proposal_form:
+            if failed_here:
                 form = context['proposal_form']
             else:
                 form = AppointmentProposalForm(
@@ -383,7 +424,7 @@ def _patient_record_context(request, company, membership, patient, **overrides):
         'notes': notes,
         'message_threads': _conversation_threads(company, patient, patient_view=False, viewer=request.user, mark_read=request.method == 'GET'),
         'task_form': ClinicalTaskForm(company=company, patient=patient),
-        'appointment_form': AppointmentForm(company=company, patient=patient),
+        'appointment_form': _staff_booking_form(company, patient=patient),
         'legacy_appointment_context': (
             request.POST.get('workflow_context', '') if overrides.get('failed_form') == 'appointment_form'
             else make_workflow_context(request, company, 'legacy-staff-booking', patient)
@@ -434,8 +475,20 @@ def _invalid_staff_form(request, company, membership, patient, name, form, **ext
 class StaffPatientActionMixin(LoginRequiredMixin, StaffCompanyRequiredMixin):
     """Look up the URL patient in the already-authorised active practice."""
 
+    # Adding a task, booking or conversation changes the record: only the current clinician does. A note
+    # can also come from a clinician covering an appointment (PatientNoteCreateView).
+    record_write = 'change'
+
     def get_patient(self):
-        return get_object_or_404(Patient, pk=self.kwargs['patient_pk'], company=self.company, is_active=True)
+        from .record_access import require_record_change, require_record_notes, require_record_view
+
+        patient = get_object_or_404(Patient, pk=self.kwargs['patient_pk'], company=self.company, is_active=True)
+        if self.request.method in ('GET', 'HEAD', 'OPTIONS'):
+            require_record_view(self.membership, self.request.user, patient)
+        else:
+            (require_record_notes if self.record_write == 'notes' else require_record_change)(
+                self.membership, self.request.user, patient)
+        return patient
 
     def patient_detail_redirect(self, patient):
         from .patient_workspace import workspace_url
@@ -469,7 +522,8 @@ class PatientAppointmentCreateView(StaffPatientActionMixin, View):
 
     def post(self, request, *args, **kwargs):
         patient = self.get_patient()
-        form = AppointmentForm(request.POST, company=self.company, patient=patient)
+        from .appointment_detail_views import staff_booking_form
+        form = staff_booking_form(self.company, request.POST, patient=patient)
         valid = form.is_valid()
         from care.appointment_lifecycle import book_staff_appointment
         from .workflow_context import validate_workflow_context
@@ -488,6 +542,7 @@ class PatientAppointmentCreateView(StaffPatientActionMixin, View):
 
 
 class PatientNoteCreateView(StaffPatientActionMixin, View):
+    record_write = 'notes'
     http_method_names = ('post',)
 
     def post(self, request, *args, **kwargs):
@@ -526,15 +581,18 @@ class StaffMessageCreateView(LoginRequiredMixin, StaffCompanyRequiredMixin, View
     http_method_names = ('post',)
 
     def post(self, request, pk):
-        from .inbox import staff_inbox_context, staff_inbox_redirect
+        from .inbox import staff_inbox_redirect
 
         thread = get_object_or_404(
             staff_threads(self.company, request.user).select_related('patient'),
             pk=pk,
             is_closed=False,
         )
-        from_inbox = request.POST.get('return_to') == 'inbox'
-        form = PatientMessageForm(request.POST, auto_id='inbox_%s' if from_inbox else 'id_%s')
+        # Replies are written on the record's Messages tab ("inbox" is its older name) or on Patient messages.
+        return_to = request.POST.get('return_to')
+        from_record = return_to in ('record', 'inbox')
+        from_inbox = return_to == 'patient_messages'
+        form = PatientMessageForm(request.POST, auto_id='record_message_%s' if from_record or from_inbox else 'id_%s')
         if form.is_valid():
             try:
                 post_patient_message(thread=thread, sender=request.user, body=form.cleaned_data['body'], request=request)
@@ -543,14 +601,22 @@ class StaffMessageCreateView(LoginRequiredMixin, StaffCompanyRequiredMixin, View
             else:
                 messages.success(request, 'Secure message sent.')
                 if from_inbox:
+                    from .inbox import search_text, staff_inbox_url
+                    return redirect(staff_inbox_url(thread, status=request.POST.get('status', ''), search=search_text(request.POST.get('q')),
+                                                    patients=request.POST.get('patients', '')))
+                if from_record:
                     return staff_inbox_redirect(thread)
                 from .patient_workspace import workspace_url
                 return redirect(workspace_url(thread.patient, 'messages', thread=thread.pk))
         if from_inbox:
-            return render(request, 'portal/staff_inbox.html', staff_inbox_context(
-                request, self.company, self.membership, selected_thread_id=thread.pk,
-                message_form=form, failed_form='message_form', reply_thread_id=thread.pk,
-            ))
+            from .inbox import render_staff_inbox
+
+            return render_staff_inbox(request, self.company, self.membership, message_form=form, reply_thread_id=thread.pk)
+        if from_record:
+            from .record_messages import render_record_messages
+
+            return render_record_messages(request, self.company, self.membership, thread.patient,
+                                          record_message_form=form, failed_form='message_form', reply_thread_id=thread.pk)
         return _invalid_staff_form(request, self.company, self.membership, thread.patient, 'message_form', form, reply_thread_id=thread.pk)
 
 
@@ -641,18 +707,57 @@ class StaffThreadCreateView(StaffPatientActionMixin, View):
 
     def post(self, request, *args, **kwargs):
         patient = self.get_patient()
-        form = PatientThreadForm(request.POST, auto_id='thread_%s')
-        if not form.is_valid():
-            return self.invalid_form(patient, 'thread_form', form)
-        try:
-            thread = start_conversation(patient=patient, opened_by=request.user, subject=form.cleaned_data['subject'],
-                                        body=form.cleaned_data['body'], request=request)
-        except ValidationError as error:
-            form.add_error(None, error)
+        from_record = request.POST.get('return_to') == 'record'
+        data = request.POST.copy()
+        if from_record:
+            # The record's messages block names a first conversation itself.
+            from .record_messages import new_thread_subject
+
+            data['subject'] = new_thread_subject(request.user, self.membership)
+        form = PatientThreadForm(data, auto_id='thread_%s')
+        thread = None
+        if form.is_valid():
+            try:
+                thread = start_conversation(patient=patient, opened_by=request.user, subject=form.cleaned_data['subject'],
+                                            body=form.cleaned_data['body'], request=request)
+            except ValidationError as error:
+                form.add_error(None, error)
+        if thread is None:
+            if from_record:
+                from .record_messages import render_record_messages
+
+                return render_record_messages(request, self.company, self.membership, patient, record_new_draft=data.get('body', ''),
+                                              record_thread_error=' '.join(message for errors in form.errors.values() for message in errors))
             return self.invalid_form(patient, 'thread_form', form)
         messages.success(request, 'Secure conversation started. Only you and the patient can read it.')
+        if from_record:
+            from .inbox import staff_inbox_redirect
+            return staff_inbox_redirect(thread)
         from .patient_workspace import workspace_url
         return redirect(workspace_url(patient, 'messages', thread=thread.pk))
+
+
+class StaffInboxThreadCreateView(LoginRequiredMixin, StaffCompanyRequiredMixin, View):
+    """New patient message from Patient messages: choose the patient, then write."""
+
+    http_method_names = ('post',)
+
+    def post(self, request):
+        from .inbox import NewPatientThreadForm, render_staff_inbox, staff_inbox_url
+
+        form = NewPatientThreadForm(request.POST, company=self.company, user=request.user, membership=self.membership,
+                                    auto_id='new_thread_%s')
+        if form.is_valid():
+            try:
+                thread = start_conversation(patient=form.cleaned_data['patient'], opened_by=request.user,
+                                            subject=form.cleaned_data['subject'] or form.default_subject,
+                                            body=form.cleaned_data['body'], request=request)
+            except ValidationError as error:
+                form.add_error(None, error)
+            else:
+                messages.success(request, 'Secure conversation started. Only you and the patient can read it.')
+                return redirect(staff_inbox_url(thread))
+        return render_staff_inbox(request, self.company, self.membership, new_thread_form=form, failed_form='new_thread_form')
 
 
 def _task_redirect(request, task):
@@ -667,3 +772,39 @@ def _task_redirect(request, task):
         from .patient_workspace import workspace_url
         return redirect(workspace_url(task.patient, 'tasks'))
     return redirect('portal:staff-tasks')
+
+
+class StaffThreadReadStateView(LoginRequiredMixin, StaffCompanyRequiredMixin, View):
+    """Mark a conversation read (everything in it) or unread (the latest message from the patient or a colleague),
+    for this staff member only; the others in the conversation keep their own read state."""
+
+    http_method_names = ('post',)
+
+    def post(self, request, pk):
+        from urllib.parse import urlencode
+
+        from care.messaging import set_staff_read_state
+
+        thread = get_object_or_404(staff_threads(self.company, request.user).select_related('patient', 'company'), pk=pk)
+        state = request.POST.get('state')
+        if state not in ('read', 'unread'):
+            return HttpResponseBadRequest('Choose read or unread.')
+        set_staff_read_state(thread=thread, user=request.user, read=state == 'read', request=request)
+        messages.success(request, 'Conversation marked as read.' if state == 'read' else 'Conversation marked as unread.')
+        from .inbox import search_text
+
+        search = search_text(request.POST.get('q'))
+        if request.POST.get('return_to') == 'record':
+            # Back to the record's Messages tab with no conversation open, so it stays unread.
+            from .patient_workspace import workspace_url
+            return redirect(workspace_url(thread.patient, 'messages', **({'q': search} if search else {})))
+        # Back to Patient messages with no conversation open, keeping its filters, search and page.
+        from .inbox import staff_inbox_url
+        page = request.POST.get('page', '')
+        return redirect(staff_inbox_url(status=request.POST.get('status', ''), page=page if page.isdecimal() and len(page) < 10 else 1,
+                                        search=search, patients=request.POST.get('patients', '')))
+
+
+def _staff_booking_form(company, *args, **kwargs):
+    from .appointment_detail_views import staff_booking_form
+    return staff_booking_form(company, *args, **kwargs)

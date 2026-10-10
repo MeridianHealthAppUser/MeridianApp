@@ -1,13 +1,15 @@
 {% extends 'portal/staff_page_base.html' %}
 {% load static workspace_ui %}
 {% block title %}{{ patient }} · {{ page_title|default:'Patient workspace' }} | Meridian{% endblock %}
-{% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/patient_workspace.css' %}">{% endblock %}
-{% block breadcrumbs %}{% if request.resolver_match.url_name == 'patient-detail' or not page_title %}{% breadcrumbs 'Patients' 'portal:patient-list' patient %}{% else %}{% url 'portal:patient-detail' patient.pk as record_url %}{% breadcrumbs 'Patients' 'portal:patient-list' patient record_url page_title %}{% endif %}{% endblock %}
+{% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/patient_workspace.css' %}?v=20261008b">{% endblock %}
+{% block breadcrumbs %}{% if request.resolver_match.url_name == 'patient-detail' or not page_title %}{% breadcrumbs 'Patient Records & Messages' 'portal:patient-list' patient %}{% else %}{% url 'portal:patient-detail' patient.pk as record_url %}{% breadcrumbs 'Patient Records & Messages' 'portal:patient-list' patient record_url page_title %}{% endif %}{% endblock %}
 {% block page_heading %}
   <header class="patient-workspace-heading">
-    <div><h1>{{ patient }}</h1><p>{{ patient.medical_record_number|default:'Record number pending' }}{% if patient.user %} · {{ patient.user.email }}{% endif %}{% if patient.phone %} · {{ patient.phone }}{% endif %}</p></div>
+    <div><h1>{{ patient }}</h1><p>{{ patient.medical_record_number|default:'Record number pending' }}{% if patient.user %} · {{ patient.user.email }}{% endif %}{% if patient.phone %} · {{ patient.phone }}{% endif %}</p>{% block patient_workspace_heading_details %}{% endblock %}</div>
     <div class="patient-workspace-actions">{% block patient_workspace_heading_actions %}{% endblock %}</div>
   </header>
+  {% if record_cover_appointment %}<p class="patient-workspace-notice patient-workspace-notice--read-only" role="note">You’re covering {{ patient.first_name }}’s appointment on {{ record_cover_appointment.starts_at|date:"j M" }}, so you can read this record and write notes, but not change anything else. {% if patient.assigned_doctor %}{{ patient.assigned_doctor.full_name }} is {{ patient.first_name }}’s clinician.{% endif %}</p>{% endif %}
+  {% if record_read_only %}<p class="patient-workspace-notice patient-workspace-notice--read-only" role="note">You looked after {{ patient.first_name }} before, so you can read this record but not change it. {% if patient.assigned_doctor %}{{ patient.assigned_doctor.full_name }} is {{ patient.first_name }}’s clinician now.{% endif %}</p>{% endif %}
   <nav class="patient-workspace-tabs" aria-label="Patient sections">
     {% for tab in workspace_tabs %}<a href="{{ tab.url }}"{% if tab.active %} class="is-active" aria-current="page"{% endif %}>{{ tab.label }}</a>{% endfor %}
   </nav>

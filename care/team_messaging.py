@@ -3,7 +3,11 @@
 Any active staff member can message colleagues in the same practice. Only the
 members of a conversation can see it; patients never can, even when linked.
 Each member keeps their own read position, so a group shows unread per person.
+Any member can close a conversation, which keeps every message but takes no
+replies or new colleagues until someone in it reopens it.
 """
+
+from datetime import timedelta
 
 from django.contrib.auth import get_user_model
 from django.core.exceptions import PermissionDenied, ValidationError
@@ -85,6 +89,8 @@ def start_team_conversation(*, company, actor, members, subject, body, patient=N
 def post_team_message(*, thread, sender, body, request=None):
     thread = TeamThread.objects.select_for_update().select_related('company').get(pk=thread.pk)
     _require_member(thread, sender)
+    if thread.is_closed:
+        raise ValidationError('This conversation is closed. Reopen it to reply.')
     message = TeamMessage.objects.create(company=thread.company, thread=thread, sender=sender, body=_body(body))
     thread.last_message_at = message.created_at
     thread.save(update_fields=('last_message_at', 'updated_at'))
@@ -99,6 +105,8 @@ def post_team_message(*, thread, sender, body, request=None):
 def add_team_member(*, thread, actor, user, request=None):
     thread = TeamThread.objects.select_for_update().select_related('company').get(pk=thread.pk)
     _require_member(thread, actor)
+    if thread.is_closed:
+        raise ValidationError('Reopen the conversation before adding a colleague.')
     if user is None or not colleagues(thread.company).filter(pk=user.pk).exists():
         raise ValidationError('Choose an active colleague in this practice.')
     if TeamThreadMember.objects.filter(thread=thread, user=user).exists():
@@ -109,5 +117,34 @@ def add_team_member(*, thread, actor, user, request=None):
     return link
 
 
+@transaction.atomic
+def manage_team_conversation(*, thread, actor, action, user=None, request=None):
+    """Message action, for anyone in the conversation: add a colleague, close it or reopen it."""
+    if action == 'add':
+        return add_team_member(thread=thread, actor=actor, user=user, request=request)
+    if action not in ('close', 'reopen'):
+        raise ValidationError('Choose a conversation action.')
+    thread = TeamThread.objects.select_for_update().select_related('company').get(pk=thread.pk)
+    _require_member(thread, actor)
+    closed = action == 'close'
+    if thread.is_closed != closed:
+        thread.is_closed = closed
+        thread.save(update_fields=('is_closed', 'updated_at'))
+        record_audit(company=thread.company, actor=actor, action='team_thread.closed' if closed else 'team_thread.reopened',
+                     target=thread, request=request, metadata={'patient_id': thread.patient_id})
+    return thread
+
+
 def mark_team_thread_read(thread, user):
     TeamThreadMember.objects.filter(thread=thread, user=user).update(last_read_at=timezone.now())
+
+
+def set_team_read_state(thread, user, *, read):
+    """Mark a conversation read, or unread from the latest message someone else sent."""
+    if read:
+        mark_team_thread_read(thread, user)
+        return
+    latest = TeamMessage.objects.filter(thread=thread).exclude(sender=user).order_by('-created_at', '-pk').values_list(
+        'created_at', flat=True).first()
+    if latest is not None:
+        TeamThreadMember.objects.filter(thread=thread, user=user).update(last_read_at=latest - timedelta(microseconds=1))

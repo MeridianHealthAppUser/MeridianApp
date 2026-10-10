@@ -1,0 +1,18 @@
+{# The patient's title, with a pen for the care team to set it. Printed on the PathCare form. #}
+<dd class="patient-workspace-fact-editable">
+  <span class="patient-workspace-fact-value">{{ patient.get_title_display|default:'Not recorded' }}</span>
+  {% if title_context_token %}
+    <details class="patient-workspace-fact-editor" data-inline-editor>
+      <summary aria-label="Change title" title="Change title"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4 20h4L19 9a2.83 2.83 0 0 0-4-4L4 16v4Z"/><path d="m13.5 6.5 4 4"/></svg></summary>
+      <form class="console-form" method="post" action="{% url 'portal:patient-title' patient.pk %}">{% csrf_token %}<input type="hidden" name="workflow_context" value="{{ title_context_token }}">
+        <div class="console-form__field"><label class="sr-only" for="patient-title-{{ patient.pk }}">Title</label>
+          <select id="patient-title-{{ patient.pk }}" name="title"><option value="">Not recorded</option>{% for value, label in title_choices %}<option value="{{ value }}"{% if patient.title == value %} selected{% endif %}>{{ label }}</option>{% endfor %}</select>
+          <span class="helptext">Printed on PathCare blood test forms.</span></div>
+        <div class="patient-workspace-fact-editor__actions">
+          <button class="console-button console-button--primary" type="submit">Save</button>
+          <a class="console-button console-button--secondary" href="{{ workspace_url }}" data-inline-editor-cancel>Cancel</a>
+        </div>
+      </form>
+    </details>
+  {% endif %}
+</dd>

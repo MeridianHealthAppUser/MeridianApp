@@ -175,6 +175,11 @@ class MedicationProduct(CompanyScopedModel):
         HORMONE = 'hormone', 'Hormone therapy'
         OTHER = 'other', 'Other'
 
+    class DoseFrequency(models.TextChoices):
+        WEEKLY = 'weekly', 'Weekly'
+        DAILY = 'daily', 'Daily'
+        AS_DIRECTED = 'as_directed', 'As directed'
+
     name = models.CharField(max_length=255)
     description = models.TextField(blank=True)
     category = models.CharField(max_length=24, choices=Category.choices, default=Category.WEIGHT_MANAGEMENT)
@@ -186,6 +191,9 @@ class MedicationProduct(CompanyScopedModel):
     requires_cold_chain = models.BooleanField(default=True)
     is_compounded = models.BooleanField(default=False)
     allowance_group = models.CharField(max_length=80, blank=True)
+    # How often a dose is taken. Each strength is its own product, so a medicine's
+    # active strengths are its dose ladder when a doctor changes a prescription.
+    dose_frequency = models.CharField(max_length=16, choices=DoseFrequency.choices, default=DoseFrequency.AS_DIRECTED)
 
     class Meta:
         constraints = [models.UniqueConstraint(fields=('company', 'name', 'strength'), name='unique_product_strength_per_company')]
@@ -211,6 +219,10 @@ class TreatmentAuthorization(PatientCompanyScopedModel):
     review_interval_days = models.PositiveSmallIntegerField(default=180)
     status = models.CharField(max_length=16, choices=Status.choices, default=Status.ACTIVE)
     instructions = models.TextField(blank=True)
+    # A renewal or change writes a new authorisation and supersedes the one it replaces.
+    replaces = models.ForeignKey('self', null=True, blank=True, on_delete=models.PROTECT, related_name='replacements')
+    change_reason = models.CharField(max_length=500, blank=True)
+    log_text = models.TextField(blank=True, help_text='The line written to the clinical log when this prescription was made.')
 
     class Meta:
         indexes = [models.Index(fields=('company', 'patient', 'status', 'expires_on'))]
@@ -471,7 +483,8 @@ class DoctorTimeOff(CompanyScopedModel):
     clinician = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='time_off_periods')
     starts_at = models.DateTimeField()
     ends_at = models.DateTimeField()
-    reason = models.CharField(max_length=16, choices=Reason.choices, default=Reason.LEAVE)
+    # Days off no longer ask for a reason; older records keep the one they were given.
+    reason = models.CharField(max_length=16, choices=Reason.choices, blank=True, default='')
     is_active = models.BooleanField(default=True)
     cancelled_at = models.DateTimeField(null=True, blank=True)
     cancelled_by = models.ForeignKey(
@@ -516,6 +529,41 @@ class DoctorTimeOff(CompanyScopedModel):
                 raise ValidationError({'ends_at': 'Time off must end after it starts.'})
             if self.ends_at - self.starts_at > timedelta(days=366):
                 raise ValidationError({'ends_at': 'Each time-off period can cover at most 366 days.'})
+
+
+class DoctorSpecialDay(CompanyScopedModel):
+    """Different working hours on one date, replacing the weekly pattern for that date only.
+
+    A day off on the same date still wins. A special day may fall on a normally non-working weekday.
+    """
+
+    clinician = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='special_days')
+    date = models.DateField()
+    starts_at = models.TimeField()
+    ends_at = models.TimeField()
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name='created_special_days',
+    )
+
+    class Meta:
+        ordering = ('date', 'pk')
+        constraints = [
+            models.UniqueConstraint(fields=('company', 'clinician', 'date'), name='unique_doctor_special_day'),
+            models.CheckConstraint(condition=models.Q(ends_at__gt=models.F('starts_at')), name='doctor_special_day_hours_valid'),
+        ]
+
+    def clean(self):
+        super().clean()
+        if self.company_id and self.clinician_id and not CompanyMembership.objects.filter(
+            company_id=self.company_id, company__is_active=True, user_id=self.clinician_id,
+            user__is_active=True, clinician_type__in=CompanyMembership.CLINICIAN_TYPES, is_active=True,
+        ).exists():
+            raise ValidationError({'clinician': 'The clinician must be active in this practice.'})
+        if isinstance(self.starts_at, time) and isinstance(self.ends_at, time):
+            if self.starts_at.tzinfo is not None or self.ends_at.tzinfo is not None:
+                raise ValidationError('Special hours must be local South Africa times.')
+            if self.ends_at <= self.starts_at:
+                raise ValidationError({'ends_at': 'The finish time must be after the start time.'})
 
 
 class ClinicalEncounter(PatientCompanyScopedModel):
@@ -721,13 +769,88 @@ class LabRequest(PatientCompanyScopedModel):
             raise ValidationError({'reviewed_by': 'Only the requesting clinician can review these results.'})
 
 
+class PatientFile(PatientCompanyScopedModel):
+    """One private file kept for a patient, such as a PathCare form or an uploaded lab report.
+
+    Read and write it only through care.patient_files. The bytes are in private object storage
+    (storage_key) or, where no storage is configured or before they are moved there, in content.
+    A file never has a public URL; the app serves it after its own access checks.
+    """
+
+    class Kind(models.TextChoices):
+        PATHCARE_FORM = 'pathcare_form', 'PathCare request form'
+        LAB_RESULT = 'lab_result', 'Lab result report'
+
+    kind = models.CharField(max_length=32, choices=Kind.choices)
+    filename = models.CharField(max_length=160)
+    content_type = models.CharField(max_length=100, default='application/pdf')
+    size = models.PositiveIntegerField()
+    sha256 = models.CharField(max_length=64)
+    storage_key = models.CharField(max_length=512, blank=True)
+    content = models.BinaryField(null=True, blank=True)
+    uploaded_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL,
+                                    related_name='uploaded_patient_files')
+
+    class Meta:
+        ordering = ('-created_at', '-pk')
+        indexes = [models.Index(fields=('company', 'patient', 'kind'), name='patient_file_lookup_idx')]
+        constraints = [
+            models.UniqueConstraint(fields=('storage_key',), condition=~models.Q(storage_key=''),
+                                    name='unique_patient_file_storage_key'),
+            models.CheckConstraint(condition=models.Q(content__isnull=False) | ~models.Q(storage_key=''),
+                                   name='patient_file_has_bytes'),
+        ]
+
+    def __str__(self):
+        return f'{self.get_kind_display()} {self.pk}'
+
+
+def _check_patient_file(record):
+    if record.file_id and (record.file.company_id != record.company_id or record.file.patient_id != record.patient_id):
+        raise ValidationError({'file': 'The file must belong to the same patient and practice.'})
+
+
+class PathCareRequestForm(PatientCompanyScopedModel):
+    """A filled, flattened PathCare request form for a blood-test request, as emailed to the patient.
+
+    The stored file is what "View form" and "Resend" serve; it is never regenerated or made public.
+    """
+
+    class EmailStatus(models.TextChoices):
+        QUEUED = 'queued', 'Queued'
+        SENT = 'sent', 'Sent'
+        FAILED = 'failed', 'Failed'
+
+    lab_request = models.OneToOneField(LabRequest, on_delete=models.PROTECT, related_name='pathcare_form')
+    tests = models.TextField()
+    file = models.OneToOneField(PatientFile, on_delete=models.PROTECT, related_name='pathcare_form')
+    size = models.PositiveIntegerField()
+    sha256 = models.CharField(max_length=64)
+    email_to = models.EmailField()
+    email_status = models.CharField(max_length=16, choices=EmailStatus.choices, default=EmailStatus.QUEUED)
+    email_attempts = models.PositiveIntegerField(default=0)
+    emailed_at = models.DateTimeField(null=True, blank=True)
+    send_count = models.PositiveIntegerField(default=1, help_text='The first send and every resend.')
+
+    class Meta:
+        ordering = ('-created_at', '-pk')
+
+    def clean(self):
+        super().clean()
+        if self.lab_request_id and (
+            self.lab_request.company_id != self.company_id or self.lab_request.patient_id != self.patient_id
+        ):
+            raise ValidationError({'lab_request': 'The form must belong to the request patient and practice.'})
+        _check_patient_file(self)
+
+
 class LabResult(PatientCompanyScopedModel):
-    """A single protected PDF attachment; never exposed through public storage."""
+    """A single protected PDF report (in file); never exposed through public storage."""
 
     lab_request = models.OneToOneField(LabRequest, on_delete=models.PROTECT, related_name='result')
     uploaded_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='uploaded_lab_results')
     filename = models.CharField(max_length=160)
-    content = models.BinaryField()
+    file = models.OneToOneField(PatientFile, on_delete=models.PROTECT, related_name='lab_result')
     size = models.PositiveIntegerField()
     sha256 = models.CharField(max_length=64)
 
@@ -743,6 +866,7 @@ class LabResult(PatientCompanyScopedModel):
             self.lab_request.company_id != self.company_id or self.lab_request.patient_id != self.patient_id
         ):
             raise ValidationError({'lab_request': 'The result must belong to the request patient and practice.'})
+        _check_patient_file(self)
 
 
 class WeightEntry(PatientCompanyScopedModel):
@@ -778,11 +902,16 @@ class MessageThread(PatientCompanyScopedModel):
 
 
 class MessageThreadParticipant(CompanyScopedModel):
-    """A staff member in a conversation; added_by is empty for the first recipient."""
+    """A staff member in a conversation, with their own read position; added_by is empty for the first recipient.
+
+    Messages anyone else sent (the patient or a colleague) after last_read_at are unread for this person
+    only. Empty means they haven't read it yet: everything others sent is unread, as for a new team member.
+    """
 
     thread = models.ForeignKey(MessageThread, on_delete=models.CASCADE, related_name='participant_links')
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='message_thread_links')
     added_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name='+')
+    last_read_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         constraints = [models.UniqueConstraint(fields=('thread', 'user'), name='one_participant_link_per_thread')]
@@ -810,11 +939,13 @@ class TeamThread(CompanyScopedModel):
     """A conversation between staff members of one practice.
 
     Patients never see these, even when one is linked to them. Like patient
-    conversations, only the members can list or read it.
+    conversations, only the members can list or read it, and any of them can
+    close it (every message is kept; nobody can reply) or reopen it.
     """
 
     subject = models.CharField(max_length=255)
     patient = models.ForeignKey(Patient, null=True, blank=True, on_delete=models.PROTECT, related_name='team_threads')
+    is_closed = models.BooleanField(default=False)
     opened_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name='+')
     members = models.ManyToManyField(settings.AUTH_USER_MODEL, through='TeamThreadMember', through_fields=('thread', 'user'),
                                      related_name='team_threads', blank=True)
@@ -856,7 +987,12 @@ class PatientMessage(CompanyScopedModel):
     thread = models.ForeignKey(MessageThread, on_delete=models.CASCADE, related_name='messages')
     sender = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name='sent_patient_messages')
     body = models.TextField()
+    # The recipient's read state: the patient's for staff messages. Unchanged by staff reading.
     read_at = models.DateTimeField(null=True, blank=True)
+    # The practice's receipt on a patient's message: when a staff member first opened it, and who. Kept for the
+    # patient side and history only; each staff member's unread state is MessageThreadParticipant.last_read_at.
+    staff_read_at = models.DateTimeField(null=True, blank=True)
+    staff_read_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name='+')
 
     class Meta:
         ordering = ('created_at',)
@@ -1176,6 +1312,50 @@ class PatientMedicalProfileRevision(PatientCompanyScopedModel):
         super().clean()
         if self.profile_id and (self.profile.patient_id != self.patient_id or self.profile.company_id != self.company_id):
             raise ValidationError('The profile history must belong to the same patient and practice.')
+
+
+class PatientClinicalSummary(PatientCompanyScopedModel):
+    """The doctor's editable summary, first filled from the screening questionnaire and medical profile.
+
+    The questionnaire and the patient's own profile are never changed by edits here.
+    """
+
+    class Answer(models.TextChoices):
+        NO = 'no', 'No'
+        YES = 'yes', 'Yes'
+        UNSURE = 'unsure', 'Unsure'
+        NOT_APPLICABLE = 'not_applicable', 'Not applicable'
+
+    patient = models.OneToOneField(Patient, on_delete=models.PROTECT, related_name='clinical_summary')
+    height_cm = models.DecimalField(max_digits=5, decimal_places=1, null=True, blank=True)
+    start_weight_kg = models.DecimalField(max_digits=5, decimal_places=1, null=True, blank=True)
+    goal_weight_kg = models.DecimalField(max_digits=5, decimal_places=1, null=True, blank=True)
+    medical_history = models.TextField(blank=True)
+    surgical_history = models.TextField(blank=True)
+    chronic_medication = models.TextField(blank=True)
+    allergies = models.TextField(blank=True)
+    pancreatitis = models.CharField(max_length=16, choices=Answer.choices, blank=True)
+    thyroid_cancer = models.CharField(max_length=16, choices=Answer.choices, blank=True)
+    pregnancy = models.CharField(max_length=16, choices=Answer.choices, blank=True)
+    seeded_from = models.DateTimeField(null=True, blank=True, help_text='When the screening assessment it was filled from was submitted.')
+
+    def clean(self):
+        super().clean()
+        if self.goal_weight_kg is not None and not 40 <= self.goal_weight_kg <= 250:
+            raise ValidationError({'goal_weight_kg': 'Give a goal weight between 40 and 250 kg.'})
+
+
+class PatientSummaryEdit(PatientCompanyScopedModel):
+    """One change to a summary field: who, when, and the value before and after."""
+
+    summary = models.ForeignKey(PatientClinicalSummary, on_delete=models.CASCADE, related_name='edits')
+    field = models.CharField(max_length=40)
+    old_value = models.TextField(blank=True)
+    new_value = models.TextField(blank=True)
+    edited_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, on_delete=models.SET_NULL, related_name='+')
+
+    class Meta:
+        ordering = ('-created_at', '-pk')
 
 
 class PharmacyOrder(PatientCompanyScopedModel):

@@ -1,0 +1,26 @@
+{% load workspace_ui %}{% comment %}
+  One conversation in a list of conversations: the subject, who else is in it (only when someone
+  besides the patient you are looking at and you, as tags by role: portal/people_tags.py), then the latest message,
+  after who wrote it (`latest_from`), and its time today or its date. The thread carries `list_url`, `is_selected`,
+  `people_tags` and `about` (the patient a team conversation is about, as a tag on its own line), and
+  `read_state_url` when it has messages from others to mark read or unread. The parent passes
+  `read_state_fields`, the hidden fields that bring the button back to this list.
+{% endcomment %}
+<li{% if thread.read_state_url %} class="record-inbox__item--marks"{% endif %}>
+  <a class="record-inbox-thread{% if thread.is_selected %} is-selected{% endif %}{% if thread.unread_count %} is-unread{% endif %}" href="{{ thread.list_url }}"{% if thread.is_selected %} aria-current="true"{% endif %}>
+    <strong><span>{{ thread.subject|default:"Patient message" }}</span>{% if thread.is_closed %}<span class="record-inbox-pill">Closed</span>{% endif %}{% include 'portal/includes/nav_badge.html' with count=thread.unread_count %}</strong>
+    {% if thread.people_tags %}<span class="record-inbox-thread__people person-tags"><span class="sr-only">With </span>{% for tag in thread.people_tags %}{% include 'portal/includes/person_tag.html' %}{% endfor %}</span>{% endif %}
+    {% if thread.about %}<span class="record-inbox-thread__about"><span class="person-tags__label">Patient:</span>{% include 'portal/includes/person_tag.html' with tag=thread.about %}</span>{% endif %}
+    <span class="record-inbox-thread__last">
+      <span class="record-inbox-thread__preview">{% if thread.latest_body %}{% if thread.latest_from %}<strong>{{ thread.latest_from }}:</strong> {% endif %}{{ thread.latest_body|truncatechars:90 }}{% else %}No messages yet{% endif %}</span>
+      {% if thread.last_activity %}<time datetime="{{ thread.last_activity|date:'c' }}" title="{{ thread.last_activity|date:'j M Y, H:i' }} SAST">{{ thread.last_activity|list_when }}</time>{% endif %}
+    </span>
+  </a>
+  {% if thread.read_state_url %}
+    <form class="record-inbox__mark" method="post" action="{{ thread.read_state_url }}">
+      {% csrf_token %}{% for name, value in read_state_fields.items %}<input type="hidden" name="{{ name }}" value="{{ value }}">{% endfor %}
+      {% if thread.unread_count %}<button type="submit" name="state" value="read" title="Mark as read">{% include 'portal/includes/read_state_icon.html' with name='read' %}<span class="sr-only">Mark as read: {{ thread.subject|default:"Patient message" }}</span></button>
+      {% else %}<button type="submit" name="state" value="unread" title="Mark as unread">{% include 'portal/includes/read_state_icon.html' with name='unread' %}<span class="sr-only">Mark as unread: {{ thread.subject|default:"Patient message" }}</span></button>{% endif %}
+    </form>
+  {% endif %}
+</li>

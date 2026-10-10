@@ -32,9 +32,9 @@ class TreatmentPageTests(TestCase):
         for user, role in ((cls.doctor, 'doctor'), (cls.admin, 'practice_admin'), (cls.super_admin, 'super_admin')):
             CompanyMembership.objects.create(company=cls.company, user=user, role=role)
         CompanyMembership.objects.create(company=cls.beta, user=cls.doctor, role='doctor')
-        cls.patient = Patient.objects.create(company=cls.company, user=cls.patient_user, first_name='Alex', last_name='Alpha')
-        cls.other = Patient.objects.create(company=cls.company, user=cls.other_user, first_name='Other', last_name='Alpha')
-        cls.beta_patient = Patient.objects.create(company=cls.beta, user=cls.patient_user, first_name='Alex', last_name='Beta')
+        cls.patient = Patient.objects.create(company=cls.company, user=cls.patient_user, first_name='Alex', last_name='Alpha', assigned_doctor=cls.doctor)
+        cls.other = Patient.objects.create(company=cls.company, user=cls.other_user, first_name='Other', last_name='Alpha', assigned_doctor=cls.doctor)
+        cls.beta_patient = Patient.objects.create(company=cls.beta, user=cls.patient_user, first_name='Alex', last_name='Beta', assigned_doctor=cls.doctor)
         cls.product = MedicationProduct.objects.create(company=cls.company, name='Selected treatment product', price=100)
         PracticeSettings.objects.create(company=cls.company)
 
@@ -64,8 +64,15 @@ class TreatmentPageTests(TestCase):
             url = reverse(f'portal:{name}')
             self.assertEqual(self.client.get(url).status_code, 302)
         self.login()
-        self.assertContains(self.client.get(reverse('portal:treatment-authorisations')), '<h1>Authorisations</h1>')
+        # Clinicians find authorisations on each patient's Treatment tab; the list is for Super Admins.
+        self.assertRedirects(self.client.get(reverse('portal:treatment-authorisations')), reverse('portal:desktop-dashboard'),
+                             fetch_redirect_response=False)
+        # Subscriptions sit in Operations, which the Clinician role doesn't see.
+        self.assertEqual(self.client.get(reverse('portal:treatment-subscriptions')).status_code, 403)
+        self.login(self.admin)
         self.assertContains(self.client.get(reverse('portal:treatment-subscriptions')), '<h1>Subscriptions</h1>')
+        self.login(self.super_admin)
+        self.assertContains(self.client.get(reverse('portal:treatment-authorisations')), '<h1>Authorisations</h1>')
         self.login(self.patient_user)
         treatment = self.client.get(reverse('portal:patient-treatment'))
         self.assertContains(treatment, '<h1>My Treatment</h1>', html=True)
@@ -165,7 +172,7 @@ class TreatmentPageTests(TestCase):
     def test_authorization_and_plan_history_paginate(self):
         for _ in range(23):
             self.authorization()
-        self.login()
+        self.login(self.super_admin)
         response = self.client.get(reverse('portal:treatment-authorisations'))
         self.assertEqual(len(response.context['page_obj']), 20)
         self.login(self.patient_user)

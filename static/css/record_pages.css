@@ -2,16 +2,11 @@
 .record-heading { justify-content:space-between; }
 .record-heading > div:first-child { min-width:0; }
 .record-heading h1 { overflow-wrap:anywhere; }
-.record-scope { padding:1.25rem; }
-.record-scope h2 { color:var(--console-ink); font-size:1rem; margin:0 0 .4rem; }
-.record-scope p, .record-footnote { color:var(--console-muted); font-size:.85rem; line-height:1.6; }
-.record-filters { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:.85rem; align-items:end; margin:1rem 0; }
-.record-filters > div { min-width:0; }
-.record-filters label { color:var(--console-muted); display:block; font-size:.78rem; font-weight:700; margin-bottom:.35rem; }
-.record-filters input, .record-filters select { background:#fff; border:1px solid var(--console-line); border-radius:.65rem; box-sizing:border-box; color:var(--console-ink); font:inherit; font-size:.83rem; min-width:0; min-height:2.7rem; padding:.6rem .7rem; width:100%; }
-.record-filters input:focus-visible, .record-filters select:focus-visible { outline:2px solid var(--console-teal); outline-offset:2px; }
-.record-filters .errorlist { color:#a33030; font-size:.8rem; margin:.4rem 0 0; padding-left:1.1rem; }
-.record-filters > .errorlist { grid-column:1/-1; }
+.record-footnote { color:var(--console-muted); font-size:.85rem; line-height:1.6; }
+/* The History tab's note under its heading and Filters. */
+.record-scope-notice { margin-bottom:0; }
+.record-scope-notice p { margin:0; }
+.record-scope-notice > * + * { margin-top:.6rem; }
 .record-layout { display:grid; grid-template-columns:minmax(0,2fr) minmax(17rem,1fr); gap:1rem; align-items:start; margin-top:1rem; }
 .record-timeline-card, .record-sidebar, .record-summary { min-width:0; }
 .record-layout .staff-page-card { margin-top:0; }
@@ -65,18 +60,28 @@
 .staff-patient-table-wrap:focus-visible { outline:2px solid var(--console-teal); outline-offset:-3px; }
 .record-directory-table small { color:var(--console-muted); display:block; font-size:.68rem; font-weight:400; margin-top:.3rem; }
 .record-directory-actions { display:flex; flex-wrap:wrap; gap:.5rem; }
+/* Open record is the row's main action: a compact primary button, like the calendar's. */
+.record-directory-open.console-button { font-size:.68rem; min-height:2rem; padding:.35rem .75rem; white-space:nowrap; }
 .record-directory-switch { margin:0; }
 .record-directory-switch button { white-space:normal; }
-.record-directory-filters { flex-wrap:wrap; }
-.record-directory-filters .staff-filter-form__field { flex:1 1 12rem; min-width:0; }
+/* The directory's search, with Filters before it, at the top right of the table, as in Messages. */
+.record-directory-header { flex-wrap:wrap; }
+.record-directory-header > div:first-child { flex:1 1 22rem; }
+.record-directory-tools { align-items:center; display:flex; flex:0 0 auto; gap:.6rem; justify-content:flex-end; margin-left:auto; max-width:100%; }
+.record-directory-tools .conversation-search { flex:0 0 19rem; }
+/* On a phone the search takes the whole line, under Filters when there is one. */
+@media (max-width: 46rem) {
+  .record-directory-tools { flex:1 1 100%; flex-wrap:wrap; }
+  .record-directory-tools .conversation-search { flex:1 1 100%; }
+}
 @media (max-width:1100px) {
   .record-layout { grid-template-columns:minmax(0,1fr); }
   .record-layout .record-timeline-card { contain:none; height:min(46rem,76svh); min-height:26rem; }
   .record-sidebar { grid-template-columns:repeat(2,minmax(0,1fr)); }
 }
 @media (max-width:680px) {
-  .record-filters, .record-sidebar { grid-template-columns:minmax(0,1fr); }
-  .record-scope, .record-summary { padding:1rem; }
+  .record-sidebar { grid-template-columns:minmax(0,1fr); }
+  .record-summary { padding:1rem; }
   .record-timeline { padding:1.1rem .9rem 1rem 1.4rem; }
   .record-heading .console-button { flex:1 1 auto; text-align:center; }
   .record-actions { width:100%; }

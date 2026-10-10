@@ -1,4 +1,8 @@
-"""Availability editing is a signed, self-doctor action in the selected practice."""
+"""Availability editing is a signed action in the selected practice.
+
+Doctors set their own working pattern. Days off and special days are the doctor's own, or a
+practice administrator's for the doctor chosen in the schedule filter.
+"""
 
 from django.test import override_settings
 from datetime import datetime, time, timedelta
@@ -11,7 +15,9 @@ from django.test import Client, RequestFactory, TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from care.models import Appointment, AuditEvent, AvailabilitySlot, DoctorTimeOff, DoctorWorkingPattern
+from care.models import (
+    Appointment, AuditEvent, AvailabilitySlot, ClinicalTask, DoctorSpecialDay, DoctorTimeOff, DoctorWorkingPattern,
+)
 from practices.models import Company, CompanyMembership, Patient
 from practices.services import ACTIVE_COMPANY_SESSION_KEY
 
@@ -49,11 +55,11 @@ class AvailabilityPortalTests(TestCase):
         session[ACTIVE_COMPANY_SESSION_KEY] = (company or self.company).pk
         session.save()
 
-    def token(self, *, company=None, clinician=None):
+    def token(self, *, company=None, clinician=None, actor=None):
         from .availability_forms import make_schedule_context
 
         request = RequestFactory().get('/schedule/')
-        request.user = self.doctor
+        request.user = actor or self.doctor
         return make_schedule_context(request, company or self.company, clinician or self.doctor)
 
     def pattern_data(self):
@@ -69,11 +75,16 @@ class AvailabilityPortalTests(TestCase):
                 data[f'pattern-{day}-is_working'] = 'on'
         return data
 
-    def time_off_data(self):
+    def time_off_data(self, **token):
         return {
-            'schedule_context': self.token(), 'timeoff-reason': 'sick',
-            'timeoff-starts_at': self.at(10).strftime('%Y-%m-%dT%H:%M'),
-            'timeoff-ends_at': self.at(11).strftime('%Y-%m-%dT%H:%M'),
+            'schedule_context': self.token(**token),
+            'timeoff-starts_on': self.monday.isoformat(), 'timeoff-ends_on': self.monday.isoformat(),
+        }
+
+    def special_day_data(self, **token):
+        return {
+            'schedule_context': self.token(**token), 'special-date': self.monday.isoformat(),
+            'special-starts_at': '08:00', 'special-ends_at': '10:00',
         }
 
     def leave(self, *, company=None, clinician=None):
@@ -88,7 +99,7 @@ class AvailabilityPortalTests(TestCase):
     def mutation_snapshot(self):
         return {
             model._meta.label: list(model.objects.order_by('pk').values())
-            for model in (DoctorWorkingPattern, DoctorTimeOff, Appointment, AvailabilitySlot, AuditEvent)
+            for model in (DoctorWorkingPattern, DoctorTimeOff, DoctorSpecialDay, Appointment, AvailabilitySlot, AuditEvent)
         }
 
     def assert_schedule_redirect(self, response, *, view='table', day=None):
@@ -127,19 +138,112 @@ class AvailabilityPortalTests(TestCase):
                 self.assertEqual(browser.post(url, data).status_code, 403)
         self.assertEqual(self.mutation_snapshot(), before)
 
-    def test_admins_are_read_only_and_patients_cannot_change_availability(self):
+    def test_admins_cannot_set_a_working_pattern_and_patients_cannot_change_availability(self):
         leave = self.leave()
         before = self.mutation_snapshot()
-        for user in (self.admin, self.super_admin, self.patient_user):
+        for user in (self.admin, self.super_admin):
             self.login(user)
-            for url, data in (
-                (reverse('portal:availability-working-pattern'), self.pattern_data()),
-                (reverse('portal:availability-time-off-create'), self.time_off_data()),
-                (reverse('portal:availability-time-off-cancel', args=[leave.pk]), {'schedule_context': self.token()}),
-            ):
-                with self.subTest(user=user.email, url=url):
-                    self.assertEqual(self.client.post(url, data).status_code, 403)
+            with self.subTest(user=user.email):
+                url = f'{reverse("portal:availability-working-pattern")}?clinician={self.doctor.pk}'
+                self.assertEqual(self.client.post(url, self.pattern_data()).status_code, 403)
+        self.login(self.patient_user)
+        for url, data in (
+            (reverse('portal:availability-working-pattern'), self.pattern_data()),
+            (reverse('portal:availability-time-off-create'), self.time_off_data()),
+            (reverse('portal:availability-time-off-cancel', args=[leave.pk]), {'schedule_context': self.token()}),
+            (reverse('portal:availability-special-day-set'), self.special_day_data()),
+            (reverse('portal:availability-undo'), {'schedule_context': self.token()}),
+        ):
+            with self.subTest(user='patient', url=url):
+                self.assertEqual(self.client.post(url, data).status_code, 403)
         self.assertEqual(self.mutation_snapshot(), before)
+
+    def test_admins_manage_days_off_and_special_days_for_the_chosen_doctor(self):
+        for user in (self.admin, self.super_admin):
+            with self.subTest(user=user.email):
+                self.login(user)
+                query = f'?date={self.monday.isoformat()}&clinician={self.doctor.pk}'
+                response = self.client.post(reverse('portal:availability-time-off-create') + query,
+                                            self.time_off_data(actor=user))
+                self.assert_schedule_redirect(response, day=self.monday)
+                self.assertEqual(parse_qs(urlsplit(response.url).query)['clinician'], [str(self.doctor.pk)])
+                leave = DoctorTimeOff.objects.get(is_active=True)
+                self.assertEqual((leave.clinician_id, leave.company_id), (self.doctor.pk, self.company.pk))
+                response = self.client.post(reverse('portal:availability-special-day-set') + query,
+                                            self.special_day_data(actor=user))
+                self.assertEqual(response.status_code, 302)
+                special = DoctorSpecialDay.objects.get()
+                self.assertEqual((special.clinician_id, special.created_by_id), (self.doctor.pk, user.pk))
+                for url in (special and reverse('portal:availability-special-day-remove', args=[special.pk]),
+                            reverse('portal:availability-time-off-cancel', args=[leave.pk])):
+                    self.assertEqual(self.client.post(url + query, {'schedule_context': self.token(actor=user)}).status_code, 302)
+                self.assertFalse(DoctorSpecialDay.objects.exists())
+                self.assertFalse(DoctorTimeOff.objects.filter(is_active=True).exists())
+        # Without a chosen doctor there is no diary to change, and a token for one doctor can't change another's.
+        self.login(self.admin)
+        before = self.mutation_snapshot()
+        self.assertEqual(self.client.post(reverse('portal:availability-time-off-create'),
+                                          self.time_off_data(actor=self.admin)).status_code, 403)
+        response = self.client.post(f'{reverse("portal:availability-time-off-create")}?clinician={self.colleague.pk}',
+                                    self.time_off_data(actor=self.admin))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(self.mutation_snapshot(), before)
+
+    def test_doctor_sets_replaces_and_removes_special_hours_for_a_date(self):
+        self.login()
+        url = f'{reverse("portal:availability-special-day-set")}?date={self.monday.isoformat()}'
+        self.assert_schedule_redirect(self.client.post(url, self.special_day_data()), day=self.monday)
+        data = {**self.special_day_data(), 'special-starts_at': '07:00', 'special-ends_at': '09:30'}
+        self.assertEqual(self.client.post(url, data).status_code, 302)
+        special = DoctorSpecialDay.objects.get()
+        self.assertEqual((special.starts_at, special.ends_at), (time(7), time(9, 30)))
+        response = self.client.get(reverse('portal:staff-schedule'), {'date': self.monday.isoformat()})
+        self.assertContains(response, '07:00 &ndash; 09:30')
+        self.assertContains(response, 'schedule-day-state--special">Special hours <svg class="special-hours-icon"')
+        self.assertContains(response, '</svg>07:00 &ndash; 09:30</p>')
+        # Upcoming special days come first; the form waits, closed, behind the dashed Add button.
+        response = self.client.get(reverse('portal:staff-schedule'), {'date': self.monday.isoformat(), 'section': 'availability'})
+        html = response.content.decode()
+        self.assertLess(html.index('07:00 &ndash; 09:30'), html.index('Add special day'))
+        self.assertContains(response, '<details class="schedule-add" data-inline-editor>')
+        bad = {**data, 'special-ends_at': '06:00'}
+        response = self.client.post(url + '&section=availability', bad)
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('ends_at', response.context['special_day_form'].errors)
+        # A rejected special day comes back with its form open.
+        self.assertContains(response, '<details class="schedule-add" data-inline-editor open>')
+        response = self.client.post(reverse('portal:availability-special-day-remove', args=[special.pk]),
+                                    {'schedule_context': self.token()})
+        self.assertEqual(response.status_code, 302)
+        self.assertFalse(DoctorSpecialDay.objects.exists())
+
+    def test_doctor_sees_the_clash_banner_with_undo_and_the_practice_gets_a_task(self):
+        DoctorWorkingPattern.objects.bulk_create([
+            DoctorWorkingPattern(company=self.company, clinician=self.doctor, weekday=day, is_working=day < 5,
+                                 starts_at=time(9) if day < 5 else None, ends_at=time(17) if day < 5 else None)
+            for day in range(7)
+        ])
+        booking = Appointment.objects.create(company=self.company, patient=self.patient, clinician=self.doctor,
+                                             starts_at=self.at(10), duration_minutes=30)
+        self.login()
+        query = f'?date={self.monday.isoformat()}'
+        self.assertEqual(self.client.post(reverse('portal:availability-time-off-create') + query, self.time_off_data()).status_code, 302)
+        task = ClinicalTask.objects.get()
+        self.assertIsNone(task.assigned_to_id)
+        response = self.client.get(reverse('portal:staff-schedule'), {'date': self.monday.isoformat()})
+        self.assertEqual(response.context['clash_count'], 1)
+        self.assertContains(response, '1 appointment sitting on a day you are now unavailable')
+        self.assertContains(response, 'The practice has been notified.')
+        self.assertContains(response, 'Doctor unavailable')
+        self.assertContains(response, 'Not open')
+        self.assertContains(response, f'action="{reverse("portal:availability-undo")}')
+        response = self.client.post(reverse('portal:availability-undo') + query, {'schedule_context': self.token()})
+        self.assert_schedule_redirect(response, day=self.monday)
+        self.assertFalse(DoctorTimeOff.objects.filter(is_active=True).exists())
+        booking.refresh_from_db()
+        self.assertEqual((booking.status, booking.starts_at), (Appointment.Status.BOOKED, self.at(10)))
+        response = self.client.get(reverse('portal:staff-schedule'), {'date': self.monday.isoformat()})
+        self.assertEqual(response.context['clash_count'], 0)
 
     def test_doctor_saves_seven_day_pattern_and_preserves_calendar_date(self):
         self.login()
@@ -187,13 +291,17 @@ class AvailabilityPortalTests(TestCase):
         self.assertFalse(DoctorWorkingPattern.objects.exclude(company=self.company, clinician=self.doctor).exists())
         self.assertEqual(DoctorWorkingPattern.objects.get(weekday=0).starts_at, time(9))
 
-    def test_time_off_is_saved_in_sast_and_cancellation_is_soft(self):
+    def test_days_off_are_whole_sast_days_without_a_reason_and_cancellation_is_soft(self):
         self.login()
-        response = self.client.post(reverse('portal:availability-time-off-create'), self.time_off_data())
+        data = {**self.time_off_data(), 'timeoff-ends_on': (self.monday + timedelta(days=2)).isoformat()}
+        response = self.client.post(reverse('portal:availability-time-off-create'), data)
         self.assertEqual(response.status_code, 302)
         leave = DoctorTimeOff.objects.get()
-        self.assertEqual((leave.company_id, leave.clinician_id), (self.company.pk, self.doctor.pk))
-        self.assertEqual((leave.starts_at, leave.ends_at), (self.at(10), self.at(11)))
+        self.assertEqual((leave.company_id, leave.clinician_id, leave.reason), (self.company.pk, self.doctor.pk, ''))
+        self.assertEqual((leave.starts_at, leave.ends_at), (self.at(0), self.at(0) + timedelta(days=3)))
+        response = self.client.get(reverse('portal:staff-schedule'), {'date': self.monday.isoformat(), 'section': 'availability'})
+        self.assertContains(response, f'{self.monday:%a} {self.monday.day} {self.monday:%b %Y} &ndash;')
+        self.assertNotContains(response, 'name="timeoff-reason"')
         response = self.client.post(reverse('portal:availability-time-off-cancel', args=[leave.pk]), {'schedule_context': self.token()})
         self.assertEqual(response.status_code, 302)
         leave.refresh_from_db()
@@ -205,13 +313,15 @@ class AvailabilityPortalTests(TestCase):
     def test_invalid_time_off_preserves_its_draft_on_schedule(self):
         self.login()
         data = self.time_off_data()
-        data['timeoff-ends_at'] = self.at(9).strftime('%Y-%m-%dT%H:%M')
+        data['timeoff-ends_on'] = (self.monday - timedelta(days=1)).isoformat()
         before = self.mutation_snapshot()
-        response = self.client.post(reverse('portal:availability-time-off-create'), data)
+        response = self.client.post(reverse('portal:availability-time-off-create') + '?section=availability', data)
         self.assertEqual(response.status_code, 200)
         self.assertTemplateUsed(response, 'portal/staff_schedule.html')
-        self.assertTrue(response.context['time_off_form'].errors)
-        self.assertEqual(response.context['time_off_form']['ends_at'].value(), data['timeoff-ends_at'])
+        self.assertIn('ends_on', response.context['time_off_form'].errors)
+        self.assertEqual(response.context['time_off_form']['ends_on'].value(), data['timeoff-ends_on'])
+        self.assertContains(response, '<details class="schedule-add" data-inline-editor open>')
+        self.assertContains(response, 'No leave coming up.')
         self.assertEqual(self.mutation_snapshot(), before)
 
     def test_other_doctor_or_other_practice_time_off_cannot_be_cancelled_by_url(self):
@@ -273,17 +383,20 @@ class AvailabilityPortalTests(TestCase):
     def test_schedule_get_has_no_availability_writes_and_admin_views_are_read_only(self):
         self.login()
         before = self.mutation_snapshot()
-        response = self.client.get(reverse('portal:staff-schedule'), {'date': self.monday.isoformat()})
+        response = self.client.get(reverse('portal:staff-schedule'), {'date': self.monday.isoformat(), 'section': 'availability'})
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'name="schedule_context"')
         self.assertEqual(self.mutation_snapshot(), before)
         for user in (self.admin, self.super_admin):
             self.login(user)
-            response = self.client.get(reverse('portal:staff-schedule'), {'date': self.monday.isoformat(), 'clinician': self.doctor.pk})
+            response = self.client.get(reverse('portal:staff-schedule'), {'date': self.monday.isoformat(), 'clinician': self.doctor.pk,
+                                                                          'section': 'availability'})
             self.assertEqual(response.status_code, 200)
             self.assertFalse(response.context['can_manage_availability'])
-            for name in ('availability-working-pattern', 'availability-time-off-create'):
-                self.assertNotContains(response, f'action="{reverse(f"portal:{name}")}')
+            self.assertTrue(response.context['can_manage_days'])
+            self.assertNotContains(response, f'action="{reverse("portal:availability-working-pattern")}')
+            for name in ('availability-time-off-create', 'availability-special-day-set'):
+                self.assertContains(response, f'action="{reverse(f"portal:{name}")}')
 
     def test_existing_booking_is_not_moved_when_doctor_adds_time_off(self):
         appointment = Appointment.objects.create(
@@ -324,7 +437,7 @@ class AvailabilityPortalTests(TestCase):
         foreign = self.leave(company=self.beta)
         self.login()
         response = self.client.get(reverse('portal:staff-schedule'), {
-            'date': self.monday.isoformat(), 'clinician': self.doctor.pk, 'view': 'calendar',
+            'date': self.monday.isoformat(), 'clinician': self.doctor.pk, 'view': 'calendar', 'section': 'availability',
         })
         self.assertEqual(len(response.context['time_off_page_obj']), 20)
         self.assertEqual(response.context['time_off_page_obj'].paginator.count, 21)
@@ -387,3 +500,23 @@ class AvailabilityPortalTests(TestCase):
         self.assertContains(response, 'Appointments needing attention')
         self.assertEqual({appointment.pk for appointment in response.context['affected_appointments']}, {own.pk, colleague.pk})
         self.assertNotContains(response, 'Secret Other Practice')
+
+    def test_working_pattern_and_availability_is_its_own_tab_and_stays_selected_after_saving(self):
+        self.login()
+        bookings = self.client.get(reverse('portal:staff-schedule'), {'date': self.monday.isoformat()})
+        self.assertEqual(bookings.context['schedule_section'], 'bookings')
+        self.assertContains(bookings, 'id="appointment-list-heading"')
+        self.assertNotContains(bookings, 'id="working-pattern-heading"')
+        self.assertContains(bookings, 'Working Pattern &amp; Availability')
+        tab = self.client.get(bookings.context['availability_tab_url'])
+        self.assertEqual(tab.context['schedule_section'], 'availability')
+        self.assertNotContains(tab, 'id="appointment-list-heading"')
+        page = tab.content.decode()
+        # Working pattern on the left; special days above days off on the right.
+        self.assertLess(page.index('id="working-pattern-heading"'), page.index('id="special-days-heading"'))
+        self.assertLess(page.index('id="special-days-heading"'), page.index('id="time-off-heading"'))
+        self.assertContains(tab, 'The standing week at this practice')
+        response = self.client.post(f'{reverse("portal:availability-time-off-create")}?date={self.monday.isoformat()}&section=availability',
+                                    self.time_off_data())
+        self.assertEqual(parse_qs(urlsplit(response.url).query).get('section'), ['availability'])
+        self.assertEqual(self.client.get(response.url).context['schedule_section'], 'availability')

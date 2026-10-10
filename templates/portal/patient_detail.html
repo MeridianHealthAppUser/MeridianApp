@@ -2,7 +2,7 @@
 {% load static workspace_ui %}
 
 {% block title %}{{ patient }} | {{ company.name }} | Meridian{% endblock %}
-{% block extra_css %}<link rel="stylesheet" href="{% static 'css/console.css' %}"><link rel="stylesheet" href="{% static 'css/record_weight.css' %}">{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{% static 'css/console.css' %}?v=20261007b"><link rel="stylesheet" href="{% static 'css/record_weight.css' %}">{% endblock %}
 {% block content %}
   <div class="meridian-console console-desktop patient-record-console">
     <div class="console-shell">
@@ -24,7 +24,7 @@
       <div class="console-main">
 
         <main class="console-content" id="summary">
-          {% breadcrumbs 'Patients' 'portal:patient-list' patient %}
+          {% breadcrumbs 'Patient Records & Messages' 'portal:patient-list' patient %}
           <section class="record-hero" aria-labelledby="patient-name">
             <div class="record-identity">
               <span class="record-avatar" aria-hidden="true">{{ patient.first_name|slice:":1"|upper }}{{ patient.last_name|slice:":1"|upper }}</span>
@@ -81,7 +81,7 @@
                   <h2 id="record-appointments-heading">Appointments</h2>
                   <p>Consultations and reviews for this patient</p>
                 </div>
-                <a class="console-button console-button--quiet" href="#add-care">Book appointment</a>
+                <a class="console-button console-button--quiet" href="#add-care">Create appointment</a>
               </header>
               <div class="console-card__body">
                 <ul class="console-list">
@@ -286,23 +286,12 @@
               </details>
 
               <details class="record-action"{% if failed_form == 'appointment_form' %} open{% endif %}>
-                <summary>Book appointment</summary>
+                <summary>Create appointment</summary>
                 <form class="console-form" method="post" action="{% url 'portal:patient-appointment-create' patient.pk %}">
                   {% csrf_token %}
                   <input type="hidden" name="workflow_context" value="{{ legacy_appointment_context }}">
-                  {{ appointment_form.non_field_errors }}
-                  {{ appointment_form.patient.as_hidden }}
-                  {{ appointment_form.patient.errors }}
-                  <div class="console-form__row">
-                    <div class="console-form__field"><label for="{{ appointment_form.clinician.id_for_label }}">{{ appointment_form.clinician.label }}</label>{{ appointment_form.clinician }}{{ appointment_form.clinician.errors }}</div>
-                    <div class="console-form__field"><label for="{{ appointment_form.appointment_type.id_for_label }}">{{ appointment_form.appointment_type.label }}</label>{{ appointment_form.appointment_type }}{{ appointment_form.appointment_type.errors }}</div>
-                  </div>
-                  <div class="console-form__row">
-                    <div class="console-form__field"><label for="{{ appointment_form.starts_at.id_for_label }}">{{ appointment_form.starts_at.label }}</label>{{ appointment_form.starts_at }}{{ appointment_form.starts_at.errors }}</div>
-                    <div class="console-form__field"><label for="{{ appointment_form.duration_minutes.id_for_label }}">{{ appointment_form.duration_minutes.label }}</label>{{ appointment_form.duration_minutes }}{{ appointment_form.duration_minutes.errors }}</div>
-                  </div>
-                  <div class="console-form__field"><label for="{{ appointment_form.video_link.id_for_label }}">{{ appointment_form.video_link.label }}</label>{{ appointment_form.video_link }}{{ appointment_form.video_link.errors }}</div>
-                  <button class="console-button console-button--primary" type="submit">Book appointment</button>
+                  {% include 'portal/includes/appointment_booking_fields.html' with form=appointment_form %}
+                  <button class="console-button console-button--primary" type="submit">Create appointment</button>
                 </form>
               </details>
 

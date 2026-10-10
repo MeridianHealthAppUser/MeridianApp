@@ -1,30 +1,11 @@
-/* Meridian brand for the patient app: the practice's palette and Roboto, as in
-   the Rev 3.9 design. Loaded last on patient pages only, so it can finish the
-   shared console, header and form styles; the practice console keeps its look.
+/* Meridian brand for the patient app: the practice's palette and Roboto (its font faces are in
+   fonts.css), as in the Rev 3.9 design. Loaded last on patient pages only, so it can finish the
+   shared console, header and form styles; the practice console keeps its own colours.
 
    Brand colours:
      #48c1c9  #46afcf  #1599de  #29698b  #0097b2
    #0097b2 marks focus, active items and charts. Text and primary buttons use
    #29698b, which keeps small text readable against white (about 6:1). */
-
-@font-face {
-  font-display: swap;
-  font-family: 'Roboto';
-  font-stretch: 100%;
-  font-style: normal;
-  font-weight: 400 700;
-  src: url('../fonts/roboto/roboto-latin.woff2') format('woff2');
-  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
-}
-@font-face {
-  font-display: swap;
-  font-family: 'Roboto';
-  font-stretch: 100%;
-  font-style: normal;
-  font-weight: 400 700;
-  src: url('../fonts/roboto/roboto-latin-ext.woff2') format('woff2');
-  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
-}
 
 .patient-app {
   --brand-1: #48c1c9;

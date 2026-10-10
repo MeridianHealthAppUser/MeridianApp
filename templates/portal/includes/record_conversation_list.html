@@ -1,0 +1,18 @@
+{% comment %}
+  The conversations on the record's Messages tab. The search on that tab refreshes just this list,
+  from portal:record-conversation-search, so typing doesn't load or log the whole record.
+{% endcomment %}
+<section class="record-inbox__threads" aria-labelledby="record-thread-list-heading" data-search-region="list">
+  <h3 class="sr-only" id="record-thread-list-heading">Conversations with {{ patient.first_name }}</h3>
+  <ol class="record-inbox__list">
+    {% for thread in record_threads %}{% include 'portal/includes/conversation_list_item.html' with read_state_fields=record_read_state_fields %}
+    {% empty %}<li class="record-inbox__none">No conversations match “{{ search }}”.</li>{% endfor %}
+  </ol>
+  {% if record_page_obj.has_other_pages %}
+    <nav class="inbox-pagination" aria-label="Conversation pages">
+      {% if record_newer_url %}<a class="console-button console-button--quiet" href="{{ record_newer_url }}">Newer</a>{% endif %}
+      <span>{{ record_page_obj.start_index }}–{{ record_page_obj.end_index }} of {{ record_page_obj.paginator.count }} conversations</span>
+      {% if record_older_url %}<a class="console-button console-button--quiet" href="{{ record_older_url }}">Older</a>{% endif %}
+    </nav>
+  {% endif %}
+</section>

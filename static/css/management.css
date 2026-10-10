@@ -28,7 +28,7 @@
 .management-practice-card { padding: 1.5rem; }
 .management-practice-card h2 { color: #163940; font-size: 1.3rem; margin: .5rem 0; }
 .management-password { margin: 2rem auto; max-width: 40rem; background: #fff; border: 1px solid #dbe7e8; border-radius: 1rem; padding: clamp(1.2rem, 4vw, 2rem); }
-.management-password h1 { font-family: Georgia, serif; color: #133a41; }
+.management-password h1 { font-family: inherit; color: #133a41; }
 .management-password .button { align-items: center; border: 1px solid #dbe7e8; border-radius: .65rem; cursor: pointer; display: inline-flex; font: inherit; font-size: .9rem; font-weight: 700; justify-content: center; min-height: 2.8rem; padding: .7rem 1rem; text-decoration: none; }
 .management-password .button-primary { background: #0b958a; border-color: #0b958a; color: #fff; }
 .management-password .button-primary:hover { background: #087d74; }

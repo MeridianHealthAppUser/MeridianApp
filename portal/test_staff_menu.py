@@ -1,10 +1,12 @@
-"""Mobile shows only the menu sections; each section has a page listing its options."""
+"""Clinicians get one flat menu; other staff see sections, and on mobile each section has a page of its options."""
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
 from django.urls import reverse
 
-from practices.models import Company, CompanyMembership
+from care.messaging import start_conversation
+from care.team_messaging import start_team_conversation
+from practices.models import Company, CompanyMembership, Patient
 from practices.services import ACTIVE_COMPANY_SESSION_KEY
 
 
@@ -35,7 +37,8 @@ class StaffMenuTests(TestCase):
 
     def test_each_role_sees_only_its_sections_on_the_mobile_bar(self):
         expected = {
-            'doctor': ['care', 'operations', 'insights', 'settings'],
+            # The Clinician role has a flat menu instead of sections.
+            'doctor': [],
             'practice_admin': ['care', 'operations', 'administration', 'insights'],
             'super_admin': ['care', 'operations', 'administration', 'insights', 'settings'],
         }
@@ -53,9 +56,62 @@ class StaffMenuTests(TestCase):
         self.assertNotContains(page, reverse('portal:management-practices'))
         self.assertContains(page, 'aria-current="page"')
         self.login('doctor')
-        self.assertEqual(self.client.get(reverse('portal:staff-menu-section', args=['administration'])).status_code, 404)
+        for section in ('operations', 'administration', 'insights', 'settings'):
+            self.assertEqual(self.client.get(reverse('portal:staff-menu-section', args=[section])).status_code, 404)
         self.assertEqual(self.client.get(reverse('portal:staff-menu-section', args=['invented'])).status_code, 404)
 
     def test_active_practice_box_is_hidden_for_a_single_practice(self):
         self.login('super_admin')
         self.assertNotContains(self.client.get(reverse('portal:staff-tasks')), 'Active practice')
+
+    def test_doctors_see_no_operations_insights_or_settings_links_and_cannot_open_them(self):
+        self.login('doctor')
+        pages = ('treatment-subscriptions', 'ops-orders', 'ops-shipping', 'ops-history', 'ops-stock', 'ops-catalogue',
+                 'metrics', 'activity-statements', 'treatment-review-rules')
+        overview = self.client.get(reverse('portal:desktop-dashboard'))
+        self.assertNotIn('shipments_due', overview.context['metrics'])
+        sidebar = overview.content.decode()
+        for name in pages:
+            with self.subTest(page=name):
+                self.assertNotIn(f'href="{reverse(f"portal:{name}")}"', sidebar)
+                self.assertEqual(self.client.get(reverse(f'portal:{name}')).status_code, 403)
+        # A Super Admin who is also a doctor keeps every section.
+        CompanyMembership.objects.filter(user=self.people['super_admin']).update(clinician_type='doctor')
+        self.login('super_admin')
+        overview = self.client.get(reverse('portal:desktop-dashboard'))
+        self.assertIn('shipments_due', overview.context['metrics'])
+        sidebar = overview.content.decode()
+        for name in pages:
+            with self.subTest(page=name, role='super_admin'):
+                self.assertIn(f'href="{reverse(f"portal:{name}")}"', sidebar)
+                self.assertEqual(self.client.get(reverse(f'portal:{name}')).status_code, 200)
+
+    def test_clinicians_get_a_flat_menu_with_patient_records_and_messages_and_its_red_unread_count(self):
+        doctor, admin = self.people['doctor'], self.people['practice_admin']
+        patient_user = get_user_model().objects.create_user(email='patient@menu.test')
+        patient = Patient.objects.create(company=self.company, user=patient_user, first_name='Pat', last_name='Patient',
+                                         assigned_doctor=doctor)
+        # One unread patient message and one unread team message.
+        start_conversation(patient=patient, opened_by=patient_user, subject='Dose', body='Can we talk?', recipient=doctor)
+        start_team_conversation(company=self.company, actor=admin, members=[doctor], subject='Rota', body='Friday?')
+        self.login('doctor')
+        page = self.client.get(reverse('portal:desktop-dashboard')).content.decode()
+        sidebar = page[page.index('class="console-nav'):]
+        sidebar = sidebar[:sidebar.index('</nav>')]
+        self.assertNotIn('<details', sidebar)
+        labels = ['Overview', 'My tasks', 'Patient Records &amp; Messages', 'Calendar &amp; Bookings']
+        self.assertEqual([label for label in labels if label in sidebar], labels)
+        self.assertNotIn('My Messages', sidebar)
+        # Patient records and messages are one entry; its badge counts patient and team messages.
+        self.assertIn('<span class="nav-badge" aria-hidden="true">2</span><span class="sr-only">, 2 unread messages</span>', sidebar)
+        mobile = page[page.index('class="mobile-bottom-nav staff-mobile-nav"'):]
+        self.assertIn('<span class="nav-badge" aria-hidden="true">2</span>', mobile[:mobile.index('</nav>')])
+        inbox = self.client.get(reverse('portal:staff-inbox'))
+        self.assertContains(inbox, '<h1>Patient Records &amp; Messages</h1>', html=True)
+        # Practice admins keep their sections, with the count on Messages for their team conversation.
+        self.login('practice_admin')
+        page = self.client.get(reverse('portal:desktop-dashboard')).content.decode()
+        self.assertIn('<details class="console-nav__group"', page)
+        self.assertNotIn('nav-badge', page)
+        self.assertIn('Patient Records &amp; Messages', page)
+        self.assertContains(self.client.get(reverse('portal:staff-inbox')), '<h1>Patient Records &amp; Messages</h1>', html=True)

@@ -117,27 +117,33 @@ class PatientWorkspaceSecurityTests(TestCase):
             with self.subTest(value=value):
                 self.assertEqual(self.get('messages', thread=value).status_code, 404)
 
-    def test_overview_other_tabs_and_head_do_not_mark_patient_messages_read(self):
-        for tab in ('overview', 'appointments', 'notes', 'tasks', 'weights'):
+    def test_other_tabs_head_and_a_plain_overview_do_not_mark_messages_read_but_opening_the_conversation_does(self):
+        for tab in ('appointments', 'notes', 'tasks', 'weights'):
             self.assertEqual(self.get(tab).status_code, 200)
         self.assertEqual(self.client.head(self.path, {'tab': 'messages'}).status_code, 200)
-        self.message.refresh_from_db()
-        self.assertIsNone(self.message.read_at)
         before = AuditEvent.objects.count()
         self.assertEqual(self.client.head(self.path, {'tab': 'overview'}).status_code, 200)
         self.assertEqual(AuditEvent.objects.count(), before)
+        self.message.refresh_from_db()
+        self.assertIsNone(self.message.staff_read_at)
+        # The Messages tab lists the conversation; it opens, and is marked read, only when chosen.
+        self.assertEqual(self.get('overview').status_code, 200)
+        self.assertEqual(self.get('messages').status_code, 200)
+        self.message.refresh_from_db()
+        self.assertIsNone(self.message.staff_read_at)
+        self.assertEqual(self.get('messages', thread=self.thread.pk).status_code, 200)
+        self.message.refresh_from_db()
+        self.assertEqual(self.message.staff_read_by_id, self.doctor.pk)
 
-    def test_message_pages_mark_only_selected_visible_fifty_messages(self):
+    def test_opening_a_conversation_shows_and_marks_read_only_its_own_messages(self):
         for number in range(60):
             PatientMessage.objects.create(company=self.alpha, thread=self.thread, sender=self.user, body=f'Owned history message {number}')
         response = self.get('messages', thread=self.thread.pk)
-        self.assertEqual(len(response.context['selected_thread'].conversation_messages), 50)
-        self.assertEqual(PatientMessage.objects.filter(thread=self.thread, read_at__isnull=False).count(), 50)
+        # The whole conversation scrolls in one pane, so all of it is on screen and read.
+        self.assertEqual(len(response.context['record_thread'].conversation_messages), 61)
+        self.assertEqual(PatientMessage.objects.filter(thread=self.thread, read_at__isnull=False).count(), 61)
         self.foreign_message.refresh_from_db()
         self.assertIsNone(self.foreign_message.read_at)
-        older = self.client.get(response.context['older_message_url'])
-        self.assertEqual(len(older.context['selected_thread'].conversation_messages), 11)
-        self.assertEqual(PatientMessage.objects.filter(thread=self.thread, read_at__isnull=False).count(), 61)
 
     def test_invalid_reply_preserves_draft_without_read_receipts_or_extra_audit(self):
         before = AuditEvent.objects.count()

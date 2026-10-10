@@ -1,5 +1,5 @@
 {% extends 'portal/patient_page_base.html' %}{% load static workspace_ui %}
-{% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/backoffice.css' %}">{% endblock %}
+{% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/backoffice.css' %}?v=20261008c"><link rel="stylesheet" href="{% static 'css/dialogs.css' %}?v=20261008b"><script src="{% static 'js/dialogs.js' %}?v=20261008a" defer></script>{% endblock %}
 {% block patient_breadcrumbs %}{% breadcrumbs 'My Appointments' 'portal:patient-appointments' 'Appointment' %}{% endblock %}
 {% block patient_heading %}<header class="patient-page-heading"><div><h1>{{ appointment.get_appointment_type_display }}</h1><p>{{ appointment.starts_at|date:'j F Y, H:i' }} SAST</p></div></header>{% endblock %}
 {% block patient_content %}<div class="backoffice">{% include 'portal/includes/appointment_detail_content.html' %}</div>{% endblock %}

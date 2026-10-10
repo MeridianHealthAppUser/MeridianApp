@@ -1,8 +1,8 @@
 {% extends 'portal/patient_page_base.html' %}
-{% load static workspace_ui %}
+{% load static workspace_ui conversation_ui %}
 
 {% block title %}My Messages | Meridian{% endblock %}
-{% block patient_extra_css %}<link rel="stylesheet" href="{% static 'css/patient_messages.css' %}?v=20261001-2">{% endblock %}
+{% block patient_extra_css %}<link rel="stylesheet" href="{% static 'css/patient_messages.css' %}?v=20261008c"><link rel="stylesheet" href="{% static 'css/message_tones.css' %}?v=20261008a"><link rel="stylesheet" href="{% static 'css/conversation_search.css' %}?v=20261005b"><script src="{% static 'js/conversation_search.js' %}?v=20261005" defer></script>{% endblock %}
 {% block patient_content_class %}patient-messages-page{% endblock %}
 
 {% block patient_breadcrumbs %}{% breadcrumbs 'My Messages' %}{% endblock %}
@@ -19,33 +19,38 @@
 {% block patient_content %}
   <div class="patient-inbox-toolbar">
     <a class="console-button console-button--primary" href="{% url 'portal:patient-messages' %}?compose=1#patient-conversation">Start a new message</a>
-    <span>{{ page_obj.paginator.count }} conversation{{ page_obj.paginator.count|pluralize }}{% if filter_form.status.value == 'open' %} · open only{% elif filter_form.status.value == 'closed' %} · closed only{% endif %}</span>
+    <span data-search-region="count">{{ page_obj.paginator.count }} conversation{{ page_obj.paginator.count|pluralize }}{% if search %} matching “{{ search }}”{% endif %}{% if filter_form.status.value == 'open' %} · open only{% elif filter_form.status.value == 'closed' %} · closed only{% endif %}</span>
     {% if filter_form.errors or filter_form.status.value == 'open' or filter_form.status.value == 'closed' %}<a class="patient-inline-link" href="{% url 'portal:patient-messages' %}">Show all conversations</a>{% endif %}
+    {# Searches your conversations: messages, subjects and your clinicians' names. #}
+    {% include 'portal/includes/conversation_search.html' with search_clear_url=search_action|add:'?status='|add:search_hidden.status %}
   </div>
 
   <section class="patient-inbox" aria-label="Secure messages">
-    <section class="patient-inbox-threads" aria-labelledby="patient-thread-list-heading">
+    <section class="patient-inbox-threads" aria-labelledby="patient-thread-list-heading" data-search-region="list">
       <h2 class="sr-only" id="patient-thread-list-heading">Conversations</h2>
       <ol class="patient-inbox-thread-list">
         {% for thread in threads %}
           <li>
-            <a class="patient-inbox-thread{% if selected_thread.pk == thread.pk %} is-selected{% endif %}{% if thread.unread_count %} is-unread{% endif %}"{% if selected_thread.pk == thread.pk %} aria-current="page"{% endif %} href="{% url 'portal:patient-messages' %}?status={{ filter_form.status.value|default:'all'|urlencode }}&amp;page={{ page_obj.number }}&amp;thread={{ thread.pk }}#patient-conversation">
-              <strong>{% if thread.unread_count %}<span class="patient-inbox-thread__dot" aria-hidden="true"></span>{% endif %}{{ thread.subject|default:"Your care" }}</strong>
+            <a class="patient-inbox-thread{% if selected_thread.pk == thread.pk %} is-selected{% endif %}{% if thread.unread_count %} is-unread{% endif %}"{% if selected_thread.pk == thread.pk %} aria-current="page"{% endif %} href="{% url 'portal:patient-messages' %}?status={{ filter_form.status.value|default:'all'|urlencode }}{% if search %}&amp;q={{ search|urlencode }}{% endif %}&amp;page={{ page_obj.number }}&amp;thread={{ thread.pk }}#patient-conversation">
+              <strong><span>{{ thread.subject|default:"Your care" }}</span>{% if thread.is_closed %}<span class="patient-inbox-pill">Closed</span>{% endif %}{% if thread.unread_count %}<span class="patient-inbox-thread__badge" aria-hidden="true">{% if thread.unread_count > 9 %}9+{% else %}{{ thread.unread_count }}{% endif %}</span>{% endif %}</strong>
               {% if thread.people %}<span class="patient-inbox-thread__with">With {{ thread.people }}</span>{% endif %}
-              <span class="patient-inbox-thread__meta">{% if thread.latest_sender_name %}<span class="patient-inbox-thread__from"><span class="sr-only">Latest message from </span>{{ thread.latest_sender_name }}</span>{% endif %}{% if thread.latest_sender_name and thread.last_activity %} · {% endif %}{% if thread.last_activity %}<time datetime="{{ thread.last_activity|date:'c' }}">{{ thread.last_activity|date:"j M, H:i" }}</time>{% endif %}</span>
-              <span class="patient-inbox-thread__preview">{% if thread.is_closed %}<span class="patient-inbox-pill">Closed</span> {% elif thread.latest_sender_id == user.pk %}<span class="patient-inbox-pill patient-inbox-pill--waiting">Waiting for a reply</span> {% endif %}{{ thread.latest_body|default:""|truncatechars:90 }}</span>
+              {# As in the practice console: the latest message, and on the right its time today or its date. #}
+              <span class="patient-inbox-thread__last">
+                <span class="patient-inbox-thread__preview">{% if thread.latest_body %}{% if thread.latest_from %}<strong>{{ thread.latest_from }}:</strong> {% endif %}{{ thread.latest_body|truncatechars:90 }}{% else %}No messages yet{% endif %}</span>
+                {% if thread.last_activity %}<time datetime="{{ thread.last_activity|date:'c' }}" title="{{ thread.last_activity|date:'j M Y, H:i' }} SAST">{{ thread.last_activity|list_when }}</time>{% endif %}
+              </span>
               {% if thread.unread_count %}<span class="sr-only">{{ thread.unread_count }} unread</span>{% endif %}
             </a>
           </li>
         {% empty %}
-          <li class="patient-inbox-empty">{% if filter_form.errors %}No conversations to show.{% else %}No messages yet.{% endif %}</li>
+          <li class="patient-inbox-empty">{% if search %}No conversations match “{{ search }}”.{% elif filter_form.errors %}No conversations to show.{% else %}No messages yet.{% endif %}</li>
         {% endfor %}
       </ol>
       {% if is_paginated %}
         <nav class="patient-inbox-pagination" aria-label="Conversation pages">
-          {% if page_obj.has_previous %}<a href="{% url 'portal:patient-messages' %}?status={{ filter_form.status.value|default:'all'|urlencode }}&amp;page={{ page_obj.previous_page_number }}">Previous</a>{% endif %}
+          {% if page_obj.has_previous %}<a href="{% url 'portal:patient-messages' %}?status={{ filter_form.status.value|default:'all'|urlencode }}{% if search %}&amp;q={{ search|urlencode }}{% endif %}&amp;page={{ page_obj.previous_page_number }}">Previous</a>{% endif %}
           <span>{{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
-          {% if page_obj.has_next %}<a href="{% url 'portal:patient-messages' %}?status={{ filter_form.status.value|default:'all'|urlencode }}&amp;page={{ page_obj.next_page_number }}">Next</a>{% endif %}
+          {% if page_obj.has_next %}<a href="{% url 'portal:patient-messages' %}?status={{ filter_form.status.value|default:'all'|urlencode }}{% if search %}&amp;q={{ search|urlencode }}{% endif %}&amp;page={{ page_obj.next_page_number }}">Next</a>{% endif %}
         </nav>
       {% endif %}
     </section>
@@ -55,7 +60,7 @@
         <header class="patient-conversation__header">
           <div>
             <h2 id="patient-conversation-heading">New message</h2>
-            <p>Only you and the clinician you choose can read this conversation · kept in your medical record</p>
+            <p>Only you and the person you choose can read this conversation · kept in your medical record</p>
           </div>
         </header>
         {% if not thread_form.has_recipients %}
@@ -108,12 +113,13 @@
         {% endif %}
 
         <ol class="patient-conversation-messages" aria-label="Messages in {{ selected_thread.subject }}">
-          {% for message in selected_thread.conversation_messages %}
-            <li class="patient-conversation-message{% if message.sender == user %} patient-conversation-message--mine{% endif %}">
+          {% patient_thread_messages selected_thread user as thread_messages %}
+          {% for message in thread_messages %}
+            <li class="patient-conversation-message{% if message.is_mine %} patient-conversation-message--mine{% else %} message-tone--{{ message.tone }}{% endif %}">
               <p>{{ message.body|linebreaksbr }}</p>
               <div class="patient-conversation-message__meta">
-                <strong>{% if message.sender == user %}You{% elif message.sender %}{{ message.sender.full_name }}{% else %}Meridian care team{% endif %}</strong>
-                <time datetime="{{ message.created_at|date:'c' }}">{{ message.created_at|date:"j M Y, H:i" }}</time>
+                <strong>{% if message.is_mine %}You{% elif message.sender %}{{ message.sender.full_name }}{% else %}Meridian care team{% endif %}</strong>
+                <time datetime="{{ message.created_at|date:'c' }}">{{ message.created_at|message_time:"j M Y, H:i" }}</time>
               </div>
             </li>
           {% empty %}

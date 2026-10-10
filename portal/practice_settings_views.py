@@ -53,7 +53,7 @@ EVENT_LOG_SECTIONS = (
     ('Administration', (
         ('Staff accounts, roles and clinician types changed', False), ('Practice details and settings changed', False),
         ('Policy versions published', False), ('Privacy preferences, requests and responses', False),
-        ('Passwords and profiles changed', False), ('Activity statements created, refreshed or approved', False),
+        ('Passwords changed or reset, other devices signed out, and profiles or staff details updated', False), ('Activity statements created, refreshed or approved', False),
         ('Follow-ups recorded and enquiries received', False),
     )),
 )

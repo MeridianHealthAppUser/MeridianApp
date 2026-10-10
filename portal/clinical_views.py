@@ -6,8 +6,8 @@ from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.core.paginator import Paginator
-from django.db.models import Q
-from django.http import HttpResponse
+from django.db.models import Exists, OuterRef, Q
+from django.http import Http404, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils.decorators import method_decorator
@@ -15,7 +15,8 @@ from django.views import View
 from django.views.decorators.cache import never_cache
 
 from care.clinical import create_lab_request, review_lab_request, save_consultation, submit_lab_result
-from care.models import ClinicalEncounter, LabRequest, LabResult
+from care.models import ClinicalEncounter, LabRequest, LabResult, PathCareRequestForm
+from care.patient_files import read_patient_file
 from care.services import record_audit
 from practices.models import CompanyMembership, Patient
 
@@ -24,6 +25,7 @@ from .clinical_forms import (
     make_clinical_context, validate_clinical_context,
 )
 from .patient_views import patient_page_context
+from .record_access import require_record_change, require_record_notes, require_record_view
 from .views import PatientPortalRequiredMixin, StaffCompanyRequiredMixin
 
 
@@ -61,8 +63,22 @@ class StaffClinicalView(LoginRequiredMixin, StaffCompanyRequiredMixin, ClinicalA
         return dict(company=self.company, active_membership=self.membership, is_doctor=self.is_doctor, is_clinician=self.is_clinician,
                     nav_section=self.nav_section, page_title=self.page_title, **kwargs)
 
+    # What a save on this page needs: 'change' (the patient's current clinician) or 'notes' (also cover).
+    record_write = 'change'
+
+    def check_record(self, patient):
+        """A clinician opens only the records of patients assigned to them, now or before, or booked with them,
+        and changes only their current patients'. Admins and Super Admins aren't limited."""
+        if self.request.method in ('GET', 'HEAD', 'OPTIONS'):
+            require_record_view(self.membership, self.request.user, patient)
+        elif self.record_write == 'notes':
+            require_record_notes(self.membership, self.request.user, patient)
+        else:
+            require_record_change(self.membership, self.request.user, patient)
+        return patient
+
     def patient_for(self, pk):
-        return get_object_or_404(Patient.objects.for_company(self.company), pk=pk, is_active=True)
+        return self.check_record(get_object_or_404(Patient.objects.for_company(self.company), pk=pk, is_active=True))
 
     def consultations(self):
         queryset = ClinicalEncounter.objects.for_company(self.company).filter(
@@ -114,6 +130,7 @@ class ConsultationListView(StaffClinicalView):
     http_method_names = ('get', 'head', 'options')
     nav_section = 'consultations'
     page_title = 'Consultation notes'
+    clinician_redirect_message = 'Consultation notes are on each patient’s record, under Consultations.'
 
     def get(self, request):
         context = self.context(**_listing(request, self.company, self.consultations().order_by('-occurred_at', '-pk'),
@@ -128,11 +145,12 @@ class ConsultationListView(StaffClinicalView):
 class ConsultationEditorView(StaffClinicalView):
     nav_section = 'consultations'
     page_title = 'Consultation note'
+    record_write = 'notes'  # A clinician covering an appointment writes the consultation note too.
 
     def record(self, patient_pk=None, pk=None):
         if pk is not None:
             encounter = get_object_or_404(self.consultations(), pk=pk)
-            return encounter.patient, encounter
+            return self.check_record(encounter.patient), encounter
         self.require_clinician()
         return self.patient_for(patient_pk), None
 
@@ -151,7 +169,11 @@ class ConsultationEditorView(StaffClinicalView):
 
     def get(self, request, patient_pk=None, pk=None):
         patient, encounter = self.record(patient_pk, pk)
-        return self.display(request, patient, encounter)
+        form, raw = None, request.GET.get('appointment', '')
+        if encounter is None and raw.isascii() and raw.isdecimal() and len(raw) < 19:
+            # From an appointment's Write consultation note: it's chosen when it's yours and has no note yet.
+            form = ConsultationForm(company=self.company, patient=patient, actor=request.user, initial={'appointment': int(raw)})
+        return self.display(request, patient, encounter, form)
 
     def post(self, request, patient_pk=None, pk=None):
         patient, encounter = self.record(patient_pk, pk)
@@ -186,6 +208,7 @@ class LabListView(StaffClinicalView):
     http_method_names = ('get', 'head', 'options')
     nav_section = 'labs'
     page_title = 'Blood tests'
+    clinician_redirect_message = 'Blood tests are on each patient’s record, under Blood tests.'
 
     def get(self, request):
         context = self.context(**_listing(request, self.company, self.labs().order_by('-requested_on', '-pk'),
@@ -234,7 +257,7 @@ class LabCreateView(StaffClinicalView):
 def _result_metadata(lab_request):
     return LabResult.objects.for_company(lab_request.company).filter(
         lab_request=lab_request, patient=lab_request.patient,
-    ).defer('content').first()
+    ).first()
 
 
 class LabDetailView(StaffClinicalView):
@@ -259,10 +282,13 @@ class LabDetailView(StaffClinicalView):
         return render(request, 'portal/clinical_lab_detail.html', context, status=status)
 
     def get(self, request, pk):
-        return self.display(request, get_object_or_404(self.labs(), pk=pk))
+        lab_request = get_object_or_404(self.labs(), pk=pk)
+        self.check_record(lab_request.patient)
+        return self.display(request, lab_request)
 
     def post(self, request, pk):
         lab_request = get_object_or_404(self.labs(), pk=pk)
+        self.check_record(lab_request.patient)
         self.require_doctor(lab_request.requested_by_id)
         action = request.POST.get('action', '')
         form = LabUploadForm(request.POST, request.FILES) if action == 'upload' else LabReviewForm(request.POST)
@@ -296,16 +322,29 @@ class PatientLabBase(LoginRequiredMixin, PatientPortalRequiredMixin, View):
     def context(self, **kwargs):
         return dict(patient_page_context(self.request, self.patient_company, self.patient, 'labs', 'Your blood tests'), **kwargs)
 
+    def pathcare_form(self, lab_request):
+        """The PathCare form the doctor sent, until the patient has uploaded their results."""
+        if lab_request.status != LabRequest.Status.REQUESTED or _result_metadata(lab_request) is not None:
+            return None
+        return PathCareRequestForm.objects.for_company(self.patient_company).filter(
+            lab_request=lab_request, patient=self.patient,
+        ).first()
+
 
 class PatientLabListView(PatientLabBase):
     http_method_names = ('get', 'head', 'options')
 
     def get(self, request):
-        context = self.context(**_listing(request, self.patient_company, self.labs().order_by('-requested_on', '-pk'),
-                                          LabRequest.Status.choices, patient_portal=True))
+        labs = self.labs().annotate(
+            has_pathcare_form=Exists(PathCareRequestForm.objects.filter(lab_request=OuterRef('pk'))),
+            has_result=Exists(LabResult.objects.filter(lab_request=OuterRef('pk'))),
+        ).order_by('-requested_on', '-pk')
+        context = self.context(**_listing(request, self.patient_company, labs, LabRequest.Status.choices, patient_portal=True))
         rows = list(context['page_obj'].object_list)
         for row in rows:
             row.detail_url = reverse('portal:patient-lab-detail', args=[row.pk])
+            available = row.has_pathcare_form and not row.has_result and row.status == LabRequest.Status.REQUESTED
+            row.form_url = reverse('portal:patient-lab-form', args=[row.pk]) if available else ''
         context['lab_requests'] = rows
         return render(request, 'portal/patient_lab_list.html', context)
 
@@ -313,8 +352,10 @@ class PatientLabListView(PatientLabBase):
 class PatientLabDetailView(PatientLabBase):
     def display(self, request, lab_request, form=None, status=200):
         result = _result_metadata(lab_request)
+        pathcare_form = self.pathcare_form(lab_request)
         return render(request, 'portal/patient_lab_detail.html', self.context(
-            lab_request=lab_request, result=result,
+            lab_request=lab_request, result=result, pathcare_form=pathcare_form,
+            pathcare_form_url=reverse('portal:patient-lab-form', args=[lab_request.pk]) if pathcare_form else '',
             can_upload=result is None and lab_request.status == LabRequest.Status.REQUESTED,
             upload_form=form if form is not None else LabUploadForm(),
             clinical_context=_form_context(request, self.patient_company, self.patient, 'lab', lab_request),
@@ -346,10 +387,11 @@ def _download(request, lab_request):
     # attachments, not inline scripts/documents or guessable storage links.
     result = get_object_or_404(LabResult.objects.for_company(lab_request.company),
                                lab_request=lab_request, patient=lab_request.patient)
+    content = read_patient_file(result.file) if request.method != 'HEAD' else b''
     if request.method != 'HEAD':
         record_audit(company=lab_request.company, actor=request.user, patient=lab_request.patient,
                      action='lab_result.downloaded', target=result, request=request)
-    response = HttpResponse(bytes(result.content) if request.method != 'HEAD' else b'', content_type='application/pdf')
+    response = HttpResponse(content, content_type='application/pdf')
     response['Content-Disposition'] = f'attachment; filename="lab-result-{lab_request.pk}.pdf"'
     response['Content-Length'] = str(result.size)
     response['Cache-Control'] = 'private, no-store, max-age=0'
@@ -363,7 +405,9 @@ class LabResultDownloadView(StaffClinicalView):
     http_method_names = ('get', 'head', 'options')
 
     def get(self, request, pk):
-        return _download(request, get_object_or_404(self.labs(), pk=pk))
+        lab_request = get_object_or_404(self.labs(), pk=pk)
+        self.check_record(lab_request.patient)
+        return _download(request, lab_request)
 
 
 class PatientLabResultDownloadView(PatientLabBase):
@@ -371,3 +415,31 @@ class PatientLabResultDownloadView(PatientLabBase):
 
     def get(self, request, pk):
         return _download(request, get_object_or_404(self.labs(), pk=pk))
+
+
+class PatientLabFormView(PatientLabBase):
+    """The PathCare form exactly as it was emailed, in case the email went missing. It opens in the browser, or
+    downloads with ?download=1. Once the results are uploaded it is no longer offered."""
+
+    http_method_names = ('get', 'head', 'options')
+
+    def get(self, request, pk):
+        from care.pathcare import FILENAME
+
+        lab_request = get_object_or_404(self.labs(), pk=pk)
+        summary = self.pathcare_form(lab_request)
+        if summary is None:
+            raise Http404('This blood test form is no longer available.')
+        form = summary
+        content = read_patient_file(form.file) if request.method != 'HEAD' else b''
+        if request.method != 'HEAD':
+            record_audit(company=self.patient_company, actor=request.user, patient=self.patient,
+                         action='pathcare_form.viewed', target=form, request=request)
+        response = HttpResponse(content, content_type='application/pdf')
+        disposition = 'attachment' if request.GET.get('download') == '1' else 'inline'
+        response['Content-Disposition'] = f'{disposition}; filename="{FILENAME}"'
+        response['Content-Length'] = str(form.size)
+        response['Cache-Control'] = 'private, no-store, max-age=0'
+        response['X-Content-Type-Options'] = 'nosniff'
+        response['Referrer-Policy'] = 'same-origin'
+        return response

@@ -1,5 +1,6 @@
 from django import forms
 from django.contrib.auth import authenticate, get_user_model
+from django.contrib.auth.forms import PasswordResetForm
 from django.core.exceptions import ValidationError
 
 
@@ -24,7 +25,7 @@ class EmailAuthenticationForm(forms.Form):
             attrs={
                 'autocomplete': 'username',
                 'autofocus': True,
-                'placeholder': 'you@example.com',
+                'placeholder': 'Enter your email',
             }
         ),
     )
@@ -85,3 +86,13 @@ class EmailAuthenticationForm(forms.Form):
 
     def get_user(self):
         return self.user_cache
+
+
+class AccountPasswordResetForm(PasswordResetForm):
+    """The reset request asks for the email the same way the sign-in page does."""
+
+    email = forms.EmailField(
+        label='Email address',
+        max_length=254,
+        widget=forms.EmailInput(attrs={'autocomplete': 'email', 'autofocus': True, 'placeholder': 'Enter your email'}),
+    )

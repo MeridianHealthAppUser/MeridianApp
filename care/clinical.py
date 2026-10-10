@@ -13,7 +13,8 @@ from django.utils import timezone
 from practices.models import Company, CompanyMembership, Patient
 from practices.tenancy import require_enabled_company
 
-from .models import Appointment, ClinicalEncounter, ClinicalNote, ClinicalTask, LabRequest, LabResult, PatientEvent
+from .models import Appointment, ClinicalEncounter, ClinicalNote, ClinicalTask, LabRequest, LabResult, PatientEvent, PatientFile
+from .patient_files import store_patient_file
 from .services import record_audit
 
 
@@ -262,9 +263,11 @@ def submit_lab_result(*, lab_request, actor, filename, content, request=None):
         company=company, user=doctor, is_active=True, clinician_type__in=CompanyMembership.PRESCRIBER_TYPES,
     ).exists():
         raise ValidationError('The requesting clinician is no longer active. Contact your practice before uploading.')
+    file = store_patient_file(company=company, patient=patient, kind=PatientFile.Kind.LAB_RESULT, filename=filename,
+                              content=content, uploaded_by=actor)
     result = LabResult(
         company=company, patient=patient, lab_request=lab, uploaded_by=actor,
-        filename=filename, content=content, size=len(content), sha256=digest,
+        filename=filename, file=file, size=len(content), sha256=digest,
     )
     result.full_clean()
     result.save()

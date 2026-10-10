@@ -171,6 +171,22 @@ def explicit_rates(rates):
     return clean_rates
 
 
+def provisional_total(*, company, doctor, counts):
+    """Activity so far at the rates on the doctor's latest approved statement here; None without one.
+
+    An estimate for the doctor's own My profile, not a statement: nothing is saved or paid."""
+    statement = DoctorActivityStatement.objects.for_company(company).filter(
+        doctor=doctor, approved_at__isnull=False,
+    ).order_by('-period_end', '-pk').first()
+    if statement is None:
+        return None
+    try:
+        rates = explicit_rates(statement.rates)
+    except ValidationError:
+        return None
+    return sum((Decimal(rates[key]) * counts[key] for key, _ in ACTIVITIES), Decimal('0.00'))
+
+
 @transaction.atomic
 def create_activity_statement(*, company, actor, doctor, start, end, rates, request=None):
     company = Company.objects.select_for_update().get(pk=company.pk)

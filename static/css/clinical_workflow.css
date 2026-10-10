@@ -55,6 +55,9 @@
 .clinical-file-card > div { min-width: 0; }
 .clinical-file-card strong { color: var(--console-ink); display: block; font-size: .84rem; line-height: 1.5; overflow-wrap: anywhere; }
 .clinical-file-card p { color: #657f82; font-size: .75rem; line-height: 1.5; margin: .4rem 0 0; }
+/* The patient's PathCare form, above the upload: open it in the browser or download it. */
+.clinical-file-card--form { margin-bottom: 1.1rem; }
+.clinical-file-card__actions, .clinical-row-actions { display: flex; flex-wrap: wrap; gap: .5rem; }
 .clinical-workflow input[type='file'] { font-size: .84rem; max-width: 100%; min-width: 0; padding: .55rem; width: 100%; }
 .clinical-workflow input[type='file']::file-selector-button { background: #edf7f3; border: 1px solid #c8ded6; border-radius: .45rem; color: #176960; cursor: pointer; font: inherit; font-weight: 700; margin-right: .6rem; padding: .5rem .65rem; }
 .clinical-file-help { color: #657f82; font-size: .77rem; line-height: 1.6; margin: .8rem 0 0; }

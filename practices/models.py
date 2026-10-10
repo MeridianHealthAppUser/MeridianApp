@@ -122,6 +122,11 @@ class CompanyMembership(TimeStampedModel):
         return self.clinician_type in self.PRESCRIBER_TYPES
 
     @property
+    def is_admin(self):
+        """Practice admins and Super Admins run the practice; the Clinician role sees only Care."""
+        return self.role in (self.Role.PRACTICE_ADMIN, self.Role.SUPER_ADMIN)
+
+    @property
     def has_clinical_access(self):
         """Clinical records are open to clinicians and to Super Admins."""
         return self.is_clinician or self.role == self.Role.SUPER_ADMIN
@@ -146,6 +151,15 @@ class Patient(CompanyScopedModel):
         blank=True,
         related_name='patient_records',
     )
+    class Title(models.TextChoices):
+        MR = 'MR', 'Mr'
+        MRS = 'MRS', 'Mrs'
+        MS = 'MS', 'Ms'
+        MISS = 'MISS', 'Miss'
+        DR = 'DR', 'Dr'
+        PROF = 'PROF', 'Prof'
+
+    title = models.CharField(max_length=8, choices=Title.choices, blank=True)
     first_name = models.CharField(max_length=150)
     last_name = models.CharField(max_length=150)
     date_of_birth = models.DateField(null=True, blank=True)

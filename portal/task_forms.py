@@ -5,6 +5,7 @@ from django.core.validators import MaxLengthValidator
 from care.forms import CompanyBoundModelForm
 from care.models import ClinicalTask
 from care.tag_forms import TagFieldsMixin
+from care.widgets import QuarterHourDateTimeField
 from practices.models import Patient
 
 
@@ -16,8 +17,8 @@ class TaskEditorForm(TagFieldsMixin, CompanyBoundModelForm):
         labels = {'description': 'Note', 'due_at': 'Due date and time (SAST)'}
         widgets = {
             'description': forms.Textarea(attrs={'rows': 4}),
-            'due_at': forms.DateTimeInput(format='%Y-%m-%dT%H:%M', attrs={'type': 'datetime-local'}),
         }
+        field_classes = {'due_at': QuarterHourDateTimeField}
 
     def __init__(self, *args, company, **kwargs):
         kwargs.setdefault('auto_id', 'task_editor_%s')

@@ -48,7 +48,7 @@ class OperationsPortalFixture(OperationsFixture):
                 'expires_on': self.today + timedelta(days=90), 'quantity': 10, 'cold_chain_confirmed': 'on', **extra}
 
     def product_data(self, **extra):
-        return {'name': 'New catalogue product', 'strength': 'Product variant', 'category': 'other',
+        return {'name': 'New catalogue product', 'strength': 'Product variant', 'category': 'other', 'dose_frequency': 'as_directed',
                 'price': '120.00', 'description': '', 'allowance': '', 'allowance_group': '',
                 'requires_authorisation': 'on', 'requires_cold_chain': 'on', 'is_active': 'on', **extra}
 
@@ -63,23 +63,23 @@ class OperationsPortalFixture(OperationsFixture):
 
 
 class OperationsPortalTests(OperationsPortalFixture):
-    def test_lists_are_separate_scoped_pages_with_read_only_doctor_views(self):
-        self.receive()
-        self.shipment(quantity=2)
+    def test_lists_are_separate_scoped_pages_and_doctors_cannot_open_them(self):
+        batch = self.receive()
+        shipment = self.shipment(quantity=2)
         order = self.submitted()
-        self.login(self.doctor)
         for name, template in (('ops-catalogue', 'operations_catalogue'), ('ops-stock', 'operations_stock'),
             ('ops-shipping', 'operations_shipping'), ('ops-history', 'operations_history'), ('ops-orders', 'operations_orders')):
             response = self.page(name)
             self.assertTemplateUsed(response, f'portal/{template}.html')
-            self.assertFalse(response.context['can_edit'])
             self.assertIn('no-store', response['Cache-Control'])
             self.assertNotContains(response, self.beta_product.name)
-        detail = self.page('ops-order-detail', [order.pk])
-        self.assertFalse(detail.context['can_edit'])
-        self.assertContains(detail, 'read-only')
-        self.assertNotContains(detail, 'name="action"')
-        self.assertNotContains(self.page('ops-stock'), 'name="batch_number"')
+        # Operations is for practice admins and Super Admins; the Clinician role can't read it either.
+        self.login(self.doctor)
+        for name, args in (('ops-catalogue', []), ('ops-stock', []), ('ops-shipping', []), ('ops-history', []), ('ops-orders', []),
+            ('ops-product-detail', [self.product.pk]), ('ops-batch-detail', [batch.pk]), ('ops-shipment-detail', [shipment.pk]),
+            ('ops-order-detail', [order.pk]), ('ops-stock-export', []), ('ops-history-export', [])):
+            with self.subTest(name=name):
+                self.assertEqual(self.client.get(reverse(f'portal:{name}', args=args)).status_code, 403)
 
     def test_anonymous_patient_and_revoked_staff_cannot_open_operations(self):
         self.client.logout()

@@ -11,6 +11,7 @@ from django.views.decorators.cache import never_cache
 from care.message_management import manage_conversation
 from care.messaging import staff_threads
 from care.patient_assignment import active_doctors
+from .navigation import messages_title
 from .views import StaffCompanyRequiredMixin
 from .workflow_context import make_workflow_context, validate_workflow_context
 
@@ -40,10 +41,22 @@ class ConversationManagementView(LoginRequiredMixin, StaffCompanyRequiredMixin, 
     def thread(self, pk):
         return get_object_or_404(staff_threads(self.company, self.request.user).select_related('patient'), pk=pk)
 
+    def came_from_record(self):
+        return self.request.GET.get('from') == 'record'
+
+    def back_url(self, thread):
+        """Back to the conversation where it was opened: the patient's record or Patient messages."""
+        if self.came_from_record():
+            from .patient_workspace import workspace_url
+            return workspace_url(thread.patient, 'messages', thread=thread.pk)
+        from .inbox import staff_inbox_url
+        return staff_inbox_url(thread)
+
     def display(self, request, thread, form=None, status=200):
         form = form if form is not None else ConversationManagementForm(company=self.company, thread=thread)
         return render(request, 'portal/message_management.html', dict(company=self.company, active_membership=self.membership,
-            nav_section='messages', thread=thread, form=form,
+            nav_section='messages', messages_title=messages_title(self.membership), thread=thread, form=form,
+            back_url=self.back_url(thread),
             participants=[link.user for link in thread.participant_links.select_related('user')],
             workflow_context=request.POST.get('workflow_context', '') if request.method == 'POST' else make_workflow_context(request, self.company, 'conversation-management', thread)), status=status)
 
@@ -62,7 +75,8 @@ class ConversationManagementView(LoginRequiredMixin, StaffCompanyRequiredMixin, 
                     messages.success(request, f"{form.cleaned_data['doctor'].full_name} can now read and reply in this conversation.")
                 else:
                     messages.success(request, 'Conversation status updated. Existing messages are retained.')
-                return redirect('portal:conversation-manage', pk=thread.pk)
+                # Done: back to the conversation, where it was opened.
+                return redirect(self.back_url(thread))
         except ValidationError as error:
             for message in error.messages:
                 form.add_error(None, message)

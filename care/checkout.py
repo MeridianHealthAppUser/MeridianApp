@@ -126,7 +126,10 @@ def _create_patient(company, lead, user, clinician):
     if lead.id_number and Patient.objects.filter(company=company, id_number=lead.id_number).exists():
         raise ValidationError('A patient record with this ID or passport number already exists. Contact the practice to link it to your login.')
     # The clinician of the first booking becomes the patient's assigned clinician.
+    questionnaire = lead.questionnaires.filter(stage=1).first()
+    title = (questionnaire.answers or {}).get('title', '') if questionnaire else ''
     patient = Patient(company=company, user=user, first_name=lead.first_name, last_name=lead.last_name,
+                      title=title if title in Patient.Title.values else '',
                       id_number=lead.id_number, phone=lead.phone, assigned_doctor=clinician)
     patient.full_clean()
     try:

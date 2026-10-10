@@ -16,6 +16,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from care.models import Appointment, ClinicalEncounter, ClinicalTask, CompoundingRecord, LabRequest, MedicationProduct, Shipment, TreatmentAuthorization
+from care.widgets import floor_quarter_hour
 from practices.models import Company, CompanyMembership, Patient
 from practices.services import ACTIVE_COMPANY_SESSION_KEY, ACTIVE_PATIENT_COMPANY_SESSION_KEY
 
@@ -33,9 +34,10 @@ class PatientWorkspaceFormTests(TestCase):
         for actor, role in ((cls.doctor, 'doctor'), (cls.admin, 'practice_admin'), (cls.super_admin, 'super_admin')):
             CompanyMembership.objects.create(company=cls.company, user=actor, role=role)
         CompanyMembership.objects.create(company=cls.beta, user=cls.doctor, role='doctor')
-        cls.patient = Patient.objects.create(company=cls.company, user=cls.patient_user, first_name='Example', last_name='Patient')
+        cls.patient = Patient.objects.create(company=cls.company, user=cls.patient_user, first_name='Example', last_name='Patient',
+                                             assigned_doctor=cls.doctor)
         cls.encounter = ClinicalEncounter.objects.create(company=cls.company, patient=cls.patient, clinician=cls.doctor,
-            clinical_summary='Recorded consultation draft.', occurred_at=timezone.now() - timedelta(hours=1))
+            clinical_summary='Recorded consultation draft.', occurred_at=floor_quarter_hour(timezone.now() - timedelta(hours=1)))
         cls.signed = ClinicalEncounter.objects.create(company=cls.company, patient=cls.patient, clinician=cls.doctor,
             clinical_summary='Signed consultation.', status='signed', signed_at=timezone.now(), signed_by=cls.doctor)
         cls.lab = LabRequest.objects.create(company=cls.company, patient=cls.patient, requested_by=cls.doctor, panel_name='Requested panel')
@@ -148,7 +150,7 @@ class SharedPatientActionTests(TestCase):
     @classmethod
     def setUpTestData(cls):
         PatientWorkspaceFormTests.setUpTestData.__func__(cls)
-        cls.other_patient = Patient.objects.create(company=cls.company, first_name='Different', last_name='Patient')
+        cls.other_patient = Patient.objects.create(company=cls.company, first_name='Different', last_name='Patient', assigned_doctor=cls.doctor)
         cls.task = ClinicalTask.objects.create(company=cls.company, patient=cls.patient, title='Patient coordination',
             assigned_to=cls.doctor, created_by=cls.doctor)
         cls.product = MedicationProduct.objects.create(company=cls.company, name='Recorded product', price='10.00', is_compounded=True)
@@ -163,20 +165,21 @@ class SharedPatientActionTests(TestCase):
     assertWorkspace = PatientWorkspaceFormTests.assertWorkspace
 
     def screens(self):
+        # Delivery detail is an Operations page, so a practice admin opens it; the doctor opens the rest.
         return [
-            ('task-editor', 'tasks', reverse('portal:task-edit', args=[self.task.pk])),
-            ('authorisation-create', 'treatment', reverse('portal:treatment-authorisation-create', args=[self.patient.pk])),
-            ('authorisation-detail', 'treatment', reverse('portal:treatment-authorisation-detail', args=[self.authorization.pk])),
-            ('authorisation-renew', 'treatment', reverse('portal:treatment-authorisation-renew', args=[self.authorization.pk])),
-            ('shipment-detail', 'deliveries', reverse('portal:ops-shipment-detail', args=[self.shipment.pk])),
-            ('compounding-create', 'treatment', reverse('portal:compounding-create', args=[self.authorization.pk])),
-            ('compounding-detail', 'treatment', reverse('portal:compounding-detail', args=[self.compounding.pk])),
+            ('task-editor', 'tasks', reverse('portal:task-edit', args=[self.task.pk]), None),
+            ('authorisation-create', 'treatment', reverse('portal:treatment-authorisation-create', args=[self.patient.pk]), None),
+            ('authorisation-detail', 'treatment', reverse('portal:treatment-authorisation-detail', args=[self.authorization.pk]), None),
+            ('authorisation-renew', 'treatment', reverse('portal:treatment-authorisation-renew', args=[self.authorization.pk]), None),
+            ('shipment-detail', 'deliveries', reverse('portal:ops-shipment-detail', args=[self.shipment.pk]), self.admin),
+            ('compounding-create', 'treatment', reverse('portal:compounding-create', args=[self.authorization.pk]), None),
+            ('compounding-detail', 'treatment', reverse('portal:compounding-detail', args=[self.compounding.pk]), None),
         ]
 
     def test_global_entry_keeps_global_shell_patient_entry_keeps_patient_shell(self):
-        self.login()
-        for name, tab, url in self.screens():
+        for name, tab, url, actor in self.screens():
             with self.subTest(screen=name):
+                self.login(actor)
                 global_page = self.client.get(url)
                 self.assertEqual(global_page.status_code, 200)
                 self.assertNotContains(global_page, 'aria-label="Patient sections"')
@@ -218,8 +221,7 @@ class SharedPatientActionTests(TestCase):
     def test_operations_permissions_and_redirects_remain_unchanged(self):
         url = reverse('portal:ops-shipment-detail', args=[self.shipment.pk])
         self.login()
-        page = self.client.get(url, {'workspace': 'patient'})
-        self.assertFalse(page.context['can_edit'])
+        self.assertEqual(self.client.get(url, {'workspace': 'patient'}).status_code, 403)
         self.assertEqual(self.client.post(url, {'workspace': 'patient', 'action': 'hold'}).status_code, 403)
         self.login(self.admin)
         page = self.client.get(url, {'workspace': 'patient'})
@@ -229,6 +231,16 @@ class SharedPatientActionTests(TestCase):
             'action': 'hold', 'reason': 'Review before dispatch.', 'confirm': 'on'}, follow=True)
         self.assertWorkspace(response, 'deliveries')
         self.assertEqual(response.redirect_chain, [(url + '?workspace=patient', 302)])
+
+    def test_deliveries_tab_shows_rows_to_doctors_but_only_admins_open_the_operations_page(self):
+        record = reverse('portal:patient-detail', args=[self.patient.pk])
+        link = reverse('portal:ops-shipment-detail', args=[self.shipment.pk])
+        self.login()
+        page = self.client.get(record, {'tab': 'deliveries'})
+        self.assertEqual([row.pk for row in page.context['rows']], [self.shipment.pk])
+        self.assertNotContains(page, link)
+        self.login(self.admin)
+        self.assertContains(self.client.get(record, {'tab': 'deliveries'}), link)
 
     def test_compounding_followup_remains_in_treatment_context(self):
         self.login()
@@ -242,9 +254,10 @@ class SharedPatientActionTests(TestCase):
 
     def test_marker_never_bypasses_practice_or_clinical_permissions(self):
         self.login(company=self.beta)
-        for name, _, url in self.screens():
+        for name, _, url, admin_page in self.screens():
             with self.subTest(screen=name):
-                self.assertEqual(self.client.get(url, {'workspace': 'patient'}).status_code, 404)
+                # The doctor can't open Operations pages at all, so a delivery is refused before the practice check.
+                self.assertEqual(self.client.get(url, {'workspace': 'patient'}).status_code, 403 if admin_page else 404)
         self.login(self.admin)
         self.assertEqual(self.client.get(reverse('portal:treatment-authorisation-detail', args=[self.authorization.pk]), {'workspace': 'patient'}).status_code, 403)
 

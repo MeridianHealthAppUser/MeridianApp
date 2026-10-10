@@ -88,11 +88,17 @@ def _authorized_appointments(user_id):
     ).select_related('company', 'clinician', 'patient__user'))
 
 
+def join_window(appointment):
+    """When the video room is open for an appointment: (opens, closes)."""
+    opens_at = appointment.starts_at - timedelta(minutes=settings.VIDEO_JOIN_EARLY_MINUTES)
+    closes_at = appointment.starts_at + timedelta(minutes=appointment.duration_minutes + settings.VIDEO_JOIN_GRACE_MINUTES)
+    return opens_at, closes_at
+
+
 def _access_from_appointment(appointment, user_id, *, now, require_window):
     starts_at = appointment.starts_at
     ends_at = starts_at + timedelta(minutes=appointment.duration_minutes)
-    opens_at = starts_at - timedelta(minutes=settings.VIDEO_JOIN_EARLY_MINUTES)
-    closes_at = ends_at + timedelta(minutes=settings.VIDEO_JOIN_GRACE_MINUTES)
+    opens_at, closes_at = join_window(appointment)
     if require_window and not opens_at <= now <= closes_at:
         raise VideoAccessDenied()
     doctor = appointment.clinician

@@ -1,21 +1,27 @@
 from django.contrib import messages
 from django.contrib.auth import get_user_model
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.contrib.auth.views import LoginView, LogoutView, PasswordChangeDoneView, PasswordChangeView
-from django.core.exceptions import ValidationError
+from django.conf import settings
+from django.contrib.auth.views import (
+    LoginView, LogoutView, PasswordChangeDoneView, PasswordChangeView, PasswordResetCompleteView,
+    PasswordResetConfirmView, PasswordResetDoneView, PasswordResetView,
+)
+from django.core.cache import cache
+from django.core.exceptions import PermissionDenied, ValidationError
 from django.core.paginator import Paginator
 from django.db import transaction
 from django.db.models import Prefetch, Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse_lazy
+from django.utils import timezone
 from django.utils.decorators import method_decorator
 from django.views.decorators.cache import never_cache
 from django.views import View
 
 from practices.tenancy import enabled_companies, scope_queryset
 
-from .forms import AccountProfileForm, EmailAuthenticationForm
-from .profile import make_profile_context, save_own_profile
+from .forms import AccountPasswordResetForm, AccountProfileForm, EmailAuthenticationForm
+from .profile import make_profile_context, save_own_profile, save_own_staff_detail
 
 
 @method_decorator(never_cache, name='dispatch')
@@ -24,7 +30,7 @@ class AccountProfileView(LoginRequiredMixin, View):
 
     http_method_names = ('get', 'post', 'head', 'options')
 
-    def display(self, request, form=None):
+    def display(self, request, form=None, staff_edit=None):
         from practices.models import CompanyMembership, Patient
 
         user = get_object_or_404(get_user_model(), pk=request.user.pk, is_active=True)
@@ -39,10 +45,15 @@ class AccountProfileView(LoginRequiredMixin, View):
             Prefetch('practices_patient_records', queryset=patients, to_attr='profile_patients'),
         )
         page = Paginator(companies, 20).get_page(request.GET.get('page'))
+        # Staff names are kept in Users and roles, so staff get no name form; a clinician edits a few details in place.
+        editable = {'profile_context': request.POST.get('profile_context', '') if request.method == 'POST' else make_profile_context(user)}
+        if not has_staff_access:
+            editable['form'] = form if form is not None else AccountProfileForm(instance=user)
+        staff = staff_profile_context(request, user, memberships, staff_edit) if has_staff_access else {}
         return render(request, 'accounts/profile.html', {
-            'form': form if form is not None else AccountProfileForm(instance=user),
+            **staff,
+            **editable,
             'profile_user': user,
-            'profile_context': request.POST.get('profile_context', '') if request.method == 'POST' else make_profile_context(user),
             'membership_page': page,
             'has_staff_access': has_staff_access,
             'has_patient_access': has_patient_access,
@@ -53,6 +64,11 @@ class AccountProfileView(LoginRequiredMixin, View):
         return self.display(request)
 
     def post(self, request):
+        from practices.models import CompanyMembership
+
+        # Staff names are maintained centrally (Users and roles); staff read them here but can't change them.
+        if scope_queryset(CompanyMembership.objects.filter(user=request.user, is_active=True, company__is_active=True)).exists():
+            raise PermissionDenied('Your details are maintained by the practice.')
         user = get_object_or_404(get_user_model(), pk=request.user.pk, is_active=True)
         form = AccountProfileForm(request.POST, instance=user)
         if form.is_valid():
@@ -65,6 +81,91 @@ class AccountProfileView(LoginRequiredMixin, View):
                 messages.success(request, 'Your profile has been updated.' if changed else 'Your profile is already up to date.')
                 return redirect('accounts:profile')
         return self.display(request, form)
+
+
+class AccountStaffDetailView(AccountProfileView):
+    """A clinician saves how they sign consult notes or a PathCare detail with the pen on My profile."""
+
+    http_method_names = ('post',)
+
+    def post(self, request):
+        field, value = request.POST.get('field', ''), request.POST.get('value', '')
+        try:
+            changed = save_own_staff_detail(actor=request.user, context_token=request.POST.get('profile_context'),
+                                            field=field, value=value, request=request)
+        except ValidationError as error:
+            return self.display(request, staff_edit={'field': field, 'value': value, 'errors': error.messages})
+        messages.success(request, 'Your details have been updated.' if changed else 'Your details are already up to date.')
+        return redirect('accounts:profile')
+
+
+# The details a clinician changes with the pen, in the order My profile lists them.
+STAFF_DETAIL_ROWS = (
+    ('note_signature', 'How you sign consult notes', 'Edit how you sign consult notes'),
+    ('pathcare_name', 'PathCare name', 'Edit your PathCare name'),
+    ('pathcare_code', 'PathCare code', 'Edit your PathCare code'),
+)
+
+
+def staff_detail_rows(user, staff_edit=None):
+    rows = []
+    for field, label, edit_label in STAFF_DETAIL_ROWS:
+        model_field = user._meta.get_field(field)
+        failed = staff_edit if staff_edit and staff_edit['field'] == field else None
+        rows.append({
+            'field': field, 'label': label, 'edit_label': edit_label, 'value': getattr(user, field),
+            'help': model_field.help_text, 'max_length': model_field.max_length,
+            # A rejected save reopens its editor with what the person typed and why it wasn't saved.
+            'draft': failed['value'] if failed else getattr(user, field),
+            'errors': failed['errors'] if failed else [], 'open': failed is not None,
+        })
+    return rows
+
+
+def staff_profile_context(request, user, memberships, staff_edit=None):
+    """My profile for staff: their details, the practice they're in, and a clinician's month so far."""
+    from care.reporting import doctor_activity, provisional_total
+    from practices.services import active_membership_for, get_active_company
+
+    company = get_active_company(request)
+    membership = active_membership_for(request, company) or memberships.select_related('company').first()
+    is_clinician = any(member.is_clinician for member in memberships)
+    month_to_date = None
+    if membership is not None and membership.is_clinician:
+        today = timezone.localdate()
+        counts, _ = doctor_activity(company=membership.company, doctor=user, start=today.replace(day=1), end=today)
+        total = provisional_total(company=membership.company, doctor=user, counts=counts)
+        month_to_date = {'first': counts['initial'], 'review': counts['review'] + counts['follow_up'],
+                         'messages': counts['messages'],
+                         # Rand with a space between thousands, as in "R14 350.00".
+                         'total': f'R{total:,.2f}'.replace(',', '\u00a0') if total is not None else ''}
+    return {'staff_membership': membership, 'staff_is_clinician': is_clinician, 'month_to_date': month_to_date,
+            'staff_detail_rows': staff_detail_rows(user, staff_edit) if is_clinician else []}
+
+
+@method_decorator(never_cache, name='dispatch')
+class AccountSignOutOthersView(LoginRequiredMixin, View):
+    """End every other session for this account; this device stays signed in."""
+
+    http_method_names = ('post',)
+
+    def post(self, request):
+        from django.contrib.auth import SESSION_KEY
+        from django.contrib.sessions.models import Session
+
+        removed = 0
+        for session in Session.objects.filter(expire_date__gt=timezone.now()).exclude(session_key=request.session.session_key).iterator():
+            if str(session.get_decoded().get(SESSION_KEY)) == str(request.user.pk):
+                session.delete()
+                removed += 1
+        from care.services import record_audit
+
+        for company in enabled_companies().filter(memberships__user=request.user, memberships__is_active=True).distinct():
+            record_audit(company=company, actor=request.user, action='account.sessions_ended', target=request.user,
+                         request=request, metadata={'sessions': removed})
+        messages.success(request, 'Signed out of every other device. This one stays signed in.' if removed
+                         else 'No other devices were signed in. This one stays signed in.')
+        return redirect('accounts:profile')
 
 
 class AccountLoginView(LoginView):
@@ -127,6 +228,7 @@ class AccountPasswordChangeView(PatientAccountPageMixin, PasswordChangeView):
     def form_valid(self, form):
         from care.services import record_audit
 
+        form.user.last_change_password = timezone.now()  # Saved with the new password.
         response = super().form_valid(form)
         companies = enabled_companies().filter(
             Q(memberships__user=self.request.user, memberships__is_active=True) |
@@ -141,3 +243,76 @@ class AccountPasswordChangeView(PatientAccountPageMixin, PasswordChangeView):
 @method_decorator(never_cache, name='dispatch')
 class AccountPasswordChangeDoneView(LoginRequiredMixin, PatientAccountPageMixin, PasswordChangeDoneView):
     template_name = 'accounts/password_change_done.html'
+
+
+# Reset requests per hour: per email address, and per network address across emails.
+RESET_LIMITS = (('email', 5), ('ip', 20))
+
+
+def _reset_allowed(request, email):
+    """Count this request; False once a limit is reached. The response never says which."""
+    allowed = True
+    for kind, limit in RESET_LIMITS:
+        value = email.lower() if kind == 'email' else (request.META.get('REMOTE_ADDR') or 'unknown')
+        key = f'password-reset:{kind}:{value}'
+        cache.add(key, 0, timeout=60 * 60)
+        if cache.incr(key) > limit:
+            allowed = False
+    return allowed
+
+
+@method_decorator(never_cache, name='dispatch')
+class AccountPasswordResetView(PasswordResetView):
+    """Email a one-hour, single-use link; the reply is the same whether or not the account exists."""
+
+    template_name = 'accounts/password_reset.html'
+    form_class = AccountPasswordResetForm
+    email_template_name = 'accounts/password_reset_email.txt'
+    subject_template_name = 'accounts/password_reset_subject.txt'
+    success_url = reverse_lazy('accounts:password-reset-done')
+    extra_email_context = {'site_name': 'Meridian Health'}
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['reset_email_available'] = settings.PASSWORD_RESET_EMAIL_ENABLED
+        return context
+
+    def post(self, request, *args, **kwargs):
+        if not settings.PASSWORD_RESET_EMAIL_ENABLED:
+            return redirect('accounts:password-reset')
+        return super().post(request, *args, **kwargs)
+
+    def form_valid(self, form):
+        if not _reset_allowed(self.request, form.cleaned_data['email']):
+            return redirect(self.success_url)
+        return super().form_valid(form)
+
+
+class AccountPasswordResetDoneView(PasswordResetDoneView):
+    template_name = 'accounts/password_reset_done.html'
+
+
+@method_decorator(never_cache, name='dispatch')
+class AccountPasswordResetConfirmView(PasswordResetConfirmView):
+    """Set a new password from the emailed link; every other session is signed out."""
+
+    template_name = 'accounts/password_reset_confirm.html'
+    success_url = reverse_lazy('accounts:password-reset-complete')
+
+    def form_valid(self, form):
+        from care.services import record_audit
+
+        form.user.last_forgot_password_reset = timezone.now()  # Saved with the new password.
+        response = super().form_valid(form)
+        user = form.user
+        companies = enabled_companies().filter(
+            Q(memberships__user=user, memberships__is_active=True) |
+            Q(practices_patient_records__user=user, practices_patient_records__is_active=True)
+        ).distinct()
+        for company in companies:
+            record_audit(company=company, actor=user, action='account.password_reset', target=user, request=self.request)
+        return response
+
+
+class AccountPasswordResetCompleteView(PasswordResetCompleteView):
+    template_name = 'accounts/password_reset_complete.html'

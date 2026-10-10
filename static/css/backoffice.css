@@ -13,6 +13,13 @@
 .backoffice-note p { white-space: normal; margin: .5rem 0; }
 .backoffice-note small, .backoffice-muted { color: #68828c; }
 .backoffice-actions { display: flex; flex-wrap: wrap; gap: .6rem; align-items: center; }
+/* Appointment details: when and the type, then status, length and clinician with the actions on the right. */
+.appointment-summary__when { color: var(--console-ink, #12302f); font-size: 1rem; font-weight: 650; margin: 0 0 .45rem; }
+.appointment-summary__when span { color: #657f82; font-weight: 500; }
+.appointment-summary__row { align-items: center; display: flex; flex-wrap: wrap; gap: .75rem 1.2rem; justify-content: space-between; }
+.appointment-summary__row > p { margin: 0; }
+.appointment-summary__row .backoffice-actions { margin-left: auto; }
+@media (max-width: 40rem) { .appointment-summary__row .backoffice-actions { margin-left: 0; } }
 .backoffice-metrics { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(165px, 1fr)); }
 .backoffice-metrics strong { display: block; font-size: 1.7rem; }
 .backoffice .console-button--primary { color: #fff; }

@@ -1,5 +1,6 @@
-<aside class="schedule-availability-panels" aria-label="Working pattern and time off">
+<div class="schedule-availability-panels schedule-availability-tab">
   {% if selected_clinician %}
+    <div class="schedule-availability-tab__column">
     <section class="staff-page-card schedule-working-pattern" aria-labelledby="working-pattern-heading">
       <header class="staff-page-card__header">
         <div><h2 id="working-pattern-heading">Working pattern</h2><p>{{ selected_clinician.full_name }} · {{ company.name }}</p></div>
@@ -59,69 +60,135 @@
       </div>
     </section>
 
-    <section class="staff-page-card schedule-time-off" aria-labelledby="time-off-heading">
-      <header class="staff-page-card__header"><div><h2 id="time-off-heading">Time off</h2><p>Leave, sickness and other time away.</p></div></header>
+    </div>
+    <div class="schedule-availability-tab__column">
+    <section class="staff-page-card schedule-special-days" aria-labelledby="special-days-heading">
+      <header class="staff-page-card__header"><div><h2 id="special-days-heading">{% include 'portal/includes/special_hours_icon.html' %}Special days</h2><p>Different hours on a specific date. These replace {% if own_diary %}your{% else %}this doctor's{% endif %} working pattern for that day only.</p></div></header>
       <div class="schedule-panel-body">
-        <p class="schedule-panel-description">Time off blocks this doctor's new bookings{% if multi_practice_enabled %} across all their practices. Only time off recorded at {{ company.name }} is shown here{% endif %}.</p>
-        {% if time_off_error %}<div class="schedule-form-error" role="alert">{{ time_off_error }}</div>{% endif %}
-        {% if can_manage_availability %}
-          <form class="console-form schedule-time-off-form" method="post" action="{{ time_off_create_url }}">
+        {% if special_day_error %}<div class="schedule-form-error" role="alert">{{ special_day_error }}</div>{% endif %}
+        {% if special_days %}
+          <ul class="schedule-time-off-list schedule-special-list">
+            {% for special in special_days %}
+              <li>
+                <div><strong>{{ special.date|date:"D j M Y" }}</strong><span>{{ special.starts_at|time:"H:i" }} &ndash; {{ special.ends_at|time:"H:i" }}{% if special.overridden %} &middot; overridden by leave{% endif %}</span></div>
+                {% if can_manage_days %}
+                  <form method="post" action="{{ special.remove_url }}">
+                    {% csrf_token %}
+                    <input type="hidden" name="schedule_context" value="{{ schedule_context }}">
+                    <button class="console-button console-button--secondary" type="submit">Remove<span class="sr-only"> special hours on {{ special.date|date:"j F Y" }}</span></button>
+                  </form>
+                {% endif %}
+              </li>
+            {% endfor %}
+          </ul>
+        {% else %}
+          <p class="schedule-panel-empty">No special days coming up.</p>
+        {% endif %}
+        {% if special_page_obj.has_other_pages %}
+          <nav class="schedule-panel-pagination" aria-label="Special day pages">
+            {% if special_previous_url %}<a href="{{ special_previous_url }}">Previous</a>{% endif %}
+            <span>Page {{ special_page_obj.number }} of {{ special_page_obj.paginator.num_pages }}</span>
+            {% if special_next_url %}<a href="{{ special_next_url }}">Next</a>{% endif %}
+          </nav>
+        {% endif %}
+        {% if can_manage_days %}
+          {# Upcoming special days come first; the form opens from the dashed button (and stays open after an error). #}
+          <details class="schedule-add" data-inline-editor{% if special_day_error or special_day_form.errors %} open{% endif %}>
+          <summary><span aria-hidden="true">+</span> Add special day</summary>
+          <form class="console-form schedule-special-day-form" method="post" action="{{ special_day_url }}">
             {% csrf_token %}
             <input type="hidden" name="schedule_context" value="{{ schedule_context }}">
-            {{ time_off_form.non_field_errors }}
+            {{ special_day_form.non_field_errors }}
             <div class="console-form__field">
-              <label for="{{ time_off_form.reason.id_for_label }}">{{ time_off_form.reason.label }}</label>
-              {{ time_off_form.reason }}
-              {{ time_off_form.reason.errors }}
+              <label for="{{ special_day_form.date.id_for_label }}">Date</label>
+              {{ special_day_form.date }}
+              {{ special_day_form.date.errors }}
             </div>
-            <div class="console-form__field">
-              <label for="{{ time_off_form.starts_at.id_for_label }}">From (SAST)</label>
-              {{ time_off_form.starts_at }}
-              {{ time_off_form.starts_at.errors }}
+            <div class="schedule-field-pair">
+              <div class="console-form__field">
+                <label for="{{ special_day_form.starts_at.id_for_label }}">From<span class="sr-only"> (SAST)</span></label>
+                {{ special_day_form.starts_at }}
+                {{ special_day_form.starts_at.errors }}
+              </div>
+              <div class="console-form__field">
+                <label for="{{ special_day_form.ends_at.id_for_label }}">To<span class="sr-only"> (SAST)</span></label>
+                {{ special_day_form.ends_at }}
+                {{ special_day_form.ends_at.errors }}
+              </div>
             </div>
-            <div class="console-form__field">
-              <label for="{{ time_off_form.ends_at.id_for_label }}">Until (SAST)</label>
-              {{ time_off_form.ends_at }}
-              {{ time_off_form.ends_at.errors }}
+            <div class="schedule-add__actions">
+              <button class="console-button console-button--primary" type="submit">Set special hours</button>
+              <a class="console-button console-button--secondary" href="{{ availability_tab_url }}" data-inline-editor-cancel>Cancel</a>
             </div>
-            <button class="console-button console-button--primary" type="submit">Mark unavailable</button>
           </form>
-        {% else %}
-          <p class="schedule-form-help">Read-only view. Doctors record and cancel their own time off.</p>
+          </details>
         {% endif %}
+      </div>
+    </section>
 
-        <h3 class="schedule-panel-subheading">Time off recorded here</h3>
-        <ul class="schedule-time-off-list">
-          {% for entry in time_off_entries %}
-            <li>
-              <strong>{{ entry.get_reason_display }}</strong>
-              <div class="schedule-time-off-dates"><time datetime="{{ entry.starts_at|date:'c' }}">{{ entry.starts_at|date:"j M Y, H:i" }}</time><span>until</span><time datetime="{{ entry.ends_at|date:'c' }}">{{ entry.ends_at|date:"j M Y, H:i" }}</time></div>
-              {% if can_manage_availability and entry.cancel_url %}
-                <form method="post" action="{{ entry.cancel_url }}">
-                  {% csrf_token %}
-                  <input type="hidden" name="schedule_context" value="{{ schedule_context }}">
-                  <button class="console-button console-button--secondary" type="submit">Cancel time off<span class="sr-only"> starting {{ entry.starts_at|date:"j F Y, H:i" }}</span></button>
-                </form>
-              {% endif %}
-            </li>
-          {% empty %}
-            <li class="schedule-time-off-empty">No upcoming time off is recorded at this practice.</li>
-          {% endfor %}
-        </ul>
+    <section class="staff-page-card schedule-time-off" aria-labelledby="time-off-heading">
+      <header class="staff-page-card__header"><div><h2 id="time-off-heading">Leave</h2></div></header>
+      <div class="schedule-panel-body">
+        {% if time_off_error %}<div class="schedule-form-error" role="alert">{{ time_off_error }}</div>{% endif %}
+        {% if time_off_entries %}
+          <ul class="schedule-time-off-list">
+            {% for entry in time_off_entries %}
+              <li>
+                <strong>{% if entry.whole_days %}{{ entry.first_day|date:"D j M Y" }}{% if entry.last_day != entry.first_day %} &ndash; {{ entry.last_day|date:"D j M Y" }}{% endif %}{% else %}{{ entry.starts_at|date:"D j M Y, H:i" }} &ndash; {{ entry.ends_at|date:"D j M Y, H:i" }}{% endif %}</strong>
+                {% if can_manage_days and entry.cancel_url %}
+                  <form method="post" action="{{ entry.cancel_url }}">
+                    {% csrf_token %}
+                    <input type="hidden" name="schedule_context" value="{{ schedule_context }}">
+                    <button class="console-button console-button--secondary" type="submit">Remove<span class="sr-only"> leave starting {{ entry.starts_at|date:"j F Y" }}</span></button>
+                  </form>
+                {% endif %}
+              </li>
+            {% endfor %}
+          </ul>
+        {% else %}
+          <p class="schedule-panel-empty">No leave coming up.</p>
+        {% endif %}
         {% if time_off_page_obj.has_other_pages %}
-          <nav class="schedule-panel-pagination" aria-label="Time-off pages">
+          <nav class="schedule-panel-pagination" aria-label="Leave pages">
             {% if time_off_previous_url %}<a href="{{ time_off_previous_url }}">Previous</a>{% endif %}
             <span>Page {{ time_off_page_obj.number }} of {{ time_off_page_obj.paginator.num_pages }}</span>
             {% if time_off_next_url %}<a href="{{ time_off_next_url }}">Next</a>{% endif %}
           </nav>
         {% endif %}
-        {% if can_manage_availability %}<p class="schedule-form-help">Cancelling time off makes those hours available again where your working pattern allows it. The original time-off record is kept.</p>{% endif %}
+        {% if can_manage_days %}
+          <details class="schedule-add" data-inline-editor{% if time_off_error or time_off_form.errors %} open{% endif %}>
+          <summary><span aria-hidden="true">+</span> Add leave</summary>
+          <form class="console-form schedule-time-off-form" method="post" action="{{ time_off_create_url }}">
+            {% csrf_token %}
+            <input type="hidden" name="schedule_context" value="{{ schedule_context }}">
+            {{ time_off_form.non_field_errors }}
+            <div class="schedule-field-pair">
+              <div class="console-form__field">
+                <label for="{{ time_off_form.starts_on.id_for_label }}">From</label>
+                {{ time_off_form.starts_on }}
+                {{ time_off_form.starts_on.errors }}
+              </div>
+              <div class="console-form__field">
+                <label for="{{ time_off_form.ends_on.id_for_label }}">To</label>
+                {{ time_off_form.ends_on }}
+                {{ time_off_form.ends_on.errors }}
+              </div>
+            </div>
+            <div class="schedule-add__actions">
+              <button class="console-button console-button--primary" type="submit">Mark unavailable</button>
+              <a class="console-button console-button--secondary" href="{{ availability_tab_url }}" data-inline-editor-cancel>Cancel</a>
+            </div>
+          </form>
+          </details>
+        {% endif %}
       </div>
     </section>
+
+    </div>
   {% else %}
     <section class="staff-page-card schedule-select-doctor" aria-labelledby="availability-doctor-heading">
-      <header class="staff-page-card__header"><div><h2 id="availability-doctor-heading">Working hours and time off</h2></div></header>
-      <div class="schedule-panel-body"><p class="schedule-panel-description">Choose a clinician in the schedule filter to view their weekly working pattern and time off for this practice.</p><p class="schedule-form-help">Doctors can edit their own hours and time off. Practice administrators and Super Admins have a read-only view.</p></div>
+      <header class="staff-page-card__header"><div><h2 id="availability-doctor-heading">Working pattern, leave and special days</h2></div></header>
+      <div class="schedule-panel-body"><p class="schedule-panel-description">Choose a clinician in the schedule filter to see their working pattern, leave and special days at this practice.</p><p class="schedule-form-help">Doctors set their own working pattern. Practice administrators and Super Admins can add or remove leave and special days for the doctor they choose.</p></div>
     </section>
   {% endif %}
-</aside>
+</div>

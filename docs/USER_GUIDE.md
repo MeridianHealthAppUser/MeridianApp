@@ -12,6 +12,9 @@ Open `/accounts/login/` on the local development server. The existing demo passw
 | `joshua.czech@meridianhealth.co.za` | Super Admin in Meridian Health |
 | `lindiwe.mahlangu@meridianhealth.co.za` | Practice Administrator in Meridian Health |
 | `nadia.m@example.co.za` | Own patient portal in Meridian Health |
+| `ayesha.p@example.co.za` | Own patient portal in Meridian Health |
+| `pieter.vdm@example.co.za` | Own patient portal in Meridian Health |
+| `zanele.n@example.co.za` | Own patient portal in Meridian Health |
 
 Demo data is for local testing only. The seed command is disabled when `DEBUG=False`; existing passwords are preserved unless the explicit local reset option is used. Do not run the seeder against an existing working database just to obtain newer screens.
 

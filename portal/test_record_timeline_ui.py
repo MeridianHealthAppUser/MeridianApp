@@ -27,7 +27,7 @@ class RecordTimelinePresentationTests(TestCase):
         cls.company = Company.objects.create(name='Timeline Example', slug='timeline-example')
         cls.doctor = get_user_model().objects.create_user(email='timeline-ui@example.test', first_name='Example', last_name='Doctor')
         CompanyMembership.objects.create(company=cls.company, user=cls.doctor, role='doctor')
-        cls.patient = Patient.objects.create(company=cls.company, first_name='Example', last_name='Patient')
+        cls.patient = Patient.objects.create(company=cls.company, first_name='Example', last_name='Patient', assigned_doctor=cls.doctor)
         PatientEvent.objects.bulk_create([
             PatientEvent(company=cls.company, patient=cls.patient, category='clinical',
                          title=f'Shared event {number}', detail='An example event with recorded information.')

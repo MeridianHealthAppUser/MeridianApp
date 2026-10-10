@@ -113,11 +113,15 @@ class SinglePracticeAccessTests(TestCase):
                 report_companies(self.doctor, company, scope)
 
     def test_report_export_rejects_forged_all(self):
+        self.client.force_login(self.admin)
         response = self.client.get(reverse('portal:metrics-export'), {'scope': 'all'})
         self.assertEqual(response.status_code, 400)
         self.assertNotContains(response, 'Disabled Access', status_code=400)
 
     def test_own_access_history_is_pinned(self):
+        self.assertEqual(self.client.get(reverse('portal:account-access-history')).status_code, 403)
+        AuditEvent.objects.filter(pk__in=[self.audit.pk, self.other_audit.pk]).update(actor=self.admin)
+        self.client.force_login(self.admin)
         response = self.client.get(reverse('portal:account-access-history'))
         self.assertEqual(response.status_code, 200)
         self.assertIn(self.audit, list(response.context['page_obj']))

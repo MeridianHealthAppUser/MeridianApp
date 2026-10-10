@@ -12,7 +12,7 @@
 .patient-navigation svg { fill: none; flex-shrink: 0; height: 1.1rem; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.7; width: 1.1rem; }
 .patient-page-content { max-width: 76rem; min-width: 0; padding-top: 2rem; width: 100%; }
 .patient-page-heading { align-items: center; display: flex; flex-wrap: wrap; gap: 1rem; justify-content: space-between; margin-bottom: 1.5rem; }
-.patient-page-heading h1 { color: var(--console-ink); font-family: Georgia, 'Times New Roman', serif; font-size: clamp(1.9rem, 3vw, 2.65rem); font-weight: 500; letter-spacing: -.035em; line-height: 1.15; margin: .2rem 0 .65rem; }
+.patient-page-heading h1 { color: var(--console-ink); font-family: inherit; font-size: clamp(1.9rem, 3vw, 2.65rem); font-weight: 500; letter-spacing: -.02em; line-height: 1.15; margin: .2rem 0 .65rem; }
 .patient-page-heading p:not(.console-kicker) { color: var(--patient-text); font-size: .9rem; line-height: 1.6; margin: 0; max-width: 49rem; }
 .patient-page-heading .console-kicker { margin-bottom: .45rem; }
 .patient-page-grid { align-items: start; display: grid; gap: 1.2rem; grid-template-columns: repeat(2, minmax(0, 1fr)); }

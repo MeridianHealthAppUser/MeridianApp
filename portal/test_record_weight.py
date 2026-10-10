@@ -53,9 +53,9 @@ class RecordWeightTests(TestCase):
         cls.user = get_user_model().objects.create_user(email='weight-patient@example.test')
         for company in (cls.company, cls.beta):
             CompanyMembership.objects.create(company=company, user=cls.doctor, role=CompanyMembership.Role.DOCTOR)
-        cls.patient = Patient.objects.create(company=cls.company, user=cls.user, first_name='Example', last_name='Patient')
-        cls.beta_patient = Patient.objects.create(company=cls.beta, user=cls.user, first_name='Example', last_name='Patient')
-        cls.other_patient = Patient.objects.create(company=cls.company, first_name='Other', last_name='Patient')
+        cls.patient = Patient.objects.create(company=cls.company, user=cls.user, first_name='Example', last_name='Patient', assigned_doctor=cls.doctor)
+        cls.beta_patient = Patient.objects.create(company=cls.beta, user=cls.user, first_name='Example', last_name='Patient', assigned_doctor=cls.doctor)
+        cls.other_patient = Patient.objects.create(company=cls.company, first_name='Other', last_name='Patient', assigned_doctor=cls.doctor)
         cls.day = date(2026, 1, 1)
 
     def login(self, user=None, company=None):
@@ -86,10 +86,11 @@ class RecordWeightTests(TestCase):
         self.assertEqual(response.context['record_weight_first'].pk, first.pk)
         self.assertEqual(response.context['record_weight_latest'].pk, latest.pk)
         self.assertEqual(response.context['record_weight_change'], Decimal('-3.95'))
-        self.assertEqual([point['weight'] for point in response.context['record_weight_chart']['points']], [Decimal('94.20'), Decimal('90.25')])
+        self.assertEqual([point['title'] for point in response.context['weight_chart']['points']],
+                         ['1 Jan 2026 · 94.2 kg', '11 Jan 2026 · 90.25 kg'])
         self.assertEqual([row.pk for row in response.context['weights']], [latest.pk, first.pk])
-        self.assertContains(response, 'record-weight-chart-description')
-        self.assertContains(response, '<table class="record-weight-table"')
+        self.assertContains(response, '<figure class="record-chart">')
+        self.assertContains(response, '<table class="record-weight-table record-weight-table--tab"')
         self.assertContains(response, 'aria-label="Recorded weight summary"')
         self.assertContains(response, '&lt;script&gt;unsafe()&lt;/script&gt;')
         for marker in ('Other practice marker', 'Other patient marker', 'Malformed company marker', '<script>unsafe()'):
@@ -103,20 +104,21 @@ class RecordWeightTests(TestCase):
         response = self.client.get(self.url())
         self.assertContains(response, 'The chart will appear after the first check-in.')
         self.assertContains(response, '0 check-ins')
-        self.assertIsNone(response.context['record_weight_chart'])
-        self.assertNotContains(response, 'id="record-weight-chart-title"')
-        self.assertNotContains(response, 'class="record-weight-summary"')
+        self.assertIsNone(response.context['weight_chart'])
+        self.assertNotContains(response, 'class="record-chart"')
+        self.assertNotContains(response, 'class="record-weight-stats"')
 
     def test_single_and_unchanged_checkins_have_clear_non_clinical_states(self):
         self.login()
         self.entry()
         response = self.client.get(self.url())
         self.assertContains(response, 'A trend line appears after the next check-in.')
-        self.assertNotContains(response, '<polyline')
+        self.assertNotIn(' L', response.context['weight_chart']['line'])
         self.entry(10)
         response = self.client.get(self.url())
         self.assertEqual(response.context['record_weight_change'], Decimal('0.00'))
-        self.assertContains(response, '<polyline')
+        self.assertIn(' L', response.context['weight_chart']['line'])
+        self.assertNotContains(response, 'A trend line appears after the next check-in.')
         self.assertContains(response, 'not daily measurements')
 
     def test_every_checkin_remains_reachable_and_summary_does_not_follow_table_page(self):
@@ -126,7 +128,7 @@ class RecordWeightTests(TestCase):
         response = self.client.get(self.url())
         self.assertEqual(len(response.context['weights']), 10)
         self.assertEqual(response.context['record_weight_total'], 13)
-        self.assertEqual(response.context['record_weight_chart']['count'], 13)
+        self.assertEqual(len(response.context['weight_chart']['points']), 13)
         self.assertEqual(response.context['record_weight_next_url'], self.url() + '&weight_page=2#weights')
         response = self.client.get(self.url(), {'tab': 'weights', 'weight_page': 2})
         self.assertEqual(len(response.context['weights']), 3)
@@ -140,7 +142,7 @@ class RecordWeightTests(TestCase):
             self.assertEqual(response.status_code, 200)
             self.assertEqual(response.context['record_weight_page'].number, 1)
 
-    def test_chart_limit_does_not_hide_old_entries_or_change_all_history_summary(self):
+    def test_long_history_is_charted_whole_as_on_the_overview_and_the_table_pages(self):
         self.login()
         WeightEntry.objects.bulk_create([
             WeightEntry(company=self.company, patient=self.patient, recorded_on=self.day + timedelta(days=day), weight_kg='90.00')
@@ -148,10 +150,10 @@ class RecordWeightTests(TestCase):
         ])
         response = self.client.get(self.url(), {'tab': 'weights', 'weight_page': 31})
         self.assertEqual(response.context['record_weight_total'], 305)
-        self.assertEqual(response.context['record_weight_chart']['count'], 300)
+        self.assertEqual(len(response.context['weight_chart']['points']), 305)
         self.assertEqual(len(response.context['weights']), 5)
         self.assertEqual(response.context['record_weight_first'].recorded_on, self.day)
-        self.assertContains(response, 'Latest 300 check-ins shown.')
+        self.assertNotContains(response, 'Latest 300 check-ins shown.')
 
     def test_staff_record_permissions_and_active_practice_still_apply(self):
         self.assertEqual(self.client.get(self.url()).status_code, 302)

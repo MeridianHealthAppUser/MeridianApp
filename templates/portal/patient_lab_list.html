@@ -5,7 +5,7 @@
 
 {% block patient_breadcrumbs %}{% breadcrumbs 'My Treatment' 'portal:patient-treatment' 'Blood tests' %}{% endblock %}
 {% block patient_heading %}
-  <header class="patient-page-heading"><div><h1>Your blood tests</h1><p>See the tests your doctor has requested at {{ patient_company.name }} and upload your report when it is ready.</p></div></header>
+  <header class="patient-page-heading"><div><h1>Your blood tests</h1><p>See the tests your doctor has requested at {{ patient_company.name }}, get the PathCare form to take to your blood test, and upload your report when it is ready.</p></div></header>
 {% endblock %}
 
 {% block patient_content %}
@@ -26,7 +26,7 @@
             <td data-label="Requested by">{{ lab_request.requested_by.full_name }}</td>
             <td data-label="Due">{% if lab_request.due_on %}<time datetime="{{ lab_request.due_on|date:'Y-m-d' }}">{{ lab_request.due_on|date:"j M Y" }}</time>{% else %}Not specified{% endif %}</td>
             <td data-label="Status"><span class="console-status console-status--{{ lab_request.status }}">{{ lab_request.get_status_display }}</span></td>
-            <td data-label="Action"><a class="console-button console-button--secondary" href="{% url 'portal:patient-lab-detail' lab_request.pk %}">Open request</a></td>
+            <td data-label="Action"><div class="clinical-row-actions"><a class="console-button console-button--secondary" href="{% url 'portal:patient-lab-detail' lab_request.pk %}">Open request</a>{% if lab_request.form_url %}<a class="console-button console-button--secondary" data-no-loader href="{{ lab_request.form_url }}?download=1">Download form<span class="sr-only"> for {{ lab_request.panel_name }}</span></a>{% endif %}</div></td>
           </tr>{% empty %}<tr><td class="clinical-table__empty" colspan="5">No blood-test requests match this view. Requests from your doctor will appear here.</td></tr>{% endfor %}</tbody>
         </table></div>
       {% endif %}

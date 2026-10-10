@@ -55,8 +55,8 @@ class ReportingPortalFixture(ReportingFixture):
 
 
 class MetricsPortalTests(ReportingPortalFixture):
-    def test_separate_page_is_staff_only_current_practice_scoped_and_private(self):
-        for actor in (self.super_admin, self.admin, self.doctor):
+    def test_separate_page_is_admin_only_current_practice_scoped_and_private(self):
+        for actor in (self.super_admin, self.admin):
             self.login(actor)
             response = self.get('metrics', start=self.start, end=self.end)
             self.assertEqual(response.status_code, 200)
@@ -66,8 +66,9 @@ class MetricsPortalTests(ReportingPortalFixture):
             self.assertIn('no-store', response['Cache-Control'])
             self.assertNotContains(response, 'name="summary"')
             self.assertNotContains(response, 'name="body"')
-        self.login(self.patient_user)
-        self.assertEqual(self.get('metrics').status_code, 403)
+        for actor in (self.doctor, self.patient_user):
+            self.login(actor)
+            self.assertEqual(self.get('metrics').status_code, 403)
         self.client.logout()
         self.assertEqual(self.get('metrics').status_code, 302)
         self.assertEqual(self.get('metrics-export').status_code, 302)
@@ -165,23 +166,17 @@ class StatementPortalTests(ReportingPortalFixture):
         self.assertFalse(Payment.objects.exists())
         self.assertEqual(len(mail.outbox), 0)
 
-    def test_practice_admin_and_patients_have_no_statement_access_doctor_has_read_only_own(self):
+    def test_only_the_super_admin_opens_statements_not_practice_admins_doctors_or_patients(self):
         own = self.statement()
-        other = self.statement(doctor=self.other_doctor)
-        for actor in (self.admin, self.patient_user):
+        # Insights is hidden from the Clinician role, including the doctor's own statements.
+        for actor in (self.admin, self.doctor, self.patient_user):
             self.login(actor)
             for name, record in (('activity-statements', None), ('activity-statement-detail', own),
                                  ('activity-statement-export', own), ('activity-statement-create', None)):
                 self.assertEqual(self.get(name, record).status_code, 403)
-        self.login(self.doctor)
-        response = self.get('activity-statements')
-        self.assertEqual(list(response.context['page_obj']), [own])
-        self.assertFalse(self.get('activity-statement-detail', own).context['can_edit'])
-        self.assertEqual(self.get('activity-statement-export', own).status_code, 200)
-        self.assertEqual(self.get('activity-statement-detail', other).status_code, 404)
-        self.assertEqual(self.get('activity-statement-export', other).status_code, 404)
-        self.assertEqual(self.get('activity-statement-create').status_code, 403)
-        self.assertEqual(self.client.post(self.url('activity-statement-detail', own), {'action': 'approve'}).status_code, 403)
+            self.assertEqual(self.client.post(self.url('activity-statement-detail', own), {'action': 'approve'}).status_code, 403)
+        self.login(self.super_admin)
+        self.assertEqual(self.get('activity-statement-detail', own).status_code, 200)
 
     def test_foreign_statements_are_not_found_even_for_a_shared_super_admin(self):
         CompanyMembership.objects.create(company=self.beta, user=self.super_admin, role='super_admin')

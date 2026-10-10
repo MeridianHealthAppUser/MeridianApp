@@ -8,6 +8,7 @@ from unittest.mock import patch
 from django.test import Client
 from django.conf import settings
 from django.urls import reverse
+from django.utils import timezone
 
 from care.compounding import mark_compounding_submitted, update_compounding_draft
 from care.models import AuditEvent, AuthorizationReviewReminder, CompoundingRecord, PracticeSettings, TreatmentAuthorization
@@ -124,9 +125,14 @@ class CompoundingPageTests(CompoundingFixture):
     def test_list_counts_and_history_are_real_and_paginated(self):
         for _ in range(23):
             self.record()
+        # Clinicians open their compounding records from My tasks; the list is for Super Admins.
         self.login()
+        self.assertRedirects(self.client.get(self.url('compounding-list')), self.url('desktop-dashboard'),
+                             fetch_redirect_response=False)
+        CompoundingRecord.objects.update(status='ready', reviewed_at=timezone.now(), reviewed_by=self.doctor)
+        self.login(self.super_admin)
         response = self.client.get(self.url('compounding-list'))
-        self.assertEqual(response.context['metrics']['awaiting'], 23)
+        self.assertEqual(response.context['metrics']['ready'], 23)
         self.assertEqual(len(response.context['page_obj']), 20)
         self.assertNotContains(response, 'Email me the batch')
 

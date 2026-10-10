@@ -1,0 +1,19 @@
+{% load workspace_ui %}{% spaceless %}{% if can_edit_summary %}
+  <details class="record-sum-edit" data-inline-editor{% if summary_error_field == field %} open{% endif %}>
+    <summary class="record-sum-edit__value" title="Click to edit">{% if level %}<span class="record-pill record-pill--{% if level == 'flag' %}rose{% else %}amber{% endif %}">{{ display }}</span>{% else %}{{ display }}{% endif %}<span class="sr-only"> (edit {{ label }})</span></summary>
+    <form class="record-sum-edit__form" method="post" action="{% url 'portal:patient-summary-edit' patient.pk %}" data-summary-form>
+      {% csrf_token %}
+      <input type="hidden" name="workflow_context" value="{{ summary_context_token }}">
+      <input type="hidden" name="field" value="{{ field }}">
+      <label class="sr-only" for="record-summary-{{ field }}">{{ label }}</label>
+      {% if kind == 'select' %}
+        <select id="record-summary-{{ field }}" name="value" data-summary-select>{% if not current %}<option value="" selected disabled>Not recorded</option>{% endif %}{% for value, text in choices %}<option value="{{ value }}"{% if value == current %} selected{% endif %}>{{ text }}</option>{% endfor %}</select>
+      {% elif kind == 'number' %}
+        <input id="record-summary-{{ field }}" type="number" name="value" min="40" max="250" step="0.1" inputmode="decimal" value="{{ current|default_if_none:''|kg }}" required>
+      {% else %}
+        <input id="record-summary-{{ field }}" type="text" name="value" maxlength="2000" value="{{ current }}">
+      {% endif %}
+      <span class="record-sum-edit__buttons"><button class="console-button console-button--primary" type="submit">Save</button><a class="console-button console-button--secondary" href="{{ workspace_url }}#record-summary" data-inline-editor-cancel>Cancel</a></span>
+    </form>
+  </details>
+{% elif level %}<span class="record-pill record-pill--{% if level == 'flag' %}rose{% else %}amber{% endif %}">{{ display }}</span>{% else %}{{ display }}{% endif %}{% endspaceless %}

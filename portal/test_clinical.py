@@ -12,9 +12,12 @@ from django.urls import reverse
 from django.utils import timezone
 
 from care.clinical import create_lab_request, review_lab_request, save_consultation, submit_lab_result
-from care.models import AuditEvent, ClinicalEncounter, ClinicalNote, ClinicalTask, LabRequest, LabResult
+from care.models import Appointment, AuditEvent, ClinicalEncounter, ClinicalNote, ClinicalTask, ClinicianAssignment, LabRequest, LabResult
+from care.widgets import floor_quarter_hour
 from practices.models import Company, CompanyMembership, Patient
 from practices.services import ACTIVE_COMPANY_SESSION_KEY, ACTIVE_PATIENT_COMPANY_SESSION_KEY
+
+from .patient_workspace import workspace_url
 
 
 PDF = b'%PDF-1.4\n1 0 obj << /Type /Catalog >> endobj\n%%EOF'
@@ -36,10 +39,15 @@ class ClinicalPortalTests(TestCase):
         for user, role in ((cls.doctor, 'doctor'), (cls.colleague, 'doctor'), (cls.admin, 'practice_admin'), (cls.super_admin, 'super_admin')):
             CompanyMembership.objects.create(company=cls.company, user=user, role=role)
         CompanyMembership.objects.create(company=cls.beta, user=cls.doctor, role='doctor')
-        cls.patient = Patient.objects.create(company=cls.company, user=cls.patient_user, first_name='Alice', last_name='Clinical Patient')
-        cls.other_patient = Patient.objects.create(company=cls.company, user=cls.other_user, first_name='Beth', last_name='Other Patient')
-        cls.beta_patient = Patient.objects.create(company=cls.beta, user=cls.patient_user, first_name='Alice', last_name='Beta Patient')
-        cls.occurred_at = timezone.now().replace(microsecond=0) - timedelta(hours=1)
+        cls.patient = Patient.objects.create(company=cls.company, user=cls.patient_user, first_name='Alice', last_name='Clinical Patient',
+                                             assigned_doctor=cls.doctor)
+        cls.other_patient = Patient.objects.create(company=cls.company, user=cls.other_user, first_name='Beth', last_name='Other Patient',
+                                                   assigned_doctor=cls.doctor)
+        cls.beta_patient = Patient.objects.create(company=cls.beta, user=cls.patient_user, first_name='Alice', last_name='Beta Patient',
+                                                  assigned_doctor=cls.doctor)
+        # The colleague was Alice's clinician before: they read her record but no longer change it.
+        ClinicianAssignment.objects.create(company=cls.company, patient=cls.patient, clinician=cls.colleague, ended_at=timezone.now())
+        cls.occurred_at = floor_quarter_hour(timezone.now() - timedelta(hours=1))
 
     def login(self, user=None, company=None, client=None):
         client = client or self.client
@@ -105,23 +113,24 @@ class ClinicalPortalTests(TestCase):
         other_signed = self.encounter(actor=self.colleague, summary='Shared signed narrative.', sign=True)
         foreign = self.encounter(company=self.beta, patient=self.beta_patient, summary='Foreign practice narrative.', sign=True)
         self.login()
-        response = self.client.get(reverse('portal:clinical-consultations'), {'status': 'all'})
-        self.assertContains(response, reverse('portal:clinical-consultation-detail', args=[own.pk]))
-        self.assertContains(response, reverse('portal:clinical-consultation-detail', args=[other_signed.pk]))
-        self.assertNotContains(response, reverse('portal:clinical-consultation-detail', args=[other_draft.pk]))
-        self.assertNotContains(response, reverse('portal:clinical-consultation-detail', args=[foreign.pk]))
         self.assertEqual(self.client.get(reverse('portal:clinical-consultation-detail', args=[other_draft.pk])).status_code, 404)
         self.assertEqual(self.client.get(reverse('portal:clinical-consultation-detail', args=[foreign.pk])).status_code, 404)
+        # The practice-wide list (Super Admins; clinicians work from the record) shows signed notes, never drafts.
         self.login(self.super_admin)
+        response = self.client.get(reverse('portal:clinical-consultations'), {'status': 'all'})
+        self.assertContains(response, reverse('portal:clinical-consultation-detail', args=[other_signed.pk]))
+        for hidden in (own, other_draft, foreign):
+            self.assertNotContains(response, reverse('portal:clinical-consultation-detail', args=[hidden.pk]))
         self.assertEqual(self.client.get(reverse('portal:clinical-consultation-detail', args=[own.pk])).status_code, 404)
         self.assertContains(self.client.get(reverse('portal:clinical-consultation-detail', args=[other_signed.pk])), 'Shared signed narrative.')
 
     def test_read_permission_never_grants_other_doctors_or_super_admin_edit_permission(self):
         encounter = self.encounter(sign=True)
-        for actor in (self.colleague, self.super_admin):
+        for actor, status in ((self.colleague, 302), (self.super_admin, 403)):
+            # A past clinician is sent back to the record they can only read; a Super Admin is refused.
             self.login(actor)
             response = self.client.post(reverse('portal:clinical-consultation-detail', args=[encounter.pk]), self.consultation_data(self.token(record=encounter)))
-            self.assertEqual(response.status_code, 403)
+            self.assertEqual(response.status_code, status)
         encounter.refresh_from_db()
         self.assertEqual(encounter.clinical_summary, 'Author-only draft narrative.')
 
@@ -200,8 +209,8 @@ class ClinicalPortalTests(TestCase):
 
     def test_clinical_lists_are_paginated_and_filters_do_not_broaden_scope(self):
         for number in range(21):
-            self.encounter(summary=f'Paged consultation {number}')
-        self.login()
+            self.encounter(summary=f'Paged consultation {number}', sign=True)
+        self.login(self.super_admin)
         first = self.client.get(reverse('portal:clinical-consultations'), {'status': 'all'})
         second = self.client.get(reverse('portal:clinical-consultations'), {'status': 'all', 'page': 2})
         self.assertEqual(len(first.context['page_obj']), 20)
@@ -210,6 +219,93 @@ class ClinicalPortalTests(TestCase):
         self.assertEqual(list(invalid.context['page_obj']), [])
         foreign_filter = self.client.get(reverse('portal:clinical-consultations'), {'patient': self.beta_patient.pk})
         self.assertEqual(list(foreign_filter.context['page_obj']), [])
+
+    def test_clinicians_are_sent_from_the_practice_wide_lists_to_the_overview_with_a_reason(self):
+        self.login()
+        for name, reason in (('clinical-consultations', 'Consultation notes are on each patient’s record'),
+                             ('clinical-labs', 'Blood tests are on each patient’s record'),
+                             ('treatment-authorisations', 'Treatment authorisations are on each patient’s record'),
+                             ('compounding-list', 'Your compounding records open from My tasks.')):
+            with self.subTest(page=name):
+                response = self.client.get(reverse(f'portal:{name}'), follow=True)
+                self.assertRedirects(response, reverse('portal:desktop-dashboard'))
+                self.assertContains(response, 'class="flash-message toast error"')
+                self.assertContains(response, reason)
+        self.login(self.super_admin)
+        for name in ('clinical-consultations', 'clinical-labs', 'treatment-authorisations', 'compounding-list'):
+            with self.subTest(page=name, role='super_admin'):
+                self.assertEqual(self.client.get(reverse(f'portal:{name}')).status_code, 200)
+
+    def test_a_clinician_never_assigned_to_the_patient_is_sent_to_all_patients(self):
+        stranger = get_user_model().objects.create_user(email='clinical-pages-stranger@example.test')
+        CompanyMembership.objects.create(company=self.company, user=stranger, role='doctor', clinician_type='doctor')
+        signed = self.encounter(sign=True)
+        lab = self.uploaded_lab()
+        self.login(stranger)
+        for url in (reverse('portal:patient-detail', args=[self.patient.pk]),
+                    reverse('portal:clinical-consultation-detail', args=[signed.pk]),
+                    reverse('portal:clinical-lab-detail', args=[lab.pk]),
+                    reverse('portal:clinical-lab-result-download', args=[lab.pk]),
+                    reverse('portal:clinical-consultation-create', args=[self.patient.pk])):
+            with self.subTest(url=url):
+                response = self.client.get(url, follow=True)
+                self.assertRedirects(response, reverse('portal:patient-list'))
+                self.assertContains(response, 'You can only open the records of patients who are, or were, assigned to you.')
+
+    def test_a_past_clinician_reads_the_record_but_cannot_change_it(self):
+        signed = self.encounter(sign=True)
+        self.login(self.colleague)
+        record = self.client.get(reverse('portal:patient-detail', args=[self.patient.pk]))
+        self.assertContains(record, 'You looked after Alice before, so you can read this record but not change it.')
+        self.assertContains(self.client.get(reverse('portal:clinical-consultation-detail', args=[signed.pk])), signed.clinical_summary)
+        self.assertNotContains(self.client.get(reverse('portal:patient-detail', args=[self.patient.pk]), {'tab': 'consultations'}),
+                               'New consultation note')
+        created = self.client.post(reverse('portal:patient-note-create', args=[self.patient.pk]),
+                                   {'note_type': 'general', 'body': 'Not mine to add'}, follow=True)
+        self.assertRedirects(created, workspace_url(self.patient))
+        self.assertContains(created, 'Only Alice’s current clinician can change this record. You can still read it.')
+
+    def test_a_clinician_covering_an_appointment_writes_notes_but_changes_nothing_else(self):
+        cover = get_user_model().objects.create_user(email='clinical-pages-cover@example.test', first_name='Cee', last_name='Cover')
+        CompanyMembership.objects.create(company=self.company, user=cover, role='doctor', clinician_type='doctor')
+        appointment = Appointment.objects.create(company=self.company, patient=self.patient, clinician=cover,
+                                                 starts_at=timezone.now() + timedelta(days=1), duration_minutes=30)
+        self.login(cover)
+        record = reverse('portal:patient-detail', args=[self.patient.pk])
+        page = self.client.get(record)
+        self.assertContains(page, f'You’re covering Alice’s appointment on {timezone.localtime(appointment.starts_at):%-d %b}')
+        self.assertNotContains(page, 'Click an underlined value to edit')
+        self.assertContains(self.client.get(record, {'tab': 'consultations'}), 'New consultation note')
+        self.assertEqual(self.client.get(reverse('portal:clinical-consultation-create', args=[self.patient.pk])).status_code, 200)
+        saved = self.client.post(reverse('portal:patient-note-create', args=[self.patient.pk]),
+                                 {'note_type': 'phone', 'body': 'Covered the review call.'})
+        self.assertEqual(saved.status_code, 302)
+        self.assertTrue(ClinicalNote.objects.filter(author=cover, patient=self.patient, body='Covered the review call.').exists())
+        # Nothing else: a task, for example, is the patient's own clinician's to add.
+        refused = self.client.post(reverse('portal:patient-task-create', args=[self.patient.pk]), {'title': 'Not mine'}, follow=True)
+        self.assertRedirects(refused, workspace_url(self.patient))
+        self.assertContains(refused, 'As cover for Alice’s appointment you can write notes')
+        # Two weeks after the appointment the cover ends and the record is read-only.
+        Appointment.objects.filter(pk=appointment.pk).update(starts_at=timezone.now() - timedelta(days=15))
+        self.assertContains(self.client.get(record), 'You looked after Alice before, so you can read this record but not change it.')
+        late = self.client.post(reverse('portal:patient-note-create', args=[self.patient.pk]), {'note_type': 'phone', 'body': 'Late'}, follow=True)
+        self.assertContains(late, 'Only Alice’s current clinician can change this record.')
+        # A cancelled booking gives no access at all.
+        Appointment.objects.filter(pk=appointment.pk).update(status=Appointment.Status.CANCELLED)
+        self.assertRedirects(self.client.get(record), reverse('portal:patient-list'), fetch_redirect_response=False)
+
+    def test_a_clinicians_patient_list_marks_past_and_covered_patients(self):
+        Appointment.objects.create(company=self.company, patient=self.other_patient, clinician=self.colleague,
+                                   starts_at=timezone.now() + timedelta(days=2), duration_minutes=30)
+        self.login(self.colleague)
+        listed = {patient.first_name: patient.record_access_label
+                  for patient in self.client.get(reverse('portal:patient-list')).context['patients']}
+        self.assertEqual(listed, {'Alice': 'Past patient', 'Beth': 'Covering'})
+        self.login()
+        page = self.client.get(reverse('portal:patient-list'))
+        self.assertEqual({patient.first_name: patient.record_access_label for patient in page.context['patients']},
+                         {'Alice': '', 'Beth': ''})
+        self.assertNotContains(page, 'console-status--past')
 
     def test_lab_create_uses_patient_practice_and_duplicate_post_is_idempotent(self):
         self.login()
@@ -259,7 +355,7 @@ class ClinicalPortalTests(TestCase):
         self.login(self.colleague)
         url = reverse('portal:clinical-lab-detail', args=[lab.pk])
         response = self.client.post(url, {'clinical_context': self.token(kind='lab', record=lab), 'action': 'review', 'review_note': 'Not my review'})
-        self.assertEqual(response.status_code, 403)
+        self.assertRedirects(response, workspace_url(self.patient), fetch_redirect_response=False)
         self.login()
         token = self.client.get(url).context['clinical_context']
         response = self.client.post(url, {'clinical_context': token, 'action': 'review', 'review_note': 'Private interpretation not for patient display.'})

@@ -1,0 +1,92 @@
+{% comment %}
+  An open conversation with a patient, on the record's Messages tab or the Patient messages tab.
+  The parent passes `thread`, `patient`, `message_form`, `new_url`, `conversation_return_to`
+  ('record' or 'patient_messages') and `read_state_fields`, and `open_record_url` on Patient messages.
+  `conversation_notes` (clinical staff only) lists the patient's notes under the reply box.
+{% endcomment %}
+<div class="record-messages__pane-head">
+  <h3>{{ thread.subject|default:"Patient message" }}</h3>
+  <span class="record-messages__tools">
+    {% if open_record_url %}<a class="console-button console-button--secondary record-messages__tool" href="{{ open_record_url }}">Open record<span class="sr-only"> for {{ patient }}</span></a>{% endif %}
+    {% if thread.has_others_message %}
+      <form class="record-messages__read" method="post" action="{% url 'portal:staff-thread-read-state' thread.pk %}">
+        {% csrf_token %}{% for name, value in read_state_fields.items %}<input type="hidden" name="{{ name }}" value="{{ value }}">{% endfor %}
+        <button class="console-button console-button--secondary record-messages__tool" type="submit" name="state" value="unread">{% include 'portal/includes/read_state_icon.html' with name='unread' %}Mark as unread</button>
+      </form>
+    {% endif %}
+    {% url 'portal:conversation-manage' thread.pk as manage_url %}
+    <a class="console-button console-button--secondary record-messages__tool" href="{{ manage_url }}{% if conversation_return_to == 'record' %}?from=record{% endif %}"{% if thread.manage_form %} data-modal-open="conversation-manage" aria-haspopup="dialog"{% endif %}>Message action</a>
+  </span>
+</div>
+{% if thread.manage_form %}
+  {# Message action: add a clinician, close or reopen, in a modal. It posts to the action's own page, which goes back to this conversation. #}
+  <dialog class="app-dialog" id="conversation-manage" aria-labelledby="conversation-manage-title">
+    <div class="app-dialog__body">
+      <h2 id="conversation-manage-title">Message action</h2>
+      <p class="app-dialog__sub">In this conversation: {{ patient }}{% for row in thread.participant_rows %}, {{ row.user.full_name }}{% endfor %}. Only these people can read it. Closing keeps every message; resolve pending appointment suggestions first.</p>
+      <form class="console-form" method="post" action="{{ manage_url }}{% if conversation_return_to == 'record' %}?from=record{% endif %}" data-conversation-manage>
+        {% csrf_token %}<input type="hidden" name="workflow_context" value="{{ thread.manage_context }}">
+        {% for field in thread.manage_form %}{% if field.name == 'doctor' %}<div data-shows-for-action="handover">{% include 'portal/includes/form_field.html' %}</div>{% else %}{% include 'portal/includes/form_field.html' %}{% endif %}{% endfor %}
+        <div class="app-dialog__actions"><button class="console-button console-button--secondary" type="button" data-dialog-close>Cancel</button><button class="console-button console-button--primary" type="submit">Apply conversation action</button></div>
+      </form>
+    </div>
+  </dialog>
+{% endif %}
+{# Who's in it as tags (Patient messages; the record's own tab needs no patient tag), then who added whom. #}
+{% if open_record_url and thread.people_tags %}<p class="record-messages__people record-messages__tags person-tags"><span class="sr-only">With </span>{% for tag in thread.people_tags %}{% include 'portal/includes/person_tag.html' %}{% endfor %}</p>{% endif %}
+{% if thread.added_rows %}<p class="record-messages__people">{% for row in thread.added_rows %}{% if not forloop.first %} &middot; {% endif %}{% if row.added_by_id == user.pk %}You{% else %}{{ row.added_by.full_name }}{% endif %} added {{ row.user.full_name }} {{ row.created_at|date:'j M' }}{% endfor %}</p>{% endif %}
+{% load conversation_ui %}{% patient_thread_messages thread user as thread_messages %}
+<ol class="record-conversation" data-record-conversation tabindex="0" aria-label="Messages in {{ thread.subject }}">
+  {% for message in thread_messages %}
+    {# Yours on the right in white; everyone else on the left in their own colour. #}
+    <li class="record-bubble{% if message.is_mine %} record-bubble--mine{% else %} message-tone--{{ message.tone }}{% endif %}">
+      <p>{{ message.body|linebreaksbr }}</p>
+      <span class="record-bubble__meta">{% if message.is_mine %}You{% elif message.is_from_patient %}{{ patient }}{% elif message.sender %}{{ message.sender.full_name }}{% else %}Care team{% endif %} &middot; <time datetime="{{ message.created_at|date:'c' }}">{{ message.created_at|message_time }}</time></span>
+    </li>
+  {% empty %}
+    <li class="record-conversation__empty">No messages in this conversation yet.</li>
+  {% endfor %}
+</ol>
+
+{# Appointment suggestions take room, so they show only once this conversation has one to read or answer, #}
+{# or when the doctor came from the calendar to offer a new time for an appointment. #}
+{% if can_propose_appointments %}{% if thread.appointment_proposals_list or thread.proposal_form %}{% include 'portal/includes/appointment_proposals.html' with thread=thread %}{% endif %}{% endif %}
+
+{% if not patient.user_id %}
+  <p class="record-messages__note">{{ patient.first_name }} doesn’t have a login yet, so they can’t read messages.</p>
+{% elif not thread.is_closed %}
+  <form class="record-reply" method="post" action="{% url 'portal:staff-message-create' thread.pk %}" data-record-reply>
+    {% csrf_token %}
+    <input type="hidden" name="return_to" value="{{ conversation_return_to }}">{% if conversation_return_to == 'patient_messages' %}<input type="hidden" name="status" value="{{ read_state_fields.status }}"><input type="hidden" name="patients" value="{{ read_state_fields.patients }}"><input type="hidden" name="q" value="{{ read_state_fields.q }}">{% endif %}
+    {% if message_form.errors %}<p class="record-error" role="alert">{% for errors in message_form.errors.values %}{{ errors|join:' ' }} {% endfor %}</p>{% endif %}
+    <label class="sr-only" for="record-reply-body">Reply to {{ patient.first_name }}</label>
+    <textarea id="record-reply-body" name="body" rows="1" maxlength="5000" required placeholder="Reply to {{ patient.first_name }}…">{{ message_form.body.value|default:'' }}</textarea>
+    <button class="console-button console-button--primary" type="submit">Send reply</button>
+  </form>
+{% else %}
+  <p class="record-messages__note">This conversation is closed.{% if new_url %} <a href="{{ new_url }}">Start a new one</a>.{% endif %}</p>
+{% endif %}
+
+{% if conversation_notes %}
+  {# The patient's notes, to read while replying without leaving the conversation. Closed until opened. #}
+  <details class="conversation-notes">
+    <summary><span class="conversation-notes__title">Patient notes</span><span class="conversation-notes__count">{{ conversation_notes.entries|length }}{% if conversation_notes.more %}+{% endif %}</span><span class="conversation-notes__hint">Consult notes and general notes, newest first</span></summary>
+    {% if conversation_notes.entries %}
+      <ol class="conversation-notes__list" tabindex="0" aria-label="Notes for {{ patient }}">
+        {% for note in conversation_notes.entries %}
+          <li class="conversation-notes__note">
+            <div class="conversation-notes__head">
+              <p class="conversation-notes__meta"><strong>{{ note.label }}</strong> &middot; <time datetime="{{ note.at|date:'c' }}">{{ note.at|date:'j M Y, H:i' }}</time>{% if note.by %} &middot; {{ note.by }}{% endif %}</p>
+              {% if note.private %}<span class="console-status note-private" title="Only visible to you">Private</span>{% endif %}
+            </div>
+            <p class="conversation-notes__text">{{ note.text|default:'No summary recorded.'|linebreaksbr }}</p>
+            {% if note.url %}<div class="note-actions"><a class="console-button console-button--secondary note-actions__button" href="{{ note.url }}">Open consultation</a></div>{% endif %}
+          </li>
+        {% endfor %}
+      </ol>
+    {% else %}
+      <p class="conversation-notes__empty">No notes for {{ patient.first_name }} yet.</p>
+    {% endif %}
+    <p class="conversation-notes__foot">{% if conversation_notes.more %}Showing the latest 100. {% endif %}On {{ patient.first_name }}’s record: <a href="{{ conversation_notes.notes_url }}">Notes</a> &middot; <a href="{{ conversation_notes.consultations_url }}">Consultations</a></p>
+  </details>
+{% endif %}

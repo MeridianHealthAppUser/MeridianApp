@@ -3,14 +3,19 @@
 A conversation is private to the patient and the staff members taking part in
 it. Nobody else in the practice, including administrators and Super Admins,
 can list, read or reply to it. Clinicians join only when a participant adds them.
+Each staff member keeps their own read position, so a group shows unread per person.
 """
 
+from datetime import timedelta
+
+from django.contrib.auth import get_user_model
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
+from django.db.models import F, Max, OuterRef, Q, Subquery
 from django.utils import timezone
 
 from practices.models import CompanyMembership
-from .models import Appointment, ClinicianAssignment, MessageThread, MessageThreadParticipant
+from .models import ClinicianAssignment, MessageThread, MessageThreadParticipant, PatientMessage
 from .patient_assignment import active_doctors
 from .services import post_patient_message, record_audit
 
@@ -22,35 +27,135 @@ def staff_threads(company, user):
     )
 
 
+def unread_for_staff(company, user):
+    """Messages someone else sent, the patient or a colleague, in the staff member's conversations since they
+    last read each one. Reading is per person: one clinician opening a conversation leaves it unread for the others.
+
+    A message whose sender's account is gone counts as someone else's.
+    """
+    last_read = MessageThreadParticipant.objects.filter(thread_id=OuterRef('thread_id'), user_id=user.pk).values('last_read_at')[:1]
+    return PatientMessage.objects.for_company(company).filter(
+        thread__in=staff_threads(company, user),
+    ).exclude(sender_id=user.pk).annotate(reader_last_read=Subquery(last_read)).filter(
+        Q(reader_last_read__isnull=True) | Q(created_at__gt=F('reader_last_read')),
+    )
+
+
+def mark_read_by_staff(thread, user, message_ids=None):
+    """Reading a conversation marks it read for this staff member only; the other people in it keep their own.
+
+    With message_ids (the ones on screen), it is read up to the latest of them; otherwise up to now. The read
+    position never moves back. The patient's messages also get the practice's receipt the first time anyone
+    opens them; that is not anyone's unread state, and the patient's own unread state is untouched.
+    Returns how many messages were unread for this person (or newly given a receipt), so callers know if
+    anything changed.
+    """
+    now = timezone.now()
+    if message_ids is not None:
+        message_ids = list(message_ids)
+        up_to = PatientMessage.objects.filter(
+            company_id=thread.company_id, thread_id=thread.pk, pk__in=message_ids,
+        ).aggregate(latest=Max('created_at'))['latest']
+    else:
+        up_to = now
+    unread = 0
+    link = MessageThreadParticipant.objects.filter(thread_id=thread.pk, user_id=user.pk).values('pk', 'last_read_at').first()
+    if link is not None and up_to is not None:
+        newly_read = PatientMessage.objects.filter(
+            company_id=thread.company_id, thread_id=thread.pk, created_at__lte=up_to,
+        ).exclude(sender_id=user.pk)
+        if link['last_read_at'] is not None:
+            newly_read = newly_read.filter(created_at__gt=link['last_read_at'])
+        unread = newly_read.count()
+        MessageThreadParticipant.objects.filter(pk=link['pk']).filter(
+            Q(last_read_at__isnull=True) | Q(last_read_at__lt=up_to),
+        ).update(last_read_at=up_to)
+    receipts = 0
+    if thread.patient.user_id:
+        unreceipted = PatientMessage.objects.filter(
+            company_id=thread.company_id, thread_id=thread.pk, sender_id=thread.patient.user_id, staff_read_at__isnull=True,
+        )
+        if message_ids is not None:
+            unreceipted = unreceipted.filter(pk__in=message_ids)
+        # read_at on a patient's message has always meant "seen by staff"; it is kept in step.
+        unreceipted.filter(read_at__isnull=True).update(read_at=now)
+        receipts = unreceipted.update(staff_read_at=now, staff_read_by=user)
+    return max(unread, receipts)
+
+
+def mark_unread_for_staff(thread, user):
+    """Mark as unread, for this staff member only: the latest message someone else sent becomes unread again.
+
+    Others in the conversation, and the practice's receipts, are untouched. Messages already unread stay so.
+    Returns 0 when nobody else has written in it.
+    """
+    latest = PatientMessage.objects.filter(
+        company_id=thread.company_id, thread_id=thread.pk,
+    ).exclude(sender_id=user.pk).order_by('-created_at', '-pk').values_list('created_at', flat=True).first()
+    if latest is None:
+        return 0
+    position = latest - timedelta(microseconds=1)
+    link = MessageThreadParticipant.objects.filter(thread_id=thread.pk, user_id=user.pk)
+    link.filter(last_read_at__gt=position).update(last_read_at=position)
+    return 1 if link.exists() else 0
+
+
+def set_staff_read_state(*, thread, user, read, request=None):
+    """Mark as read reads the whole conversation; Mark as unread makes the latest message from someone else
+    unread. Both are for this staff member only."""
+    require_participant(thread, user)
+    changed = mark_read_by_staff(thread, user) if read else mark_unread_for_staff(thread, user)
+    if changed:
+        record_audit(company=thread.company, actor=user, patient=thread.patient, target=thread, request=request,
+                     action='message.marked_read' if read else 'message.marked_unread')
+    return changed
+
+
 def is_participant(thread, user):
     return MessageThreadParticipant.objects.filter(thread_id=thread.pk, user_id=user.pk).exists()
 
 
 def add_participant(thread, user, added_by=None):
+    """Someone new in a conversation starts with no read position, so everything already in it is unread for
+    them, as for someone added to a team conversation."""
     link, _ = MessageThreadParticipant.objects.get_or_create(
         company_id=thread.company_id, thread=thread, user=user, defaults={'added_by': added_by},
     )
     return link
 
 
+def practice_administrators(company):
+    return get_user_model().objects.filter(
+        is_active=True, company_memberships__company=company, company_memberships__is_active=True,
+        company_memberships__role=CompanyMembership.Role.PRACTICE_ADMIN,
+    ).distinct().order_by('first_name', 'last_name', 'email')
+
+
 def recipient_choices(patient):
-    """The assigned clinician first, then past clinicians and anyone the patient is booked with."""
+    """Who a patient can write to: the assigned clinician first, then clinicians assigned to them before, then the
+    practice administrators. Never other clinicians in the practice.
+
+    Each person carries recipient_note: "your clinician", "practice administrator" or nothing.
+    """
     past = ClinicianAssignment.objects.for_company(patient.company).filter(patient=patient).values_list('clinician_id', flat=True)
-    booked = Appointment.objects.for_company(patient.company).filter(
-        patient=patient, status=Appointment.Status.BOOKED, starts_at__gte=timezone.now(),
-    ).values_list('clinician_id', flat=True)
-    ids = {*past, *booked, patient.assigned_doctor_id} - {None}
+    ids = {*past, patient.assigned_doctor_id} - {None}
     clinicians = list(active_doctors(patient.company).filter(pk__in=ids))
     clinicians.sort(key=lambda user: user.pk != patient.assigned_doctor_id)
-    return clinicians
+    for clinician in clinicians:
+        clinician.recipient_note = 'your clinician' if clinician.pk == patient.assigned_doctor_id else ''
+    chosen = {clinician.pk for clinician in clinicians}
+    administrators = [user for user in practice_administrators(patient.company) if user.pk not in chosen]
+    for administrator in administrators:
+        administrator.recipient_note = 'practice administrator'
+    return clinicians + administrators
 
 
 @transaction.atomic
 def start_conversation(*, patient, opened_by, subject, body, recipient=None, request=None):
-    """Staff open a conversation with themselves in it; a patient addresses one of their clinicians."""
+    """Staff open a conversation with themselves in it; a patient addresses a clinician or practice administrator."""
     if opened_by.pk == patient.user_id:
-        if recipient is None or recipient.pk not in {clinician.pk for clinician in recipient_choices(patient)}:
-            raise ValidationError('Choose one of your clinicians to message.')
+        if recipient is None or recipient.pk not in {person.pk for person in recipient_choices(patient)}:
+            raise ValidationError('Choose someone from the list to message.')
         participant = recipient
     else:
         participant = opened_by

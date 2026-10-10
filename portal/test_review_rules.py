@@ -12,15 +12,16 @@ class ReviewRulePageTests(TestCase):
     setUpTestData = classmethod(treatment_fixtures.TreatmentPageTests.setUpTestData.__func__)
     login = treatment_fixtures.TreatmentPageTests.login
 
-    def test_review_page_access_and_doctor_read_only(self):
+    def test_review_page_is_for_the_super_admin_only(self):
         url = reverse('portal:treatment-review-rules')
         self.assertEqual(self.client.get(url).status_code, 302)
-        self.login(self.admin)
-        self.assertEqual(self.client.get(url).status_code, 403)
-        self.login(self.doctor)
+        for actor in (self.admin, self.doctor):
+            self.login(actor)
+            self.assertEqual(self.client.get(url).status_code, 403)
+            self.assertEqual(self.client.get(reverse('portal:treatment-review-rule-create')).status_code, 403)
+            self.assertEqual(self.client.post(reverse('portal:treatment-review-default')).status_code, 403)
+        self.login(self.super_admin)
         self.assertContains(self.client.get(url), 'Review planning rules')
-        self.assertEqual(self.client.get(reverse('portal:treatment-review-rule-create')).status_code, 403)
-        self.assertEqual(self.client.post(reverse('portal:treatment-review-default')).status_code, 403)
 
     def test_super_admin_create_edit_with_signed_context_and_practice_isolation(self):
         self.login(self.super_admin)
@@ -38,9 +39,11 @@ class ReviewRulePageTests(TestCase):
         detail = reverse('portal:treatment-review-rule-detail', args=[rule.pk])
         self.assertEqual(self.client.get(detail).status_code, 200)
         self.login(self.doctor)
-        self.assertContains(self.client.get(detail), 'Read-only')
+        self.assertEqual(self.client.get(detail).status_code, 403)
         self.assertEqual(self.client.post(detail, values).status_code, 403)
-        self.login(self.doctor, self.beta)
+        from practices.models import CompanyMembership
+        CompanyMembership.objects.create(company=self.beta, user=self.super_admin, role='super_admin')
+        self.login(self.super_admin, self.beta)
         self.assertEqual(self.client.get(detail).status_code, 404)
 
     def test_review_defaults_require_signed_context(self):

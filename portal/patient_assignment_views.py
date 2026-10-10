@@ -7,6 +7,7 @@ from django.views import View
 
 from care.patient_assignment import active_doctors, assign_doctor, can_assign_doctor
 from practices.models import Patient
+from .record_access import require_record_change
 from .views import StaffCompanyRequiredMixin
 from .workflow_context import validate_workflow_context
 
@@ -26,6 +27,7 @@ class PatientDoctorAssignmentView(LoginRequiredMixin, StaffCompanyRequiredMixin,
     def post(self, request, patient_pk):
         patient = get_object_or_404(Patient.objects.for_company(self.company).select_related('user', 'assigned_doctor'),
                                     pk=patient_pk, is_active=True)
+        require_record_change(self.membership, request.user, patient)
         if not can_assign_doctor(self.membership):
             raise PermissionDenied('Only an active member of the care team can change the assigned clinician.')
         form = AssignedDoctorForm(request.POST, company=self.company)

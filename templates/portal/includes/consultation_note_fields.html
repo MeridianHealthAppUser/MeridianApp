@@ -1,0 +1,6 @@
+{# The new or draft consultation note's fields, on its own page and in the appointment page's modal. #}
+{{ form.non_field_errors }}
+<div class="console-form__field"><label for="{{ form.appointment.id_for_label }}">{{ form.appointment.label }}</label>{{ form.appointment }}{{ form.appointment.errors }}{% if form.appointment.help_text %}<span class="helptext">{{ form.appointment.help_text }}</span>{% endif %}</div>
+<div class="console-form__field"><label for="{{ form.occurred_at.id_for_label }}">Consultation date and time (SAST)</label>{{ form.occurred_at }}{{ form.occurred_at.errors }}</div>
+<div class="console-form__field"><label for="{{ form.summary.id_for_label }}">{{ form.summary.label }}</label>{{ form.summary }}{{ form.summary.errors }}</div>
+{% if can_sign %}<div class="clinical-signature"><label class="clinical-signature-check" for="{{ form.confirm_signature.id_for_label }}">{{ form.confirm_signature }}<span>I confirm this is the final note.</span></label>{{ form.confirm_signature.errors }}<p>Signing locks this consultation note. Check the patient, appointment and wording before signing. You do not need to confirm this to save a draft.</p></div>{% endif %}

@@ -283,6 +283,9 @@ class VideoHTTPTests(AppointmentLifecycleFixture):
         self.assertNotContains(response, self.url())
         self.assertNotContains(response, 'https://example.test/old-external-call')
         self.assertContains(response, 'Join window:')
+        # In the list it's behind an (i) that shows it on hover, or on a tap.
+        self.assertContains(response, f'<span class="info-tip" data-info-tip><button class="info-tip__button" type="button" aria-label="When the video room opens" aria-describedby="video-join-{self.booking.pk}">i</button><span class="info-tip__bubble" id="video-join-{self.booking.pk}" role="tooltip">')
+        self.assertContains(response, 'js/info_tips.js')
 
     def test_new_booking_form_does_not_ask_for_external_meeting_url(self):
         self.login()

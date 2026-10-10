@@ -5,7 +5,6 @@ from urllib.parse import urlencode
 
 from django import forms
 from django.contrib import messages
-from django.contrib.auth import get_user_model
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.exceptions import ValidationError
 from django.core.paginator import Paginator
@@ -22,10 +21,12 @@ from care.forms import AppointmentProposalForm, PatientMessageForm, PatientThrea
 from care.models import (
     Appointment, ConsentRecord, MessageThread, PatientMessage, PracticeSettings, WeightEntry,
 )
+from care.messaging import recipient_choices
 from care.services import record_audit
 from practices.models import Patient
 from video.access import attach_video_join
 
+from .inbox import latest_from, search_text, search_threads
 from .patient_context import make_patient_context, validate_patient_context
 from .video_links import safe_video_link
 from .views import PatientPortalRequiredMixin, PatientThreadCreateView, _attach_appointment_proposals
@@ -46,6 +47,8 @@ class MessageFilterForm(forms.Form):
 class PatientContactForm(forms.Form):
     # Deliberately not a broad profile ModelForm: identity, access and care-team
     # fields are not editable through a patient's contact-details form.
+    # The title is printed on PathCare blood test forms; the care team can set it too.
+    title = forms.ChoiceField(choices=[('', 'No title'), *Patient.Title.choices], required=False)
     phone = forms.CharField(label='Contact number', max_length=32, required=False,
                             widget=forms.TextInput(attrs={'type': 'tel', 'autocomplete': 'tel'}))
     city = forms.CharField(max_length=120, required=False,
@@ -162,6 +165,10 @@ def patient_appointments_context(request, company, patient):
         eligible_ids |= set(proposal_form.fields['appointment'].queryset.filter(
             pk__in=[appointment.pk for appointment in context['appointments']],
         ).values_list('pk', flat=True))
+    # Without a conversation to suggest a time in, the patient messages the appointment's clinician, or
+    # their assigned clinician when that clinician was never assigned to them and so can't be chosen.
+    recipients = recipient_choices(patient)
+    recipient_ids = {clinician.pk for clinician in recipients}
     for appointment in context['appointments']:
         # Never turn an untrusted imported link into an executable URL.
         appointment.video_link = safe_video_link(appointment.video_link)
@@ -175,10 +182,11 @@ def patient_appointments_context(request, company, patient):
                     f'#appointment-proposals-{thread.pk}'
                 )
                 appointment.proposal_label = 'Suggest a new time' if can_reschedule else 'Ask to rebook'
-            elif not thread:
-                query = urlencode({'compose': 1, 'to': appointment.clinician_id, 'subject': 'My appointment'})
+            elif not thread and recipients:
+                to = appointment.clinician if appointment.clinician_id in recipient_ids else recipients[0]
+                query = urlencode({'compose': 1, 'to': to.pk, 'subject': 'My appointment'})
                 appointment.proposal_url = f'{reverse("portal:patient-messages")}?{query}#patient-conversation'
-                appointment.proposal_label = f'Message {appointment.clinician.full_name}'
+                appointment.proposal_label = f'Message {to.full_name}'
     return context
 
 
@@ -218,6 +226,7 @@ def patient_messages_context(request, company, patient, *, selected_thread_id=No
     all_threads = MessageThread.objects.for_company(company).filter(patient=patient).annotate(
         latest_body=Subquery(latest.values('body')[:1]),
         latest_sender_id=Subquery(latest.values('sender_id')[:1]),
+        latest_sender_first_name=Subquery(latest.values('sender__first_name')[:1]),
         last_activity=Coalesce('last_message_at', 'created_at'),
         unread_count=Count('messages', filter=(
             Q(messages__company=company, messages__read_at__isnull=True) & ~Q(messages__sender=request.user)
@@ -229,19 +238,17 @@ def patient_messages_context(request, company, patient, *, selected_thread_id=No
         filtered = filtered.filter(is_closed=status == 'closed')
     elif status is None:
         filtered = filtered.none()
+    # A search narrows the list; the open conversation stays open even when it doesn't match.
+    search = search_text(request.GET.get('q'))
+    if search:
+        filtered = search_threads(filtered, company, search)
     context.update(_paginate(request, filtered))
     threads = list(context['page_obj'].object_list)
-    # Who wrote the latest message in each listed conversation, fetched once for the page.
-    sender_ids = {thread.latest_sender_id for thread in threads if thread.latest_sender_id}
-    senders = {person.pk: person.full_name for person in get_user_model().objects.filter(pk__in=sender_ids)}
     for thread in threads:
-        if thread.latest_body is None:
-            thread.latest_sender_name = ''
-        elif thread.latest_sender_id == request.user.pk:
-            thread.latest_sender_name = 'You'
-        else:
-            thread.latest_sender_name = senders.get(thread.latest_sender_id) or 'Meridian care team'
-        thread.people = ', '.join(person.full_name for person in thread.participants.all())
+        people = list(thread.participants.all())
+        thread.people = ', '.join(person.full_name for person in people)
+        # A clinician is named before their message only when more than one is in the conversation.
+        thread.latest_from = latest_from(thread, request.user, unnamed={people[0].pk} if len(people) == 1 else ())
     requested = selected_thread_id if selected_thread_id is not None else request.GET.get('thread')
     # A new message opens in the conversation pane. Links elsewhere in the
     # portal can suggest a subject, which the patient can change before sending.
@@ -254,6 +261,7 @@ def patient_messages_context(request, company, patient, *, selected_thread_id=No
     settings_row = PracticeSettings.objects.for_company(company).first()
     context.update(
         threads=threads, filter_form=form, selected_thread=selected,
+        search=search, search_hidden={'status': status or 'all'}, search_action=reverse('portal:patient-messages'),
         message_threads=[selected] if selected else [],
         message_form=PatientMessageForm(auto_id='patient_reply_%s'),
         thread_form=PatientThreadForm(auto_id='thread_%s', patient=patient, initial=initial or None),
@@ -301,7 +309,7 @@ def patient_messages_context(request, company, patient, *, selected_thread_id=No
 def patient_account_context(request, company, patient, **overrides):
     context = patient_page_context(request, company, patient, 'account', 'Account settings')
     context.update(
-        contact_form=PatientContactForm(initial={'phone': patient.phone, 'city': patient.city}),
+        contact_form=PatientContactForm(initial={'title': patient.title, 'phone': patient.phone, 'city': patient.city}),
         details_change_url=f"{reverse('portal:patient-messages')}?{urlencode({'compose': 1, 'subject': 'Change to my personal details'})}#patient-conversation",
         consents=ConsentRecord.objects.for_company(company).filter(patient=patient).order_by('-created_at', '-pk'),
     )
@@ -357,15 +365,22 @@ class PatientAccountView(LoginRequiredMixin, PatientPortalRequiredMixin, View):
                 Patient.objects.select_for_update(), pk=self.patient.pk, user=request.user,
                 company=self.patient_company, company__is_active=True, is_active=True,
             )
-            changed = [name for name in ('phone', 'city') if getattr(patient, name) != form.cleaned_data[name]]
+            # A form from before the title was added leaves the title as it is.
+            fields = ('title', 'phone', 'city') if 'title' in request.POST else ('phone', 'city')
+            changed = [name for name in fields if getattr(patient, name) != form.cleaned_data[name]]
             if changed:
                 for name in changed:
                     setattr(patient, name, form.cleaned_data[name])
                 patient.save(update_fields=(*changed, 'updated_at'))
+            if 'title' in changed:
+                record_audit(company=self.patient_company, actor=request.user, patient=patient,
+                             action='patient.title_updated', target=patient, request=request)
+            contact = [name for name in changed if name != 'title']
+            if contact:
                 record_audit(
                     company=self.patient_company, actor=request.user, patient=patient,
                     action='patient.contact_updated', target=patient, request=request,
-                    metadata={'changed_fields': changed},
+                    metadata={'changed_fields': contact},
                 )
-        messages.success(request, 'Your contact details have been saved for this practice.')
+        messages.success(request, 'Your details have been saved for this practice.')
         return redirect('portal:patient-account')

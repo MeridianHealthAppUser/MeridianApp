@@ -45,16 +45,23 @@ class PatientWorkspaceTests(TestCase):
                         self.assertEqual(parse_qs(split.query)['tab'], [link['name']])
                     self.assertEqual([link['name'] for link in response.context['workspace_tabs'] if link['active']], [tab])
 
-    def test_overview_is_summary_only_and_does_not_read_any_conversation(self):
+    def test_overview_shows_no_conversations_or_general_notes_and_the_messages_tab_waits_for_a_choice(self):
         self.login(self.doctor)
         incoming = self.add_message(body='UNREAD_PRIVATE_CONVERSATION_BODY')
         ClinicalNote.objects.create(company=self.company, patient=self.patient, author=self.doctor, body='CLINICAL_NOTE_BODY')
         response = self.page()
-        for private in ('UNREAD_PRIVATE_CONVERSATION_BODY', 'CLINICAL_NOTE_BODY', 'name="body"', 'name="summary"', 'name="starts_at"'):
+        for private in ('CLINICAL_NOTE_BODY', 'name="summary"', 'name="starts_at"', 'id="record-messages"', 'Choose a conversation'):
             self.assertNotContains(response, private)
-        self.assertContains(response, 'aria-label="Patient overview"')
+        # A clinician's Overview is the clinical one. Their conversations are on the Messages tab, where none
+        # opens (or is marked read) until one is chosen.
+        self.assertContains(response, 'data-record-overview')
+        self.assertContains(self.page('messages'), 'Choose a conversation')
         incoming.refresh_from_db()
-        self.assertIsNone(incoming.read_at)
+        self.assertIsNone(incoming.staff_read_at)
+        opened = self.page('messages', thread=incoming.thread_id)
+        self.assertEqual(opened.context['record_thread'].pk, incoming.thread_id)
+        incoming.refresh_from_db()
+        self.assertIsNotNone(incoming.staff_read_at)
 
     def test_local_payments_tab_is_readonly_and_does_not_expose_provider_metadata(self):
         self.login(self.administrator)
@@ -107,8 +114,57 @@ class PatientWorkspaceTests(TestCase):
         self.assertRedirects(response, self.path() + f'?tab=messages&thread={new_thread.pk}', fetch_redirect_response=False)
         self.assertEqual(new_thread.patient_id, self.patient.pk)
         # The administrator sees their own conversation, never the doctor's.
-        threads = self.page('messages').context['workspace_message_threads']
+        threads = self.page('messages').context['record_threads']
         self.assertEqual([thread.pk for thread in threads], [new_thread.pk])
+
+    def test_add_note_is_a_button_that_opens_the_note_form_in_a_modal(self):
+        self.login(self.doctor)
+        response = self.page('notes')
+        self.assertContains(response, f'href="{self.path()}?tab=notes&amp;update=note" data-modal-open="add-note" aria-haspopup="dialog">Add note</a>')
+        self.assertContains(response, '<dialog class="app-dialog" id="add-note" aria-labelledby="add-note-title">')
+        self.assertContains(response, '<legend>Free-form tags</legend>')
+        self.assertContains(response, 'js/dialogs.js')
+        self.assertNotContains(response, '<summary>Add a general clinical note</summary>')
+        # Without scripts its link opens the form; after a mistake it opens again, with the error.
+        opened = 'id="add-note" aria-labelledby="add-note-title" open>'
+        self.assertContains(self.page('notes', update='note'), opened)
+        failed = self.client.post(reverse('portal:patient-note-create', args=[self.patient.pk]), {'body': '', 'note_type': 'clinical'})
+        self.assertContains(failed, opened)
+        self.assertContains(failed, 'This field is required.')
+
+    def test_create_task_is_a_button_that_opens_the_task_form_in_a_modal(self):
+        self.login(self.doctor)
+        response = self.page('tasks')
+        html = response.content.decode()
+        button = f'href="{self.path()}?tab=tasks&amp;update=task" data-modal-open="create-task" aria-haspopup="dialog">Create task</a>'
+        self.assertContains(response, button)
+        self.assertLess(html.index('data-filter-menu'), html.index(button))
+        self.assertContains(response, '<dialog class="app-dialog" id="create-task" aria-labelledby="create-task-title">')
+        self.assertNotContains(response, '<summary>Create a task for this patient</summary>')
+        opened = 'id="create-task" aria-labelledby="create-task-title" open>'
+        self.assertContains(self.page('tasks', update='task'), opened)
+        failed = self.client.post(reverse('portal:patient-task-create', args=[self.patient.pk]),
+                                  {'patient': self.patient.pk, 'title': '', 'description': 'Kept draft', 'priority': 'high'})
+        self.assertContains(failed, opened)
+        self.assertContains(failed, 'Kept draft')
+
+    def test_history_filters_are_in_the_filters_menu(self):
+        self.login(self.doctor)
+        response = self.page('history')
+        self.assertContains(response, '<details class="filter-menu" data-filter-menu>')
+        for label in ('Activity', 'Date'):
+            self.assertContains(response, f'<span class="filter-menu__label">{label}</span>')
+        self.assertContains(response, '<input type="radio" name="category" value="all" checked>')
+        self.assertNotContains(response, 'class="record-filters"')
+        response = self.page('history', category='clinical', date_from='2026-01-01')
+        self.assertContains(response, '<input type="radio" name="category" value="clinical" checked>')
+        self.assertContains(response, '<span class="filter-menu__badge">2<span class="sr-only"> applied</span></span>')
+        self.assertContains(response, f'<a class="filter-menu__clear" href="{self.path()}?tab=history">Clear all</a>')
+        # A wrong range opens the menu with the error, and shows no timeline.
+        response = self.page('history', date_from='2026-02-01', date_to='2026-01-01')
+        self.assertContains(response, '<details class="filter-menu" data-filter-menu open>')
+        self.assertContains(response, 'The end date must be on or after the start date.')
+        self.assertNotContains(response, 'data-record-timeline')
 
     def test_invalid_legacy_forms_render_only_their_own_tab_and_preserve_inputs(self):
         self.login(self.doctor)

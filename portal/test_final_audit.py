@@ -179,9 +179,12 @@ class FinalWriteAuditTests(OperationsFixture):
         before = AuditEvent.objects.count()
         for url in (reverse('portal:patient-detail', args=[self.patient.pk]), reverse('portal:staff-inbox')):
             response = self.client.head(url, {'thread': thread.pk})
+            # Both open the conversation; only a GET marks it read and records the view.
             self.assertEqual(response.status_code, 200)
             self.assertEqual(response.content, b'')
             self.assertIn('no-store', response['Cache-Control'])
+        self.assertEqual(self.client.head(reverse('portal:patient-detail', args=[self.patient.pk]),
+                                          {'tab': 'overview', 'thread': thread.pk}).status_code, 200)
         message.refresh_from_db()
         self.assertIsNone(message.read_at)
         self.assertEqual(AuditEvent.objects.count(), before)
@@ -194,8 +197,8 @@ class FinalWriteAuditTests(OperationsFixture):
         response = self.client.post(reverse('portal:patient-task-create', args=[self.patient.pk]), {
             'patient': self.patient.pk, 'title': '', 'priority': 'normal'})
         self.assertEqual(response.status_code, 200)
-        response = self.client.post(reverse('portal:staff-message-create', args=[thread.pk]), {'body': '', 'return_to': 'inbox'})
-        self.assertEqual(response.status_code, 200)
+        response = self.client.post(reverse('portal:staff-message-create', args=[thread.pk]), {'body': '', 'return_to': 'record'})
+        self.assertEqual(response.status_code, 400)
         message.refresh_from_db()
         self.assertIsNone(message.read_at)
         self.assertEqual(AuditEvent.objects.count(), before)

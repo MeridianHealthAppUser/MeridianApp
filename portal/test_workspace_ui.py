@@ -3,7 +3,10 @@ from django.test import override_settings
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
+from django.utils import timezone
 
+from care.messaging import add_participant
+from care.models import MessageThread
 from practices.models import Company, CompanyMembership, Patient
 from practices.services import ACTIVE_COMPANY_SESSION_KEY, ACTIVE_PATIENT_COMPANY_SESSION_KEY
 
@@ -30,14 +33,50 @@ class WorkspacePresentationTests(TestCase):
     def page(self, name):
         return self.client.get(reverse(f'portal:{name}'))
 
+    def test_overview_opens_records_and_conversations_with_secondary_buttons(self):
+        thread = MessageThread.objects.create(company=self.company, patient=self.patient, subject='Dose question',
+                                              opened_by=self.patient_user, last_message_at=timezone.now())
+        add_participant(thread, self.super_admin)
+        self.login(self.super_admin)
+        record = reverse('portal:patient-detail', args=[self.patient.pk])
+        for name in ('desktop-dashboard', 'mobile-dashboard'):
+            with self.subTest(page=name):
+                response = self.page(name)
+                self.assertContains(response, f'<a class="console-button console-button--secondary" href="{record}">Open record<span class="sr-only"> for {self.patient}</span></a>')
+                self.assertContains(response, f'<a class="console-button console-button--secondary" href="{record}?thread={thread.pk}#conversation-{thread.pk}">View conversation')
+        # Who's in each conversation shows as tags, the patient first, as in Patient messages.
+        for name in ('desktop-dashboard', 'mobile-dashboard'):
+            with self.subTest(tags=name):
+                response = self.page(name)
+                self.assertEqual([tag['kind'] for tag in response.context['recent_messages'][0].people_tags], ['patient'])
+                self.assertContains(response, '<span class="person-tags"><span class="sr-only">With </span><span class="person-tag person-tag--patient" title="Example Patient · Patient">')
+                self.assertContains(response, 'css/person_tags.css')
+        # A closed conversation has the "Closed" tag from Patient messages, just before View conversation.
+        MessageThread.objects.filter(pk=thread.pk).update(is_closed=True)
+        for name in ('desktop-dashboard', 'mobile-dashboard'):
+            with self.subTest(closed=name):
+                self.assertContains(self.page(name), f'<div class="message-list__actions"><span class="record-inbox-pill">Closed</span><a class="console-button console-button--secondary" href="{record}?thread={thread.pk}')
+        # On the desktop Overview the button sits against the right edge of the row.
+        self.assertContains(self.page('desktop-dashboard'), f'<td class="patient-table__action-cell"><a class="console-button console-button--secondary" href="{record}">Open record')
+
     def test_overview_has_spaced_metric_labels_and_compact_style_hook(self):
-        self.login(self.doctor)
+        self.login(self.super_admin)
         for name in ('desktop-dashboard', 'mobile-dashboard'):
             response = self.page(name)
             self.assertContains(response, 'workspace-overview')
             self.assertContains(response, '<span class="metric-card__label">Open tasks</span>', html=True)
             self.assertContains(response, '<span class="metric-card__label">Unread messages</span>', html=True)
             self.assertNotContains(response, 'Opentasks')
+
+    def test_clinician_overview_has_no_metric_cards_and_no_single_practice_privacy_note(self):
+        self.login(self.doctor)
+        for name in ('desktop-dashboard', 'mobile-dashboard'):
+            response = self.page(name)
+            self.assertNotContains(response, 'metric-card')
+            self.assertContains(response, 'Upcoming appointments')
+        with self.settings(MULTI_PRACTICE_ENABLED=False, SINGLE_PRACTICE_SLUG=self.company.slug):
+            self.assertNotContains(self.page('desktop-dashboard'), 'Practice privacy.')
+        self.assertContains(self.page('desktop-dashboard'), 'Practice privacy.')
 
     def test_polish_stylesheet_is_loaded_after_page_css(self):
         self.login(self.doctor)
@@ -48,7 +87,7 @@ class WorkspacePresentationTests(TestCase):
         self.assertContains(response, 'href="#workspace-content">Skip to content')
 
     def test_overview_greeting_is_time_neutral_and_appointment_count_is_labelled_today(self):
-        self.login(self.doctor)
+        self.login(self.super_admin)
         for name in ('desktop-dashboard', 'mobile-dashboard'):
             response = self.page(name)
             self.assertContains(response, '>Welcome, ')

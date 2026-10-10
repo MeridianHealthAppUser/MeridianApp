@@ -88,16 +88,20 @@ class OwnPracticeRoleSwitchTests(TestCase):
         management_url = reverse('portal:management-users')
         for role, management_status, clinical_status, create_status in (
             ('super_admin', 200, 200, 403),
-            ('doctor', 403, 200, 200),
+            # Clinicians work from their patients' records, so the practice-wide list sends them to the Overview.
+            ('doctor', 403, 302, 200),
             ('practice_admin', 403, 403, 403),
             ('super_admin', 200, 200, 403),
         ):
             with self.subTest(role=role):
                 self.assertEqual(self.client.post(self.url, {'role': role}).status_code, 302)
+                # As a clinician they write in their own patients' records; the role can't change while assigned.
+                Patient.objects.filter(pk=self.patient.pk).update(assigned_doctor=self.admin if role == 'doctor' else None)
                 self.assertEqual(self.client.get(management_url).status_code, management_status)
                 self.assertEqual(self.client.get(clinical_url).status_code, clinical_status)
                 self.assertEqual(self.client.get(new_consultation_url).status_code, create_status)
                 self.assertEqual(self.client.get(reverse('admin:index')).status_code, 200)
+                Patient.objects.filter(pk=self.patient.pk).update(assigned_doctor=None)
 
     def test_real_doctor_membership_passes_existing_orm_and_availability_service_guards(self):
         days = [
@@ -128,6 +132,7 @@ class OwnPracticeRoleSwitchTests(TestCase):
         self.assertEqual(second_browser.get(url).status_code, 403)
 
         self.client.post(self.url, {'role': 'doctor'})
+        Patient.objects.filter(pk=self.patient.pk).update(assigned_doctor=self.admin)
 
         self.assertEqual(second_browser.get(url).status_code, 200)
         self.assertEqual(int(second_browser.session['_auth_user_id']), self.admin.pk)

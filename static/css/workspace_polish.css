@@ -9,7 +9,7 @@
 .workspace-page .site-header select { border-color:#cfdfda; border-radius:.6rem; font-size:.8rem; min-height:2.35rem; }
 .workspace-page .meridian-console .console-topbar { min-height:4.4rem; padding-inline:clamp(1rem,2.8vw,2.5rem); }
 .workspace-page .meridian-console .console-content { padding:1.75rem clamp(1rem,2.8vw,2.5rem); }
-.workspace-page .meridian-console :is(.staff-page-header,.inbox-page-header,.patient-page-heading) h1 { font-size:clamp(1.9rem,2.65vw,2.65rem); letter-spacing:-.035em; line-height:1.12; }
+.workspace-page .meridian-console :is(.staff-page-header,.inbox-page-header,.patient-page-heading) h1 { font-size:clamp(1.9rem,2.65vw,2.65rem); letter-spacing:-.02em; line-height:1.12; }
 .workspace-page .meridian-console .staff-page-header > div > p:last-child { max-width:78ch; line-height:1.65; }
 .workspace-page .meridian-console :is(.staff-page-card,.console-card,.privacy-card,.ops-metric,.metric-card) { border-radius:.9rem; }
 .workspace-page .meridian-console :is(.staff-page-card__header,.console-card__header) { min-height:4rem; }
@@ -48,7 +48,9 @@
 .workspace-page .workspace-overview .metric-card__label { font-size:.72rem; line-height:1.4; letter-spacing:0; text-transform:none; }
 .workspace-page .workspace-overview .metric-card__value { font-size:1.75rem; line-height:1.1; margin-top:.4rem; }
 .workspace-page .workspace-overview .metric-card__hint { font-size:.72rem; margin-top:.3rem; }
-.workspace-page .workspace-overview .console-grid { align-items:start; gap:.9rem; margin-top:.9rem; }
+/* Upcoming appointments and Open tasks split the row in half and match heights. */
+.workspace-page .workspace-overview .console-grid { align-items:stretch; gap:.9rem; grid-template-columns:repeat(2,minmax(0,1fr)); margin-top:.9rem; }
+@media (max-width:52rem) { .workspace-page .workspace-overview .console-grid { grid-template-columns:1fr; } }
 .workspace-page .workspace-overview .console-card__header { min-height:0; padding:.75rem 1rem; }
 .workspace-page .workspace-overview .console-card__body { padding:.15rem 1rem; }
 .workspace-page .workspace-overview .console-list__item { min-height:3.6rem; padding:.6rem 0; }
@@ -59,8 +61,9 @@
 
 @media (min-width:52.001rem) {
   .workspace-page .site-header { background:#fff; height:4rem; position:sticky; top:0; z-index:45; }
-  .workspace-page .console-shell { grid-template-columns:15rem minmax(0,1fr); }
-  .workspace-page .console-sidebar { align-self:start; height:calc(100vh - 4rem); height:calc(100dvh - 4rem); min-height:0; overflow:hidden; padding:1rem .8rem .85rem; position:sticky; top:4rem; }
+  /* Wide enough for "Patient Records & Messages" and its unread badge on one line. */
+  .workspace-page .console-shell { grid-template-columns:17rem minmax(0,1fr); }
+  .workspace-page .console-sidebar { align-self:start; height:calc(100vh - 4rem); height:calc(100dvh - 4rem); min-height:0; overflow:hidden; padding:1rem .6rem .85rem; position:sticky; top:4rem; }
   .workspace-page .console-sidebar__practice { flex:0 0 auto; margin:0 0 .85rem; padding:.7rem; border-radius:.7rem; }
   .workspace-page .console-sidebar__practice p { font-size:.59rem; }
   .workspace-page .console-sidebar__practice strong { font-size:.76rem; line-height:1.4; overflow-wrap:anywhere; }
@@ -71,6 +74,8 @@
   .workspace-page .console-nav a.is-active { background:#e5f4ef; border-color:#acd8cb; color:#087a71; font-weight:750; }
   .workspace-page .console-nav a:hover { background:#f1f8f4; color:#086e66; }
   .workspace-page .console-nav a:focus-visible { outline-offset:-2px; }
+  .workspace-page .console-nav--flat a.console-nav__item { border-radius:.65rem; color:#527074; font-size:.8rem; font-weight:500; gap:.45rem; min-height:2.8rem; padding:.6rem .6rem; }
+  .workspace-page .console-nav--flat a.console-nav__item.is-active { background:var(--console-teal-soft); border-color:#b5e3ea; color:var(--console-teal-dark); font-weight:600; }
   .workspace-page .console-sidebar__footer { flex:0 0 auto; margin-top:.5rem; padding:.8rem .4rem 0; }
   .workspace-page .console-person__copy strong { font-size:.74rem; }
   .workspace-page .console-person__copy span { font-size:.65rem; }

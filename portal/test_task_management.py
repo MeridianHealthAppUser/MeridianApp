@@ -182,6 +182,40 @@ class TaskManagementTests(TestCase):
         response = self.client.get(reverse('portal:staff-tasks'), {'kind': 'patient'})
         self.assertEqual([task.pk for task in response.context['tasks']], [self.own_task.pk])
 
+    def test_task_filters_are_in_a_filters_menu_where_patients_and_tags_tick_any(self):
+        second_tag = RecordTag.objects.create(company=self.company, name='Follow up')
+        TaskTagAssignment.objects.create(company=self.company, task=self.created_task, tag=self.tag)
+        TaskTagAssignment.objects.create(company=self.company, task=self.own_task, tag=second_tag)
+        self.login()
+        url = reverse('portal:staff-tasks')
+        response = self.client.get(url)
+        self.assertContains(response, '<details class="filter-menu" data-filter-menu>')
+        self.assertNotContains(response, 'staff-filter-form--tasks')
+        self.assertContains(response, '<input type="radio" name="status" value="open" checked>')
+        # Open is where the list starts, so it isn't counted as a filter.
+        self.assertNotContains(response, 'filter-menu__badge')
+        # Only patients in your tasks are offered.
+        self.assertContains(response, f'<input type="checkbox" name="patient" value="{self.patient.pk}">')
+        self.assertNotContains(response, f'name="patient" value="{self.inactive_patient.pk}"')
+
+        def tasks(**query):
+            return {task.pk for task in self.client.get(url, {'status': 'all', **query}).context['tasks']}
+
+        self.assertEqual(tasks(tag=[self.tag.pk]), {self.created_task.pk})
+        self.assertEqual(tasks(tag=[self.tag.pk, second_tag.pk]), {self.created_task.pk, self.own_task.pk})
+        self.assertEqual(tasks(patient=[self.patient.pk]), {self.own_task.pk})
+        response = self.client.get(url, {'status': 'all', 'tag': [self.tag.pk, second_tag.pk]})
+        self.assertContains(response, '<span class="filter-menu__badge">3<span class="sr-only"> applied</span></span>')
+        self.assertContains(response, f'<a class="filter-menu__clear" href="{url}">Clear all</a>')
+
+    def test_task_rows_have_secondary_buttons_then_a_tick_to_complete(self):
+        self.login()
+        response = self.client.get(reverse('portal:staff-tasks'))
+        self.assertContains(response, f'<a class="console-button console-button--secondary" href="{reverse("portal:task-edit", args=[self.own_task.pk])}">Edit task</a>')
+        self.assertContains(response, f'<a class="console-button console-button--secondary" href="{reverse("portal:patient-detail", args=[self.patient.pk])}">Open record')
+        self.assertContains(response, f'<button class="console-button console-button--primary task-complete" type="submit" aria-label="Complete {self.own_task.title}" data-tooltip="Complete">')
+        self.assertContains(response, 'css/task_list.css')
+
     def test_invalid_type_and_foreign_tag_filters_do_not_fall_back_to_all_tasks(self):
         self.login()
         for field, value in (('kind', 'unsupported-type'), ('tag', self.foreign_tag.pk)):

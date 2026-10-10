@@ -5,9 +5,10 @@ from datetime import datetime, time, timedelta
 from decimal import Decimal
 from pathlib import Path
 
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.staticfiles import finders
-from django.test import TestCase, override_settings
+from django.test import Client, TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
@@ -93,14 +94,38 @@ class PatientWebAppTests(TestCase):
         self.assertEqual(opened.context['selected_thread'].pk, self.thread.pk)
         self.assertFalse(PatientMessage.objects.filter(read_at__isnull=True).exists())
 
-    def test_conversation_list_shows_who_sent_the_latest_message(self):
+    def test_my_messages_search_finds_message_text_subjects_and_clinicians(self):
+        self.incoming(1)
+        delivery = MessageThread.objects.create(company=self.company, patient=self.patient, subject='Delivery', opened_by=self.user)
+        add_participant(delivery, self.doctor)
+        PatientMessage.objects.create(company=self.company, thread=delivery, sender=self.user, body='The parcel was late')
+
+        def found(search):
+            return [thread.pk for thread in self.page('patient-messages', q=search).context['threads']]
+
+        self.assertEqual(found('parcel'), [delivery.pk])  # message text
+        self.assertEqual(found('DOSE'), [self.thread.pk])  # subject, any case
+        self.assertEqual(set(found('sam doctor')), {self.thread.pk, delivery.pk})  # the clinician in both
+        response = self.page('patient-messages', q='parcel')
+        self.assertContains(response, '1 conversation matching “parcel”')
+        self.assertContains(response, 'value="parcel"')
+        self.assertContains(self.page('patient-messages', q='nothing here'), 'No conversations match “nothing here”.')
+        # Searching opens nothing, so replies stay unread.
+        self.assertTrue(PatientMessage.objects.filter(read_at__isnull=True, sender=self.doctor).exists())
+
+    def test_conversation_list_rows_look_like_the_practice_consoles(self):
         self.incoming(1)
         listing = self.page('patient-messages')
-        self.assertContains(listing, '<span class="sr-only">Latest message from </span>Sam Doctor', html=False)
+        # Who it's with stays; the latest message sits beside its time today (or its date), as in the console.
+        self.assertContains(listing, '<span class="patient-inbox-thread__with">With Sam Doctor</span>', html=True)
+        sent = timezone.localtime(listing.context['threads'][0].last_activity)
+        self.assertRegex(listing.content.decode(), rf'class="patient-inbox-thread__last">\s*<span class="patient-inbox-thread__preview">Reply 0</span>\s*<time [^>]*>{sent:%H:%M}</time>')
+        self.assertNotContains(listing, 'patient-inbox-thread__meta')
         PatientMessage.objects.create(company=self.company, thread=self.thread, sender=self.user, body='Thank you')
         listing = self.page('patient-messages')
-        self.assertContains(listing, '<span class="sr-only">Latest message from </span>You', html=False)
-        self.assertContains(listing, 'Waiting for a reply')
+        # Your own last message reads "You: …"; there's no waiting-for-a-reply tag.
+        self.assertContains(listing, '<strong>You:</strong> Thank you')
+        self.assertNotContains(listing, 'Waiting for a reply')
 
     def test_my_treatment_tasks_come_from_the_record_and_clear_when_done(self):
         self.authorize(days=20)
@@ -157,6 +182,36 @@ class PatientWebAppTests(TestCase):
         self.assertNotContains(response, f'action="{reverse("portal:patient-basket-item", args=[self.product.pk])}"')
         self.assertContains(response, f'action="{reverse("portal:patient-basket-item", args=[supply.pk])}"')
         self.assertNotContains(response, f'action="{reverse("portal:patient-basket-item", args=[earlier.pk])}"')
+
+    def test_doctors_see_appointment_suggestions_only_when_there_is_one_and_patients_can_still_suggest(self):
+        from practices.services import ACTIVE_COMPANY_SESSION_KEY
+
+        appointment = self.book()
+        mine = self.page('patient-messages', thread=self.thread.pk)
+        self.assertContains(mine, 'Suggest a different appointment time')
+        doctor = Client()
+        doctor.force_login(self.doctor)
+        session = doctor.session
+        session[ACTIVE_COMPANY_SESSION_KEY] = self.company.pk
+        session.save()
+        inbox = reverse('portal:staff-inbox') + f'?thread={self.thread.pk}'
+        response = doctor.get(inbox)
+        self.assertEqual(response.status_code, 200)
+        for hidden in ('Appointment suggestions', 'Suggest a different appointment time'):
+            self.assertNotContains(response, hidden)
+        # "Offer a new time" on the calendar opens the conversation with the form ready for that appointment.
+        record = reverse('portal:patient-detail', args=[self.patient.pk])
+        offered = doctor.get(f'{record}?tab=messages&thread={self.thread.pk}&appointment={appointment.pk}')
+        self.assertContains(offered, 'Suggest a different appointment time')
+        self.assertContains(offered, f'action="{reverse("portal:staff-appointment-propose", args=[self.thread.pk])}"')
+        self.assertEqual(str(offered.context['record_thread'].proposal_form['appointment'].value()), str(appointment.pk))
+        proposed = datetime.combine(timezone.localdate() + timedelta(days=5), time(10), tzinfo=SAST)
+        propose_appointment_time(appointment=appointment, thread=self.thread, actor=self.user, actor_role='patient',
+                                 proposed_starts_at=proposed)
+        response = doctor.get(inbox)
+        self.assertContains(response, 'Appointment suggestions')
+        self.assertContains(response, 'value="accept"')
+        self.assertNotContains(response, 'Suggest a different appointment time')
 
     def test_suggested_time_can_be_answered_from_my_appointments(self):
         appointment = self.book()
@@ -215,8 +270,13 @@ class PatientWebAppTests(TestCase):
         theme = Path(finders.find('css/patient_theme.css')).read_text()
         for colour in ('#48c1c9', '#46afcf', '#1599de', '#29698b', '#0097b2'):
             self.assertIn(colour, theme)
-        fonts = re.findall(r"url\('\.\./(fonts/[^']+)'\)", theme)
+        # Roboto is self-hosted and loaded on every page, the practice console's included.
+        faces = Path(finders.find('css/fonts.css')).read_text()
+        fonts = re.findall(r"url\('\.\./(fonts/[^']+)'\)", faces)
         self.assertEqual(len(fonts), 2)
         for font in fonts:
             self.assertIsNotNone(finders.find(font), font)
-        self.assertNotIn('fonts.googleapis.com', theme)
+        for stylesheet in (theme, faces):
+            self.assertNotIn('fonts.googleapis.com', stylesheet)
+        base = Path(settings.BASE_DIR / 'templates' / 'base.html').read_text()
+        self.assertIn("css/fonts.css", base)

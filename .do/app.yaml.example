@@ -1,8 +1,12 @@
 # Template only: confirm repository access and configure encrypted
-# runtime DJANGO_SECRET_KEY and DATABASE_URL in DigitalOcean for BOTH components.
+# runtime DJANGO_SECRET_KEY and DATABASE_URL in DigitalOcean for ALL components.
+# The worker is optional: add it with CELERY_BROKER_URL set on web AND worker, plus the DJANGO_EMAIL_*
+# settings. Without CELERY_BROKER_URL, web sends PathCare emails itself and no worker is needed.
 # Native video also needs private REDIS_URL/VIDEO_REDIS_URL, VIDEO_TURN_URLS
 # and an encrypted VIDEO_TURN_SECRET on web. Provision the relay separately;
 # see docs/VIDEO_CONSULTATIONS.md. Do not paste secrets into this file.
+# Patient files (PathCare forms, lab reports) go to a private DigitalOcean Space once the SPACES_*
+# secrets are set on web, worker and migrate; until then they are kept in the database.
 # The app refuses production startup without a real secret. No deployment is
 # triggered by this example file. Review region, sizing and costs in your account.
 name: meridian-health
@@ -33,6 +37,57 @@ services:
       - key: DJANGO_CSRF_TRUSTED_ORIGINS
         value: '${APP_URL}'
         scope: RUN_TIME
+      # Patient files in a private Space (docs/DEPLOYMENT.md, "Patient files on Spaces"). Uncomment once the
+      # Space exists, on web, worker AND migrate alike, and enter the values in DigitalOcean, where they are
+      # stored encrypted. Never paste them here. Without them, patient files stay in the database.
+      # - key: SPACES_BUCKET
+      #   type: SECRET
+      #   scope: RUN_TIME
+      # - key: SPACES_REGION
+      #   type: SECRET
+      #   scope: RUN_TIME
+      # - key: SPACES_ACCESS_KEY_ID
+      #   type: SECRET
+      #   scope: RUN_TIME
+      # - key: SPACES_SECRET_ACCESS_KEY
+      #   type: SECRET
+      #   scope: RUN_TIME
+workers:
+  # Optional. Background tasks such as emailing PathCare forms, with retries. Same image and runtime
+  # settings as web; only add it together with CELERY_BROKER_URL.
+  - name: worker
+    github:
+      repo: MeridianHealthAppUser/MeridianApp
+      branch: main
+      deploy_on_push: false
+    dockerfile_path: Dockerfile
+    source_dir: /
+    run_command: celery -A config worker --loglevel=info
+    envs:
+      - key: MULTI_PRACTICE_ENABLED
+        value: 'false'
+        scope: RUN_TIME
+      - key: SINGLE_PRACTICE_SLUG
+        value: meridian-health
+        scope: RUN_TIME
+      - key: DJANGO_DEBUG
+        value: 'false'
+        scope: RUN_TIME
+      # Patient files in a private Space (docs/DEPLOYMENT.md, "Patient files on Spaces"). Uncomment once the
+      # Space exists, on web, worker AND migrate alike, and enter the values in DigitalOcean, where they are
+      # stored encrypted. Never paste them here. Without them, patient files stay in the database.
+      # - key: SPACES_BUCKET
+      #   type: SECRET
+      #   scope: RUN_TIME
+      # - key: SPACES_REGION
+      #   type: SECRET
+      #   scope: RUN_TIME
+      # - key: SPACES_ACCESS_KEY_ID
+      #   type: SECRET
+      #   scope: RUN_TIME
+      # - key: SPACES_SECRET_ACCESS_KEY
+      #   type: SECRET
+      #   scope: RUN_TIME
 jobs:
   - name: migrate
     kind: PRE_DEPLOY
@@ -53,3 +108,18 @@ jobs:
       - key: DJANGO_DEBUG
         value: 'false'
         scope: RUN_TIME
+      # Patient files in a private Space (docs/DEPLOYMENT.md, "Patient files on Spaces"). Uncomment once the
+      # Space exists, on web, worker AND migrate alike, and enter the values in DigitalOcean, where they are
+      # stored encrypted. Never paste them here. Without them, patient files stay in the database.
+      # - key: SPACES_BUCKET
+      #   type: SECRET
+      #   scope: RUN_TIME
+      # - key: SPACES_REGION
+      #   type: SECRET
+      #   scope: RUN_TIME
+      # - key: SPACES_ACCESS_KEY_ID
+      #   type: SECRET
+      #   scope: RUN_TIME
+      # - key: SPACES_SECRET_ACCESS_KEY
+      #   type: SECRET
+      #   scope: RUN_TIME

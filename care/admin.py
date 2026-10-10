@@ -184,7 +184,7 @@ class AvailabilitySlotAdmin(OperationalWorkflowReadOnlyAdmin):
     autocomplete_fields = ('company', 'clinician', 'appointment')
 
 
-@admin.register(models.DoctorWorkingPattern, models.DoctorTimeOff)
+@admin.register(models.DoctorWorkingPattern, models.DoctorTimeOff, models.DoctorSpecialDay)
 class DoctorAvailabilityAdmin(CompanyScopedAdmin):
     """Inspect availability history; changes use the locked, audited portal."""
 
@@ -264,9 +264,6 @@ class LabResultAdmin(ClinicalWorkflowReadOnlyAdmin):
         'id', 'company', 'patient', 'lab_request', 'uploaded_by', 'filename',
         'size', 'sha256', 'created_at', 'updated_at',
     )
-
-    def get_queryset(self, request):
-        return super().get_queryset(request).defer('content')
 
 
 @admin.register(models.WeightEntry)

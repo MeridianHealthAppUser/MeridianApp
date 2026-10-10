@@ -11,7 +11,8 @@ from django.urls import reverse
 from django.utils import timezone
 
 from care.messaging import add_participant
-from care.models import Appointment, AppointmentProposal, AuditEvent, MessageThread, PatientMessage
+from care.models import Appointment, AppointmentProposal, AuditEvent, MessageThread, MessageThreadParticipant, PatientMessage
+from care.widgets import floor_quarter_hour
 from practices.models import Company, CompanyMembership, Patient
 from practices.services import ACTIVE_COMPANY_SESSION_KEY
 
@@ -92,12 +93,18 @@ class StaffInboxTests(TestCase):
         return reverse('portal:staff-inbox')
 
     def thread_url(self, thread):
-        return f'{self.inbox_url()}?thread={thread.pk}#inbox-conversation'
+        # A conversation opens beside the list in Patient messages, from the top of the page.
+        return f'{self.inbox_url()}?thread={thread.pk}'
+
+    def record_thread_url(self, thread):
+        # Replies and suggestions sent from the record's Messages tab go back there.
+        record = reverse('portal:patient-detail', args=[thread.patient_id])
+        return f'{record}?tab=messages&thread={thread.pk}'
 
     def make_appointment(self):
         return Appointment.objects.create(
             company=self.company, patient=self.patient, clinician=self.doctor,
-            starts_at=timezone.now() + timedelta(days=7), duration_minutes=30,
+            starts_at=floor_quarter_hour(timezone.now() + timedelta(days=7)), duration_minutes=30,
         )
 
     def parse(self, response):
@@ -193,21 +200,27 @@ class StaffInboxTests(TestCase):
         self.assertEqual(first_ids | second_ids,
                          {self.recent_thread.pk, self.older_thread.pk, *(thread.pk for thread in extra_threads)})
 
-    def test_unread_count_is_patient_origin_only_and_unselected_thread_stays_unread(self):
+    def test_unread_count_is_what_others_sent_since_you_last_read_and_listing_marks_nothing_read(self):
+        now = timezone.now()
+        already_read = self.add_message(staff_read_at=now - timedelta(hours=1))
+        PatientMessage.objects.filter(pk=already_read.pk).update(created_at=now - timedelta(hours=2))
+        MessageThreadParticipant.objects.filter(thread=self.recent_thread, user=self.doctor).update(
+            last_read_at=now - timedelta(hours=1))
         self.add_message()
         self.add_message()
-        self.add_message(read_at=timezone.now() - timedelta(hours=1))
-        self.add_message(sender=self.doctor)
-        self.add_message(sender=self.administrator)
-        self.add_message(sender=self.second_patient_user)
+        self.add_message(sender=self.doctor)  # Your own messages are never unread for you.
+        self.add_message(sender=self.administrator)  # A colleague's are, like the patient's.
         self.add_message(thread=self.other_practice_thread)
-        before = dict(PatientMessage.objects.values_list('pk', 'read_at'))
+        before = dict(PatientMessage.objects.values_list('pk', 'staff_read_at'))
+        positions = dict(MessageThreadParticipant.objects.values_list('pk', 'last_read_at'))
         self.login()
-        response = self.client.get(self.inbox_url(), {'thread': self.older_thread.pk})
+        response = self.client.get(self.inbox_url())
         counts = {thread.pk: thread.unread_count for thread in response.context['threads']}
-        self.assertEqual(counts[self.recent_thread.pk], 2)
+        self.assertEqual(counts[self.recent_thread.pk], 3)
         self.assertEqual(counts[self.older_thread.pk], 0)
-        self.assertEqual(dict(PatientMessage.objects.values_list('pk', 'read_at')), before)
+        self.assertEqual(response.context['patient_unread_total'], 3)
+        self.assertEqual(dict(PatientMessage.objects.values_list('pk', 'staff_read_at')), before)
+        self.assertEqual(dict(MessageThreadParticipant.objects.values_list('pk', 'last_read_at')), positions)
 
     def test_desktop_and_mobile_link_to_staff_inbox(self):
         self.login()
@@ -217,19 +230,13 @@ class StaffInboxTests(TestCase):
                 self.assertEqual(response.status_code, 200)
                 self.assertIn(self.inbox_url(), self.parse(response).links)
 
-    def test_each_inbox_thread_links_to_its_selected_conversation(self):
+    def test_each_inbox_row_opens_that_conversation_beside_the_list(self):
         self.login()
         response = self.client.get(self.inbox_url())
         links = self.parse(response).links
         for thread in response.context['threads']:
             with self.subTest(thread=thread.pk):
-                matches = [
-                    urlsplit(link) for link in links
-                    if urlsplit(link).path == self.inbox_url()
-                    and parse_qs(urlsplit(link).query).get('thread') == [str(thread.pk)]
-                ]
-                self.assertTrue(matches)
-                self.assertTrue(any(link.fragment == 'inbox-conversation' for link in matches))
+                self.assertIn(self.thread_url(thread), links)
 
     def test_selected_older_thread_opens_instead_of_first_conversation(self):
         self.login()
@@ -237,11 +244,10 @@ class StaffInboxTests(TestCase):
             'thread': self.older_thread.pk,
         })
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.context['selected_thread_id'], self.older_thread.pk)
         self.assertEqual(response.context['workspace_tab'], 'messages')
         self.assertEqual([thread.pk for thread in response.context['message_threads']], [self.older_thread.pk])
-        self.assertEqual(response.context['selected_thread'].pk, self.older_thread.pk)
-        self.assertContains(response, 'id="patient-conversation"')
+        self.assertEqual(response.context['record_thread'].pk, self.older_thread.pk)
+        self.assertContains(response, 'id="record-messages"')
 
     def test_invalid_or_out_of_scope_thread_selection_is_rejected(self):
         other_patient_thread = MessageThread.objects.create(
@@ -252,54 +258,136 @@ class StaffInboxTests(TestCase):
             with self.subTest(selection=selection):
                 response = self.client.get(reverse('portal:patient-detail', args=[self.patient.pk]), {'thread': selection})
                 self.assertEqual(response.status_code, 404)
-                self.assertIsNone(response.context.get('selected_thread_id'))
+                self.assertIsNone(response.context.get('record_thread'))
                 self.assertNotContains(response, self.recent_thread.subject, status_code=404)
 
-    def test_inbox_marks_only_selected_thread_patient_messages_read(self):
+    def test_showing_a_conversation_on_the_record_marks_only_it_read_for_the_practice(self):
         recent_message = self.add_message()
         older_message = self.add_message(thread=self.older_thread)
         outgoing_message = self.add_message(sender=self.doctor)
         other_practice_message = self.add_message(thread=self.other_practice_thread)
         self.login()
-        response = self.client.get(self.inbox_url(), {'thread': self.older_thread.pk})
+        response = self.client.get(reverse('portal:patient-detail', args=[self.patient.pk]),
+                                   {'tab': 'messages', 'thread': self.older_thread.pk})
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.context['selected_thread'].pk, self.older_thread.pk)
-        self.assertEqual({message.pk for message in response.context['selected_thread'].conversation_messages}, {older_message.pk})
-        recent_message.refresh_from_db()
-        older_message.refresh_from_db()
-        outgoing_message.refresh_from_db()
-        other_practice_message.refresh_from_db()
-        self.assertIsNone(recent_message.read_at)
-        self.assertIsNotNone(older_message.read_at)
-        self.assertIsNone(outgoing_message.read_at)
-        self.assertIsNone(other_practice_message.read_at)
+        self.assertEqual(response.context['record_thread'].pk, self.older_thread.pk)
+        self.assertEqual({message.pk for message in response.context['record_thread'].conversation_messages}, {older_message.pk})
+        for message in (recent_message, older_message, outgoing_message, other_practice_message):
+            message.refresh_from_db()
+        self.assertIsNone(recent_message.staff_read_at)
+        self.assertEqual(older_message.staff_read_by_id, self.doctor.pk)
+        self.assertIsNotNone(older_message.staff_read_at)
+        self.assertIsNone(outgoing_message.staff_read_at)
+        self.assertIsNone(other_practice_message.staff_read_at)
+        # Another unread conversation keeps its count on its chip.
+        chips = {thread.pk: thread.unread_count for thread in response.context['record_threads']}
+        self.assertEqual(chips[self.recent_thread.pk], 1)
 
-    def test_inbox_opens_with_no_conversation_so_messages_stay_unread(self):
+    def test_messages_tab_waits_for_a_conversation_then_opens_it_beside_the_list(self):
         unread = self.add_message()
         self.login()
         response = self.client.get(self.inbox_url())
         self.assertEqual(response.status_code, 200)
-        self.assertIsNone(response.context['selected_thread'])
-        self.assertContains(response, 'Choose a patient message')
         self.assertNotContains(response, 'action="' + reverse('portal:staff-message-create', args=[self.recent_thread.pk]) + '"')
-        counts = {thread.pk: thread.unread_count for thread in response.context['threads']}
-        self.assertEqual(counts[self.recent_thread.pk], 1)
+        self.assertContains(response, '<h1>Patient Records &amp; Messages</h1>', html=True)
+        self.assertContains(response, 'Choose a conversation')
         unread.refresh_from_db()
-        self.assertIsNone(unread.read_at)
+        self.assertIsNone(unread.staff_read_at)
         self.assertFalse(AuditEvent.objects.filter(action='message.thread_viewed').exists())
-        # Choosing the conversation is what marks it read.
-        self.client.get(self.inbox_url(), {'thread': self.recent_thread.pk})
+        # A link to a conversation, including the older ones with an appointment, opens it here and marks it read.
+        opened = self.client.get(self.inbox_url(), {'thread': self.recent_thread.pk, 'appointment': '7'})
+        self.assertEqual(opened.status_code, 200)
+        self.assertEqual(opened.context['inbox_thread'].pk, self.recent_thread.pk)
+        self.assertContains(opened, 'action="' + reverse('portal:staff-message-create', args=[self.recent_thread.pk]) + '"')
+        self.assertContains(opened, '<input type="hidden" name="return_to" value="patient_messages">')
+        record = reverse('portal:patient-detail', args=[self.patient.pk])
+        self.assertContains(opened, f'href="{record}?tab=overview">Open record<span class="sr-only"> for ')
+        manage = reverse('portal:conversation-manage', args=[self.recent_thread.pk])
+        # Message action opens in a modal; its link goes to the action's own page without scripts.
+        self.assertContains(opened, f'record-messages__tool" href="{manage}" data-modal-open="conversation-manage" aria-haspopup="dialog">Message action</a>')
+        self.assertContains(opened, '<dialog class="app-dialog" id="conversation-manage" aria-labelledby="conversation-manage-title">')
+        self.assertContains(opened, f'<form class="console-form" method="post" action="{manage}" data-conversation-manage>')
+        self.assertContains(opened, '<div data-shows-for-action="handover"><div class="console-form__field"><label for="manage_doctor">Clinician to add</label>')
+        self.assertContains(opened, 'js/dialogs.js')
+        self.assertContains(opened, 'js/conversation_management.js')
         unread.refresh_from_db()
-        self.assertIsNotNone(unread.read_at)
+        self.assertEqual(unread.staff_read_by_id, self.doctor.pk)
+        # Applied from the modal, it goes back to the conversation in Patient messages.
+        closed = self.client.post(manage, {'workflow_context': opened.context['inbox_thread'].manage_context, 'action': 'close', 'confirm': 'on'})
+        self.assertRedirects(closed, f'{self.inbox_url()}?thread={self.recent_thread.pk}', fetch_redirect_response=False)
+        self.recent_thread.refresh_from_db()
+        self.assertTrue(self.recent_thread.is_closed)
+
+    def test_search_finds_messages_patients_and_clinicians_only_in_your_conversations(self):
+        PatientMessage.objects.create(company=self.company, thread=self.older_thread, sender=self.patient_user,
+                                      body='The parcel arrived damaged')
+        colleague = get_user_model().objects.create_user(email='inbox-colleague@example.test', first_name='Zola', last_name='Khumalo')
+        CompanyMembership.objects.create(user=colleague, company=self.company, role=CompanyMembership.Role.DOCTOR)
+        dose = MessageThread.objects.create(company=self.company, patient=self.second_patient, subject='Dose question',
+                                            last_message_at=timezone.now())
+        add_participant(dose, self.doctor)
+        add_participant(dose, colleague)
+        not_yours = MessageThread.objects.create(company=self.company, patient=self.second_patient, subject='Parcel for Zola')
+        add_participant(not_yours, colleague)
+        self.login()
+
+        def found(search, **extra):
+            return {thread.pk for thread in self.client.get(self.inbox_url(), {'q': search, **extra}).context['threads']}
+
+        self.assertEqual(found('parcel'), {self.older_thread.pk})  # message text; never a conversation you are not in
+        self.assertEqual(found('BETH'), {dose.pk})  # the patient's name, any case
+        self.assertEqual(found('khumalo'), {dose.pk})  # a clinician in the conversation
+        self.assertEqual(found('alice damaged'), {self.older_thread.pk})  # every word has to match
+        self.assertEqual(found('parcel', status='open'), {self.older_thread.pk})
+        self.assertEqual(found('parcel', status='closed'), set())
+        response = self.client.get(self.inbox_url(), {'q': '  parcel  '})
+        self.assertContains(response, 'value="parcel"')
+        self.assertContains(response, f'href="{self.inbox_url()}?q=parcel&amp;thread={self.older_thread.pk}"')
+        self.assertContains(self.client.get(self.inbox_url(), {'q': 'nothing here'}), 'No conversations match “nothing here”.')
+
+    def test_new_patient_message_starts_a_conversation_with_one_of_your_patients(self):
+        self.login()
+        page = self.client.get(self.inbox_url())
+        self.assertContains(page, f'href="{self.inbox_url()}?compose=1">New patient message</a>', count=2)
+        compose = self.client.get(self.inbox_url(), {'compose': '1'})
+        # A clinician can write to their own patients who can sign in; Beth isn't Doctor's patient.
+        self.assertEqual(list(compose.context['new_thread_form'].fields['patient'].queryset), [self.patient])
+        url = reverse('portal:staff-inbox-thread-create')
+        refused = self.client.post(url, {'patient': self.second_patient.pk, 'body': 'Hello'})
+        self.assertEqual(refused.status_code, 400)
+        self.assertTrue(refused.context['inbox_composing'])
+        response = self.client.post(url, {'patient': self.patient.pk, 'subject': '', 'body': 'Your results are in.'})
+        thread = MessageThread.objects.get(messages__body='Your results are in.')
+        self.assertRedirects(response, f'{self.inbox_url()}?thread={thread.pk}', fetch_redirect_response=False)
+        self.assertEqual((thread.patient, thread.opened_by, thread.subject), (self.patient, self.doctor, 'Message from the practice'))
+        self.assertEqual(list(thread.participants.all()), [self.doctor])
+        # An administrator can write to any active patient with a login.
+        self.login(self.administrator)
+        patients = self.client.get(self.inbox_url(), {'compose': '1'}).context['new_thread_form'].fields['patient'].queryset
+        self.assertEqual(set(patients), {self.patient, self.second_patient})
+
+    def test_a_reply_from_patient_messages_comes_back_to_the_same_conversation_and_filter(self):
+        self.add_message()
+        self.login()
+        url = reverse('portal:staff-message-create', args=[self.recent_thread.pk])
+        response = self.client.post(url, {'body': 'Thanks, noted.', 'return_to': 'patient_messages', 'status': 'open'})
+        self.assertRedirects(response, f'{self.inbox_url()}?status=open&thread={self.recent_thread.pk}',
+                             fetch_redirect_response=False)
+        self.assertTrue(PatientMessage.objects.filter(thread=self.recent_thread, sender=self.doctor, body='Thanks, noted.').exists())
+        # An empty reply stays on Patient messages with the conversation open and says why.
+        failed = self.client.post(url, {'body': '', 'return_to': 'patient_messages'})
+        self.assertEqual(failed.status_code, 400)
+        self.assertEqual(failed.context['inbox_thread'].pk, self.recent_thread.pk)
+        self.assertContains(failed, 'class="record-error" role="alert"', status_code=400)
 
     def test_patient_record_messages_tab_opens_with_no_conversation(self):
         unread = self.add_message()
         self.login()
         response = self.client.get(reverse('portal:patient-detail', args=[self.patient.pk]), {'tab': 'messages'})
         self.assertEqual(response.status_code, 200)
-        self.assertIsNone(response.context['selected_thread'])
-        self.assertContains(response, 'New messages from the patient stay unread until you open them.')
-        self.assertContains(response, '· 1 unread')
+        self.assertIsNone(response.context['record_thread'])
+        self.assertContains(response, 'New messages stay unread until you open them.')
+        self.assertContains(response, ', 1 unread message')
         unread.refresh_from_db()
         self.assertIsNone(unread.read_at)
 
@@ -309,33 +397,60 @@ class StaffInboxTests(TestCase):
             with self.subTest(selection=selection):
                 self.assertEqual(self.client.get(self.inbox_url(), {'thread': selection}).status_code, 404)
 
-    def test_reply_filters_use_latest_sender_not_read_receipts(self):
-        self.add_message(read_at=timezone.now())
-        self.add_message(thread=self.older_thread)
-        self.add_message(thread=self.older_thread, sender=self.administrator)
-        add_participant(MessageThread.objects.create(company=self.company, patient=self.patient, subject='No messages yet'), self.doctor)
+    def test_open_and_closed_filters_split_conversations_by_whether_they_are_closed(self):
+        MessageThread.objects.filter(pk=self.older_thread.pk).update(is_closed=True)
+        empty = MessageThread.objects.create(company=self.company, patient=self.patient, subject='No messages yet')
+        add_participant(empty, self.doctor)
         self.login()
         for status, expected in (
-            ('awaiting', {self.recent_thread.pk}),
-            ('answered', {self.older_thread.pk}),
+            ([], {self.recent_thread.pk, self.older_thread.pk, empty.pk}),
+            (['open'], {self.recent_thread.pk, empty.pk}),
+            (['closed'], {self.older_thread.pk}),
+            (['open', 'closed'], {self.recent_thread.pk, self.older_thread.pk, empty.pk}),
         ):
             with self.subTest(status=status):
                 response = self.client.get(self.inbox_url(), {'status': status})
-                self.assertEqual(response.status_code, 200)
                 self.assertEqual({thread.pk for thread in response.context['threads']}, expected)
-                self.assertEqual(response.context['metrics']['total'], 3)
-                self.assertEqual(response.context['metrics']['awaiting'], 1)
-                self.assertEqual(response.context['metrics']['answered'], 1)
-                for thread in response.context['threads']:
-                    self.assertTrue(thread.has_message)
-                    self.assertEqual(thread.is_awaiting_reply, status == 'awaiting')
+        self.assertContains(self.client.get(self.inbox_url(), {'status': 'open'}), '<input type="checkbox" name="status" value="open" checked>')
+        # An old link to a filter that no longer exists ("all", "awaiting") shows everything.
+        for old in ('all', 'awaiting'):
+            response = self.client.get(self.inbox_url(), {'status': old})
+            self.assertEqual(len(response.context['threads']), 3)
+        self.assertNotContains(response, 'Awaiting a reply')
+
+    def test_filters_menu_has_status_and_patient_sections_beside_the_search(self):
+        other = Patient.objects.create(company=self.company, first_name='Zanele', last_name='Ndlovu', assigned_doctor=self.doctor)
+        theirs = MessageThread.objects.create(company=self.company, patient=other, subject='Zanele question')
+        add_participant(theirs, self.doctor)
+        self.login()
+        inbox = self.inbox_url()
+        response = self.client.get(inbox)
+        html = response.content.decode()
+        # The Filters menu comes just before the search; there are no All, Open and Closed buttons.
+        self.assertLess(html.index('<details class="filter-menu filter-menu--compact" data-filter-menu>'), html.index('data-conversation-search'))
+        self.assertNotContains(response, 'class="inbox-filters"')
+        for label in ('Status', 'Patient'):
+            self.assertContains(response, f'<span class="filter-menu__label">{label}</span>')
+        # Patients are the ones your conversations are with, by name.
+        self.assertContains(response, f'<input type="checkbox" name="patients" value="{other.pk}"><span>Zanele Ndlovu</span>')
+        self.assertContains(response, f'<input type="checkbox" name="patients" value="{self.patient.pk}">')
+        self.assertNotContains(response, f'name="patients" value="{self.other_practice_patient.pk}"')
+        response = self.client.get(inbox, {'patients': other.pk})
+        self.assertEqual([thread.pk for thread in response.context['threads']], [theirs.pk])
+        self.assertEqual(len(self.client.get(inbox, {'patients': [other.pk, self.patient.pk]}).context['threads']), 3)
+        # Opening, replying to or marking a conversation keeps the filters; a new message's ?patient= isn't one.
+        self.assertContains(response, f'href="{inbox}?patients={other.pk}&amp;thread={theirs.pk}"')
+        reply = self.client.post(reverse('portal:staff-message-create', args=[theirs.pk]),
+                                 {'body': 'Noted', 'return_to': 'patient_messages', 'patients': str(other.pk)})
+        self.assertRedirects(reply, f'{inbox}?patients={other.pk}&thread={theirs.pk}', fetch_redirect_response=False)
+        self.assertEqual(len(self.client.get(inbox, {'compose': 1, 'patient': other.pk}).context['threads']), 3)
 
     def test_inbox_reply_redirects_back_to_the_same_conversation(self):
         self.login()
         response = self.client.post(reverse('portal:staff-message-create', args=[self.older_thread.pk]), {
             'body': 'A reply from the shared inbox.', 'return_to': 'inbox',
         })
-        self.assertRedirects(response, self.thread_url(self.older_thread), fetch_redirect_response=False)
+        self.assertRedirects(response, self.record_thread_url(self.older_thread), fetch_redirect_response=False)
         self.assertTrue(self.older_thread.messages.filter(sender=self.doctor, body='A reply from the shared inbox.').exists())
 
     def test_invalid_inbox_reply_keeps_selected_thread_and_draft(self):
@@ -344,10 +459,10 @@ class StaffInboxTests(TestCase):
         response = self.client.post(reverse('portal:staff-message-create', args=[self.older_thread.pk]), {
             'body': draft, 'return_to': 'inbox',
         })
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.context['selected_thread'].pk, self.older_thread.pk)
-        self.assertIn('body', response.context['message_form'].errors)
-        self.assertEqual(response.context['message_form']['body'].value(), draft)
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.context['record_thread'].pk, self.older_thread.pk)
+        self.assertIn('body', response.context['record_message_form'].errors)
+        self.assertEqual(response.context['record_message_form']['body'].value(), draft)
         self.assertFalse(PatientMessage.objects.exists())
 
     def test_inbox_proposal_returns_to_conversation_without_changing_booking(self):
@@ -358,7 +473,7 @@ class StaffInboxTests(TestCase):
             'appointment': appointment.pk, 'proposed_starts_at': (original_time + timedelta(days=1)).isoformat(),
             'note': 'Would this new time work?', 'return_to': 'inbox',
         })
-        self.assertRedirects(response, self.thread_url(self.older_thread), fetch_redirect_response=False)
+        self.assertRedirects(response, self.record_thread_url(self.older_thread), fetch_redirect_response=False)
         proposal = AppointmentProposal.objects.get()
         self.assertEqual((proposal.thread_id, proposal.status), (self.older_thread.pk, 'pending'))
         appointment.refresh_from_db()
@@ -371,10 +486,10 @@ class StaffInboxTests(TestCase):
             'appointment': appointment.pk, 'proposed_starts_at': 'bad-date',
             'note': 'Retain this proposal explanation.', 'return_to': 'inbox',
         })
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.context['selected_thread'].pk, self.older_thread.pk)
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.context['record_thread'].pk, self.older_thread.pk)
         self.assertEqual(response.context['failed_form'], 'proposal_form')
-        form = response.context['selected_thread'].proposal_form
+        form = response.context['record_thread'].proposal_form
         self.assertIn('proposed_starts_at', form.errors)
         self.assertEqual(form['note'].value(), 'Retain this proposal explanation.')
         self.assertFalse(AppointmentProposal.objects.exists())
@@ -392,7 +507,7 @@ class StaffInboxTests(TestCase):
         response = self.client.post(reverse('portal:staff-appointment-respond', args=[proposal.pk]), {
             'decision': 'accept', 'return_to': 'inbox',
         })
-        self.assertRedirects(response, self.thread_url(self.older_thread), fetch_redirect_response=False)
+        self.assertRedirects(response, self.record_thread_url(self.older_thread), fetch_redirect_response=False)
         appointment.refresh_from_db()
         self.assertEqual(appointment.starts_at, new_time)
 
@@ -414,9 +529,68 @@ class StaffInboxTests(TestCase):
         response = self.client.post(reverse('portal:staff-appointment-respond', args=[proposal.pk]), {
             'decision': 'accept', 'return_to': 'inbox',
         })
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.context['selected_thread'].pk, self.older_thread.pk)
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.context['record_thread'].pk, self.older_thread.pk)
         self.assertEqual(response.context['failed_proposal_id'], proposal.pk)
         self.assertTrue(response.context['proposal_error'])
         appointment.refresh_from_db()
         self.assertEqual(appointment.starts_at, original_time)
+
+    def test_the_page_has_no_intro_or_count_cards_and_rows_open_the_patient_record(self):
+        self.add_message()
+        self.login()
+        response = self.client.get(self.inbox_url())
+        self.assertNotContains(response, 'inbox-metrics')
+        self.assertNotContains(response, 'Your conversations with patients at')
+        self.assertNotContains(response, 'Conversations you are not part of are not shown')
+        self.assertContains(response, f'<a class="record-inbox-thread is-unread" href="{self.thread_url(self.recent_thread)}"')
+        # The unread count is the red badge used in the patient app: sidebar, mobile bar, Messages tab and row.
+        self.assertContains(response, '<span class="nav-badge" aria-hidden="true">1</span><span class="sr-only">, 1 unread message</span>', count=4)
+        # Someone else's last message is shown as it is; your own starts "You:". The patient is the first tag.
+        self.assertContains(response, '<span class="record-inbox-thread__preview">Secure inbox test message</span>', html=True)
+        self.assertContains(response, '<span class="record-inbox-thread__people person-tags"><span class="sr-only">With </span><span class="person-tag person-tag--patient" title="Alice Patient · Patient">')
+        self.assertContains(response, 'Alice Patient<span class="sr-only"> (Patient)</span></span>')
+        self.add_message(sender=self.doctor)
+        self.assertContains(self.client.get(self.inbox_url()), '<strong>You:</strong> Secure inbox test message')
+
+    def test_mark_as_read_reads_everything_and_mark_as_unread_only_the_latest_for_you(self):
+        first = self.add_message()
+        reply = self.add_message(sender=self.doctor)
+        latest = self.add_message()
+        self.login()
+        page = self.client.get(self.inbox_url())
+        url = reverse('portal:staff-thread-read-state', args=[self.recent_thread.pk])
+        self.assertContains(page, f'action="{url}"')
+        self.assertContains(page, 'name="state" value="read" title="Mark as read"><svg class="read-state-icon"')
+        self.assertContains(page, '<span class="sr-only">Mark as read: Alpha recent discussion</span>')
+        response = self.client.post(url, {'state': 'read', 'status': 'open', 'page': '1'})
+        self.assertRedirects(response, f'{self.inbox_url()}?status=open', fetch_redirect_response=False)
+        for message in (first, latest):
+            message.refresh_from_db()
+            self.assertEqual(message.staff_read_by_id, self.doctor.pk)
+        read_page = self.client.get(self.inbox_url())
+        self.assertContains(read_page, 'name="state" value="unread" title="Mark as unread"><svg class="read-state-icon"')
+        self.assertContains(read_page, 'class="read-state-icon__dot"')
+        self.client.post(url, {'state': 'unread'})
+        first.refresh_from_db()
+        latest.refresh_from_db()
+        reply.refresh_from_db()
+        # Unread is yours alone now: the practice's receipts on the patient's messages stay as they were.
+        self.assertIsNotNone(first.staff_read_at)
+        self.assertIsNotNone(latest.staff_read_at)
+        self.assertIsNone(reply.staff_read_at)
+        counts = {thread.pk: thread.unread_count for thread in self.client.get(self.inbox_url()).context['threads']}
+        self.assertEqual(counts[self.recent_thread.pk], 1)
+        self.assertEqual(set(AuditEvent.objects.filter(action__startswith='message.marked').values_list('action', flat=True)),
+                         {'message.marked_read', 'message.marked_unread'})
+
+    def test_only_people_in_the_conversation_can_change_its_read_state(self):
+        message = self.add_message()
+        self.login(self.administrator)
+        url = reverse('portal:staff-thread-read-state', args=[self.recent_thread.pk])
+        self.assertEqual(self.client.post(url, {'state': 'read'}).status_code, 404)
+        self.login()
+        self.assertEqual(self.client.post(url, {'state': 'maybe'}).status_code, 400)
+        self.assertEqual(self.client.get(url).status_code, 405)
+        message.refresh_from_db()
+        self.assertIsNone(message.staff_read_at)

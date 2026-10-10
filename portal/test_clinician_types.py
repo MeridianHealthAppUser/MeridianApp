@@ -89,6 +89,7 @@ class ClinicianTypeTests(TestCase):
         self.assertEqual(self.client.get(reverse('portal:clinical-consultations')).status_code, 200)
 
     def test_dietitian_keeps_clinical_records_but_cannot_do_doctor_only_work(self):
+        Patient.objects.filter(pk=self.patient.pk).update(assigned_doctor=self.dietitian)
         self.login(self.dietitian)
         self.assertEqual(self.client.get(reverse('portal:clinical-consultation-create', args=[self.patient.pk])).status_code, 200)
         for name in ('clinical-lab-create', 'treatment-authorisation-create'):

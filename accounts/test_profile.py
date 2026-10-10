@@ -49,7 +49,8 @@ class AccountProfileTests(TestCase):
         self.url = reverse('accounts:profile')
 
     def login(self, user=None):
-        self.client.force_login(user or self.doctor)
+        # Staff details are read-only, so self-service edits are exercised with a patient account.
+        self.client.force_login(user or self.patient_user)
 
     def data(self, **changes):
         response = self.client.get(self.url)
@@ -88,14 +89,14 @@ class AccountProfileTests(TestCase):
         self.login()
         response = self.client.get(self.url)
         self.assertEqual(set(response.context['form'].fields), {'first_name', 'last_name'})
-        self.assertContains(response, self.doctor.email)
+        self.assertContains(response, self.patient_user.email)
         self.assertNotContains(response, 'name="email"')
         self.assertNotContains(response, 'name="role"')
         self.assertNotContains(response, 'name="password"')
         self.assertContains(response, 'do not alter recorded patient names')
 
     def test_membership_list_is_owned_active_and_read_only(self):
-        self.login()
+        self.login(self.doctor)
         CompanyMembership.objects.create(company=self.foreign, user=self.doctor, role='doctor', is_active=False)
         response = self.client.get(self.url)
         self.assertEqual({row.pk for row in response.context['membership_page']}, {self.alpha.pk, self.beta.pk})
@@ -138,8 +139,8 @@ class AccountProfileTests(TestCase):
         other_before = get_user_model().objects.get(pk=self.other.pk).__dict__.copy()
         response = self.client.post(self.url, data)
         self.assertRedirects(response, self.url)
-        self.doctor.refresh_from_db()
-        self.assertEqual((self.doctor.first_name, self.doctor.last_name), ('New name', 'Display'))
+        self.patient_user.refresh_from_db()
+        self.assertEqual((self.patient_user.first_name, self.patient_user.last_name), ('New name', 'Display'))
         self.assertEqual(list(Patient.objects.order_by('pk').values()), patient_before)
         self.assertEqual(list(CompanyMembership.objects.order_by('pk').values()), memberships_before)
         self.assertEqual(get_user_model().objects.get(pk=self.other.pk).first_name, other_before['first_name'])
@@ -147,8 +148,8 @@ class AccountProfileTests(TestCase):
         self.assertEqual({row.company_id for row in audits}, {self.alpha.pk, self.beta.pk})
         for row in audits:
             self.assertEqual(row.metadata, {'fields': ['first_name', 'last_name']})
-            self.assertEqual(row.target_id, str(self.doctor.pk))
-            self.assertEqual(row.actor_id, self.doctor.pk)
+            self.assertEqual(row.target_id, str(self.patient_user.pk))
+            self.assertEqual(row.actor_id, self.patient_user.pk)
 
     def test_patient_name_change_preserves_both_patient_records(self):
         self.login(self.patient_user)
@@ -160,35 +161,116 @@ class AccountProfileTests(TestCase):
 
     def test_submitted_privilege_identity_and_target_fields_cannot_escalate(self):
         self.login()
-        original_password = self.doctor.password
-        original_email = self.doctor.email
+        original_password = self.patient_user.password
+        original_email = self.patient_user.email
         data = self.data(user_id=self.other.pk, pk=self.other.pk, email='attacker@example.test', password='replace',
             is_superuser='on', is_staff='on', is_active='', role='super_admin', company=self.foreign.pk,
             groups='1', user_permissions='1', phone='999', id_number='REWRITE')
         response = self.client.post(f'{self.url}?user_id={self.other.pk}', data)
         self.assertRedirects(response, self.url)
-        self.doctor.refresh_from_db()
+        self.patient_user.refresh_from_db()
         self.other.refresh_from_db()
-        self.assertEqual(self.doctor.email, original_email)
-        self.assertEqual(self.doctor.password, original_password)
-        self.assertFalse(self.doctor.is_staff)
-        self.assertFalse(self.doctor.is_superuser)
-        self.assertTrue(self.doctor.is_active)
-        self.assertFalse(self.doctor.groups.exists())
-        self.assertFalse(self.doctor.user_permissions.exists())
+        self.assertEqual(self.patient_user.email, original_email)
+        self.assertEqual(self.patient_user.password, original_password)
+        self.assertFalse(self.patient_user.is_staff)
+        self.assertFalse(self.patient_user.is_superuser)
+        self.assertTrue(self.patient_user.is_active)
+        self.assertFalse(self.patient_user.groups.exists())
+        self.assertFalse(self.patient_user.user_permissions.exists())
         self.assertEqual(self.other.first_name, 'PRIVATE OTHER')
-        self.assertEqual(CompanyMembership.objects.get(company=self.alpha, user=self.doctor).role, 'doctor')
-        self.assertFalse(CompanyMembership.objects.filter(company=self.foreign, user=self.doctor).exists())
+        self.assertFalse(CompanyMembership.objects.filter(user=self.patient_user).exists())
         self.assertEqual(self.client.get(f'{self.url}{self.other.pk}/').status_code, 404)
 
-    def test_super_admin_still_edits_only_their_own_account(self):
-        self.login(self.super_admin)
-        data = self.data(user_id=self.other.pk)
-        self.assertRedirects(self.client.post(self.url, data), self.url)
-        self.super_admin.refresh_from_db()
-        self.other.refresh_from_db()
-        self.assertEqual(self.super_admin.first_name, 'Changed')
-        self.assertEqual(self.other.first_name, 'PRIVATE OTHER')
+    def test_staff_names_are_read_only_and_cannot_be_posted(self):
+        """Staff read their names here; a Super Admin keeps them in Users and roles."""
+        get_user_model().objects.filter(pk=self.doctor.pk).update(contact_number='082 441 7730', hpcsa_number='MP 0728145',
+                                                                   note_signature='S. Example, MBChB')
+        for user in (self.doctor, self.admin, self.super_admin):
+            with self.subTest(user=user.email):
+                self.login(user)
+                response = self.client.get(self.url)
+                self.assertNotIn('form', response.context)
+                self.assertNotContains(response, 'name="first_name"')
+                if user != self.doctor:
+                    self.assertContains(response, 'Read-only')
+                    self.assertContains(response, 'These details are maintained centrally.')
+                token = make_profile_context(user)
+                response = self.client.post(self.url, {'profile_context': token, 'first_name': 'Changed', 'last_name': 'Display'})
+                self.assertEqual(response.status_code, 403)
+                user.refresh_from_db()
+                self.assertNotEqual(user.first_name, 'Changed')
+        self.login(self.doctor)
+        response = self.client.get(self.url)
+        for value in ('082 441 7730', 'MP 0728145', 'S. Example, MBChB', 'HPCSA registration number', 'Your month to date'):
+            self.assertContains(response, value)
+        # Clinician-only rows and the month so far are not shown to a practice administrator.
+        self.login(self.admin)
+        response = self.client.get(self.url)
+        self.assertNotContains(response, 'HPCSA registration number')
+        self.assertNotContains(response, 'Your month to date')
+        self.assertNotContains(response, 'account-profile__editor')
+        self.assertFalse(AuditEvent.objects.filter(action='account.profile_updated').exists())
+
+    def test_staff_title_shows_above_first_name_and_is_not_editable(self):
+        get_user_model().objects.filter(pk=self.doctor.pk).update(title='DR')
+        self.login(self.doctor)
+        response = self.client.get(self.url)
+        self.assertContains(response, '<div><dt>Title</dt><dd>Dr</dd></div>', html=True)
+        html = response.content.decode()
+        self.assertLess(html.index('<dt>Title</dt>'), html.index('<dt>First name</dt>'))
+        self.assertNotContains(response, 'name="title"')
+        self.login(self.admin)
+        self.assertContains(self.client.get(self.url), '<div><dt>Title</dt><dd>Not recorded</dd></div>', html=True)
+
+    def test_clinician_edits_note_signature_and_pathcare_details_with_the_pen(self):
+        detail_url = reverse('accounts:profile-detail')
+        get_user_model().objects.filter(pk=self.doctor.pk).update(pathcare_name='EXAMPLE,DR S', pathcare_code='EXASA0')
+        self.login(self.doctor)
+        response = self.client.get(self.url)
+        # PathCare name and code are separate rows, each with its own pen.
+        for label in ('Edit how you sign consult notes', 'Edit your PathCare name', 'Edit your PathCare code'):
+            self.assertContains(response, f'aria-label="{label}"')
+        self.assertContains(response, '<dt>PathCare name</dt>')
+        self.assertContains(response, '<dt>PathCare code</dt>')
+        self.assertNotContains(response, 'PathCare name and code')
+        token = make_profile_context(self.doctor)
+        response = self.client.post(detail_url, {'profile_context': token, 'field': 'pathcare_code', 'value': '  CZEJC0 '})
+        self.assertRedirects(response, self.url)
+        self.doctor.refresh_from_db()
+        self.assertEqual(self.doctor.pathcare_code, 'CZEJC0')
+        # Recorded in each active practice the doctor works in.
+        events = AuditEvent.objects.filter(action='account.staff_details_updated')
+        self.assertEqual({event.company for event in events}, {self.alpha, self.beta})
+        self.assertTrue(all(event.metadata['fields'] == ['pathcare_code'] for event in events))
+        self.assertRedirects(self.client.post(detail_url, {'profile_context': token, 'field': 'note_signature',
+                                                           'value': 'S. Example, MBChB'}), self.url)
+        self.doctor.refresh_from_db()
+        self.assertEqual(self.doctor.note_signature, 'S. Example, MBChB')
+        # Too long: the editor reopens with the draft and the reason, and nothing is saved.
+        response = self.client.post(detail_url, {'profile_context': token, 'field': 'pathcare_name', 'value': 'X' * 61})
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'value="' + 'X' * 61 + '"')
+        self.assertContains(response, 'aria-invalid="true"')
+        self.doctor.refresh_from_db()
+        self.assertEqual(self.doctor.pathcare_name, 'EXAMPLE,DR S')
+        response = self.client.post(detail_url, {'profile_context': 'tampered', 'field': 'pathcare_name', 'value': 'NEW,DR S'})
+        self.assertContains(response, 'Reload My profile before saving again.')
+        # Only these three; names, title and HPCSA number stay with the Super Admin.
+        for field in ('first_name', 'title', 'hpcsa_number', 'email', ''):
+            with self.subTest(field=field):
+                self.assertEqual(self.client.post(detail_url, {'profile_context': token, 'field': field, 'value': 'X'}).status_code, 403)
+        self.doctor.refresh_from_db()
+        self.assertEqual((self.doctor.first_name, self.doctor.title, self.doctor.hpcsa_number), ('Sam', '', ''))
+
+    def test_non_clinicians_cannot_use_the_pen(self):
+        for user in (self.admin, self.patient_user):
+            with self.subTest(user=user.email):
+                self.login(user)
+                response = self.client.post(reverse('accounts:profile-detail'), {
+                    'profile_context': make_profile_context(user), 'field': 'pathcare_code', 'value': 'CZEJC0'})
+                self.assertEqual(response.status_code, 403)
+                user.refresh_from_db()
+                self.assertEqual(user.pathcare_code, '')
 
     def test_missing_tampered_wrong_shape_and_expired_tokens_rejected(self):
         self.login()
@@ -205,7 +287,7 @@ class AccountProfileTests(TestCase):
     def test_token_from_different_login_cannot_change_new_session_account(self):
         self.login()
         data = self.data()
-        self.login(self.patient_user)
+        self.login(self.unlinked)
         self.assert_rejected(data)
 
     def test_stale_tab_cannot_overwrite_newer_name(self):
@@ -214,8 +296,8 @@ class AccountProfileTests(TestCase):
         self.assertRedirects(self.client.post(self.url, data), self.url)
         response = self.assert_rejected({**data, 'first_name': 'Stale draft'})
         self.assertContains(response, 'value="Stale draft"')
-        self.doctor.refresh_from_db()
-        self.assertEqual(self.doctor.first_name, 'Changed')
+        self.patient_user.refresh_from_db()
+        self.assertEqual(self.patient_user.first_name, 'Changed')
 
     def test_global_profile_token_is_not_tied_to_selected_practice(self):
         self.login()
@@ -225,12 +307,12 @@ class AccountProfileTests(TestCase):
         session[ACTIVE_PATIENT_COMPANY_SESSION_KEY] = self.beta.pk
         session.save()
         self.assertRedirects(self.client.post(self.url, data), self.url)
-        self.doctor.refresh_from_db()
-        self.assertEqual(self.doctor.first_name, 'Changed')
+        self.patient_user.refresh_from_db()
+        self.assertEqual(self.patient_user.first_name, 'Changed')
 
     def test_unchanged_profile_does_not_create_audit_event(self):
         self.login()
-        data = self.data(first_name=self.doctor.first_name, last_name=self.doctor.last_name)
+        data = self.data(first_name=self.patient_user.first_name, last_name=self.patient_user.last_name)
         self.assertRedirects(self.client.post(self.url, data), self.url)
         self.assertFalse(AuditEvent.objects.exists())
 
@@ -249,12 +331,12 @@ class AccountProfileTests(TestCase):
 
     def test_post_requires_csrf_even_with_valid_signed_profile_context(self):
         client = Client(enforce_csrf_checks=True)
-        client.force_login(self.doctor)
+        client.force_login(self.patient_user)
         response = client.get(self.url)
         data = {'profile_context': response.context['profile_context'], 'first_name': 'CSRF safe', 'last_name': 'Example'}
         self.assertEqual(client.post(self.url, data).status_code, 403)
-        self.doctor.refresh_from_db()
-        self.assertEqual(self.doctor.first_name, 'Sam')
+        self.patient_user.refresh_from_db()
+        self.assertEqual(self.patient_user.first_name, 'Nadia')
         self.assertFalse(AuditEvent.objects.exists())
         response = client.post(self.url, data, HTTP_X_CSRFTOKEN=client.cookies['csrftoken'].value)
         self.assertEqual(response.status_code, 302)
@@ -269,7 +351,7 @@ class AccountProfileTests(TestCase):
         self.assertFalse(AuditEvent.objects.exists())
 
     def test_practice_access_is_paginated(self):
-        self.login()
+        self.login(self.doctor)
         for index in range(23):
             company = Company.objects.create(name=f'Extra {index:02}', slug=f'profile-extra-{index}')
             CompanyMembership.objects.create(company=company, user=self.doctor, role='doctor')
@@ -281,13 +363,27 @@ class AccountProfileTests(TestCase):
         self.assertEqual(self.client.get(self.url, {'page': 'invalid'}).status_code, 200)
 
     def test_profile_links_use_existing_security_and_owned_contact_pages(self):
-        self.login()
+        self.login(self.doctor)
         response = self.client.get(self.url)
         self.assertContains(response, reverse('accounts:password-change'))
-        self.assertContains(response, reverse('portal:account-access-history'))
+        self.assertContains(response, f'action="{reverse("accounts:sign-out-others")}"')
         self.assertContains(response, f'action="{reverse("accounts:logout")}"')
         self.assertNotContains(response, 'href="mailto:')
         self.assertEqual(self.client.get(reverse('accounts:logout')).status_code, 405)
+
+    def test_sign_out_others_ends_every_other_session_and_keeps_this_one(self):
+        other_device = Client()
+        other_device.force_login(self.doctor)
+        someone_else = Client()
+        someone_else.force_login(self.admin)
+        self.login(self.doctor)
+        self.assertEqual(self.client.get(reverse('accounts:sign-out-others')).status_code, 405)
+        response = self.client.post(reverse('accounts:sign-out-others'))
+        self.assertRedirects(response, self.url)
+        self.assertEqual(self.client.get(self.url).status_code, 200)
+        self.assertEqual(other_device.get(self.url).status_code, 302)
+        self.assertEqual(someone_else.get(self.url).status_code, 200)
+        self.assertEqual(AuditEvent.objects.filter(action='account.sessions_ended').count(), 2)
 
     def test_optional_browser_layout_for_staff_and_patient(self):
         if not os.environ.get('MERIDIAN_PLAYWRIGHT_PATH'):
@@ -302,3 +398,46 @@ class AccountProfileTests(TestCase):
             cwd=root, input=json.dumps(pages), text=True, capture_output=True, timeout=90, check=False)
         self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
         self.assertEqual(json.loads(result.stdout)['checked'], 9)
+
+    def test_month_to_date_is_provisional_with_a_total_at_the_latest_approved_rates(self):
+        from datetime import date
+        from decimal import Decimal
+
+        from care.models import DoctorActivityStatement
+
+        self.client.force_login(self.doctor)
+        session = self.client.session
+        session[ACTIVE_COMPANY_SESSION_KEY] = self.alpha.pk
+        session.save()
+        response = self.client.get(self.url)
+        self.assertContains(response, '<span class="account-profile__role">Provisional</span>', html=True)
+        self.assertNotContains(response, 'So far this month')
+        self.assertContains(response, 'No rates on file yet')
+        # The practice isn't repeated as a tag beside the role.
+        self.assertNotContains(response, '<span class="account-profile__role account-profile__role--plain">Profile Alpha</span>')
+
+        statement = dict(doctor=self.doctor, counts={}, source_ids={}, amount=Decimal('0'), prepared_by=self.admin)
+        rates = {'initial': '650.00', 'review': '200.00', 'follow_up': '150.00', 'messages': '25.00'}
+        DoctorActivityStatement.objects.create(company=self.alpha, period_start=date(2026, 8, 1), period_end=date(2026, 8, 31),
+                                               rates=rates, approved_at=timezone.now(), **statement)
+        # Neither a draft nor another practice's rates count.
+        DoctorActivityStatement.objects.create(company=self.alpha, period_start=date(2026, 9, 1), period_end=date(2026, 9, 30),
+                                               rates={**rates, 'initial': '9999.00'}, **statement)
+        DoctorActivityStatement.objects.create(company=self.beta, period_start=date(2026, 9, 1), period_end=date(2026, 9, 30),
+                                               rates={**rates, 'initial': '8888.00'}, approved_at=timezone.now(), **statement)
+        counts = {'initial': 12, 'review': 30, 'follow_up': 8, 'messages': 96}
+        with patch('care.reporting.doctor_activity', return_value=(counts, {})):
+            response = self.client.get(self.url)
+        self.assertEqual(response.context['month_to_date']['review'], 38)
+        # 12 × 650 + 30 × 200 + 8 × 150 + 96 × 25
+        self.assertContains(response, '<dd>R17 400.00</dd>', html=True)
+        self.assertNotContains(response, 'No rates on file yet')
+
+    def test_security_card_says_two_factor_is_not_set_up_yet(self):
+        for user in (self.doctor, self.admin):
+            with self.subTest(user=user.email):
+                self.client.force_login(user)
+                page = self.client.get(self.url).content.decode()
+                self.assertLess(page.index('<strong>Password</strong>'), page.index('<strong>Two-factor authentication</strong>'))
+                self.assertLess(page.index('<strong>Two-factor authentication</strong>'), page.index('<strong>Active sessions</strong>'))
+                self.assertIn('Not set up yet', page)

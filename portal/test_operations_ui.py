@@ -77,16 +77,14 @@ class OperationsTemplateTests(OperationsFixture):
             with self.subTest(route=route):
                 self.assert_page(route, heading, args)
 
-    def test_doctor_readonly_views_do_not_render_operational_write_forms(self):
+    def test_doctors_cannot_open_operations_detail_pages(self):
         batch = self.receive()
         shipment = self.shipment(quantity=1)
         order = self.submitted_order()
         self.login(self.doctor)
         for route, pk in (('ops-product-detail', self.product.pk), ('ops-batch-detail', batch.pk),
                           ('ops-shipment-detail', shipment.pk), ('ops-order-detail', order.pk)):
-            response = self.client.get(reverse(f'portal:{route}', args=[pk]))
-            self.assertEqual(response.status_code, 200)
-            self.assertNotContains(response, 'name="workflow_context"')
+            self.assertEqual(self.client.get(reverse(f'portal:{route}', args=[pk])).status_code, 403)
 
     def test_patient_catalogue_and_basket_show_no_payment_flow(self):
         self.login(self.patient_user)

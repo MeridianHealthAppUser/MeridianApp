@@ -13,6 +13,7 @@ from care.models import (
     MedicationProduct, PatientEvent, PatientMedicalProfile, PatientMedicalProfileRevision,
     PatientSubscription, PracticeSettings, TreatmentAuthorization, WeightEntry,
 )
+from care.patient_files import store_patient_file
 from practices.models import Company, CompanyMembership, Patient
 from practices.services import ACTIVE_COMPANY_SESSION_KEY
 
@@ -57,7 +58,8 @@ class ClinicalRecordTests(TestCase):
         cls.lab = LabRequest.objects.create(company=cls.alpha, patient=cls.patient, requested_by=cls.doctor,
             panel_name='Requested panel', status='reviewed', reviewed_by=cls.doctor, reviewed_at=timezone.now(), result_summary='Clinician reviewed the report.')
         cls.result = LabResult.objects.create(company=cls.alpha, patient=cls.patient, lab_request=cls.lab,
-            uploaded_by=cls.user, filename='report.pdf', content=b'BINARY_REPORT_SECRET', size=20, sha256='0' * 64)
+            uploaded_by=cls.user, filename='report.pdf', size=20, sha256='0' * 64, file=store_patient_file(
+                company=cls.alpha, patient=cls.patient, kind='lab_result', filename='report.pdf', content=b'BINARY_REPORT_SECRET'))
         cls.profile = PatientMedicalProfile.objects.create(company=cls.alpha, patient=cls.patient,
             revision=1, answers={'allergies': 'ALPHA_DOCTOR_ONLY_PROFILE', 'unexpected_key': 'UNEXPECTED_PROFILE_SECRET'})
         PatientMedicalProfileRevision.objects.create(company=cls.alpha, patient=cls.patient, profile=cls.profile,
@@ -186,7 +188,7 @@ class ClinicalRecordTests(TestCase):
             self.page(True)
         selects = [query['sql'].lower() for query in queries if query['sql'].lstrip().lower().startswith('select')]
         for query in selects:
-            self.assertNotIn('"care_labresult"."content"', query)
+            self.assertNotIn('"care_patientfile"."content"', query)
             self.assertNotIn('"care_auditevent"."metadata"', query)
             self.assertNotIn('"care_auditevent"."ip_address"', query)
 
@@ -341,6 +343,7 @@ class ClinicalRecordTests(TestCase):
         self.assertIn('no-store', response.headers['Cache-Control'])
 
     def test_foreign_directory_rows_require_explicit_post_practice_switch(self):
+        Patient.objects.filter(pk=self.beta_patient.pk).update(assigned_doctor=self.doctor)
         self.login()
         response = self.directory(scope='all')
         self.assertNotContains(response, f'href="{reverse("portal:patient-detail", args=[self.beta_patient.pk])}"')

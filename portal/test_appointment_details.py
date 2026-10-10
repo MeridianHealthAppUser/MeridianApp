@@ -1,7 +1,8 @@
 """Standalone appointment and conversation forms are signed and practice scoped."""
 
-from datetime import timedelta
+from datetime import datetime, time, timedelta
 import json
+import re
 import os
 import shutil
 import subprocess
@@ -19,6 +20,7 @@ from care.clinical import save_consultation
 from care.models import Appointment, AuditEvent, ClinicalTask, PatientMessage
 from care.services import post_patient_message
 from care.test_appointment_lifecycle import AppointmentLifecycleFixture
+from care.widgets import floor_quarter_hour
 from practices.services import ACTIVE_COMPANY_SESSION_KEY, ACTIVE_PATIENT_COMPANY_SESSION_KEY
 
 
@@ -182,6 +184,202 @@ class AppointmentDetailPageTests(AppointmentLifecycleFixture):
         appointment.refresh_from_db()
         self.assertEqual(appointment.status, 'completed')
 
+    def test_update_booking_status_opens_in_a_modal_after_the_details_and_video(self):
+        appointment = self.appointment()
+        url = self.url('appointment-detail', appointment.pk)
+        self.login(self.admin)
+        response = self.client.get(url)
+        html = response.content.decode()
+        # A button with the card's other actions opens the form in a modal, below the video section in the page.
+        self.assertContains(response, 'href="?update=status" data-modal-open="appointment-status" aria-haspopup="dialog">Update booking status</a>')
+        self.assertContains(response, '<dialog class="app-dialog" id="appointment-status" aria-labelledby="appointment-status-title">')
+        self.assertContains(response, 'js/dialogs.js')
+        self.assertLess(html.index('<h2>Appointment details</h2>'), html.index('>Video consultation</h2>'))
+        self.assertLess(html.index('>Video consultation</h2>'), html.index('id="appointment-status"'))
+        # Without scripts the button's link opens it; after a form error it opens by itself, with the error.
+        opened = 'id="appointment-status" aria-labelledby="appointment-status-title" open>'
+        self.assertContains(self.client.get(url, {'update': 'status'}), opened)
+        response = self.client.post(url, self.status_data(response.context['workflow_context'], confirm=''))
+        self.assertContains(response, opened, status_code=400)
+        self.assertContains(response, 'errorlist', status_code=400)
+        appointment.refresh_from_db()
+        self.assertEqual(appointment.status, 'booked')
+        # Someone who can't change the booking gets neither the button nor the modal.
+        self.login(self.colleague)
+        response = self.client.get(url)
+        self.assertNotContains(response, 'Update booking status')
+        self.assertNotContains(response, '<dialog')
+
+    def test_write_consultation_note_opens_a_modal_with_this_appointment_chosen_and_the_time_now(self):
+        appointment = self.appointment()
+        url = self.url('appointment-detail', appointment.pk)
+        create = self.url('clinical-consultation-create', self.patient.pk)
+        self.login(self.doctor)
+        response = self.client.get(url)
+        self.assertContains(response, f'href="{create}?appointment={appointment.pk}" data-modal-open="consultation-note" aria-haspopup="dialog">Write consultation note</a>')
+        self.assertContains(response, '<dialog class="app-dialog app-dialog--wide clinical-workflow" id="consultation-note" aria-labelledby="consultation-note-title">')
+        self.assertContains(response, f'<form class="console-form" method="post" action="{create}">')
+        self.assertContains(response, f'<option value="{appointment.pk}" selected>')
+        self.assertContains(response, 'data-requires-check="consultation_confirm_signature">Sign final note</button>')
+        self.assertContains(response, 'css/clinical_workflow.css')
+        # Now, to the quarter hour just gone, as the picker offers only 00, 15, 30 and 45.
+        occurred = response.context['consultation_form'].initial['occurred_at']
+        self.assertEqual(occurred.minute % 15, 0)
+        self.assertTrue(0 <= (timezone.now() - occurred).total_seconds() < 15 * 60)
+        self.assertContains(response, '<select name="occurred_at_1" class="quarter-hour-time" aria-label="Time" required id="consultation_occurred_at_1">')
+        # Without scripts, the link opens the note's own page with the appointment chosen.
+        self.assertContains(self.client.get(f'{create}?appointment={appointment.pk}'), f'<option value="{appointment.pk}" selected>')
+        # Saving from the modal goes to the new note, linked to the appointment; the button then opens it.
+        # The date and the time come from the picker's two boxes.
+        saved = self.client.post(create, {'clinical_context': response.context['consultation_context'], 'appointment': appointment.pk,
+                                          'occurred_at_0': occurred.strftime('%Y-%m-%d'), 'occurred_at_1': occurred.strftime('%H:%M'),
+                                          'summary': 'Reviewed progress.', 'action': 'save'})
+        appointment.refresh_from_db()
+        note = appointment.encounter
+        self.assertRedirects(saved, self.url('clinical-consultation-detail', note.pk))
+        response = self.client.get(url)
+        self.assertContains(response, f'href="{self.url("clinical-consultation-detail", note.pk)}">Open consultation note</a>')
+        self.assertNotContains(response, 'id="consultation-note"')
+        # Practice administrators never get the note or its form.
+        self.login(self.admin)
+        response = self.client.get(url)
+        self.assertNotContains(response, 'consultation note</a>')
+        self.assertNotContains(response, 'id="consultation-note"')
+
+    def test_the_record_appointment_list_shows_the_join_window_and_the_video_room_note_behind_an_info_tip(self):
+        appointment = self.appointment(starts_at=timezone.make_aware(timezone.datetime(2030, 10, 16, 11, 0)), duration_minutes=15)
+        cancelled = self.appointment(starts_at=timezone.make_aware(timezone.datetime(2030, 10, 17, 11, 0)), status='cancelled')
+        self.login(self.doctor)
+        response = self.client.get(self.url('patient-detail', self.patient.pk), {'tab': 'appointments'})
+        self.assertContains(response, '<th scope="col">Date and time</th><th scope="col">Appointment type</th><th scope="col">Join window</th><th scope="col">Doctor</th>')
+        self.assertContains(response, '<td>10:55–11:15<small>SAST</small></td>')
+        self.assertContains(response, '<td>&mdash;</td>', count=1)
+        self.assertNotIn(cancelled.pk, [row.pk for row in response.context['rows'] if row.join_window])
+        # The window has its own column, so the note behind the (i) leaves it out.
+        self.assertNotContains(response, 'Join window:')
+        self.assertContains(response, f'<span class="info-tip" data-info-tip><button class="info-tip__button" type="button" aria-label="When the video room opens" aria-describedby="video-join-{appointment.pk}">i</button><span class="info-tip__bubble" id="video-join-{appointment.pk}" role="tooltip">')
+        self.assertContains(response, 'css/info_tips.css')
+        self.assertContains(response, 'js/info_tips.js')
+        # The appointment's own page keeps the note written out.
+        self.assertContains(self.client.get(self.url('appointment-detail', appointment.pk)), '<span class="backoffice-muted">')
+
+    def test_record_tables_filter_by_any_choices_ticked_in_a_filters_menu(self):
+        mine = self.appointment(appointment_type='initial')
+        theirs = self.appointment(clinician=self.colleague, appointment_type='follow_up', starts_at=self.starts_at + timedelta(hours=1))
+        cancelled = self.appointment(appointment_type='follow_up', status='cancelled', starts_at=self.starts_at + timedelta(hours=2))
+        record = self.url('patient-detail', self.patient.pk)
+        self.login(self.admin)
+
+        def rows(**query):
+            return {row.pk for row in self.client.get(record, {'tab': 'appointments', **query}).context['rows']}
+
+        response = self.client.get(record, {'tab': 'appointments'})
+        self.assertContains(response, '<details class="filter-menu" data-filter-menu>')
+        self.assertContains(response, 'js/filter_menu.js')
+        self.assertNotContains(response, 'patient-workspace-filter')
+        self.assertNotContains(response, 'Clear all')
+        for label in ('Status', 'Appointment type', 'Doctor'):
+            self.assertContains(response, f'<span class="filter-menu__label">{label}</span>')
+        # Only people in this patient's appointments are offered.
+        self.assertContains(response, f'name="doctor" value="{self.doctor.pk}"')
+        self.assertContains(response, f'name="doctor" value="{self.colleague.pk}"')
+        self.assertNotContains(response, f'name="doctor" value="{self.admin.pk}"')
+        # Ticks within a section widen it; sections narrow each other.
+        self.assertEqual(rows(status=['booked', 'cancelled'], doctor=self.doctor.pk), {mine.pk, cancelled.pk})
+        self.assertEqual(rows(type='follow_up'), {theirs.pk, cancelled.pk})
+        self.assertEqual(rows(status='all'), {mine.pk, theirs.pk, cancelled.pk})
+        response = self.client.get(record, {'tab': 'appointments', 'status': ['booked', 'cancelled'], 'type': 'follow_up'})
+        self.assertContains(response, '<span class="filter-menu__badge">3<span class="sr-only"> applied</span></span>')
+        self.assertContains(response, '<input type="checkbox" name="status" value="cancelled" checked>')
+        self.assertContains(response, f'<a class="filter-menu__clear" href="{record}?tab=appointments">Clear all</a>')
+        # A choice that isn't offered shows nothing, rather than everything.
+        self.assertEqual(rows(doctor=self.super_admin.pk), set())
+        self.assertContains(self.client.get(record, {'tab': 'appointments', 'doctor': self.super_admin.pk}), 'filter-menu__error')
+        # Consultations filter by status and by who wrote them.
+        save_consultation(company=self.company, patient=self.patient, actor=self.doctor, summary='Final',
+                          occurred_at=timezone.now() - timedelta(days=1), sign=True)
+        self.login(self.doctor)
+        draft = save_consultation(company=self.company, patient=self.patient, actor=self.doctor, summary='Draft',
+                                  occurred_at=timezone.now() - timedelta(hours=1))
+        response = self.client.get(record, {'tab': 'consultations', 'status': 'draft'})
+        self.assertEqual([row.pk for row in response.context['rows']], [draft.pk])
+        self.assertEqual([section['label'] for section in response.context['filter_menu']['sections']], ['Status', 'Doctor'])
+
+    def test_book_an_appointment_is_a_button_beside_the_filters_that_opens_a_modal(self):
+        self.appointment(clinician=self.colleague)
+        record = self.url('patient-detail', self.patient.pk)
+        self.login(self.admin)
+        response = self.client.get(record, {'tab': 'appointments'})
+        html = response.content.decode()
+        button = f'href="{self.url("appointment-book")}?patient={self.patient.pk}" data-modal-open="book-appointment" aria-haspopup="dialog">Book an appointment</a>'
+        self.assertContains(response, button)
+        self.assertLess(html.index('data-filter-menu'), html.index(button))
+        self.assertContains(response, '<dialog class="app-dialog" id="book-appointment" aria-labelledby="book-appointment-title">')
+        self.assertNotContains(response, '<summary>Book an appointment</summary>')
+        # A mistake opens the modal again with the error; a booking returns to the list.
+        create = self.url('patient-appointment-create', self.patient.pk)
+        data = {'workflow_context': response.context['legacy_appointment_context'], 'patient': self.patient.pk,
+                'clinician': self.doctor.pk, 'appointment_type': 'follow_up', 'duration_minutes': 15, 'video_link': '',
+                'starts_at': floor_quarter_hour(timezone.localtime(timezone.now() - timedelta(days=1))).strftime('%Y-%m-%dT%H:%M')}
+        failed = self.client.post(create, data)
+        self.assertContains(failed, 'id="book-appointment" aria-labelledby="book-appointment-title" open>')
+        self.assertContains(failed, 'Choose a future appointment time.')
+        data['starts_at'] = timezone.localtime(self.starts_at + timedelta(days=1)).strftime('%Y-%m-%dT%H:%M')
+        self.assertRedirects(self.client.post(create, data), f'{record}?tab=appointments', fetch_redirect_response=False)
+        self.assertTrue(Appointment.objects.filter(patient=self.patient, clinician=self.doctor, appointment_type='follow_up').exists())
+        # Someone who can only read the record gets neither.
+        self.login(self.colleague)
+        response = self.client.get(record, {'tab': 'appointments'})
+        self.assertNotContains(response, 'Book an appointment')
+        self.assertNotContains(response, 'id="book-appointment"')
+
+    def test_create_appointment_opens_a_modal_with_date_time_and_duration_in_thirds(self):
+        self.login(self.admin)
+        response = self.client.get(self.url('staff-schedule'))
+        self.assertContains(response, f'href="{self.url("appointment-book")}" data-modal-open="create-appointment" aria-haspopup="dialog">Create appointment</a>')
+        self.assertContains(response, '<dialog class="app-dialog" id="create-appointment" aria-labelledby="create-appointment-title">')
+        html = response.content.decode()
+        fields = html[html.index('class="booking-fields"'):html.index('</dialog>', html.index('id="create-appointment"'))]
+        order = [fields.index(f'name="{name}"') for name in ('patient', 'clinician', 'appointment_type', 'date', 'time', 'duration_minutes')]
+        self.assertEqual(order, sorted(order))
+        self.assertLess(fields.index('class="booking-fields__when"'), fields.index('name="date"'))
+        self.assertIn(f'data-times-url="{self.url("appointment-book-times")}"', fields)
+        self.assertEqual(re.findall(r'<option value="(\d+)"', fields[fields.index('name="duration_minutes"'):]), ['15', '30', '45', '60'])
+        self.assertNotIn('name="video_link" type', fields)
+        self.assertContains(response, 'js/appointment_booking.js')
+        # Booking from the modal: the date and time make the start.
+        day = timezone.localtime(self.starts_at + timedelta(days=1)).date()
+        booked = self.client.post(self.url('appointment-book'), {
+            'workflow_context': response.context['booking_context'], 'patient': self.patient.pk, 'clinician': self.doctor.pk,
+            'appointment_type': 'follow_up', 'date': day.isoformat(), 'time': '10:15', 'duration_minutes': '45'})
+        appointment = Appointment.objects.get(patient=self.patient, duration_minutes=45)
+        self.assertRedirects(booked, self.url('appointment-detail', appointment.pk), fetch_redirect_response=False)
+        self.assertEqual(timezone.localtime(appointment.starts_at).strftime('%Y-%m-%d %H:%M'), f'{day.isoformat()} 10:15')
+
+    def test_the_time_list_offers_the_clinicians_free_quarter_hours_that_day(self):
+        from care.models import DoctorWorkingPattern
+
+        day = timezone.localdate() + timedelta(days=7)
+        DoctorWorkingPattern.objects.create(company=self.company, clinician=self.doctor, weekday=day.weekday(), is_working=True,
+                                            starts_at=time(9, 0), ends_at=time(11, 0))
+        self.appointment(starts_at=timezone.make_aware(datetime.combine(day, time(9, 30))), duration_minutes=30)
+        self.login(self.admin)
+        url = self.url('appointment-book-times')
+
+        def times(**query):
+            return self.client.get(url, {'clinician': self.doctor.pk, 'date': day.isoformat(), 'duration': 15, **query}).json()['times']
+
+        # In their hours, on the quarter hour, clear of the 9:30 booking; a longer booking has fewer starts.
+        self.assertEqual(times(), ['09:00', '09:15', '10:00', '10:15', '10:30', '10:45'])
+        self.assertEqual(times(duration=60), ['10:00'])
+        # The patient's own other bookings are left out too.
+        self.assertEqual(times(patient=self.patient.pk), ['09:00', '09:15', '10:00', '10:15', '10:30', '10:45'])
+        self.appointment(clinician=self.colleague, starts_at=timezone.make_aware(datetime.combine(day, time(10, 0))), duration_minutes=30)
+        self.assertEqual(times(patient=self.patient.pk), ['09:00', '09:15', '10:30', '10:45'])
+        # Anything not offered here can't be asked about.
+        self.assertEqual(self.client.get(url, {'clinician': self.doctor.pk, 'date': day.isoformat(), 'duration': 20}).status_code, 400)
+        self.assertEqual(self.client.get(url, {'clinician': self.other_user.pk, 'date': day.isoformat(), 'duration': 15}).status_code, 400)
+
     def test_admin_cannot_forge_attendance_action_and_own_doctor_waits_for_end(self):
         appointment = self.appointment()
         url = self.url('appointment-detail', appointment.pk)
@@ -295,10 +493,14 @@ class AppointmentDetailPageTests(AppointmentLifecycleFixture):
         self.login(self.doctor)
         response = self.client.get(url)
         self.assertTemplateUsed(response, 'portal/message_management.html')
+        # "Clinician to add" only shows while adding a clinician is the chosen action (the script hides it otherwise).
+        self.assertContains(response, '<div data-shows-for-action="handover"><div class="console-form__field"><label for="id_doctor">Clinician to add</label>')
+        self.assertContains(response, 'js/conversation_management.js')
         token = response.context['workflow_context']
         self.assertEqual(self.client.post(url, self.management_data('missing')).status_code, 400)
         response = self.client.post(url, self.management_data(token))
-        self.assertRedirects(response, url, fetch_redirect_response=False)
+        # Once applied, it goes back to the conversation in Patient messages.
+        self.assertRedirects(response, f"{reverse('portal:staff-inbox')}?thread={self.thread.pk}", fetch_redirect_response=False)
         self.assertEqual(set(self.thread.participants.all()), {self.doctor, self.colleague})
         self.assertFalse(PatientMessage.objects.exists())
         self.assertFalse(ClinicalTask.objects.exists())

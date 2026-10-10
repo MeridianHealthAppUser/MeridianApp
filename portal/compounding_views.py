@@ -38,6 +38,7 @@ class CompoundingBase(StaffClinicalView):
 
 class CompoundingListView(CompoundingBase):
     http_method_names = ('get', 'head', 'options')
+    clinician_redirect_message = 'Your compounding records open from My tasks.'
 
     def get(self, request):
         records = self.records().order_by('-created_at', '-pk')
@@ -53,10 +54,12 @@ class CompoundingListView(CompoundingBase):
 class CompoundingCreateView(CompoundingBase):
     def authorization(self, pk):
         self.require_doctor()
-        return get_object_or_404(TreatmentAuthorization.objects.for_company(self.company).filter(
+        authorization = get_object_or_404(TreatmentAuthorization.objects.for_company(self.company).filter(
             patient__company=self.company, patient__is_active=True, prescribed_by=self.request.user,
             product__company=self.company, product__is_compounded=True,
         ).select_related('patient', 'product'), pk=pk)
+        self.check_record(authorization.patient)
+        return authorization
 
     def display(self, request, authorization, form, status=200):
         context = self.context(
@@ -107,10 +110,13 @@ class CompoundingDetailView(CompoundingBase):
         return render(request, 'portal/patient_workspace_action.html' if context.get('patient_workspace') else 'portal/compounding_detail.html', context, status=status)
 
     def get(self, request, pk):
-        return self.display(request, get_object_or_404(self.records(), pk=pk))
+        record = get_object_or_404(self.records(), pk=pk)
+        self.check_record(record.patient)
+        return self.display(request, record)
 
     def post(self, request, pk):
         record = get_object_or_404(self.records(), pk=pk)
+        self.check_record(record.patient)
         self.require_doctor(record.clinician_id)
         action = request.POST.get('action')
         form_class, prefix = {
@@ -139,6 +145,7 @@ class CompoundingPrintView(CompoundingBase):
 
     def get(self, request, pk):
         record = get_object_or_404(self.records(), pk=pk)
+        self.check_record(record.patient)
         self.require_doctor(record.clinician_id)
         if request.method == 'GET':
             record_audit(company=self.company, actor=request.user, patient=record.patient,

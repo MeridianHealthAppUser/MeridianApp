@@ -1,7 +1,7 @@
 from django.urls import include, path
 
-from . import appointment_views, availability_views, clinical_views, intake_views, lead_views, menu_views, message_management_views, patient_assignment_views, patient_views, practice_settings_views, staff_views, task_views, team_views, views
-from .patient_workspace import PatientWorkspaceView
+from . import appointment_views, availability_views, pathcare_views, prescription_views, clinical_views, intake_views, lead_views, menu_views, message_management_views, patient_assignment_views, patient_views, practice_settings_views, staff_views, task_views, team_views, views
+from .patient_workspace import PatientWorkspaceView, RecordConversationSearchView
 
 app_name = 'portal'
 
@@ -30,7 +30,8 @@ urlpatterns = [
     path('messages/team/', team_views.TeamInboxView.as_view(), name='team-inbox'),
     path('messages/team/new/', team_views.TeamThreadCreateView.as_view(), name='team-thread-create'),
     path('messages/team/<int:pk>/', team_views.TeamMessageCreateView.as_view(), name='team-message-create'),
-    path('messages/team/<int:pk>/members/', team_views.TeamMemberAddView.as_view(), name='team-member-add'),
+    path('messages/team/<int:pk>/manage/', team_views.TeamConversationManageView.as_view(), name='team-conversation-manage'),
+    path('messages/team/<int:pk>/read-state/', team_views.TeamThreadReadStateView.as_view(), name='team-thread-read-state'),
     path('tasks/', staff_views.StaffTaskListView.as_view(), name='staff-tasks'),
     path('tasks/new/', task_views.TaskEditorView.as_view(), name='task-create'),
     path('tasks/<int:pk>/', task_views.TaskEditorView.as_view(), name='task-edit'),
@@ -46,6 +47,9 @@ urlpatterns = [
     path('schedule/working-pattern/', availability_views.WorkingPatternUpdateView.as_view(), name='availability-working-pattern'),
     path('schedule/time-off/', availability_views.TimeOffCreateView.as_view(), name='availability-time-off-create'),
     path('schedule/time-off/<int:pk>/cancel/', availability_views.TimeOffCancelView.as_view(), name='availability-time-off-cancel'),
+    path('schedule/special-days/', availability_views.SpecialDaySetView.as_view(), name='availability-special-day-set'),
+    path('schedule/special-days/<int:pk>/remove/', availability_views.SpecialDayRemoveView.as_view(), name='availability-special-day-remove'),
+    path('schedule/undo/', availability_views.AvailabilityUndoView.as_view(), name='availability-undo'),
     path('companies/<slug:slug>/activate/', views.ActivateCompanyView.as_view(), name='activate-company'),
     path('patient/', views.PatientDashboardView.as_view(), name='patient-dashboard'),
     path('patient/appointments/', patient_views.PatientAppointmentsView.as_view(), name='patient-appointments'),
@@ -54,12 +58,23 @@ urlpatterns = [
     path('patient/blood-tests/', clinical_views.PatientLabListView.as_view(), name='patient-labs'),
     path('patient/blood-tests/<int:pk>/', clinical_views.PatientLabDetailView.as_view(), name='patient-lab-detail'),
     path('patient/blood-tests/<int:pk>/report/', clinical_views.PatientLabResultDownloadView.as_view(), name='patient-lab-result-download'),
+    path('patient/blood-tests/<int:pk>/form.pdf', clinical_views.PatientLabFormView.as_view(), name='patient-lab-form'),
     path('patient/companies/<slug:slug>/activate/', views.ActivatePatientCompanyView.as_view(), name='activate-patient-company'),
     path('patient/weight/', views.PatientWeightAddView.as_view(), name='patient-weight-add'),
     path('patient/messages/<int:pk>/', views.PatientMessageCreateView.as_view(), name='patient-message-create'),
     path('patient/messages/', patient_views.PatientMessagesView.as_view(), name='patient-messages'),
     path('patient/messages/new/', views.PatientThreadCreateView.as_view(), name='patient-thread-create'),
     path('patients/<int:pk>/', PatientWorkspaceView.as_view(), name='patient-detail'),
+    path('patients/<int:pk>/messages/search/', RecordConversationSearchView.as_view(), name='record-conversation-search'),
+    path('patients/<int:pk>/prescription/renew/', prescription_views.PrescriptionRenewView.as_view(), name='patient-prescription-renew'),
+    path('patients/<int:pk>/prescription/change/', prescription_views.PrescriptionChangeView.as_view(), name='patient-prescription-change'),
+    path('patients/<int:pk>/summary/', prescription_views.SummaryEditView.as_view(), name='patient-summary-edit'),
+    path('patients/<int:pk>/title/', prescription_views.PatientTitleView.as_view(), name='patient-title'),
+    path('patients/<int:pk>/blood-tests/', pathcare_views.BloodTestRequestView.as_view(), name='patient-blood-tests'),
+    path('patients/<int:pk>/blood-tests/preview/', pathcare_views.BloodTestPreviewView.as_view(), name='patient-blood-tests-preview'),
+    path('patients/<int:pk>/blood-tests/preview.pdf', pathcare_views.BloodTestPreviewPdfView.as_view(), name='patient-blood-tests-preview-pdf'),
+    path('patients/<int:pk>/blood-tests/<int:form_pk>/form.pdf', pathcare_views.BloodTestFormView.as_view(), name='patient-blood-test-form'),
+    path('patients/<int:pk>/blood-tests/<int:form_pk>/resend/', pathcare_views.BloodTestResendView.as_view(), name='patient-blood-test-resend'),
     path('patients/<int:patient_pk>/doctor/', patient_assignment_views.PatientDoctorAssignmentView.as_view(), name='patient-doctor-assign'),
     path('patients/<int:patient_pk>/tasks/', views.PatientTaskCreateView.as_view(), name='patient-task-create'),
     path('patients/<int:patient_pk>/appointments/', views.PatientAppointmentCreateView.as_view(), name='patient-appointment-create'),
@@ -68,6 +83,8 @@ urlpatterns = [
     path('patients/<int:patient_pk>/messages/', views.StaffThreadCreateView.as_view(), name='staff-thread-create'),
     path('tasks/<int:pk>/complete/', views.TaskCompleteView.as_view(), name='task-complete'),
     path('messages/<int:pk>/', views.StaffMessageCreateView.as_view(), name='staff-message-create'),
+    path('messages/new/', views.StaffInboxThreadCreateView.as_view(), name='staff-inbox-thread-create'),
+    path('messages/<int:pk>/read-state/', views.StaffThreadReadStateView.as_view(), name='staff-thread-read-state'),
     path('messages/<int:pk>/appointment-proposals/', appointment_views.StaffAppointmentProposeView.as_view(), name='staff-appointment-propose'),
     path('appointment-proposals/<int:pk>/respond/', appointment_views.StaffAppointmentRespondView.as_view(), name='staff-appointment-respond'),
     path('patient/messages/<int:pk>/appointment-proposals/', appointment_views.PatientAppointmentProposeView.as_view(), name='patient-appointment-propose'),

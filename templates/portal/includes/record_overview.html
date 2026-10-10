@@ -1,0 +1,252 @@
+{% load workspace_ui %}
+{# The clinical Overview: the log and summary data on the left; weight, the prescription and blood tests on the right. #}
+<div class="record-overview" data-record-overview data-patient-name="{{ patient }}">
+  <div class="record-overview__main">
+    <section class="staff-page-card record-log" aria-label="Log">
+      <header class="record-log__header">
+        <nav class="record-chips" aria-label="Log filter">
+          <a href="{{ workspace_url }}&amp;log=clinical" data-log-filter="clinical"{% if log_filter == 'clinical' %} class="is-active" aria-current="true"{% endif %}>Clinical</a>
+          <a href="{{ workspace_url }}&amp;log=dispensed" data-log-filter="dispensed"{% if log_filter == 'dispensed' %} class="is-active" aria-current="true"{% endif %}>Dispensed</a>
+        </nav>
+        <span class="record-log__count" data-log-count="clinical"{% if log_filter != 'clinical' %} hidden{% endif %}>{% if clinical_log %}{{ clinical_log|length }} entr{{ clinical_log|length|pluralize:'y,ies' }}{% endif %}</span>
+        <span class="record-log__count" data-log-count="dispensed"{% if log_filter != 'dispensed' %} hidden{% endif %}>{% if dispensed_log %}{{ dispensed_log|length }} shipment{{ dispensed_log|length|pluralize }}{% endif %}</span>
+      </header>
+      <ol class="record-log__list" data-log-list="clinical"{% if log_filter != 'clinical' %} hidden{% endif %}>
+        {% for entry in clinical_log %}
+          <li class="record-log__entry record-log__entry--{{ entry.kind }}{% if entry.automatic %} is-automatic{% endif %}" id="log-{{ entry.id }}">
+            <time datetime="{{ entry.at|date:'Y-m-d' }}">{{ entry.at|date:'j M Y' }}</time>
+            <p class="record-log__by">{% if entry.automatic %}Sent automatically{% else %}{{ entry.by }}{% endif %}{% if entry.tag %}<span class="record-log__tag record-log__tag--{{ entry.kind }}">{{ entry.tag }}</span>{% endif %}</p>
+            {% if entry.text %}<p class="record-log__text">{{ entry.text|linebreaksbr }}</p>{% endif %}
+            {% if entry.form %}
+              <div class="record-log__form">
+                <a href="{% url 'portal:patient-blood-test-form' patient.pk entry.form.pk %}" target="_blank" rel="noopener" data-no-loader>View form</a>
+                {% if entry.form.email_status == 'failed' %}<span class="record-log__status is-rose">Email failed</span>{% elif entry.form.email_status == 'queued' %}<span class="record-log__status">Email queued</span>{% else %}<span class="record-log__status">Emailed to {{ entry.form.email_to }}</span>{% endif %}
+                {% if can_request_bloods %}
+                  <form method="post" action="{% url 'portal:patient-blood-test-resend' patient.pk entry.form.pk %}">
+                    {% csrf_token %}
+                    <input type="hidden" name="workflow_context" value="{{ bloods_context_token }}">
+                    <button class="record-log__resend" type="submit">{% if entry.form.email_status == 'failed' %}Resend{% else %}Resend to patient{% endif %}</button>
+                  </form>
+                {% endif %}
+              </div>
+            {% endif %}
+          </li>
+        {% empty %}
+          <li class="record-log__empty">No clinical entries yet.</li>
+        {% endfor %}
+      </ol>
+      <ol class="record-log__list" data-log-list="dispensed"{% if log_filter != 'dispensed' %} hidden{% endif %}>
+        {% for row in dispensed_log %}
+          <li class="record-log__entry record-log__entry--dispensed" id="log-{{ row.id }}">
+            <time datetime="{{ row.date|date:'Y-m-d' }}">{{ row.date|date:'j M Y' }}</time>
+            <p class="record-log__title">{{ row.title }}<span class="record-log__tag record-log__tag--month">{{ row.tag }}</span></p>
+            {% if row.detail %}<p class="record-log__text">{{ row.detail }}</p>{% endif %}
+          </li>
+        {% empty %}
+          <li class="record-log__empty">Nothing dispensed yet.</li>
+        {% endfor %}
+      </ol>
+    </section>
+
+    <section class="staff-page-card record-card" id="record-summary" aria-labelledby="record-summary-heading">
+      <header class="record-card__header">
+        <h2 class="record-card__eyebrow" id="record-summary-heading">Summary data</h2>
+        <span class="record-card__header-side">
+          {% if summary_has_flag %}<span class="record-pill record-pill--rose">Safety flag</span>{% endif %}
+          {% if can_edit_summary %}<span class="record-card__hint">Click an underlined value to edit</span>{% endif %}
+        </span>
+      </header>
+      {% if summary_error %}<p class="record-error" role="alert">{{ summary_error }}</p>{% endif %}
+      <dl class="record-rows record-rows--summary">
+        <div><dt>Weight <span>start &rarr; current &rarr; goal</span></dt><dd>{{ summary_weight.start }} &rarr; {{ summary_weight.current }} &rarr; {% if summary.goal_weight_kg %}{% firstof summary.goal_weight_kg|kg as goal_display %}{% else %}{% firstof 'Not set' as goal_display %}{% endif %}{% include 'portal/includes/record_summary_value.html' with field='goal_weight_kg' label='Goal weight' kind='number' current=summary.goal_weight_kg display=goal_display %}&nbsp;kg</dd></div>
+        <div><dt>BMI <span>start &rarr; current</span></dt><dd>{{ summary_bmi.start|default:'—' }} &rarr; {{ summary_bmi.current|default:'—' }}</dd></div>
+        {% for row in summary_texts %}
+          <div><dt>{{ row.label }}</dt><dd>{% include 'portal/includes/record_summary_value.html' with field=row.field label=row.label kind='text' current=row.value display=row.value|default:'Not recorded' %}</dd></div>
+        {% endfor %}
+      </dl>
+      <h3 class="record-card__subhead">Safety flags</h3>
+      <dl class="record-rows record-rows--summary">
+        {% for flag in summary_flags %}
+          <div><dt>{{ flag.label }}</dt><dd>{% include 'portal/includes/record_summary_value.html' with field=flag.field label=flag.label kind='select' current=flag.value display=flag.display choices=flag.choices level=flag.level %}</dd></div>
+        {% endfor %}
+      </dl>
+      <p class="record-card__foot">{% if summary_seeded_from %}Populated from the screening assessment on {{ summary_seeded_from|date:'j M Y' }}{% else %}No screening assessment on record{% endif %} &middot; {% if summary_edit_count %}{{ summary_edit_count }} edit{{ summary_edit_count|pluralize }} since{% else %}unedited since{% endif %}</p>
+      {% if summary_edits %}
+        <ul class="record-edits" aria-label="Edit history">
+          {% for edit in summary_edits %}
+            <li><span class="record-edits__meta">{{ edit.created_at|date:'j M Y' }} &middot; {{ edit.edited_by.full_name|default:'Former staff member' }} &middot;</span> {{ edit.label }}: <s>{{ edit.old_value }}</s> &rarr; {{ edit.new_value }}</li>
+          {% endfor %}
+        </ul>
+      {% endif %}
+    </section>
+  </div>
+
+  <div class="record-overview__side">
+    <section class="staff-page-card record-card" id="record-weight" aria-labelledby="record-weight-heading">
+      <header class="record-card__header">
+        <h2 class="record-card__eyebrow" id="record-weight-heading">Weight</h2>
+        {% if weight_chart.goal_pill %}<span class="record-pill record-pill--grey">{{ weight_chart.goal_pill }}</span>{% endif %}
+      </header>
+      {% if weight_chart %}
+        {% include 'portal/includes/record_weight_chart.html' with chart=weight_chart %}
+        {% if not weight_chart.goal %}<p class="record-card__note">Set a goal weight in Summary data to see the projection.</p>{% endif %}
+      {% else %}
+        <p class="record-card__empty">No weights logged</p>
+      {% endif %}
+    </section>
+
+    <section class="staff-page-card record-card" id="record-prescription" aria-labelledby="record-prescription-heading">
+      <h2 class="record-card__eyebrow" id="record-prescription-heading">Current prescription</h2>
+      {% if prescription %}
+        <dl class="record-rows">
+          <div><dt>Medicine</dt><dd>{{ prescription.product.name }}</dd></div>
+          <div><dt>Dose</dt><dd>{{ prescription.max_dose }}</dd></div>
+          <div><dt>Authorised</dt><dd>{{ prescription.starts_on|date:'j M Y' }}</dd></div>
+          <div><dt>Expires</dt><dd{% if prescription_state == 'expired' %} class="is-rose"{% elif prescription_state == 'due' %} class="is-amber"{% endif %}>{{ prescription.expires_on|date:'j M Y' }}{% if prescription_state == 'expired' %} &middot; expired{% endif %}</dd></div>
+          <div><dt>By</dt><dd>{{ prescription.prescribed_by.full_name }}</dd></div>
+        </dl>
+        {% if prescription_state == 'paused' %}<p class="record-card__note">This prescription is paused. Undispatched parcels are on hold.</p>{% endif %}
+      {% else %}
+        <p class="record-card__empty">No prescription yet. One is written at the first consult.</p>
+      {% endif %}
+      {% if can_prescribe %}
+        <div class="record-card__actions">
+          {% if prescription %}<a class="console-button console-button--primary" href="{{ workspace_url }}&amp;prescription=renew#record-renew" data-dialog-open="record-renew">Renew prescription</a>{% endif %}
+          <a class="console-button {% if prescription %}console-button--secondary{% else %}console-button--primary{% endif %}" href="{{ workspace_url }}&amp;prescription=change#record-change" data-dialog-open="record-change">{% if prescription %}Change prescription{% else %}Create prescription{% endif %}</a>
+        </div>
+      {% endif %}
+    </section>
+
+    {% if can_request_bloods %}
+      <section class="staff-page-card record-card" id="record-bloods" aria-labelledby="record-bloods-heading">
+        <h2 class="record-card__eyebrow" id="record-bloods-heading">Request blood tests</h2>
+        {% if pathcare_blocked %}<p class="record-error" role="alert">{{ pathcare_blocked_message }}</p>{% endif %}
+        <form class="record-bloods-form" method="post" action="{% url 'portal:patient-blood-tests-preview' patient.pk %}" data-bloods-form>
+          {% csrf_token %}
+          <input type="hidden" name="workflow_context" value="{{ bloods_context_token }}">
+          <label for="record-bloods-tests">Tests and relevant clinical data</label>
+          <textarea id="record-bloods-tests" name="tests" rows="3" maxlength="300" required placeholder="e.g. FBC, ferritin, TSH">{{ bloods_tests|default:'' }}</textarea>
+          <p class="record-card__note">Fills a PathCare request form with the patient’s details, emails it to them and adds it to the clinical log.</p>
+          <button class="console-button console-button--primary" type="submit"{% if pathcare_blocked %} disabled{% endif %}>Request blood tests</button>
+        </form>
+      </section>
+    {% endif %}
+  </div>
+</div>
+
+{% include 'portal/includes/record_consult_dialog.html' with consult_notes=clinical_log %}
+
+{% if can_request_bloods and not pathcare_blocked %}
+  <dialog class="record-dialog record-dialog--wide" id="record-bloods-dialog" aria-labelledby="record-bloods-title"{% if open_dialog == 'bloods' %} open{% endif %}>
+    <h2 id="record-bloods-title">Request blood tests</h2>
+    <p class="record-dialog__sub">{{ patient }} &middot; PathCare clinical request form</p>
+    <div class="record-bloods-preview">
+      <div class="record-bloods-preview__form">
+        <iframe name="record-bloods-frame" class="record-bloods-frame" title="The filled PathCare form" data-bloods-frame></iframe>
+        <p class="record-dialog__help"><button class="record-link-button" type="submit" form="record-bloods-preview-form" formtarget="_blank">Open the filled form in a new tab</button></p>
+      </div>
+      <dl class="record-rows">
+        {% for row in pathcare_summary %}<div><dt>{{ row.label }}</dt><dd{% if row.missing %} class="is-rose"{% endif %}>{% if row.missing %}Missing{% else %}{{ row.value }}{% endif %}</dd></div>{% endfor %}
+        <div><dt>Medical aid no.</dt><dd class="is-muted">Left blank</dd></div>
+        <div><dt>Tests</dt><dd data-bloods-tests-preview>{{ bloods_tests|default:''|linebreaksbr }}</dd></div>
+      </dl>
+    </div>
+    {% if pathcare_has_missing %}<p class="record-dialog__help">A missing value leaves that box blank. You can still send the form.</p>{% endif %}
+    <p class="record-dialog__help">The medical aid number isn’t stored. You or the patient can write it on the form.</p>
+    <form id="record-bloods-preview-form" method="post" action="{% url 'portal:patient-blood-tests-preview-pdf' patient.pk %}" target="record-bloods-frame" data-bloods-preview-form>
+      {% csrf_token %}
+      <input type="hidden" name="workflow_context" value="{{ bloods_context_token }}">
+      <input type="hidden" name="tests" value="{{ bloods_tests|default:'' }}" data-bloods-tests-input>
+    </form>
+    <form method="post" action="{% url 'portal:patient-blood-tests' patient.pk %}" data-bloods-send-form>
+      {% csrf_token %}
+      <input type="hidden" name="workflow_context" value="{{ bloods_context_token }}">
+      <input type="hidden" name="submission_key" value="{{ bloods_submission_key }}">
+      <input type="hidden" name="tests" value="{{ bloods_tests|default:'' }}" data-bloods-tests-input>
+      <div class="record-dialog__actions">
+        <a class="console-button console-button--secondary" href="{{ workspace_url }}#record-bloods" data-dialog-close>Cancel</a>
+        {% if patient_email %}<button class="console-button console-button--primary" type="submit">Email to {{ patient_email }}</button>
+        {% else %}<span class="record-error">This patient has no email address on file.</span>{% endif %}
+      </div>
+    </form>
+  </dialog>
+{% endif %}
+
+{% if can_prescribe %}
+  {% if prescription %}
+    <dialog class="record-dialog" id="record-renew" aria-labelledby="record-renew-title"{% if open_dialog == 'renew' %} open{% endif %}>
+      <form method="post" action="{% url 'portal:patient-prescription-renew' patient.pk %}" data-renew-form>
+        {% csrf_token %}
+        <input type="hidden" name="workflow_context" value="{{ prescription_context_token }}">
+        <input type="hidden" name="current" value="{{ prescription.pk }}">
+        <h2 id="record-renew-title">Renew prescription</h2>
+        <p class="record-dialog__sub">{{ patient }} &middot; {{ prescription_label }}</p>
+        {% if renew_form.non_field_errors %}<div class="record-error" role="alert">{{ renew_form.non_field_errors|join:' ' }}</div>{% endif %}
+        <fieldset class="record-dialog__months">
+          <legend>Renew for</legend>
+          {% for option in renew_months %}
+            <label class="record-chip"><input type="radio" name="months" value="{{ option.months }}" data-expires="{{ option.expires_on|date:'j M Y' }}"{% if option.months|stringformat:'s' == renew_form.months.value|stringformat:'s' %} checked{% endif %}><span>{{ option.months }} month{{ option.months|pluralize }}</span></label>
+          {% endfor %}
+        </fieldset>
+        <dl class="record-rows">
+          <div><dt>Current expiry</dt><dd>{{ prescription.expires_on|date:'j M Y' }}</dd></div>
+          <div><dt>New expiry</dt><dd class="is-teal" data-renew-expiry>{% for option in renew_months %}{% if option.months|stringformat:'s' == renew_form.months.value|stringformat:'s' %}{{ option.expires_on|date:'j M Y' }}{% endif %}{% endfor %}</dd></div>
+        </dl>
+        {% include 'portal/includes/record_safety_flags.html' with prefix='renew' %}
+        <div class="record-dialog__actions">
+          <a class="console-button console-button--secondary" href="{{ workspace_url }}#record-prescription" data-dialog-close>Cancel</a>
+          <button class="console-button console-button--primary" type="submit">Renew prescription</button>
+        </div>
+      </form>
+    </dialog>
+  {% endif %}
+  <dialog class="record-dialog" id="record-change" aria-labelledby="record-change-title"{% if open_dialog == 'change' %} open{% endif %}>
+    <form method="post" action="{% url 'portal:patient-prescription-change' patient.pk %}" data-change-form>
+      {% csrf_token %}
+      <input type="hidden" name="workflow_context" value="{{ prescription_context_token }}">
+      <input type="hidden" name="current" value="{{ prescription.pk|default:'' }}">
+      <h2 id="record-change-title">{% if prescription %}Change prescription{% else %}Create prescription{% endif %}</h2>
+      <p class="record-dialog__sub">{{ patient }}{% if prescription %} &middot; currently {{ prescription_label }}{% endif %}</p>
+      {% if change_form.non_field_errors %}<div class="record-error" role="alert">{{ change_form.non_field_errors|join:' ' }}</div>{% endif %}
+      {% if prescription_choices %}
+        <div class="record-dialog__pair">
+          <div class="console-form__field">
+            <label for="record-change-medicine">Medicine</label>
+            <select id="record-change-medicine" name="medicine" data-change-medicine>
+              {% for choice in prescription_choices %}<option value="{{ choice.name }}"{% if choice.name == change_form.medicine.value %} selected{% endif %}>{{ choice.name }}</option>{% endfor %}
+            </select>
+          </div>
+          <div class="console-form__field">
+            <label for="record-change-dose">Dose</label>
+            <select id="record-change-dose" name="product" data-change-dose>
+              {% for choice in prescription_choices %}{% for product in choice.doses %}<option value="{{ product.pk }}" data-medicine="{{ choice.name }}" data-label="{{ product.name }} {{ product.strength }} {{ product.get_dose_frequency_display|lower }}"{% if product.pk|stringformat:'s' == change_form.product.value|stringformat:'s' %} selected{% endif %}>{{ product.strength }} {{ product.get_dose_frequency_display|lower }}</option>{% endfor %}{% endfor %}
+            </select>
+            {% if change_form.product.errors %}<p class="record-error">{{ change_form.product.errors|join:' ' }}</p>{% endif %}
+          </div>
+        </div>
+        <fieldset class="record-dialog__months">
+          <legend>Valid for</legend>
+          {% for option in change_months %}
+            <label class="record-chip"><input type="radio" name="months" value="{{ option.months }}" data-expires="{{ option.expires_on|date:'j M Y' }}"{% if option.months|stringformat:'s' == change_form.months.value|stringformat:'s' %} checked{% endif %}><span>{{ option.months }} month{{ option.months|pluralize }}</span></label>
+          {% endfor %}
+        </fieldset>
+        <div class="console-form__field">
+          <label for="record-change-reason">Reason <span class="record-dialog__optional">(optional, goes in the clinical log)</span></label>
+          <input id="record-change-reason" name="reason" type="text" maxlength="500" value="{{ change_form.reason.value|default:'' }}" placeholder="e.g. Side effects – nausea, vomiting">
+        </div>
+        <dl class="record-rows">
+          <div><dt>New prescription</dt><dd class="is-teal" data-change-preview></dd></div>
+        </dl>
+        <p class="record-dialog__help">Listed from the main treatments in the practice catalogue.{% if prescription %} The current prescription is replaced from today.{% endif %}</p>
+        {% include 'portal/includes/record_safety_flags.html' with prefix='change' %}
+        <div class="record-dialog__actions">
+          <a class="console-button console-button--secondary" href="{{ workspace_url }}#record-prescription" data-dialog-close>Cancel</a>
+          <button class="console-button console-button--primary" type="submit">Save prescription</button>
+        </div>
+      {% else %}
+        <p class="record-card__empty">There are no main treatments in the catalogue to prescribe. Ask a practice administrator to add one.</p>
+        <div class="record-dialog__actions"><a class="console-button console-button--secondary" href="{{ workspace_url }}#record-prescription" data-dialog-close>Close</a></div>
+      {% endif %}
+    </form>
+  </dialog>
+{% endif %}

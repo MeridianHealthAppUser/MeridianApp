@@ -1,0 +1,14 @@
+{# The consult note a dot on the weight chart opens. On the Overview "Show in log" finds it in the Clinical log; elsewhere it goes to the Overview. #}
+{% for entry in consult_notes %}{% if entry.kind == 'consult' %}
+  <template id="record-consult-{{ entry.consult_id }}" data-date="{{ entry.at|date:'j M Y' }}" data-by="{{ entry.by }}" data-entry="log-{{ entry.id }}">{{ entry.text|linebreaksbr }}</template>
+{% endif %}{% endfor %}
+<dialog class="record-dialog" id="record-consult" aria-labelledby="record-consult-title">
+  <p class="record-card__eyebrow">Consult note</p>
+  <h2 id="record-consult-title">{{ patient }}</h2>
+  <p class="record-dialog__sub" data-consult-meta></p>
+  <div class="record-dialog__note-text" data-consult-text></div>
+  <div class="record-dialog__actions">
+    {% if consult_log_url %}<a class="console-button console-button--secondary" href="{{ consult_log_url }}" data-consult-show data-log-url="{{ consult_log_url }}">Show in log</a>{% else %}<button class="console-button console-button--secondary" type="button" data-consult-show>Show in log</button>{% endif %}
+    <button class="console-button console-button--primary" type="button" data-dialog-close>Close</button>
+  </div>
+</dialog>

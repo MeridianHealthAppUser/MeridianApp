@@ -15,7 +15,7 @@
         <a href="{% url 'portal:patient-account' %}">Account settings</a>
         <a href="{% url 'portal:patient-privacy' %}">Privacy and preferences</a>
         <a href="{% url 'portal:patient-data-requests' %}">My data requests</a>
-      {% elif active_company %}
+      {% elif active_company and active_membership.role != 'doctor' %}
         <a href="{% url 'portal:account-access-history' %}">My access history</a>
       {% endif %}
     </nav>

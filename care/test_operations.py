@@ -35,9 +35,12 @@ class OperationsFixture(TestCase):
             CompanyMembership.objects.create(company=cls.company, user=actor, role=role)
         CompanyMembership.objects.create(company=cls.beta, user=cls.beta_admin, role='practice_admin')
         CompanyMembership.objects.create(company=cls.beta, user=cls.doctor, role='doctor')
-        cls.patient = Patient.objects.create(company=cls.company, user=cls.patient_user, first_name='Alpha', last_name='Patient')
-        cls.other_patient = Patient.objects.create(company=cls.company, user=cls.other_user, first_name='Other', last_name='Patient')
-        cls.beta_patient = Patient.objects.create(company=cls.beta, user=cls.patient_user, first_name='Beta', last_name='Patient')
+        cls.patient = Patient.objects.create(company=cls.company, user=cls.patient_user, first_name='Alpha', last_name='Patient',
+                                             assigned_doctor=cls.doctor)
+        cls.other_patient = Patient.objects.create(company=cls.company, user=cls.other_user, first_name='Other', last_name='Patient',
+                                                   assigned_doctor=cls.doctor)
+        cls.beta_patient = Patient.objects.create(company=cls.beta, user=cls.patient_user, first_name='Beta', last_name='Patient',
+                                                  assigned_doctor=cls.doctor)
         cls.product = MedicationProduct.objects.create(company=cls.company, name='Explicit prescribed product', strength='Dose A', price=Decimal('100.00'))
         cls.open_product = MedicationProduct.objects.create(company=cls.company, name='Open local product', price=Decimal('40.00'), requires_authorisation=False, requires_cold_chain=False)
         cls.beta_product = MedicationProduct.objects.create(company=cls.beta, name='Private beta product', price=Decimal('60.00'))

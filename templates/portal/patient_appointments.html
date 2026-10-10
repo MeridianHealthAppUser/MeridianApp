@@ -1,7 +1,8 @@
 {% extends 'portal/patient_page_base.html' %}
-{% load workspace_ui %}
+{% load static workspace_ui %}
 
 {% block title %}My Appointments | Meridian{% endblock %}
+{% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/info_tips.css' %}?v=20261008a"><script src="{% static 'js/info_tips.js' %}?v=20261008a" defer></script>{% endblock %}
 {% block patient_content_class %}patient-appointments{% endblock %}
 
 {% block patient_breadcrumbs %}{% breadcrumbs 'My Appointments' %}{% endblock %}
@@ -131,7 +132,7 @@
                   <div class="patient-table__actions">
                     <a class="patient-inline-link" href="{% url 'portal:patient-appointment-detail' appointment.pk %}">Details / cancel</a>
                     <a class="patient-inline-link" data-no-loader href="{% url 'portal:patient-appointment-calendar' appointment.pk %}">Add to calendar</a>
-                    {% include 'portal/includes/video_join_link.html' %}
+                    {% include 'portal/includes/video_join_link.html' with join_tip=True %}
                     {% if appointment.proposal_url %}<a class="console-button console-button--secondary" href="{{ appointment.proposal_url }}">{{ appointment.proposal_label }}</a>{% else %}<a class="patient-inline-link" href="{% url 'portal:patient-messages' %}">Contact care team</a>{% endif %}
                   </div>
                 </td>

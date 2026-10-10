@@ -1,0 +1,32 @@
+{# The doctor's weight chart and its key, on the Overview and the Weight tab: drawn on the server from portal/record_chart.py. #}
+<figure class="record-chart">
+  <svg viewBox="0 0 {{ chart.width }} {{ chart.height }}" role="img" aria-label="{{ chart.summary }}">
+    <defs><clipPath id="record-chart-clip"><rect x="{{ chart.left }}" y="{{ chart.top }}" width="{{ chart.plot_width }}" height="{{ chart.plot_height }}"/></clipPath></defs>
+    <rect class="record-chart__future" x="{{ chart.future_x }}" y="{{ chart.top }}" width="{{ chart.future_width }}" height="{{ chart.plot_height }}"/>
+    {% for line in chart.grid %}<line class="record-chart__grid" x1="{{ chart.left }}" y1="{{ line.y }}" x2="{{ chart.right_edge }}" y2="{{ line.y }}"/><text class="record-chart__axis" x="4" y="{{ line.label_y }}">{{ line.label }}</text>{% endfor %}
+    <text class="record-chart__axis" x="4" y="{{ chart.kg_label_y }}">kg</text>
+    <path class="record-chart__band" d="{{ chart.band }}" clip-path="url(#record-chart-clip)"/>
+    {% if chart.goal_y %}<line class="record-chart__goal" x1="{{ chart.left }}" y1="{{ chart.goal_y }}" x2="{{ chart.right_edge }}" y2="{{ chart.goal_y }}"/>{% endif %}
+    <line class="record-chart__baseline" x1="{{ chart.left }}" y1="{{ chart.base }}" x2="{{ chart.right_edge }}" y2="{{ chart.base }}"/>
+    {% for bar in chart.bars %}<rect class="record-chart__dose" x="{{ bar.x }}" y="{{ bar.y }}" width="14" height="{{ bar.height }}" rx="3"><title>{{ bar.title }}</title></rect>{% if bar.label %}<text class="record-chart__dose-label" x="{{ bar.label_x }}" y="{{ bar.label_y }}" text-anchor="middle">{{ bar.label }}</text>{% endif %}{% endfor %}
+    {% if chart.dose_axis %}
+      <text class="record-chart__dose-axis" x="{{ chart.dose_axis_x }}" y="{{ chart.dose_axis_label_y }}">mg</text>
+      <line class="record-chart__dose-line" x1="{{ chart.right_edge }}" y1="{{ chart.dose_axis_top }}" x2="{{ chart.right_edge }}" y2="{{ chart.base }}"/>
+      {% for tick in chart.dose_axis %}<line class="record-chart__dose-tick" x1="{{ chart.right_edge }}" y1="{{ tick.y }}" x2="{{ chart.dose_tick_end }}" y2="{{ tick.y }}"/><text class="record-chart__dose-axis" x="{{ chart.dose_label_x }}" y="{{ tick.label_y }}">{{ tick.label }}</text>{% endfor %}
+    {% endif %}
+    {% if chart.goal_y %}<text class="record-chart__goal-label" x="{{ chart.goal_label_x }}" y="{{ chart.goal_label_y }}" text-anchor="end">{{ chart.goal_label }}</text>{% endif %}
+    {% if chart.projection_path %}<path class="record-chart__projection" d="{{ chart.projection_path }}"/>{% endif %}
+    <path class="record-chart__line" d="{{ chart.line }}"/>
+    {% for point in chart.projection %}<circle class="record-chart__projected" cx="{{ point.x }}" cy="{{ point.y }}" r="{% if point.is_goal %}4.5{% else %}3{% endif %}"><title>{{ point.title }}</title></circle>{% endfor %}
+    {% for point in chart.points %}<circle class="record-chart__point" cx="{{ point.x }}" cy="{{ point.y }}" r="3.5"><title>{{ point.title }}</title></circle>{% endfor %}
+    {% for month in chart.months %}<line class="record-chart__tick" x1="{{ month.x }}" y1="{{ chart.base }}" x2="{{ month.x }}" y2="{{ chart.month_tick_end }}"/><text class="record-chart__axis" x="{{ month.x }}" y="{{ chart.label_y }}" text-anchor="middle">{{ month.label }}</text>{% endfor %}
+    {% for dot in chart.consults %}<g class="record-chart__consult" tabindex="0" role="button" data-consult="{{ dot.id }}" aria-label="{{ dot.label }}"><title>{{ dot.label }}</title><circle cx="{{ dot.x }}" cy="{{ chart.base }}" r="6"/></g>{% endfor %}
+  </svg>
+</figure>
+<ul class="record-legend" aria-label="Chart key">
+  <li><i class="record-legend__weight"></i>Weight</li>
+  <li><i class="record-legend__range"></i>Expected range, assuming 0.5 to 1 kg a week</li>
+  {% if chart.projection %}<li><i class="record-legend__projection"></i>Projected to goal</li>{% endif %}
+  {% if chart.bars %}<li><i class="record-legend__dose"></i>Dose shipped (mg, right scale)</li>{% endif %}
+  {% if chart.consults %}<li><i class="record-legend__consult"></i>Consultation &mdash; click to open the note</li>{% endif %}
+</ul>

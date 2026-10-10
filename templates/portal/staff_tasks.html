@@ -1,7 +1,8 @@
 {% extends 'portal/staff_page_base.html' %}
-{% load workspace_ui %}
+{% load static workspace_ui %}
 
 {% block title %}{{ title|default:page_title }} | {{ company.name }} | Meridian{% endblock %}
+{% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/filter_menu.css' %}?v=20261010a"><script src="{% static 'js/filter_menu.js' %}?v=20261008b" defer></script><link rel="stylesheet" href="{% static 'css/task_list.css' %}?v=20261008b">{% endblock %}
 
 
 {% block breadcrumbs %}{% breadcrumbs page_title %}{% endblock %}
@@ -11,46 +12,18 @@
       <h1>{{ page_title }}</h1>
       <p>{% if active_membership.role == 'doctor' %}Tasks assigned to you or created by you in {{ company.name }}.{% else %}Care tasks for {{ company.name }}.{% endif %}</p>
     </div>
-    <a class="console-button console-button--primary" href="{% url 'portal:task-create' %}">Create task</a>
+    <div class="staff-page-header__actions">{% include 'portal/includes/filter_menu.html' %}<a class="console-button console-button--primary" href="{% url 'portal:task-create' %}">Create task</a></div>
   </header>
 {% endblock %}
 
 {% block page_content %}
+  {# Clinicians don't need the count cards; administrators keep them. #}{% if not is_doctor %}
   <section class="staff-metrics staff-metrics--three" aria-label="Task summary">
     <article><span>Open</span><strong>{{ metrics.open }}</strong></article>
     <article><span>Overdue</span><strong>{{ metrics.overdue }}</strong></article>
     <article><span>Completed</span><strong>{{ metrics.completed }}</strong></article>
   </section>
-
-  <section class="staff-page-card" aria-labelledby="task-filters-heading">
-    <header class="staff-page-card__header">
-      <div><h2 id="task-filters-heading">Filter tasks</h2><p>Filter by workflow, task type, patient, or free-form tag.</p></div>
-    </header>
-    <form class="staff-filter-form staff-filter-form--tasks" method="get" action="{% url 'portal:staff-tasks' %}">
-      {{ filter_form.non_field_errors }}
-      <div class="staff-filter-form__field">
-        <label for="{{ filter_form.status.id_for_label }}">{{ filter_form.status.label }}</label>
-        {{ filter_form.status }}
-        {{ filter_form.status.errors }}
-      </div>
-      <div class="staff-filter-form__field">
-        <label for="{{ filter_form.kind.id_for_label }}">{{ filter_form.kind.label }}</label>
-        {{ filter_form.kind }}
-        {{ filter_form.kind.errors }}
-      </div>
-      <div class="staff-filter-form__field">
-        <label for="{{ filter_form.patient.id_for_label }}">{{ filter_form.patient.label }}</label>
-        {{ filter_form.patient }}
-        {{ filter_form.patient.errors }}
-      </div>
-      <div class="staff-filter-form__field">
-        <label for="{{ filter_form.tag.id_for_label }}">Free-form tag</label>
-        {{ filter_form.tag }}
-        {{ filter_form.tag.errors }}
-      </div>
-      <button class="console-button console-button--primary" type="submit">Apply filters</button>
-    </form>
-  </section>
+  {% endif %}
 
   <section class="staff-page-card staff-page-card--list" aria-labelledby="task-list-heading">
     <header class="staff-page-card__header">
@@ -58,7 +31,7 @@
       <span class="staff-page-card__count">{{ page_obj.paginator.count }} task{{ page_obj.paginator.count|pluralize }}</span>
     </header>
     {% if filter_form.errors %}
-      <div class="staff-filter-error" role="alert">Correct the filter fields above to view tasks.</div>
+      <div class="staff-filter-error" role="alert">Correct the filters to view tasks.</div>
     {% else %}
       <div class="staff-task-table-wrap">
         <table class="staff-task-table">
@@ -108,13 +81,14 @@
                 <td data-label="Workflow status"><span class="console-status console-status--{{ task.status }}">{{ task.get_status_display }}</span>{% if task.completed_at %}<span class="staff-task-table__completed">Completed {{ task.completed_at|date:"j M, H:i" }} SAST</span>{% endif %}</td>
                 <td class="staff-task-table__actions-cell" data-label="Actions">
                   <div class="staff-task-table__actions">
-                    {% if task.workflow_url %}<a class="console-button console-button--quiet" href="{{ task.workflow_url }}">{{ task.workflow_label }}</a>{% elif task.is_clinical_workflow %}<span class="staff-task-table__due">Completed by the responsible doctor in the clinical workflow.</span>{% else %}<a class="console-button console-button--quiet" href="{% url 'portal:task-edit' task.pk %}">Edit task</a>{% endif %}
-                    {% if task.patient %}<a class="staff-row-link" href="{% url 'portal:patient-detail' task.patient_id %}">Open record<span class="sr-only"> for {{ task.patient }}</span></a>{% endif %}
+                    {% if task.workflow_url %}<a class="console-button console-button--secondary" href="{{ task.workflow_url }}">{{ task.workflow_label }}</a>{% elif task.is_clinical_workflow %}<span class="staff-task-table__due">Completed by the responsible doctor in the clinical workflow.</span>{% else %}<a class="console-button console-button--secondary" href="{% url 'portal:task-edit' task.pk %}">Edit task</a>{% endif %}
+                    {% if task.patient %}<a class="console-button console-button--secondary" href="{% url 'portal:patient-detail' task.patient_id %}">Open record<span class="sr-only"> for {{ task.patient }}</span></a>{% endif %}
                     {% if task.is_actionable %}
                       <form method="post" action="{% url 'portal:task-complete' task.pk %}">
                         {% csrf_token %}
                         <input type="hidden" name="next" value="{{ request.get_full_path }}">
-                        <button class="console-button console-button--primary" type="submit">Complete</button>
+                        {# A tick; "Complete" shows above it on hover or keyboard focus. #}
+                        <button class="console-button console-button--primary task-complete" type="submit" aria-label="Complete {{ task.title }}" data-tooltip="Complete"><svg aria-hidden="true" viewBox="0 0 20 20" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m4.5 10.5 3.5 3.5 7.5-8"/></svg></button>
                       </form>
                     {% endif %}
                   </div>

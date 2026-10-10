@@ -72,6 +72,7 @@ class StatementActionForm(forms.Form):
 
 @method_decorator(never_cache, name='dispatch')
 class ReportingView(LoginRequiredMixin, StaffCompanyRequiredMixin, View):
+    admin_only = True
     nav_section = 'metrics'
     http_method_names = ('get', 'post', 'head', 'options')
 

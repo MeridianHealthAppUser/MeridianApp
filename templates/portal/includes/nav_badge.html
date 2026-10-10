@@ -1,0 +1,1 @@
+{% comment %}The red unread count used across the app's menus, as in the patient app.{% endcomment %}{% if count %}<span class="nav-badge" aria-hidden="true">{% if count > 9 %}9+{% else %}{{ count }}{% endif %}</span><span class="sr-only">, {{ count }} unread message{{ count|pluralize }}</span>{% endif %}

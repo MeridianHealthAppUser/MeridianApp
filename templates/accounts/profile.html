@@ -1,8 +1,76 @@
 {% extends 'base.html' %}
 {% load static workspace_ui %}
 {% block title %}My profile | Meridian{% endblock %}
-{% block extra_css %}<link rel="stylesheet" href="{% static 'css/management.css' %}"><link rel="stylesheet" href="{% static 'css/account_profile.css' %}">{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{% static 'css/management.css' %}?v=20261007"><link rel="stylesheet" href="{% static 'css/account_profile.css' %}?v=20261007b">{% endblock %}
 {% block content %}
+{% if has_staff_access %}
+{% account_identity as identity %}
+<section class="account-profile account-profile--staff" aria-labelledby="profile-heading">
+  {% breadcrumbs 'My profile' %}
+  <header class="account-profile__heading"><h1 id="profile-heading">My profile</h1></header>
+  <div class="account-profile__card account-profile__identity">
+    <span class="account-profile__avatar" aria-hidden="true">{{ identity.initials }}</span>
+    <div>
+      <strong>{{ profile_user.full_name }}</strong>
+      <span>{{ profile_user.email }}</span>
+      <div class="account-profile__roles">{% if staff_membership %}<span class="account-profile__role">{{ staff_membership.title }}</span>{% endif %}<span class="account-profile__role account-profile__role--ok">Active</span></div>
+    </div>
+  </div>
+  <div class="account-profile__grid">
+    <section class="account-profile__card" aria-labelledby="profile-details-heading">
+      <div class="account-profile__card-heading"><h2 id="profile-details-heading">Your details</h2>{% if not staff_is_clinician %}<span class="account-profile__role account-profile__role--plain">Read-only</span>{% endif %}</div>
+      <dl class="account-profile__facts account-profile__details">
+        <div><dt>Title</dt><dd>{{ profile_user.get_title_display|default:"Not recorded" }}</dd></div>
+        <div><dt>First name</dt><dd>{{ profile_user.first_name|default:"Not recorded" }}</dd></div>
+        <div><dt>Last name</dt><dd>{{ profile_user.last_name|default:"Not recorded" }}</dd></div>
+        <div><dt>Email (your sign-in)</dt><dd>{{ profile_user.email }}</dd></div>
+        <div><dt>Contact number</dt><dd>{{ profile_user.contact_number|default:"Not recorded" }}</dd></div>
+        {% if staff_is_clinician %}<div><dt>HPCSA registration number</dt><dd>{{ profile_user.hpcsa_number|default:"Not recorded" }}</dd></div>
+        {% for row in staff_detail_rows %}<div id="profile-{{ row.field }}"><dt>{{ row.label }}</dt><dd class="account-profile__editable">
+          <span class="account-profile__value">{{ row.value|default:"Not recorded" }}</span>
+          {# The pen opens the field in place; without JavaScript, Cancel reloads My profile with it closed. #}
+          <details class="account-profile__editor"{% if row.open %} open{% endif %}>
+            <summary aria-label="{{ row.edit_label }}" title="{{ row.edit_label }}"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4 20h4L19 9a2.83 2.83 0 0 0-4-4L4 16v4Z"/><path d="m13.5 6.5 4 4"/></svg></summary>
+            <form method="post" action="{% url 'accounts:profile-detail' %}">{% csrf_token %}<input type="hidden" name="profile_context" value="{{ profile_context }}"><input type="hidden" name="field" value="{{ row.field }}">
+              <input type="text" name="value" value="{{ row.draft }}" maxlength="{{ row.max_length }}" aria-label="{{ row.label }}"{% if row.errors %} aria-invalid="true" autofocus{% endif %}>
+              {% if row.help %}<span class="account-profile__help">{{ row.help }}</span>{% endif %}
+              {% for error in row.errors %}<span class="account-profile__error" role="alert">{{ error }}</span>{% endfor %}
+              <div class="account-profile__editor-actions"><button class="button button-primary" type="submit">Save</button><a class="button button-secondary" href="{% url 'accounts:profile' %}">Cancel</a></div>
+            </form>
+          </details>
+        </dd></div>{% endfor %}{% endif %}
+      </dl>
+      <p class="account-profile__note">{% if staff_is_clinician %}Use the pen to update how you sign consult notes or your PathCare details. Everything else is maintained centrally: if it’s wrong, let the practice know and it will be corrected for you.{% else %}These details are maintained centrally. If anything here is wrong, let the practice know and it will be corrected for you.{% endif %}</p>
+    </section>
+    <div class="account-profile__stack">
+      <section class="account-profile__card" aria-labelledby="profile-security-heading">
+        <h2 id="profile-security-heading">Security</h2>
+        <div class="account-profile__row"><div><strong>Password</strong><span>{% if profile_user.last_change_password %}Last changed {{ profile_user.last_change_password|date:"j M Y, H:i" }}{% else %}Not changed yet{% endif %}</span><span>{% if profile_user.last_forgot_password_reset %}Last reset with Forgot password {{ profile_user.last_forgot_password_reset|date:"j M Y, H:i" }}{% else %}Never reset with Forgot password{% endif %}</span>{% if profile_user.last_login %}<span>Last signed in {{ profile_user.last_login|date:"j M Y, H:i" }}</span>{% endif %}</div><a class="button button-secondary" href="{% url 'accounts:password-change' %}">Change</a></div>
+        {# Two-factor isn't built yet, so the row says so rather than showing it as on. #}
+        <div class="account-profile__row"><div><strong>Two-factor authentication</strong></div><span class="account-profile__role account-profile__role--plain">Not set up yet</span></div>
+        <div class="account-profile__row"><div><strong>Active sessions</strong><span>You stay signed in on this device.</span></div><form method="post" action="{% url 'accounts:sign-out-others' %}">{% csrf_token %}<button class="button button-secondary" type="submit">Sign out others</button></form></div>
+      </section>
+      {% if month_to_date %}<section class="account-profile__card" aria-labelledby="profile-month-heading">
+        <div class="account-profile__card-heading"><h2 id="profile-month-heading">Your month to date</h2><span class="account-profile__role">Provisional</span></div>
+        <dl class="account-profile__facts account-profile__details">
+          <div><dt>First consultations</dt><dd>{{ month_to_date.first }}</dd></div>
+          <div><dt>Review consultations</dt><dd>{{ month_to_date.review }}</dd></div>
+          <div><dt>Messages answered</dt><dd>{{ month_to_date.messages }}</dd></div>
+          {# This month's activity at the rates on the latest approved statement. #}
+          <div class="account-profile__total"><dt>Provisional total</dt><dd>{% if month_to_date.total %}{{ month_to_date.total }}{% else %}<span>No rates on file yet</span>{% endif %}</dd></div>
+        </dl>
+      </section>{% endif %}
+    </div>
+  </div>
+  {% if multi_practice_enabled %}<section class="account-profile__card account-profile__practices" aria-labelledby="profile-practices-heading">
+    <h2 id="profile-practices-heading">Your practice access</h2>
+    <ul class="account-profile__practice-list">
+      {% for practice in membership_page %}<li><strong>{{ practice.name }}</strong><div class="account-profile__roles">{% for membership in practice.profile_memberships %}<span class="account-profile__role">{{ membership.title }}</span>{% endfor %}{% if practice.profile_patients %}<span class="account-profile__role">Patient</span>{% endif %}</div></li>{% endfor %}
+    </ul>
+    {% if membership_page.has_other_pages %}<nav class="account-profile__pagination" aria-label="Practice access pages">{% if membership_page.has_previous %}<a class="button button-secondary" href="?page={{ membership_page.previous_page_number }}#profile-practices-heading">Previous</a>{% endif %}<span>Page {{ membership_page.number }} of {{ membership_page.paginator.num_pages }}</span>{% if membership_page.has_next %}<a class="button button-secondary" href="?page={{ membership_page.next_page_number }}#profile-practices-heading">Next</a>{% endif %}</nav>{% endif %}
+  </section>{% endif %}
+</section>
+{% else %}
 <section class="account-profile" aria-labelledby="profile-heading">
   {% breadcrumbs 'My profile' %}
   <header class="account-profile__heading">
@@ -27,7 +95,7 @@
       <a class="account-profile__link" href="{% url 'accounts:password-change' %}"><strong>Change password</strong><span>Confirm your current password to choose a new one.</span></a>
       {% if has_staff_access %}<a class="account-profile__link" href="{% url 'portal:account-access-history' %}"><strong>Account access history</strong><span>Review recorded activity for your own account.</span></a>{% endif %}
       {% if has_patient_access %}<a class="account-profile__link" href="{% url 'portal:patient-account' %}"><strong>Account settings</strong><span>Your contact details and consents at your{% if multi_practice_enabled %} selected{% endif %} care practice.</span></a><a class="account-profile__link" href="{% url 'portal:patient-privacy' %}"><strong>Privacy and preferences</strong><span>Review recorded consent and communication preferences.</span></a>{% endif %}
-      <dl class="account-profile__facts"><div><dt>Account created</dt><dd>{{ profile_user.date_joined|date:"j M Y" }}</dd></div><div><dt>Last sign-in</dt><dd>{% if profile_user.last_login %}{{ profile_user.last_login|date:"j M Y, H:i" }} SAST{% else %}Not recorded{% endif %}</dd></div></dl>
+      <dl class="account-profile__facts"><div><dt>Account created</dt><dd>{{ profile_user.date_joined|date:"j M Y" }}</dd></div><div><dt>Last sign-in</dt><dd>{% if profile_user.last_login %}{{ profile_user.last_login|date:"j M Y, H:i" }} SAST{% else %}Not recorded{% endif %}</dd></div><div><dt>Password last changed</dt><dd>{% if profile_user.last_change_password %}{{ profile_user.last_change_password|date:"j M Y, H:i" }} SAST{% else %}Not changed yet{% endif %}</dd></div><div><dt>Last reset with Forgot password</dt><dd>{% if profile_user.last_forgot_password_reset %}{{ profile_user.last_forgot_password_reset|date:"j M Y, H:i" }} SAST{% else %}Never{% endif %}</dd></div></dl>
       <form method="post" action="{% url 'accounts:logout' %}">{% csrf_token %}<button class="button button-secondary" type="submit">Sign out</button></form>
     </section>
   </div>
@@ -40,4 +108,5 @@
     {% if membership_page.has_other_pages %}<nav class="account-profile__pagination" aria-label="Practice access pages">{% if membership_page.has_previous %}<a class="button button-secondary" href="?page={{ membership_page.previous_page_number }}#profile-practices-heading">Previous</a>{% endif %}<span>Page {{ membership_page.number }} of {{ membership_page.paginator.num_pages }}</span>{% if membership_page.has_next %}<a class="button button-secondary" href="?page={{ membership_page.next_page_number }}#profile-practices-heading">Next</a>{% endif %}</nav>{% endif %}
   </section>
 </section>
+{% endif %}
 {% endblock %}

@@ -1,6 +1,6 @@
 .account-profile { margin: 1.5rem auto 3rem; max-width: 68rem; color: #24464d; }
 .account-profile__heading { margin-bottom: 1.4rem; }
-.account-profile h1 { color: #11383e; font: 700 clamp(1.9rem, 4vw, 2.4rem)/1.2 Georgia, serif; margin: .5rem 0; }
+.account-profile h1 { color: #11383e; font: 500 clamp(1.9rem, 4vw, 2.4rem)/1.2 var(--meridian-font); letter-spacing: -.02em; margin: .5rem 0; }
 .account-profile__heading > p:last-child { color: #67828a; line-height: 1.6; }
 .account-profile__grid { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 1rem; }
 .account-profile__card { background: #fff; border: 1px solid #dfeaec; border-radius: 1rem; min-width: 0; padding: clamp(1rem, 2.5vw, 1.6rem); }
@@ -30,3 +30,54 @@
 .account-profile a:focus-visible, .account-profile button:focus-visible { outline: 3px solid #99d8d4; outline-offset: 3px; }
 @media (max-width: 700px) { .account-profile__grid { grid-template-columns: minmax(0, 1fr); } .account-profile { margin-top: 1rem; } }
 @media (max-width: 380px) { .account-profile .management-actions > .button { width: 100%; } }
+/* Staff: details are read-only; security and the month so far sit beside them. */
+.account-profile__identity { align-items: center; display: flex; gap: 1rem; margin-bottom: 1rem; }
+.account-profile__identity > div { display: grid; gap: .3rem; min-width: 0; }
+.account-profile__identity strong { color: #11383e; font-size: 1.15rem; }
+.account-profile__identity span { color: #67828a; font-size: .9rem; overflow-wrap: anywhere; }
+.account-profile__identity .account-profile__roles { margin-top: .25rem; }
+.account-profile__avatar { align-items: center; background: #e6f5f3; border: 1px solid #cde9e5; border-radius: 50%; color: #14756e; display: inline-flex; flex: 0 0 auto; font-size: 1.15rem; font-weight: 700; height: 3.6rem; justify-content: center; width: 3.6rem; }
+.account-profile__card-heading { align-items: center; display: flex; flex-wrap: wrap; gap: .6rem; justify-content: space-between; margin-bottom: .7rem; }
+.account-profile__card-heading h2 { margin: 0; }
+.account-profile__identity .account-profile__role, .account-profile__card-heading .account-profile__role { color: #14756e; font-size: .74rem; padding: .25rem .6rem; }
+.account-profile__role--plain { background: #f3f8f8; border-color: #e2ecee; color: #4e6a70; }
+.account-profile__identity .account-profile__role--plain, .account-profile__card-heading .account-profile__role--plain { color: #4e6a70; }
+.account-profile__role--ok { background: #e8f5ee; border-color: #bfe0ce; }
+.account-profile__identity .account-profile__role--ok { color: #1a7a52; }
+.account-profile__details { margin: 0; }
+.account-profile__details > div { border-top: 1px solid #e6eff0; padding: .65rem 0; }
+.account-profile__details > div:first-child { border-top: 0; }
+.account-profile__details dd { font-weight: 600; overflow-wrap: anywhere; text-align: right; }
+.account-profile__note { background: #f3f8f8; border: 1px dashed #d4e3e5; border-radius: .7rem; color: #67828a; font-size: .82rem; line-height: 1.55; margin: 1rem 0 0; padding: .75rem .9rem; }
+.account-profile__stack { display: grid; gap: 1rem; min-width: 0; align-content: start; }
+.account-profile__row { align-items: center; border-top: 1px solid #e6eff0; display: flex; flex-wrap: wrap; gap: .6rem 1rem; justify-content: space-between; padding: .8rem 0; }
+.account-profile__row:first-of-type { border-top: 0; }
+.account-profile__row > div { display: grid; gap: .2rem; }
+.account-profile__row span { color: #68828a; font-size: .82rem; }
+.account-profile__row form { margin: 0; }
+.account-profile__row .button { min-height: 2.5rem; padding: .5rem .9rem; }
+
+/* Clinician details with a pen that opens the field in place. */
+.account-profile__editable { align-items: center; display: flex; gap: .35rem; justify-content: flex-end; }
+.account-profile__details > div:has(.account-profile__editor[open]) { flex-direction: column; }
+.account-profile__details > div:has(.account-profile__editor[open]) .account-profile__editable { display: block; text-align: left; }
+.account-profile__editable:has(> .account-profile__editor[open]) > .account-profile__value { display: none; }
+.account-profile__editor > summary { align-items: center; border-radius: .45rem; color: #14756e; cursor: pointer; display: inline-flex; height: 1.75rem; justify-content: center; list-style: none; margin-block: -.25rem; width: 1.75rem; }
+.account-profile__editor > summary::-webkit-details-marker { display: none; }
+.account-profile__editor > summary:hover { background: #e6f5f3; }
+.account-profile__editor > summary:focus-visible { outline: 2px solid #0b958a; outline-offset: 1px; }
+.account-profile__editor > summary svg { fill: none; height: 1rem; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 2; width: 1rem; }
+.account-profile__editor[open] > summary { display: none; }
+.account-profile__editor form { display: grid; gap: .5rem; margin-top: .2rem; }
+.account-profile__editor input[type='text'] { border: 1px solid #c9d9db; border-radius: .6rem; color: #183a43; font: inherit; font-weight: 500; min-height: 2.6rem; padding: .55rem .75rem; width: 100%; }
+.account-profile__editor input[type='text']:focus { border-color: #0b958a; box-shadow: 0 0 0 3px rgba(11, 149, 138, .14); outline: 0; }
+.account-profile__editor input[aria-invalid='true'] { border-color: #c7564d; }
+.account-profile__help { color: #68828a; font-size: .76rem; font-weight: 400; line-height: 1.45; }
+.account-profile__error { color: #a3322b; font-size: .8rem; font-weight: 600; }
+.account-profile__editor-actions { display: flex; flex-wrap: wrap; gap: .5rem; }
+.account-profile__editor-actions .button { min-height: 2.4rem; padding: .45rem .9rem; }
+/* The month so far ends with its provisional total in rand. */
+.account-profile__details > .account-profile__total { align-items: baseline; }
+.account-profile__total dt { color: #11383e; font-weight: 600; }
+.account-profile__details .account-profile__total dd { color: #14756e; font-size: 1rem; font-variant-numeric: tabular-nums; font-weight: 700; white-space: nowrap; }
+.account-profile__details .account-profile__total dd span { color: #68828a; font-size: .8rem; font-weight: 500; white-space: normal; }

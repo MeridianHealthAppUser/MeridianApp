@@ -8,6 +8,7 @@ from django.views import View
 from django.views.decorators.cache import never_cache
 
 from practices.tenancy import multi_practice_enabled
+from .inbox import message_tab_counts
 from .navigation import build_staff_menu
 from .views import StaffCompanyRequiredMixin
 
@@ -18,7 +19,9 @@ class StaffMenuSectionView(LoginRequiredMixin, StaffCompanyRequiredMixin, View):
 
     def get(self, request, section):
         nav_section = f'section:{section}'
-        menu = build_staff_menu(self.membership, multi_practice=multi_practice_enabled(), nav_section=nav_section)
+        counts = message_tab_counts(self.company, request.user)
+        menu = build_staff_menu(self.membership, multi_practice=multi_practice_enabled(), nav_section=nav_section,
+                                unread=counts['patient_unread_total'] + counts['team_unread_total'])
         current = next((item for item in menu if item['key'] == section), None)
         if current is None:
             raise Http404('This menu section is not available to you.')

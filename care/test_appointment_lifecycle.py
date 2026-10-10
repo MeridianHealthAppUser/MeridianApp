@@ -19,6 +19,7 @@ from .clinical import save_consultation
 from .messaging import add_participant
 from .models import Appointment, AuditEvent, AvailabilitySlot, ClinicalNote, MessageThread, PatientEvent
 from .scheduling import propose_appointment_time, respond_to_appointment_proposal
+from .widgets import floor_quarter_hour
 
 
 @override_settings(MULTI_PRACTICE_ENABLED=True)
@@ -55,7 +56,7 @@ class AppointmentLifecycleFixture(TestCase):
         add_participant(cls.beta_thread, cls.doctor)
 
     def setUp(self):
-        self.starts_at = timezone.now().replace(microsecond=0) + timedelta(days=3)
+        self.starts_at = floor_quarter_hour(timezone.now() + timedelta(days=3))
 
     def appointment(self, **overrides):
         values = dict(company=self.company, patient=self.patient, clinician=self.doctor,

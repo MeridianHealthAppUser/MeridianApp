@@ -1,0 +1,51 @@
+{% load workspace_ui %}
+{# The record's Messages tab: the conversations with this patient and the one being read. #}
+<section class="staff-page-card record-messages" id="record-messages" aria-labelledby="record-messages-heading" data-record-messages>
+  <header class="record-messages__header">
+    <h2 class="record-card__eyebrow" id="record-messages-heading">Messages</h2>
+    <span class="record-messages__actions">
+      {% if record_has_threads %}
+        {% url 'portal:patient-detail' patient.pk as record_page %}
+        {% include 'portal/includes/conversation_search.html' with search_clear_url=record_page|add:'?tab=messages' %}
+        {% if record_new_url %}<a class="console-button console-button--primary" href="{{ record_new_url }}">Start a new conversation</a>{% endif %}
+      {% endif %}
+      {% if record_bloods_url %}<a class="console-button console-button--secondary" href="{{ record_bloods_url }}">Request blood tests</a>{% endif %}
+    </span>
+  </header>
+
+  <div class="record-inbox{% if not record_has_threads %} record-inbox--single{% endif %}">
+    {% if record_has_threads %}{% include 'portal/includes/record_conversation_list.html' %}{% endif %}
+
+    <section class="record-messages__pane" aria-label="Conversation">
+      {% if record_thread %}
+        {% include 'portal/includes/patient_conversation.html' with thread=record_thread message_form=record_message_form new_url=record_new_url conversation_return_to='record' read_state_fields=record_read_state_fields %}
+      {% elif record_starting %}
+        {% if record_has_threads %}<h3 class="record-messages__pane-title">New conversation</h3>{% endif %}
+        <div class="record-conversation record-conversation--empty"><p class="record-conversation__empty">{% if record_has_threads %}Write below to start a new conversation with {{ patient.first_name }}.{% else %}No messages with {{ patient.first_name }} yet.{% endif %}</p></div>
+        {% if not patient.user_id %}
+          <p class="record-messages__note">{{ patient.first_name }} doesn’t have a login yet, so they can’t read messages.</p>
+        {% else %}
+          <form class="record-reply" method="post" action="{% url 'portal:staff-thread-create' patient.pk %}" data-record-reply>
+            {% csrf_token %}
+            <input type="hidden" name="return_to" value="record">
+            {% if record_thread_error %}<p class="record-error" role="alert">{{ record_thread_error }}</p>{% endif %}
+            <label class="sr-only" for="record-reply-body">Write to {{ patient.first_name }}</label>
+            <textarea id="record-reply-body" name="body" rows="1" maxlength="5000" required placeholder="Write to {{ patient.first_name }} to start a conversation…">{{ record_new_draft }}</textarea>
+            <button class="console-button console-button--primary" type="submit">Send</button>
+          </form>
+        {% endif %}
+      {% else %}
+        <div class="record-inbox-empty">
+          {% if record_has_threads %}
+            <h3>Choose a conversation</h3>
+            <p>Select a conversation to read it. New messages stay unread until you open them.</p>
+          {% else %}
+            <h3>No conversations</h3>
+            <p>You aren’t in any conversations with {{ patient.first_name }}.</p>
+          {% endif %}
+          {% if record_new_url %}<a class="console-button console-button--primary" href="{{ record_new_url }}">Start a new conversation</a>{% endif %}
+        </div>
+      {% endif %}
+    </section>
+  </div>
+</section>

@@ -425,7 +425,8 @@ class PatientStandalonePagesTests(TestCase):
     def test_account_exposes_only_contact_edit_fields(self):
         self.login()
         response = self.page('patient-account')
-        self.assertEqual(set(response.context['contact_form'].fields), {'phone', 'city'})
+        self.assertEqual(set(response.context['contact_form'].fields), {'title', 'phone', 'city'})
+        self.assertEqual(response.context['contact_form']['title'].value(), self.patient.title)
         self.assertEqual(response.context['contact_form']['phone'].value(), self.patient.phone)
         self.assertEqual(response.context['contact_form']['city'].value(), self.patient.city)
 
@@ -455,6 +456,30 @@ class PatientStandalonePagesTests(TestCase):
         self.assertEqual(set(event.metadata), {'changed_fields'})
         self.assertNotIn('083 765 4321', str(event.metadata))
         self.assertNotIn('Johannesburg', str(event.metadata))
+
+    def test_patient_sees_and_changes_their_title(self):
+        self.login()
+        page = self.page('patient-account')
+        self.assertContains(page, 'Printed on your blood test forms.')
+        self.assertContains(page, '<option value="MS">Ms</option>', html=True)
+        response = self.client.post(reverse('portal:patient-account'), {
+            'patient_context': self.patient_token(), 'title': 'MS', 'phone': self.patient.phone, 'city': self.patient.city,
+        })
+        self.assertRedirects(response, reverse('portal:patient-account'), fetch_redirect_response=False)
+        self.patient.refresh_from_db()
+        self.beta_patient.refresh_from_db()
+        self.assertEqual((self.patient.title, self.beta_patient.title), ('MS', ''))
+        self.assertEqual(list(AuditEvent.objects.filter(patient=self.patient, actor=self.user).values_list('action', flat=True)),
+                         ['patient.title_updated'])
+        self.assertContains(self.page('patient-account'), '<option value="MS" selected>Ms</option>', html=True)
+
+    def test_a_form_without_the_title_leaves_it_alone(self):
+        Patient.objects.filter(pk=self.patient.pk).update(title='MR')
+        self.login()
+        self.client.post(reverse('portal:patient-account'), {
+            'patient_context': self.patient_token(), 'phone': '083 765 4321', 'city': 'Johannesburg'})
+        self.patient.refresh_from_db()
+        self.assertEqual((self.patient.title, self.patient.phone), ('MR', '083 765 4321'))
 
     def test_invalid_contact_values_preserve_form_and_do_not_write(self):
         self.login()

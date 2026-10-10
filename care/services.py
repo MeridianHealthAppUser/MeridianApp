@@ -28,7 +28,7 @@ ACCESS_ACTIONS = frozenset({
     'patient.record_viewed', 'patient.clinical_record_viewed', 'patient.clinical_record_exported',
     'message.thread_viewed', 'lab_result.downloaded', 'compounding.summary_viewed', 'follow_up.viewed',
     'lead.viewed', 'privacy.request_viewed', 'activity_statement.exported', 'dispatch.history_exported',
-    'metrics.exported', 'stock.exported',
+    'metrics.exported', 'stock.exported', 'pathcare_form.viewed',
 })
 
 
@@ -75,6 +75,8 @@ def post_patient_message(*, thread, sender, body, request=None):
     message.save()
     thread.last_message_at = timezone.now()
     thread.save(update_fields=('last_message_at', 'updated_at'))
+    # A staff member who replies has read the conversation, as in team conversations; the others' read state is theirs.
+    thread.participant_links.filter(user=sender).update(last_read_at=message.created_at)
     event = PatientEvent.objects.create(
         company=thread.company,
         patient=thread.patient,

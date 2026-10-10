@@ -1,0 +1,13 @@
+/* (i) tips (static/js/info_tips.js): a note in a speech bubble, shown on hover, keyboard focus or a tap. */
+.info-tip { display: inline-flex; margin-left: .45rem; position: relative; vertical-align: middle; }
+.info-tip__button { align-items: center; background: #fff; border: 1.5px solid var(--console-teal, #07877f); border-radius: 50%; color: var(--console-teal-dark, #056f69); cursor: help; display: inline-flex; flex: 0 0 auto; font: italic 700 .82rem/1 Georgia, 'Times New Roman', serif; height: 1.45rem; justify-content: center; margin: 0; min-height: 0; padding: 0; width: 1.45rem; }
+.info-tip__button:hover, .info-tip.is-open .info-tip__button { background: var(--console-teal-soft, #e4f5f1); }
+.info-tip__button:focus-visible { outline: 2px solid var(--console-teal, #07877f); outline-offset: 2px; }
+.info-tip__bubble { background: var(--console-ink, #12383c); border-radius: .65rem; bottom: calc(100% + 10px); box-shadow: 0 12px 30px rgba(18, 56, 60, .22); color: #fff; font-size: .8rem; font-style: normal; font-weight: 500; line-height: 1.5; max-width: min(17rem, calc(100vw - 1rem)); opacity: 0; padding: .6rem .8rem; pointer-events: none; position: absolute; right: -.55rem; text-align: left; transition: opacity .12s ease; visibility: hidden; white-space: normal; width: max-content; z-index: 70; }
+/* The bubble's tail points at the (i). */
+.info-tip__bubble::after { border: 7px solid transparent; border-top-color: var(--console-ink, #12383c); content: ''; left: var(--info-tip-arrow, calc(100% - 1.28rem)); position: absolute; top: 100%; transform: translateX(-50%); }
+.info-tip--below .info-tip__bubble::after { border-bottom-color: var(--console-ink, #12383c); border-top-color: transparent; bottom: 100%; top: auto; }
+.info-tip.is-open .info-tip__bubble { opacity: 1; visibility: visible; }
+/* With the script, the bubble is placed against the window, so it never widens or gets cut off by a table that scrolls. */
+.info-tips-ready .info-tip__bubble { bottom: auto; left: 0; position: fixed; right: auto; top: 0; }
+html:not(.info-tips-ready) .info-tip:hover .info-tip__bubble, html:not(.info-tips-ready) .info-tip:focus-within .info-tip__bubble { opacity: 1; visibility: visible; }

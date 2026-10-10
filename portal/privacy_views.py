@@ -4,7 +4,7 @@ from urllib.parse import urlencode
 
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.core.exceptions import ValidationError
+from django.core.exceptions import PermissionDenied, ValidationError
 from django.core.paginator import Paginator
 from django.db.models import F
 from django.shortcuts import get_object_or_404, redirect, render
@@ -42,6 +42,10 @@ PRIVACY_AUDIT_LABELS = {
     'privacy.request_responded': 'Privacy request responded to',
     'privacy.policy_published': 'Policy version published',
     'account.password_changed': 'Account password changed',
+    'account.password_reset': 'Account password reset',
+    'account.sessions_ended': 'Signed out of other devices',
+    'staff.details_updated': 'Staff details updated',
+    'account.staff_details_updated': 'Own staff details updated',
 }
 TARGET_LABELS = {
     'practices.patient': 'Patient record', 'care.clinicalencounter': 'Consultation',
@@ -235,6 +239,9 @@ class AccountAccessHistoryView(PrivacyStaffPage):
     http_method_names = ('get', 'head', 'options')
 
     def get(self, request):
+        # Clinicians don't have an access history page; administrators and Super Admins do.
+        if self.membership.role == 'doctor':
+            raise PermissionDenied('Your access history is not available to the Clinician role.')
         memberships = staff_memberships(request.user)
         data = request.GET.copy()
         data.setdefault('scope', 'current')

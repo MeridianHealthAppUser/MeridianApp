@@ -21,6 +21,9 @@ DigitalOcean App Platform supports Dockerfile source builds and a `PRE_DEPLOY` j
 - `CHECKOUT_TEST_CODE`: a discount code that settles the initial consultation at R0 and runs the full patient conversion without a payment provider. It defaults to `devtest` only when `DJANGO_DEBUG=true` and is empty (off) otherwise. Leave it unset on any site real patients can reach.
 - `MULTI_PRACTICE_ENABLED=false` and `SINGLE_PRACTICE_SLUG=meridian-health`: keep the application restricted to Meridian Health (also the defaults). Existing other-practice data is not automatically deleted. See [single-practice operation](SINGLE_PRACTICE.md).
 - `REDIS_URL` (or `VIDEO_REDIS_URL`): private shared Redis for video signalling and expiring room presence; video is unavailable in production without it.
+- `CELERY_BROKER_URL` (optional): the broker for background tasks, such as emailing PathCare blood-test forms. It can point at the same Redis as `REDIS_URL`, but `REDIS_URL` alone does not turn it on. When you set it, also run a **worker** component from the same image with `celery -A config worker --loglevel=info` and the same environment as the web component; failed emails are then retried. Without it, tasks run inside the web request and a failed email is marked failed straight away, to be resent from the clinical log.
+- `DJANGO_EMAIL_HOST` and the other `DJANGO_EMAIL_*` settings: the transactional email (Brevo) used for password reset links and PathCare forms. Until a host is set, production sends no email: Forgot password points people to support, and PathCare forms are kept in the clinical log marked not emailed (nothing is printed to the server log), ready to resend once email is set up.
+- `SPACES_BUCKET`, `SPACES_REGION`, `SPACES_ACCESS_KEY_ID` and `SPACES_SECRET_ACCESS_KEY` (all four or none) and optional `SPACES_PREFIX`: the private DigitalOcean Space for patient files (PathCare forms and uploaded lab reports). Without them, production keeps those files in the database. Set them on web, worker and the migrate job. See [Patient files on Spaces](#patient-files-on-spaces).
 - Configure a separate TURN relay for reliable cross-network video. See [native video setup](VIDEO_CONSULTATIONS.md).
 - Review `DJANGO_SECURE_HSTS_SECONDS` before enabling a long HSTS lifetime on a real domain.
 
@@ -36,7 +39,29 @@ Recommended release order:
 
 HSTS preload is deliberately not enabled automatically. A deployment check may report that the domain is not configured for browser preload; review domain-wide HTTPS policy before opting in.
 
-Payments, outbound email, third-party Zoom integration and courier APIs are not configured. Native WebRTC video is included; production Redis and TURN must be provisioned separately. Configure any future integration separately; never infer payment success from a browser flag. The local review-reminder command can be scheduled only after choosing an authorised operational account and reviewing its scope.
+Payments, third-party Zoom integration and courier APIs are not configured. Transactional email (password reset links and PathCare forms) uses the `DJANGO_EMAIL_*` settings. Native WebRTC video is included; production Redis and TURN must be provisioned separately. Configure any future integration separately; never infer payment success from a browser flag. The local review-reminder command can be scheduled only after choosing an authorised operational account and reviewing its scope.
+
+## Patient files on Spaces
+
+PathCare blood-test forms and patients' uploaded lab reports are private patient files. Once the four `SPACES_*` settings are set, they are stored in a private DigitalOcean Space. Until then, production keeps them in the database. They are never kept on the container's own disk, which is wiped on every deploy. The app never hands out a link to the Space: every view or download goes through the app's own access checks, and the app fetches the file with its own key. Each file's SHA-256 is checked when it is read.
+
+Deploying this version needs no Space. The migration copies existing forms and reports into patient files in the database and never contacts Spaces.
+
+DigitalOcean has no South African region. Choose the nearest one, ideally the region your app and database are in: `fra1` (Frankfurt), `ams3` (Amsterdam) or `lon1` (London). Patient information is then stored outside South Africa, so confirm that your POPIA cross-border assessment and privacy notice cover it.
+
+1. **Create the Space.** In DigitalOcean, open **Spaces Object Storage** and choose **Create a Spaces Bucket**. Pick the region, give it a name such as `meridian-health-patient-files`, leave the **CDN off** and set file listing to **Restricted**. Never make the Space or any file in it public.
+2. **Create a key for that Space only.** Under **Spaces Object Storage → Access Keys**, choose **Create Access Key** and then **Limited access**. Select only this Space with **Read/Write/Delete** permission. Copy the access key ID and the secret now, because the secret is shown only once.
+3. **Set the environment variables.** In the app's **Settings**, add these to the web component, the worker (if you run one) and the `migrate` job, with **Encrypt** ticked:
+   - `SPACES_BUCKET`: the Space's name
+   - `SPACES_REGION`: its region, for example `fra1`
+   - `SPACES_ACCESS_KEY_ID` and `SPACES_SECRET_ACCESS_KEY`: the key from step 2
+   - Optionally, `SPACES_PREFIX`: the folder in the Space for these files (default `meridian-health`). Changing it later affects new files only.
+4. **Deploy.** Saving the settings redeploys the app. From then on, each new file goes to the Space as soon as it is saved. If the Space can't be reached at that moment, the file stays in the database and the error is logged; the next step picks it up.
+5. **Move the existing files once.** Open the web component's **Console** and run `python manage.py move_patient_files_to_spaces --dry-run` to see how many files will move. Then run `python manage.py move_patient_files_to_spaces`. Each file is uploaded and checked before it is removed from the database. The command is safe to run again, for example if it reports any failures. It refuses to run until Spaces is configured.
+6. **Check.** In the app, open a blood-test report and a PathCare form ("View form").
+7. **Plan backups.** Once the files are moved, database backups no longer contain these PDFs. Consider turning on versioning for the Space (DigitalOcean supports it through the S3-compatible API), so that a deleted or overwritten file can be recovered. Also consider a scheduled copy to a second Space or another location, and include the Space in your restore tests.
+
+Local development keeps patient files under `media/patient-files/`. Git ignores that folder and the app never serves it. The test suite keeps them in memory and never reaches a real Space.
 
 ## Meridian administration and first login
 

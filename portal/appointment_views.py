@@ -17,7 +17,8 @@ from .views import (
     _invalid_staff_form,
     _patient_record_context,
 )
-from .inbox import staff_inbox_context, staff_inbox_redirect
+from .inbox import staff_inbox_redirect
+from .record_messages import render_record_messages
 
 
 class AppointmentProposalActionMixin:
@@ -28,7 +29,8 @@ class AppointmentProposalActionMixin:
         return self.patient_company if self.actor_role == 'patient' else self.company
 
     def is_staff_inbox(self):
-        return self.actor_role == 'doctor' and self.request.POST.get('return_to') == 'inbox'
+        # Staff answer appointment suggestions in the record's messages block ("inbox" is its older name).
+        return self.actor_role == 'doctor' and self.request.POST.get('return_to') in ('record', 'inbox')
 
     def require_doctor(self):
         if self.actor_role == 'doctor' and not self.membership.is_clinician:
@@ -44,17 +46,23 @@ class AppointmentProposalActionMixin:
             queryset = queryset.filter(participants=self.request.user)
         return queryset.select_related('patient')
 
+    def from_patient_messages(self):
+        return self.actor_role == 'doctor' and self.request.POST.get('return_to') == 'patient_messages'
+
     def invalid_proposal_form(self, thread, form):
         if self.actor_role == 'patient':
             return _invalid_patient_form(
                 self.request, self.patient_company, self.patient, 'proposal_form', form,
                 reply_thread_id=thread.pk,
             )
+        if self.from_patient_messages():
+            from .inbox import render_staff_inbox
+
+            return render_staff_inbox(self.request, self.company, self.membership,
+                                      proposal_form=form, failed_form='proposal_form', reply_thread_id=thread.pk)
         if self.is_staff_inbox():
-            return render(self.request, 'portal/staff_inbox.html', staff_inbox_context(
-                self.request, self.company, self.membership, selected_thread_id=thread.pk,
-                proposal_form=form, failed_form='proposal_form', reply_thread_id=thread.pk,
-            ))
+            return render_record_messages(self.request, self.company, self.membership, thread.patient,
+                                          proposal_form=form, failed_form='proposal_form', reply_thread_id=thread.pk)
         return _invalid_staff_form(
             self.request, self.company, self.membership, thread.patient, 'proposal_form', form,
             reply_thread_id=thread.pk,
@@ -68,6 +76,9 @@ class AppointmentProposalActionMixin:
                 return redirect('portal:patient-appointments')
 
             return patient_messages_redirect(thread)
+        if self.from_patient_messages():
+            from .inbox import staff_inbox_url
+            return redirect(staff_inbox_url(thread))
         if self.is_staff_inbox():
             return staff_inbox_redirect(thread)
         from .patient_workspace import workspace_url
@@ -141,11 +152,12 @@ class RespondToAppointmentMixin(AppointmentProposalActionMixin):
                     request, self.patient_company, self.patient, selected_thread_id=proposal.thread_id, **extra,
                 )
                 template = 'portal/patient_messages.html'
+            elif self.from_patient_messages():
+                from .inbox import render_staff_inbox
+
+                return render_staff_inbox(request, self.company, self.membership, **extra)
             elif self.is_staff_inbox():
-                context = staff_inbox_context(
-                    request, self.company, self.membership, selected_thread_id=proposal.thread_id, **extra,
-                )
-                template = 'portal/staff_inbox.html'
+                return render_record_messages(request, self.company, self.membership, proposal.patient, **extra)
             else:
                 context = _patient_record_context(request, self.company, self.membership, proposal.patient, **extra)
                 template = 'portal/patient_detail.html'

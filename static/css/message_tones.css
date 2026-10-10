@@ -1,0 +1,11 @@
+/* One colour per person in a conversation (portal/templatetags/conversation_ui.py). Your own messages stay white;
+   the patient, or the first other member, is blue; the rest follow in the order they joined. */
+.message-tone--blue { background: #e8f4fc; border-color: #cfe6f6; }
+.message-tone--orange { background: #fff0e1; border-color: #f5d0a9; }
+.message-tone--pink { background: #fdebf3; border-color: #f3c4da; }
+.message-tone--yellow { background: #fff8d9; border-color: #ecdc94; }
+.message-tone--purple { background: #f1ebfb; border-color: #d6c6f1; }
+.message-tone--dark-green { background: #d6ebdf; border-color: #94c4a9; }
+.message-tone--red { background: #fde8e6; border-color: #f0bfb9; }
+.message-tone--light-green { background: #eef8e6; border-color: #c6e5ad; }
+.message-tone--navy { background: #e4e9f5; border-color: #b6c2df; }

@@ -11,6 +11,7 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 
 import os
+import sys
 from pathlib import Path
 
 import dj_database_url
@@ -80,6 +81,8 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    # A clinician opening or changing a record that isn't theirs gets a toast and a way back, not a 403 page.
+    'portal.record_access.RecordAccessMiddleware',
 ]
 
 ROOT_URLCONF = 'config.urls'
@@ -179,6 +182,77 @@ STORAGES = {
 
 AUTH_USER_MODEL = 'accounts.User'
 LOGIN_URL = 'accounts:login'
+
+TESTING = len(sys.argv) > 1 and sys.argv[1] == 'test'
+
+# Patient files (PathCare forms, uploaded lab reports) live in a private DigitalOcean Space once one is
+# configured: all four SPACES_* values below, or none. They are read through the app only, after its access
+# checks; nothing is public or has a public URL. Without a Space, local development keeps them on disk
+# under media/patient-files (never served) and production keeps them in the database, never on the
+# container's temporary disk. `manage.py move_patient_files_to_spaces` moves database-held files to the Space.
+SPACES_BUCKET = os.getenv('SPACES_BUCKET', '').strip()
+SPACES_ACCESS_KEY_ID = os.getenv('SPACES_ACCESS_KEY_ID', '').strip()
+SPACES_SECRET_ACCESS_KEY = os.getenv('SPACES_SECRET_ACCESS_KEY', '').strip()
+SPACES_REGION = os.getenv('SPACES_REGION', '').strip().lower()
+SPACES_CONFIGURED = all((SPACES_BUCKET, SPACES_ACCESS_KEY_ID, SPACES_SECRET_ACCESS_KEY, SPACES_REGION))
+if not SPACES_CONFIGURED and any((SPACES_BUCKET, SPACES_ACCESS_KEY_ID, SPACES_SECRET_ACCESS_KEY, SPACES_REGION)):
+    raise ImproperlyConfigured('Set all of SPACES_BUCKET, SPACES_ACCESS_KEY_ID, SPACES_SECRET_ACCESS_KEY and SPACES_REGION, or none.')
+SPACES_ENDPOINT_URL = f'https://{SPACES_REGION}.digitaloceanspaces.com' if SPACES_REGION else ''
+# The first part of every patient file's key. Changing it later affects new files only.
+PATIENT_FILES_PREFIX = os.getenv('SPACES_PREFIX', 'meridian-health').strip().strip('/')
+if TESTING:  # The test suite never reaches a real Space, even when one is configured.
+    STORAGES['patient_files'] = {'BACKEND': 'django.core.files.storage.InMemoryStorage'}
+elif SPACES_CONFIGURED:
+    from botocore.config import Config as _SpacesClientConfig
+
+    STORAGES['patient_files'] = {'BACKEND': 'storages.backends.s3.S3Storage', 'OPTIONS': {
+        'bucket_name': SPACES_BUCKET, 'access_key': SPACES_ACCESS_KEY_ID, 'secret_key': SPACES_SECRET_ACCESS_KEY,
+        'region_name': SPACES_REGION, 'endpoint_url': SPACES_ENDPOINT_URL,
+        'default_acl': 'private', 'querystring_auth': True, 'file_overwrite': False,
+        # Keys already start with PATIENT_FILES_PREFIX, so the stored key is the object's full key.
+        'location': '',
+        'signature_version': 's3v4', 'addressing_style': 'virtual',
+        # Spaces doesn't need the newer optional upload checksums; the app checks each file's SHA-256 itself.
+        'client_config': _SpacesClientConfig(
+            s3={'addressing_style': 'virtual'}, signature_version='s3v4',
+            request_checksum_calculation='when_required', response_checksum_validation='when_required',
+        ),
+    }}
+elif DEBUG:
+    STORAGES['patient_files'] = {'BACKEND': 'django.core.files.storage.FileSystemStorage', 'OPTIONS': {
+        'location': BASE_DIR / 'media' / 'patient-files', 'base_url': None,
+        'file_permissions_mode': 0o600, 'directory_permissions_mode': 0o700,
+    }}
+# Without storage, patient files are kept in the database (PatientFile.content).
+PATIENT_FILES_STORAGE_ENABLED = 'patient_files' in STORAGES
+
+# Outgoing email (password reset links and PathCare forms). Brevo's SMTP relay: DJANGO_EMAIL_HOST=smtp-relay.brevo.com,
+# port 587 with TLS, the Brevo SMTP login as user and an SMTP key as password. Until a host is set, local
+# development prints emails to the console and production sends none: it offers no email reset, and PathCare
+# forms are kept in the clinical log, marked not emailed, so they never end up in the server log.
+EMAIL_HOST = os.getenv('DJANGO_EMAIL_HOST', '').strip()
+EMAIL_PORT = int(os.getenv('DJANGO_EMAIL_PORT', '').strip() or 587)
+EMAIL_HOST_USER = os.getenv('DJANGO_EMAIL_HOST_USER', '')
+EMAIL_HOST_PASSWORD = os.getenv('DJANGO_EMAIL_HOST_PASSWORD', '')
+EMAIL_USE_TLS = os.getenv('DJANGO_EMAIL_USE_TLS', 'true').lower() == 'true'
+EMAIL_TIMEOUT = 10
+DEFAULT_FROM_EMAIL = os.getenv('DJANGO_DEFAULT_FROM_EMAIL', 'Meridian Health <no-reply@meridianhealth.co.za>')
+EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend' if EMAIL_HOST else 'django.core.mail.backends.console.EmailBackend'
+EMAIL_ENABLED = bool(EMAIL_HOST) or DEBUG or TESTING  # The test suite keeps sent email in memory.
+PASSWORD_RESET_EMAIL_ENABLED = EMAIL_ENABLED
+# Reset links work once and expire after an hour.
+PASSWORD_RESET_TIMEOUT = 60 * 60
+
+# Background tasks (Celery), such as emailing PathCare forms. Optional: with CELERY_BROKER_URL set, a worker
+# component sends them and retries a failed send. Without it, as in local development and the test suite,
+# tasks run straight away in the web process. REDIS_URL alone does not turn the worker on.
+CELERY_BROKER_URL = os.getenv('CELERY_BROKER_URL', '').strip()
+CELERY_TASK_ALWAYS_EAGER = (not CELERY_BROKER_URL or os.getenv('CELERY_TASK_ALWAYS_EAGER', '').lower() == 'true'
+                            or TESTING)
+CELERY_TASK_ACKS_LATE = True
+CELERY_TASK_SERIALIZER = 'json'
+CELERY_ACCEPT_CONTENT = ['json']
+CELERY_TIMEZONE = 'Africa/Johannesburg'
 LOGIN_REDIRECT_URL = 'portal:desktop-dashboard'
 LOGOUT_REDIRECT_URL = 'landing'
 

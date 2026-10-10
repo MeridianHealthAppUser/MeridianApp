@@ -20,6 +20,7 @@ from .models import (
     Appointment, AuditEvent, ClinicalEncounter, ClinicalNote, ClinicalTask,
     LabRequest, LabResult, PatientEvent, Payment, TreatmentAuthorization,
 )
+from .patient_files import read_patient_file
 from .services import complete_task
 
 
@@ -200,7 +201,7 @@ class ClinicalWorkflowTests(TestCase):
         result = self.upload(request)
         request.refresh_from_db()
         self.assertEqual((result.company_id, result.patient_id, result.uploaded_by_id), (self.company.pk, self.patient.pk, self.patient_user.pk))
-        self.assertEqual(bytes(result.content), PDF)
+        self.assertEqual(read_patient_file(result.file), PDF)
         self.assertEqual(result.size, len(PDF))
         self.assertEqual(result.sha256, hashlib.sha256(PDF).hexdigest())
         self.assertEqual(request.status, LabRequest.Status.UPLOADED)
@@ -218,7 +219,7 @@ class ClinicalWorkflowTests(TestCase):
         with self.assertRaises(ValidationError):
             self.upload(request, content=PDF.replace(b'Catalog', b'Pages'))
         first.refresh_from_db()
-        self.assertEqual(bytes(first.content), PDF)
+        self.assertEqual(read_patient_file(first.file), PDF)
 
     def test_pdf_upload_rejects_non_pdf_incomplete_and_oversized_content(self):
         request = self.lab()
