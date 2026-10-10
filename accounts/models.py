@@ -69,4 +69,18 @@ class User(AbstractUser):
     def full_name(self):
         return self.get_full_name() or self.email
 
+    @property
+    def given_name(self):
+        """The first name without a title typed at its start: "Dr James" is James, as the title is kept on its own."""
+        first = self.first_name.strip()
+        word, _, rest = first.partition(' ')
+        titles = {label.casefold() for label in self.Title.labels}
+        return rest.strip() if rest.strip() and word.rstrip('.').casefold() in titles else first
+
+    @property
+    def titled_name(self):
+        """Their title and name, "Dr James Westraadt", with the title once even when it's also typed into the name."""
+        name = ' '.join(filter(None, [self.given_name, self.last_name.strip()]))
+        return f'{self.get_title_display()} {name}' if self.title and name else self.full_name
+
 # Create your models here.

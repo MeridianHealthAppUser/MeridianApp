@@ -33,7 +33,7 @@ def person_tag(name, kind, full_name=None):
 
 
 def short_name(person, kind):
-    first, last = person.first_name.strip(), person.last_name.strip()
+    first, last = getattr(person, 'given_name', person.first_name).strip(), person.last_name.strip()
     if not first or not last:
         return person.full_name
     if kind == 'admin':

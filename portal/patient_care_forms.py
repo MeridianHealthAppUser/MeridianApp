@@ -37,8 +37,7 @@ class PatientBookingForm(forms.Form):
         super().__init__(*args, **kwargs)
         doctors = practice_doctors(company)
         self.fields['clinician'].queryset = doctors
-        self.fields['clinician'].label_from_instance = (
-            lambda person: f'{person.get_title_display()} {person.full_name}' if person.title else person.full_name)
+        self.fields['clinician'].label_from_instance = lambda person: person.titled_name
         # Their own clinician to start with.
         if not self.is_bound and patient.assigned_doctor_id and doctors.filter(pk=patient.assigned_doctor_id).exists():
             self.initial.setdefault('clinician', patient.assigned_doctor_id)

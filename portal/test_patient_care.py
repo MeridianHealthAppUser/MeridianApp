@@ -134,6 +134,13 @@ class PatientCareTests(TestCase):
         self.assertRedirects(response, f"{self.url('patient-appointments')}?book=1&date={self.day.isoformat()}&clinician={self.doctor.pk}",
                              fetch_redirect_response=False)
 
+    def test_a_title_typed_into_the_name_is_not_doubled(self):
+        get_user_model().objects.filter(pk=self.doctor.pk).update(title='DR', first_name='Dr Sam')
+        self.login()
+        page = self.client.get(self.url('patient-appointments'))
+        self.assertContains(page, f'<option value="{self.doctor.pk}" selected>Dr Sam One</option>', html=True)
+        self.assertNotContains(page, 'Dr Dr')
+
     def test_the_booked_banner_shows_once_after_booking(self):
         self.login()
         self.create_appointment(starts_at=self.starts_at + timedelta(days=1))

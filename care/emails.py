@@ -19,7 +19,7 @@ def site_link(name, *args, query='', fragment=''):
 
 def person_name(user):
     """Staff as "Dr Joshua Czech": their title, when they have one, and full name."""
-    return ' '.join(filter(None, [user.get_title_display() if getattr(user, 'title', '') else '', user.full_name]))
+    return user.titled_name
 
 
 def greeting_name(user):

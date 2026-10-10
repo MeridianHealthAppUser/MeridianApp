@@ -138,7 +138,7 @@ class AppointmentForm(PatientBoundModelForm):
             company_memberships__is_active=True,
         ).distinct().order_by('first_name', 'last_name', 'email')
         # Clinicians by name, with their title; nothing chosen to start with.
-        self.fields['clinician'].label_from_instance = lambda person: f'{person.get_title_display()} {person.full_name}'.strip() if person.title else person.full_name
+        self.fields['clinician'].label_from_instance = lambda person: person.titled_name
         self.fields['clinician'].empty_label = 'Choose a clinician'
         self.fields['patient'].empty_label = 'Choose a patient'
         self.fields['starts_at'].required = False
