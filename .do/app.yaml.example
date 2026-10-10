@@ -1,7 +1,9 @@
 # Template only: confirm repository access and configure encrypted
 # runtime DJANGO_SECRET_KEY and DATABASE_URL in DigitalOcean for ALL components.
 # The worker is optional: add it with CELERY_BROKER_URL set on web AND worker, plus the DJANGO_EMAIL_*
-# settings. Without CELERY_BROKER_URL, web sends PathCare emails itself and no worker is needed.
+# settings. Without CELERY_BROKER_URL, web sends emails itself and no worker is needed.
+# The appointment-reminders job emails reminders every 15 minutes: give it DATABASE_URL, DJANGO_SECRET_KEY
+# and the DJANGO_EMAIL_* settings too (and CELERY_BROKER_URL when a worker runs).
 # Native video also needs private REDIS_URL/VIDEO_REDIS_URL, VIDEO_TURN_URLS
 # and an encrypted VIDEO_TURN_SECRET on web. Provision the relay separately;
 # see docs/VIDEO_CONSULTATIONS.md. Do not paste secrets into this file.
@@ -35,6 +37,10 @@ services:
         value: '${APP_DOMAIN}'
         scope: RUN_TIME
       - key: DJANGO_CSRF_TRUSTED_ORIGINS
+        value: '${APP_URL}'
+        scope: RUN_TIME
+      # Links and the logo in notification emails (docs/DEPLOYMENT.md, "Emails and appointment reminders").
+      - key: DJANGO_SITE_URL
         value: '${APP_URL}'
         scope: RUN_TIME
       # Patient files in a private Space (docs/DEPLOYMENT.md, "Patient files on Spaces"). Uncomment once the
@@ -72,6 +78,9 @@ workers:
         scope: RUN_TIME
       - key: DJANGO_DEBUG
         value: 'false'
+        scope: RUN_TIME
+      - key: DJANGO_SITE_URL
+        value: '${APP_URL}'
         scope: RUN_TIME
       # Patient files in a private Space (docs/DEPLOYMENT.md, "Patient files on Spaces"). Uncomment once the
       # Space exists, on web, worker AND migrate alike, and enter the values in DigitalOcean, where they are
@@ -123,3 +132,29 @@ jobs:
       # - key: SPACES_SECRET_ACCESS_KEY
       #   type: SECRET
       #   scope: RUN_TIME
+  - name: appointment-reminders
+    # Emails each booked appointment's patient and clinician a reminder 24 hours before; each is reminded once.
+    kind: SCHEDULED
+    schedule:
+      cron: '*/15 * * * *'
+      time_zone: Africa/Johannesburg
+    github:
+      repo: MeridianHealthAppUser/MeridianApp
+      branch: main
+      deploy_on_push: false
+    dockerfile_path: Dockerfile
+    source_dir: /
+    run_command: python manage.py send_appointment_reminders
+    envs:
+      - key: MULTI_PRACTICE_ENABLED
+        value: 'false'
+        scope: RUN_TIME
+      - key: SINGLE_PRACTICE_SLUG
+        value: meridian-health
+        scope: RUN_TIME
+      - key: DJANGO_DEBUG
+        value: 'false'
+        scope: RUN_TIME
+      - key: DJANGO_SITE_URL
+        value: '${APP_URL}'
+        scope: RUN_TIME

@@ -1,0 +1,6 @@
+{% extends 'emails/base.html' %}{% block content %}
+        <p style="margin:0 0 16px;">Hello{% if greeting %} {{ greeting }}{% endif %},</p>
+        <p style="margin:0 0 16px;">{% if from_patient %}You have a new message from {{ patient }}.{% else %}{{ sender }} sent a new message in your conversation with {{ patient }}.{% endif %}</p>
+        <p style="margin:0 0 16px;">Messages aren't included in emails. Open Patient messages to read it and reply.</p>
+        {% include 'emails/button.html' with label='Read message' %}
+{% endblock %}

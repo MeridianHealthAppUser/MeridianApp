@@ -1,0 +1,9 @@
+{% extends 'emails/base.txt' %}{% block content %}Hello{% if greeting %} {{ greeting }}{% endif %},
+
+An appointment with you has been cancelled.{% if cancelled_by %} Cancelled by {{ cancelled_by }}.{% endif %}
+
+{% for label, value in details %}{{ label }}: {{ value }}{% if not forloop.last %}
+{% endif %}{% endfor %}
+
+The time is free again in your calendar:
+{{ url }}{% endblock %}

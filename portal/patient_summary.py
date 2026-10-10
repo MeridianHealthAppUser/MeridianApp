@@ -167,7 +167,7 @@ def _task(title, body, actions, *, urgent=False):
 def patient_tasks(*, authorization, plan, consult, weight, profile, labs, proposals):
     """What needs doing, most urgent first. Each task disappears once its record changes."""
     today = timezone.localdate()
-    book_url = reverse('portal:patient-appointments') + '#book'
+    book_url = reverse('portal:patient-appointments') + '?book=1'
     tasks = []
     if authorization is not None and consult is None and (authorization.expires_on - today).days <= RENEWAL_WINDOW_DAYS:
         expires = date_format(authorization.expires_on, 'j F')

@@ -2,7 +2,7 @@
 {% load static workspace_ui %}
 
 {% block title %}My Appointments | Meridian{% endblock %}
-{% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/info_tips.css' %}?v=20261008a"><script src="{% static 'js/info_tips.js' %}?v=20261008a" defer></script>{% endblock %}
+{% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/info_tips.css' %}?v=20261008a"><script src="{% static 'js/info_tips.js' %}?v=20261008a" defer></script><link rel="stylesheet" href="{% static 'css/dialogs.css' %}?v=20261008b"><script src="{% static 'js/dialogs.js' %}?v=20261008a" defer></script><script src="{% static 'js/appointment_booking.js' %}?v=20261010b" defer></script><link rel="stylesheet" href="{% static 'css/filter_menu.css' %}?v=20261010a"><script src="{% static 'js/filter_menu.js' %}?v=20261008b" defer></script>{% endblock %}
 {% block patient_content_class %}patient-appointments{% endblock %}
 
 {% block patient_breadcrumbs %}{% breadcrumbs 'My Appointments' %}{% endblock %}
@@ -10,6 +10,10 @@
   <header class="patient-page-heading">
     <div>
       <h1>My Appointments</h1>
+    </div>
+    <div class="patient-page-heading__actions">
+      {% if renewal_due %}<span class="patient-pill patient-pill--amber">Review due by {{ renewal_due|date:"j M" }}</span>{% endif %}
+      <a class="console-button console-button--primary" href="{% url 'portal:patient-appointments' %}?book=1" data-modal-open="book-appointment" aria-haspopup="dialog">Book Appointment</a>
     </div>
   </header>
 {% endblock %}
@@ -33,107 +37,34 @@
     </section>
   {% endfor %}
 
-  {% include 'portal/includes/patient_next_consult.html' with consult=next_consult eyebrow='Booked' %}
-
-  <section class="console-card patient-book" id="book" aria-labelledby="book-heading">
-    <div class="console-card__body">
-      <div class="patient-book__head">
-        <div>
-          <h2 class="patient-book__title" id="book-heading">Book a consult · 15 min</h2>
-          <p class="patient-small">All times are South Africa time (SAST) and allow for each clinician’s working hours, time off and existing bookings. Booking does not take payment.</p>
-        </div>
-        {% if renewal_due %}<span class="patient-pill patient-pill--amber">Due by {{ renewal_due|date:"j M" }}</span>{% endif %}
-      </div>
-
-      {{ booking_filter_form.non_field_errors }}
-      <div class="patient-book__choices">
-        <div class="patient-book__group">
-          <p class="patient-book__label" id="book-type-label">Consult</p>
-          <div class="patient-chip-row" role="group" aria-labelledby="book-type-label">{% for chip in booking_chips.types %}<a class="patient-chip{% if chip.active %} is-active{% endif %}" href="{{ chip.url }}"{% if chip.active %} aria-current="true"{% endif %}>{{ chip.label }}</a>{% endfor %}</div>
-          {{ booking_filter_form.appointment_type.errors }}
-        </div>
-        <div class="patient-book__group">
-          <p class="patient-book__label" id="book-doctor-label">Clinician</p>
-          <div class="patient-chip-row" role="group" aria-labelledby="book-doctor-label">{% for chip in booking_chips.doctors %}<a class="patient-chip{% if chip.active %} is-active{% endif %}" href="{{ chip.url }}"{% if chip.active %} aria-current="true"{% endif %}>{{ chip.label }}</a>{% endfor %}</div>
-          {{ booking_filter_form.clinician.errors }}
-        </div>
-        <div class="patient-book__group">
-          <p class="patient-book__label" id="book-day-label">Day</p>
-          <div class="patient-chip-row" role="group" aria-labelledby="book-day-label">{% for chip in booking_chips.days %}<a class="patient-chip{% if chip.active %} is-active{% endif %}" href="{{ chip.url }}"{% if chip.active %} aria-current="true"{% endif %}>{{ chip.label }}</a>{% endfor %}</div>
-          <form class="patient-book__date" method="get" action="{% url 'portal:patient-appointments' %}#book">
-            <label for="{{ booking_filter_form.date.id_for_label }}">Another date</label>
-            {{ booking_filter_form.date }}
-            <input type="hidden" name="clinician" value="{{ booking_filter_form.clinician.value|default:'' }}">
-            <input type="hidden" name="appointment_type" value="{{ booking_filter_form.appointment_type.value|default:'' }}">
-            {% if request.GET.status %}<input type="hidden" name="status" value="{{ request.GET.status }}">{% endif %}
-            <button class="console-button console-button--secondary" type="submit">Show times</button>
-          </form>
-          {{ booking_filter_form.date.errors }}
-        </div>
-      </div>
-
-      <form method="post" action="{% url 'portal:patient-book-appointment' %}" class="console-form patient-book__form">
-        {% csrf_token %}
-        <input type="hidden" name="patient_context" value="{{ patient_context }}">
-        <input type="hidden" name="date" value="{{ booking_filter_form.date.value|default:'' }}">
-        <input type="hidden" name="clinician" value="{{ booking_filter_form.clinician.value|default:'' }}">
-        <input type="hidden" name="appointment_type" value="{{ booking_filter_form.appointment_type.value|default:'' }}">
-        {{ booking_form.non_field_errors }}{{ booking_form.slot.errors }}
-        {% if slots %}
-          <fieldset class="patient-slots">
-            <legend>{{ booking_filter_form.cleaned_data.date|date:"l j F" }} · choose a time</legend>
-            <div class="patient-slots__grid">
-              {% for slot in slots %}<label class="patient-slot" for="booking-slot-{{ forloop.counter }}"><input type="radio" id="booking-slot-{{ forloop.counter }}" name="slot" value="{{ slot.token }}" required{% if slot.selected %} checked{% endif %}><span><strong>{{ slot.starts_at|date:"H:i" }}</strong><small>{{ slot.clinician.full_name }}</small></span></label>{% endfor %}
-            </div>
-          </fieldset>
-          {% if slots|length >= 100 %}<p class="patient-small">Showing the first 100 times. Choose a clinician to narrow the list.</p>{% endif %}
-          <label class="patient-check" for="{{ booking_form.confirm_booking.id_for_label }}">{{ booking_form.confirm_booking }}<span>{{ booking_form.confirm_booking.label }}</span></label>
-          {{ booking_form.confirm_booking.errors }}
-          <div class="patient-book__actions">
-            <button type="submit" class="console-button console-button--primary">Confirm booking</button>
-            <span class="patient-small">Your chosen time is held for {{ slot_expiry_minutes }} minutes and checked again when you confirm.</span>
-          </div>
-        {% else %}
-          <p class="patient-empty">{% if booking_filter_form.errors %}Correct the choices above to see available times.{% else %}No times are free on this day. Choose another day or clinician, or message your clinician for help.{% endif %}</p>
-          <a class="console-button console-button--secondary" href="{% url 'portal:patient-messages' %}">Message my care team</a>
-        {% endif %}
-      </form>
-    </div>
-  </section>
+  {% include 'portal/includes/patient_next_consult.html' with consult=just_booked eyebrow='Booked' %}
 
   <section class="console-card" aria-labelledby="patient-appointments-heading">
     <header class="console-card__header">
       <div class="console-card__heading">
-        <h2 id="patient-appointments-heading">All your consults</h2>
+        <h2 id="patient-appointments-heading">My Appointments</h2>
         <p>{{ page_obj.paginator.count }} appointment{{ page_obj.paginator.count|pluralize }} in this view · times in SAST</p>
       </div>
-      <form class="console-form patient-filter-form" method="get" action="{% url 'portal:patient-appointments' %}">
-        {{ filter_form.non_field_errors }}
-        <div class="console-form__field">
-          <label for="{{ filter_form.status.id_for_label }}">{{ filter_form.status.label }}</label>
-          {{ filter_form.status }}
-          {{ filter_form.status.errors }}
-        </div>
-        <button class="console-button console-button--secondary" type="submit">View appointments</button>
-      </form>
+      {% include 'portal/includes/filter_menu.html' with filter_menu_class='filter-menu--compact' %}
     </header>
     {% if not filter_form.errors %}
       <div class="patient-table-wrap">
         <table class="patient-table patient-appointment-table" aria-labelledby="patient-appointments-heading">
-          <thead><tr><th scope="col">Date and time</th><th scope="col">Appointment</th><th scope="col">Clinician</th><th scope="col">Status</th><th scope="col">Actions</th></tr></thead>
+          <thead><tr><th scope="col">Date and time</th><th scope="col">Appointment</th><th scope="col">Clinician</th><th scope="col">Status</th><th class="patient-table__fit" scope="col">Actions</th></tr></thead>
           <tbody>
             {% for appointment in appointments %}
               <tr>
-                <td data-label="Date and time"><div class="patient-table__date"><time datetime="{{ appointment.starts_at|date:'c' }}">{{ appointment.starts_at|date:"j M Y" }}</time><span>{{ appointment.starts_at|date:"H:i" }} · {{ appointment.duration_minutes }} minutes</span></div></td>
+                <td data-label="Date and time"><div class="patient-table__when"><div class="patient-table__date"><time datetime="{{ appointment.starts_at|date:'c' }}">{{ appointment.starts_at|date:"j M Y" }}</time><span>{{ appointment.starts_at|date:"H:i" }} · {{ appointment.duration_minutes }} minutes</span></div>{% if not appointment.video_room_url %}{% include 'portal/includes/video_join_link.html' with join_tip=True %}{% endif %}</div></td>
                 <td data-label="Appointment">{{ appointment.get_appointment_type_display }}</td>
                 <td data-label="Clinician">{% if appointment.clinician %}{{ appointment.clinician.full_name }}{% else %}Your care team{% endif %}</td>
                 <td data-label="Status"><span class="console-status console-status--{{ appointment.status }}">{{ appointment.get_status_display }}</span></td>
-                <td data-label="Actions">
+                <td class="patient-table__fit" data-label="Actions">
+                  {# Download (a calendar file) and Suggest New Time, then View Appointment; Join comes first while the room is open. #}
                   <div class="patient-table__actions">
-                    <a class="patient-inline-link" href="{% url 'portal:patient-appointment-detail' appointment.pk %}">Details / cancel</a>
-                    <a class="patient-inline-link" data-no-loader href="{% url 'portal:patient-appointment-calendar' appointment.pk %}">Add to calendar</a>
-                    {% include 'portal/includes/video_join_link.html' with join_tip=True %}
-                    {% if appointment.proposal_url %}<a class="console-button console-button--secondary" href="{{ appointment.proposal_url }}">{{ appointment.proposal_label }}</a>{% else %}<a class="patient-inline-link" href="{% url 'portal:patient-messages' %}">Contact care team</a>{% endif %}
+                    {% if appointment.video_room_url %}{% include 'portal/includes/video_join_link.html' %}{% endif %}
+                    <a class="console-button console-button--secondary" data-no-loader href="{% url 'portal:patient-appointment-calendar' appointment.pk %}" aria-label="Download to your calendar"><svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4m10-4v4M3 10h18M12 13v5m-2.5-2.5L12 18l2.5-2.5"/></svg>Download</a>
+                    <a class="console-button console-button--secondary" href="{% if appointment.proposal_url %}{{ appointment.proposal_url }}{% else %}{% url 'portal:patient-messages' %}{% endif %}"><svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a3 3 0 0 1-3 3H9l-6 3V6a3 3 0 0 1 3-3h12a3 3 0 0 1 3 3Z"/><path d="M7 8h10M7 12h7"/></svg>{% if appointment.proposal_url %}{{ appointment.proposal_label }}{% else %}Contact Care Team{% endif %}</a>
+                    <a class="console-button {% if appointment.video_room_url %}console-button--secondary{% else %}console-button--primary{% endif %}" href="{% url 'portal:patient-appointment-detail' appointment.pk %}">View Appointment</a>
                   </div>
                 </td>
               </tr>
@@ -150,4 +81,25 @@
     <p><strong>Need a different time?</strong> You or your clinician can suggest a new time in Messages. Your existing appointment stays in place until the other person accepts the change.</p>
   </aside>
 </div>
+
+{# Opened by Book Appointment above, or by ?book=1 from links on other pages; it stays open to show a mistake. #}
+<dialog class="app-dialog" id="book-appointment" aria-labelledby="book-appointment-title"{% if booking_open %} open{% endif %}>
+  <div class="app-dialog__body">
+    <h2 id="book-appointment-title">Book an appointment</h2>
+    <p class="app-dialog__sub">15-minute appointments. Times are SAST, in your clinician’s working hours and clear of your other bookings. Booking doesn’t take payment.</p>
+    <form class="console-form" method="post" action="{% url 'portal:patient-book-appointment' %}">{% csrf_token %}
+      <input type="hidden" name="patient_context" value="{{ patient_context }}">
+      <div class="booking-fields" data-booking-form data-times-url="{% url 'portal:patient-booking-times' %}">
+        {% if booking_form.non_field_errors %}<div role="alert">{{ booking_form.non_field_errors }}</div>{% endif %}
+        {% include 'portal/includes/form_field.html' with field=booking_form.clinician %}
+        {% include 'portal/includes/form_field.html' with field=booking_form.appointment_type %}
+        <div class="booking-fields__when booking-fields__when--pair">
+          {% include 'portal/includes/form_field.html' with field=booking_form.date %}
+          {% include 'portal/includes/form_field.html' with field=booking_form.time %}
+        </div>
+      </div>
+      <div class="app-dialog__actions"><button class="console-button console-button--secondary" type="button" data-dialog-close>Cancel</button><button class="console-button console-button--primary" type="submit">Confirm booking</button></div>
+    </form>
+  </div>
+</dialog>
 {% endblock %}

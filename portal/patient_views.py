@@ -33,10 +33,30 @@ from .video_links import safe_video_link
 from .views import PatientPortalRequiredMixin, PatientThreadCreateView, _attach_appointment_proposals
 
 
+APPOINTMENT_STATUS_CHOICES = (('upcoming', 'Upcoming'), ('history', 'Past and cancelled'), ('all', 'All appointments'))
+APPOINTMENT_WHEN_CHOICES = (('', 'Any time'), ('today', 'Today'), ('week', 'This week'), ('month', 'This month'))
+# The appointment just booked, shown once at the top of My Appointments (portal/patient_care_views.py).
+JUST_BOOKED = 'patient_just_booked'
+
+
 class AppointmentFilterForm(forms.Form):
-    status = forms.ChoiceField(choices=(
-        ('upcoming', 'Upcoming'), ('history', 'Past and cancelled'), ('all', 'All appointments'),
-    ))
+    status = forms.ChoiceField(choices=APPOINTMENT_STATUS_CHOICES)
+
+
+def _when_bounds(when):
+    """Today, this week (Monday to Sunday) or this calendar month, in SAST."""
+    from care.availability import day_bounds
+
+    today = timezone.localdate()
+    if when == 'today':
+        first, last = today, today
+    elif when == 'week':
+        first = today - timedelta(days=today.weekday())
+        last = first + timedelta(days=6)
+    else:
+        first = today.replace(day=1)
+        last = (first + timedelta(days=32)).replace(day=1) - timedelta(days=1)
+    return day_bounds(first)[0], day_bounds(last)[1]
 
 
 class MessageFilterForm(forms.Form):
@@ -129,6 +149,52 @@ def _with_appointment_end(queryset):
     return queryset.annotate(scheduled_ends_at=ExpressionWrapper(F('starts_at') + duration, output_field=DateTimeField()))
 
 
+def _appointment_list(request, company, patient, now):
+    """My Appointments' table and its Filters: Status (Upcoming to start with), Date, Clinician and Appointment type."""
+    from django.contrib.auth import get_user_model
+    from .filter_menus import choice_section, filter_menu, ticked_ids, ticked_values
+
+    form, status = _filter(request, AppointmentFilterForm, 'upcoming')
+    when = request.GET.get('when', '') if request.GET.get('when', '') in dict(APPOINTMENT_WHEN_CHOICES) else ''
+    clinicians = ticked_ids(request.GET.getlist('clinician'))
+    types = [value for value in ticked_values(request.GET.getlist('type')) if value in Appointment.Type.values]
+    yours = Appointment.objects.for_company(company).filter(patient=patient)
+    upcoming = Q(scheduled_ends_at__gte=now, status=Appointment.Status.BOOKED)
+    appointments = _with_appointment_end(yours.select_related('clinician'))
+    if status == 'upcoming':
+        appointments = appointments.filter(upcoming)
+    elif status == 'history':
+        appointments = appointments.exclude(upcoming)
+    elif status is None:
+        appointments = appointments.none()
+    if when:
+        start, end = _when_bounds(when)
+        appointments = appointments.filter(starts_at__gte=start, starts_at__lt=end)
+    if clinicians:
+        appointments = appointments.filter(clinician_id__in=clinicians)
+    if types:
+        appointments = appointments.filter(appointment_type__in=types)
+    appointments = appointments.order_by('-starts_at', '-pk') if status == 'history' else appointments.order_by('starts_at', 'pk')
+    context = _paginate(request, appointments)
+    kept = {key: value for key, value in {'status': request.GET.get('status', ''), 'when': when, 'clinician': clinicians,
+                                         'type': types}.items() if value}
+    context['pagination_query'] = urlencode(kept, doseq=True)
+    # Only the clinicians they've had appointments with.
+    people = get_user_model().objects.filter(pk__in=yours.values('clinician_id')).order_by('first_name', 'last_name', 'pk')
+    action = reverse('portal:patient-appointments')
+    context.update(filter_form=form, filter_menu=filter_menu(
+        action=action, clear_url=action, label='Filter appointments', form=form, sections=[
+            choice_section('status', 'Status', APPOINTMENT_STATUS_CHOICES, [request.GET.get('status', 'upcoming')], pick=True,
+                           default='upcoming', errors=form.errors.get('status', ())),
+            choice_section('when', 'Date', APPOINTMENT_WHEN_CHOICES, [when], icon='date', pick=True, default=''),
+            choice_section('clinician', 'Clinician', [(person.pk, person.full_name) for person in people], clinicians, icon='person'),
+            choice_section('type', 'Appointment type', Appointment.Type.choices, types, icon='type'),
+        ]))
+    context['appointments'] = list(context['page_obj'].object_list)
+    attach_video_join(context['appointments'], request.user.pk, allowed_role='patient', now=now)
+    return context
+
+
 def patient_appointments_context(request, company, patient):
     from .patient_summary import RENEWAL_WINDOW_DAYS, current_authorization, current_plan, next_consult, pending_proposals
 
@@ -139,20 +205,15 @@ def patient_appointments_context(request, company, patient):
     if authorization is not None and consult is None and (authorization.expires_on - timezone.localdate()).days <= RENEWAL_WINDOW_DAYS:
         renewal_due = authorization.expires_on
     context.update(next_consult=consult, proposals=pending_proposals(request, company, patient), renewal_due=renewal_due)
-    form, status = _filter(request, AppointmentFilterForm, 'upcoming')
     now = timezone.now()
-    upcoming = Q(scheduled_ends_at__gte=now, status=Appointment.Status.BOOKED)
-    appointments = _with_appointment_end(Appointment.objects.for_company(company).filter(patient=patient).select_related('clinician'))
-    if status == 'upcoming':
-        appointments = appointments.filter(upcoming)
-    elif status == 'history':
-        appointments = appointments.exclude(upcoming)
-    elif status is None:
-        appointments = appointments.none()
-    appointments = appointments.order_by('-starts_at', '-pk') if status == 'history' else appointments.order_by('starts_at', 'pk')
-    context.update(_paginate(request, appointments), filter_form=form)
-    context['appointments'] = list(context['page_obj'].object_list)
-    attach_video_join(context['appointments'], request.user.pk, allowed_role='patient', now=now)
+    # The appointment just booked, at the top of the page this once.
+    just_booked = Appointment.objects.for_company(company).filter(
+        pk=request.session.pop(JUST_BOOKED, None), patient=patient, status=Appointment.Status.BOOKED,
+    ).select_related('clinician').first()
+    if just_booked is not None:
+        attach_video_join([just_booked], request.user.pk, allowed_role='patient', now=now)
+    context['just_booked'] = just_booked
+    context.update(_appointment_list(request, company, patient, now))
     # A new time is suggested in the patient's open conversation with that appointment's clinician.
     thread_for = {}
     for open_thread in MessageThread.objects.for_company(company).filter(patient=patient, is_closed=False).prefetch_related('participant_links'):
@@ -182,7 +243,7 @@ def patient_appointments_context(request, company, patient):
                     f'{reverse("portal:patient-messages")}?thread={thread.pk}&appointment={appointment.pk}'
                     f'#appointment-proposals-{thread.pk}'
                 )
-                appointment.proposal_label = 'Suggest a new time' if can_reschedule else 'Ask to rebook'
+                appointment.proposal_label = 'Suggest New Time' if can_reschedule else 'Ask to Rebook'
             elif not thread and recipients:
                 to = appointment.clinician if appointment.clinician_id in recipient_ids else recipients[0]
                 query = urlencode({'compose': 1, 'to': to.pk, 'subject': 'My appointment'})

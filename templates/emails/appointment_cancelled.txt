@@ -1,0 +1,11 @@
+{% extends 'emails/base.txt' %}{% block content %}Hello{% if greeting %} {{ greeting }}{% endif %},
+
+{% if by_patient %}Your appointment has been cancelled, as you asked.{% else %}Your appointment has been cancelled by the practice.{% endif %}{% if reason %}
+
+Reason: {{ reason }}{% endif %}
+
+{% for label, value in details %}{{ label }}: {{ value }}{% if not forloop.last %}
+{% endif %}{% endfor %}
+
+If you'd like a new time, you can book one or message your care team in the Meridian Health app:
+{{ url }}{% endblock %}

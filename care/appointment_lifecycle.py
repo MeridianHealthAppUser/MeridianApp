@@ -11,6 +11,7 @@ from django.utils import timezone
 from practices.models import Company, CompanyMembership, Patient
 from practices.tenancy import require_enabled_company
 from .models import Appointment, AppointmentProposal, AvailabilitySlot, ClinicalEncounter, PatientEvent
+from .notifications import queue as notify
 from .scheduling import ensure_clinician_available, ensure_patient_available
 from .services import record_audit
 
@@ -63,6 +64,7 @@ def book_staff_appointment(*, company, patient, actor, clinician, starts_at, dur
         detail=f'{appointment.get_appointment_type_display()} booked for {timezone.localtime(starts_at):%d %B %Y at %H:%M} SAST.',
         source_type=appointment._meta.label_lower, source_id=str(appointment.pk))
     record_audit(company=company, actor=actor, patient=patient, action='appointment.created', target=appointment, request=request)
+    notify('appointment_booked', appointment.pk, actor.pk)
     return appointment
 
 
@@ -109,7 +111,9 @@ def change_appointment_status(*, appointment, actor, status, expected_updated, c
     if len(reason) > 500 or (status == 'cancelled' and not reason):
         raise ValidationError('Give a cancellation reason, up to 500 characters, that the patient can see.')
     appointment.status = status
-    appointment.save(update_fields=('status', 'updated_at'))
+    if status == 'cancelled':
+        appointment.cancellation_reason = reason
+    appointment.save(update_fields=('status', 'cancellation_reason', 'updated_at'))
     AppointmentProposal.objects.for_company(appointment.company).filter(appointment=appointment, status='pending').update(status='superseded', responded_by=actor, responded_at=timezone.now(), updated_at=timezone.now())
     if status in ('cancelled', 'no_show'):
         AvailabilitySlot.objects.for_company(appointment.company).filter(appointment=appointment).update(appointment=None, is_booked=False, updated_at=timezone.now())
@@ -118,4 +122,6 @@ def change_appointment_status(*, appointment, actor, status, expected_updated, c
         detail=f'{timezone.localtime(appointment.starts_at):%d %B %Y at %H:%M} SAST.' + (f' {reason}' if reason else ''),
         source_type=appointment._meta.label_lower, source_id=str(appointment.pk))
     record_audit(company=appointment.company, actor=actor, patient=appointment.patient, action='appointment.status_changed', target=appointment, request=request, metadata={'from': 'booked', 'to': status})
+    if status == 'cancelled':
+        notify('appointment_cancelled', appointment.pk, actor.pk)
     return appointment

@@ -1,0 +1,6 @@
+{% extends 'emails/base.txt' %}{% block content %}Hello{% if greeting %} {{ greeting }}{% endif %},
+
+Welcome to Meridian Health. Your account is ready.
+
+Sign in with this email address, {{ email }}, and the password you chose. In the app you can see your appointments, message your care team and keep track of your progress:
+{{ url }}{% endblock %}

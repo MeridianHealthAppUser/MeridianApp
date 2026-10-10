@@ -3,6 +3,7 @@
 import io
 from unittest.mock import patch
 
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core import mail
 from django.core.exceptions import PermissionDenied, ValidationError
@@ -102,6 +103,14 @@ class PathCareFormTests(TestCase):
         self.assertEqual(email.subject, 'Your blood test request from Meridian Health')
         self.assertIn('Dr Marchant has requested blood tests', email.body)
         self.assertIn('any PathCare collection point', email.body)
+        # The same look as every email, with a button to Blood tests for a patient with a login.
+        html, mimetype = email.alternatives[0]
+        self.assertEqual(mimetype, 'text/html')
+        self.assertIn('Dr Marchant has requested blood tests for you. The PathCare request form is attached.', html)
+        self.assertIn(f'{settings.SITE_URL}/patient/blood-tests/', email.body)
+        self.assertIn('>View blood tests</a>', html)
+        self.assertIn('alt="Meridian Health - Medical Weight Loss"', html)
+        self.assertIn('Please do not reply to this email.', email.body)
         name, attachment, mimetype = email.attachments[0]
         self.assertEqual((name, mimetype), ('pathcare-blood-test-request.pdf', 'application/pdf'))
         self.assertEqual(attachment, read_patient_file(form.file))

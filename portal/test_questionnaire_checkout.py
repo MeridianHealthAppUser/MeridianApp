@@ -4,6 +4,7 @@ from datetime import time, timedelta
 from decimal import Decimal
 
 from django.contrib.auth import get_user_model
+from django.core import mail
 from django.test import Client, TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
@@ -118,6 +119,28 @@ class QuestionnaireCheckoutTests(TestCase):
         for name in ('questionnaire-checkout', 'questionnaire-result'):
             self.assertRedirects(self.client.get(reverse(f'portal:{name}')), reverse('portal:patient-dashboard'),
                                  fetch_redirect_response=False)
+
+    @override_settings(EMAIL_ENABLED=True, SITE_URL='https://app.meridian.test',
+                       EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend')
+    def test_a_new_account_is_welcomed_and_the_consultation_confirmed_by_email(self):
+        self.submit_enquiry()
+        with self.captureOnCommitCallbacks(execute=True):
+            self.pay()
+        sent = {(email.to[0], email.subject): email for email in mail.outbox}
+        welcome = sent[(EMAIL, 'Welcome to Meridian Health')]
+        self.assertIn('Hello Thandi,', welcome.body)
+        self.assertIn(f'Sign in with this email address, {EMAIL}, and the password you chose.', welcome.body)
+        self.assertIn('https://app.meridian.test/patient/', welcome.body)
+        self.assertIn('>Go to my account</a>', welcome.alternatives[0][0])
+        appointment = Appointment.objects.get(patient__user__email=EMAIL)
+        starts = timezone.localtime(appointment.starts_at)
+        when = f'{starts:%A} {starts.day} {starts:%B} at {starts:%H:%M}'
+        confirmation = sent[(EMAIL, f'Appointment confirmed: {when}')]
+        self.assertIn('Appointment: Initial consultation', confirmation.body)
+        self.assertIn('With: Sam Doctor', confirmation.body)
+        doctor = sent[('doctor@checkout.test', f'New booking: Thandi Checkout on {when}')]
+        self.assertIn('Booked by Thandi Checkout, the patient.', doctor.body)
+        self.assertEqual(len(mail.outbox), 3)
 
     def test_pay_now_is_disabled_until_the_test_code_is_applied(self):
         self.submit_enquiry()

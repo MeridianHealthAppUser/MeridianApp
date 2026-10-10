@@ -1,0 +1,7 @@
+{% extends 'emails/base.html' %}{% block content %}
+        <p style="margin:0 0 16px;">Hello{% if greeting %} {{ greeting }}{% endif %},</p>
+        <p style="margin:0 0 16px;">This is a reminder of your upcoming appointment.</p>
+        {% include 'emails/details.html' %}
+        <p style="margin:0 0 16px;">Everything you need is on your appointment page. If you can no longer make it, you can cancel it there.</p>
+        {% include 'emails/button.html' with label='View appointment' %}
+{% endblock %}

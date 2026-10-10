@@ -1,5 +1,6 @@
 """Appointment changes require agreement from both the clinician and patient."""
 
+from contextlib import nullcontext
 from datetime import datetime, timedelta
 
 from django.contrib.auth import get_user_model
@@ -13,6 +14,7 @@ from practices.models import CompanyMembership
 from practices.tenancy import require_enabled_company
 
 from .models import Appointment, AppointmentProposal, AvailabilitySlot, MessageThread, PatientEvent
+from .notifications import paused as paused_notifications, queue as notify
 from .services import post_patient_message, record_audit
 
 
@@ -278,7 +280,9 @@ def respond_to_appointment_proposal(*, proposal, actor, actor_role, decision, re
                                  duration_minutes=appointment.duration_minutes, exclude_appointment=appointment)
         if proposal.kind == AppointmentProposal.Kind.RESCHEDULE:
             appointment.starts_at = proposal.proposed_starts_at
-            appointment.save(update_fields=('starts_at', 'updated_at'))
+            appointment.reminder_sent_at = None  # A reminder for the new time.
+            appointment.save(update_fields=('starts_at', 'reminder_sent_at', 'updated_at'))
+            notify('appointment_moved', appointment.pk, actor.pk)
             # The old availability interval no longer has a booking. Updating
             # both values together avoids leaving a reserved slot at the old time.
             AvailabilitySlot.objects.filter(appointment=appointment).update(
@@ -296,6 +300,7 @@ def respond_to_appointment_proposal(*, proposal, actor, actor_role, decision, re
             replacement.full_clean()
             replacement.save()
             proposal.resulting_appointment = replacement
+            notify('appointment_booked', replacement.pk, actor.pk)
             title = 'Appointment rebooked'
             detail = (
                 f'Both participants agreed to a new appointment on {_time_label(proposal.proposed_starts_at)}. '
@@ -312,6 +317,8 @@ def respond_to_appointment_proposal(*, proposal, actor, actor_role, decision, re
     proposal.responded_at = timezone.now()
     proposal.full_clean()
     proposal.save(update_fields=('status', 'responded_by', 'responded_at', 'resulting_appointment', 'updated_at'))
-    post_patient_message(thread=thread, sender=actor, body=f'{title}. {detail}', request=request)
+    # An accepted time is emailed as a confirmation, so its message isn't emailed as well.
+    with paused_notifications() if decision == 'accept' else nullcontext():
+        post_patient_message(thread=thread, sender=actor, body=f'{title}. {detail}', request=request)
     _record_event(proposal, actor, f'appointment.proposal.{target_status}', title, detail, request)
     return proposal

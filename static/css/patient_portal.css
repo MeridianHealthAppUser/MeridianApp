@@ -1,13 +1,14 @@
 /* Shared pieces of the patient pages: status pills, key/value rows, task and
-   join bars, and the unread count on the sidebar. The brand palette and type
-   are set in patient_theme.css; these are the same values, for pages without it. */
+   join bars, and the unread count on the sidebar. The colours and type are set
+   in patient_theme.css (the practice console's teal); these are the same values,
+   for pages without it. */
 .patient-pages-console {
   --patient-amber-soft: #fcf3e2;
   --patient-amber-line: #ebd5ac;
-  --patient-blue: #1072aa;
-  --patient-blue-soft: #e8f4fc;
-  --patient-blue-line: #bce0f5;
-  --patient-teal-line: #b5e3ea;
+  --patient-blue: #056f69;
+  --patient-blue-soft: #e4f5f1;
+  --patient-blue-line: #b9d9d3;
+  --patient-teal-line: #b9d9d3;
   --patient-rose-soft: #fbedeb;
   --patient-rose-line: #efccc8;
   --patient-badge: #d92d20;
@@ -67,6 +68,10 @@
 .patient-bar__body { color: var(--patient-text); font-size: .84rem; line-height: 1.6; margin: .25rem 0 0; }
 .patient-bar__actions { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: .75rem; }
 .patient-bar--urgent { background: var(--patient-amber-soft); border-color: var(--patient-amber-line); }
+/* A task: its text runs up to the buttons on the right and wraps there. Without room for both, the buttons go below. */
+.patient-bar--task { flex-wrap: wrap; }
+.patient-bar--task .patient-bar__copy { flex: 1 1 16rem; }
+.patient-bar--task .patient-bar__actions { align-self: center; flex: 0 0 auto; justify-content: flex-end; margin: 0 0 0 auto; }
 .patient-bar--done { background: var(--console-teal-soft); border-color: var(--patient-teal-line); }
 .patient-bar--join { align-items: center; background: var(--console-teal-soft); border-color: var(--patient-teal-line); flex-wrap: wrap; padding: 1.05rem 1.2rem; }
 .patient-bar--join.is-waiting { background: var(--patient-amber-soft); border-color: var(--patient-amber-line); }
@@ -186,6 +191,8 @@ a.patient-chip { display: inline-block; text-decoration: none; }
   .patient-bar { flex-direction: column; gap: .55rem; }
   .patient-bar > .patient-pill { min-width: 0; }
   .patient-bar--join .patient-bar__actions { width: 100%; }
+  .patient-bar--task .patient-bar__copy { flex: 0 1 auto; }
+  .patient-bar--task .patient-bar__actions { align-self: flex-start; justify-content: flex-start; margin: 0; }
   .patient-bar--join .patient-bar__actions > * { flex: 1 1 auto; justify-content: center; }
   .patient-section-title { font-size: 1.15rem; }
   .patient-slots__grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }

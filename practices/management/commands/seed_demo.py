@@ -6,6 +6,7 @@ from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 
 from care.demo import seed_demo_care
+from care.notifications import paused as notifications_paused
 from practices.models import Company, CompanyMembership, Patient
 from practices.tenancy import multi_practice_enabled
 
@@ -140,7 +141,8 @@ class Command(BaseCommand):
                 },
             )
 
-        seed_demo_care(meridian=meridian, orion=orion, users=users, nadia=nadia)
+        with notifications_paused():  # Demo messages email nobody.
+            seed_demo_care(meridian=meridian, orion=orion, users=users, nadia=nadia)
 
         self.stdout.write(self.style.SUCCESS(
             f'Demo data is ready: {2 if orion else 1} practices, {len(people)} accounts, '

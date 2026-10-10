@@ -1,0 +1,36 @@
+{% load static %}{% comment %}Every Meridian email's HTML part (care/emails.py); base.txt is the same in plain text. Inline styles only, as
+email apps drop most stylesheets. Roboto, the platform's typeface, from our own server where the email app loads web
+fonts; others fall back to their system font. Colours: ink #183638, teal #087e75 (links and buttons, as on the sign-in
+page), muted #5a7274. The logo sits on white so its black lettering stays readable in dark mode.{% endcomment %}<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light">
+<meta name="supported-color-schemes" content="light">
+<title>{% block title %}{{ subject }}{% endblock %}</title>
+<style>
+@font-face { font-family: 'Roboto'; font-style: normal; font-weight: 400 700; src: url('{{ site_url }}{% static "fonts/roboto/roboto-latin.woff2" %}') format('woff2'); }
+</style>
+</head>
+<body style="margin:0;padding:0;background:#ffffff;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#ffffff;">
+  <tr>
+    <td style="padding:24px 16px;font-family:Roboto,-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;font-size:15px;line-height:1.55;color:#183638;">
+      <div style="max-width:600px;">
+{% block content %}{% endblock %}
+        <p style="margin:28px 0 12px;color:#5a7274;">Meridian Health</p>
+        <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+          <tr>
+            <td bgcolor="#ffffff" style="background:#ffffff;">
+              <img src="{{ site_url }}{% static 'images/meridian-logo.png' %}" alt="Meridian Health - Medical Weight Loss" width="220" height="63" style="display:block;border:0;outline:none;text-decoration:none;">
+            </td>
+          </tr>
+        </table>
+        <p style="margin:24px 0 0;font-size:12px;line-height:1.5;color:#6e8588;">Please do not reply to this email. If you need help, please email <a href="mailto:{{ support_email }}" style="color:#087e75;">{{ support_email }}</a>.</p>
+      </div>
+    </td>
+  </tr>
+</table>
+</body>
+</html>

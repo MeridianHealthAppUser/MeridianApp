@@ -1,0 +1,6 @@
+{% extends 'emails/base.html' %}{% block content %}
+        <p style="margin:0 0 16px;">Hello{% if greeting %} {{ greeting }}{% endif %},</p>
+        <p style="margin:0 0 16px;">{{ sender }} sent you a new team message.</p>
+        <p style="margin:0 0 16px;">Messages aren't included in emails. Open Team messages to read it and reply.</p>
+        {% include 'emails/button.html' with label='Read message' %}
+{% endblock %}

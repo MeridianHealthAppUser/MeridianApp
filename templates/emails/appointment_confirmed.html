@@ -1,0 +1,7 @@
+{% extends 'emails/base.html' %}{% block content %}
+        <p style="margin:0 0 16px;">Hello{% if greeting %} {{ greeting }}{% endif %},</p>
+        <p style="margin:0 0 16px;">{% if moved %}Your appointment has moved to a new time.{% else %}Your appointment is confirmed.{% endif %}</p>
+        {% include 'emails/details.html' %}
+        <p style="margin:0 0 16px;">You can find it, and any of your other appointments, under My Appointments in the Meridian Health app.</p>
+        {% include 'emails/button.html' with label='View my appointments' %}
+{% endblock %}

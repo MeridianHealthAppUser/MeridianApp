@@ -13,6 +13,7 @@ from practices.models import Company, CompanyMembership, Patient
 from practices.tenancy import require_enabled_company
 from .availability import SAST, open_slots_for_day
 from .models import Appointment, AvailabilitySlot, PatientEvent
+from .notifications import queue as notify
 from .scheduling import ensure_clinician_available
 from .services import record_audit
 
@@ -94,6 +95,7 @@ def book_patient_appointment(*, company, patient, actor, clinician_id, starts_at
         source_type=appointment._meta.label_lower, source_id=str(appointment.pk), is_patient_visible=True,
     )
     record_audit(company=company, actor=actor, patient=patient, action='appointment.patient_booked', target=appointment, request=request)
+    notify('appointment_booked', appointment.pk, actor.pk)
     return appointment, True
 
 

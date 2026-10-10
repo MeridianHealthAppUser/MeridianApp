@@ -1,7 +1,13 @@
+from datetime import timedelta
+
 from django import forms
+from django.conf import settings
 from django.contrib.auth import authenticate, get_user_model
 from django.contrib.auth.forms import PasswordResetForm
 from django.core.exceptions import ValidationError
+from django.utils import timezone
+
+from care.emails import greeting_name
 
 
 class AccountProfileForm(forms.ModelForm):
@@ -96,3 +102,10 @@ class AccountPasswordResetForm(PasswordResetForm):
         max_length=254,
         widget=forms.EmailInput(attrs={'autocomplete': 'email', 'autofocus': True, 'placeholder': 'Enter your email'}),
     )
+
+    def send_mail(self, subject_template_name, email_template_name, context, *args, **kwargs):
+        """The email says when its link stops working, and where to ask for help, as replies aren't read."""
+        context = {**context, 'support_email': settings.SUPPORT_EMAIL, 'site_url': f"{context['protocol']}://{context['domain']}",
+                   'greeting': greeting_name(context['user']),
+                   'valid_until': timezone.now() + timedelta(seconds=settings.PASSWORD_RESET_TIMEOUT)}
+        super().send_mail(subject_template_name, email_template_name, context, *args, **kwargs)

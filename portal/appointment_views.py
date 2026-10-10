@@ -1,13 +1,19 @@
 """Appointment changes requested and agreed inside a secure conversation."""
 
+from django import forms
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.exceptions import PermissionDenied, ValidationError
+from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
+from django.utils import timezone
+from django.utils.decorators import method_decorator
 from django.views import View
+from django.views.decorators.cache import never_cache
 
+from care.availability import SAST, bookable_start_times
 from care.forms import AppointmentProposalForm
-from care.models import MessageThread
+from care.models import Appointment, MessageThread
 from practices.models import CompanyMembership
 
 from .views import (
@@ -116,6 +122,50 @@ class StaffAppointmentProposeView(LoginRequiredMixin, StaffCompanyRequiredMixin,
 
 
 class PatientAppointmentProposeView(LoginRequiredMixin, PatientPortalRequiredMixin, ProposeAppointmentMixin, View):
+    actor_role = 'patient'
+
+
+class ProposalTimesMixin(AppointmentProposalActionMixin):
+    """The times the suggest-a-new-time form's Time list offers for one of its appointments on a date: the
+    appointment's clinician's free quarter hours that day (their working hours or special day, not on leave, clear
+    of their other bookings and the patient's), for the appointment's length. Sending the suggestion checks again."""
+
+    http_method_names = ('get', 'head', 'options')
+
+    def get(self, request, pk):
+        thread = get_object_or_404(self.scoped_threads(), pk=pk, is_closed=False)
+        self.require_doctor()
+        # The appointments this person may suggest a time for, as the form offers them.
+        appointments = AppointmentProposalForm(
+            company=self.action_company(), patient=thread.patient, thread=thread, actor=request.user, actor_role=self.actor_role,
+        ).fields['appointment'].queryset
+        query = ProposalTimesQuery(request.GET)
+        appointment = appointments.filter(pk=query.cleaned_data['appointment']).first() if query.is_valid() else None
+        if appointment is None:
+            return JsonResponse({'times': []}, status=400)
+        times = bookable_start_times(
+            company=appointment.company, clinician=appointment.clinician, day=query.cleaned_data['date'],
+            duration_minutes=appointment.duration_minutes, patient=appointment.patient, exclude_appointment=appointment,
+        )
+        if appointment.status == Appointment.Status.BOOKED:  # Its current time isn't a different one.
+            current = timezone.localtime(appointment.starts_at, SAST)
+            if current.date() == query.cleaned_data['date']:
+                times = [at for at in times if at != f'{current:%H:%M}']
+        return JsonResponse({'times': times})
+
+
+class ProposalTimesQuery(forms.Form):
+    appointment = forms.IntegerField(min_value=1)
+    date = forms.DateField()
+
+
+@method_decorator(never_cache, name='dispatch')
+class StaffProposalTimesView(LoginRequiredMixin, StaffCompanyRequiredMixin, ProposalTimesMixin, View):
+    actor_role = 'doctor'
+
+
+@method_decorator(never_cache, name='dispatch')
+class PatientProposalTimesView(LoginRequiredMixin, PatientPortalRequiredMixin, ProposalTimesMixin, View):
     actor_role = 'patient'
 
 

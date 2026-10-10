@@ -2,7 +2,7 @@
 {% load static workspace_ui conversation_ui %}
 
 {% block title %}Team messages | {{ company.name }} | Meridian{% endblock %}
-{% block extra_css %}<link rel="stylesheet" href="{% static 'css/console.css' %}?v=20261007b"><link rel="stylesheet" href="{% static 'css/conversations.css' %}?v=20261009d"><link rel="stylesheet" href="{% static 'css/person_tags.css' %}?v=20261009e"><link rel="stylesheet" href="{% static 'css/message_tones.css' %}?v=20261008a"><link rel="stylesheet" href="{% static 'css/conversation_search.css' %}?v=20261005b"><script src="{% static 'js/conversations.js' %}?v=20261007b" defer></script><script src="{% static 'js/conversation_search.js' %}?v=20261005" defer></script><link rel="stylesheet" href="{% static 'css/dialogs.css' %}?v=20261008b"><script src="{% static 'js/dialogs.js' %}?v=20261008a" defer></script><script src="{% static 'js/conversation_management.js' %}?v=20261008b" defer></script><link rel="stylesheet" href="{% static 'css/filter_menu.css' %}?v=20261010a"><script src="{% static 'js/filter_menu.js' %}?v=20261008b" defer></script>{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{% static 'css/console.css' %}?v=20261007b"><link rel="stylesheet" href="{% static 'css/conversations.css' %}?v=20261009d"><link rel="stylesheet" href="{% static 'css/person_tags.css' %}?v=20261009e"><link rel="stylesheet" href="{% static 'css/message_tones.css' %}?v=20261008a"><link rel="stylesheet" href="{% static 'css/conversation_search.css' %}?v=20261010b"><script src="{% static 'js/conversations.js' %}?v=20261007b" defer></script><script src="{% static 'js/conversation_search.js' %}?v=20261005" defer></script><link rel="stylesheet" href="{% static 'css/dialogs.css' %}?v=20261008b"><script src="{% static 'js/dialogs.js' %}?v=20261008a" defer></script><script src="{% static 'js/conversation_management.js' %}?v=20261008b" defer></script><link rel="stylesheet" href="{% static 'css/filter_menu.css' %}?v=20261010a"><script src="{% static 'js/filter_menu.js' %}?v=20261008b" defer></script>{% endblock %}
 {% block content %}
   <div class="meridian-console console-desktop inbox-console">
     <div class="console-shell">
@@ -26,10 +26,12 @@
         <main class="console-content inbox-content">
           {% breadcrumbs messages_title 'portal:staff-inbox' 'Team' %}
           {% url 'portal:team-inbox' as team_url %}
-          {% include 'portal/includes/records_header.html' with records_tab='team' action_url=team_url|add:'?compose=1' action_label='New team message' %}
+          {% include 'portal/includes/records_header.html' with records_tab='team' %}
 
-          {# Filters (Open or Closed, With patient or No patient) to the left of the search. #}
+          {# New team message on the left, as on the patient's My Messages; Filters (Open or Closed, With patient or #}
+          {# No patient) to the left of the search on the right. #}
           <div class="inbox-toolbar inbox-toolbar--search-only">
+            <a class="console-button console-button--primary inbox-toolbar__new" href="{{ team_url }}?compose=1">New team message</a>
             {% include 'portal/includes/filter_menu.html' with filter_menu_class='filter-menu--compact' %}
             {# Searches your team conversations: messages, subjects, colleagues and the patient they are about. #}
             {% url 'portal:team-inbox' as search_action %}

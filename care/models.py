@@ -377,6 +377,10 @@ class Appointment(PatientCompanyScopedModel):
     status = models.CharField(max_length=16, choices=Status.choices, default=Status.BOOKED)
     video_link = models.URLField(blank=True)
     outcome_notes = models.TextField(blank=True)
+    # When the reminder email went (care/notifications.py), or the confirmation if booked within the reminder time.
+    reminder_sent_at = models.DateTimeField(null=True, blank=True)
+    # Why it was cancelled, as the patient sees it. A reason the practice gives is in the patient's cancellation email.
+    cancellation_reason = models.CharField(max_length=500, blank=True)
 
     class Meta:
         indexes = [models.Index(fields=('company', 'clinician', 'starts_at')), models.Index(fields=('company', 'patient', 'starts_at'))]
@@ -895,6 +899,8 @@ class MessageThread(PatientCompanyScopedModel):
     )
     is_closed = models.BooleanField(default=False)
     last_message_at = models.DateTimeField(null=True, blank=True)
+    # The message the patient was last emailed about (its time); the next email waits until they've read it.
+    patient_emailed_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         indexes = [models.Index(fields=('company', 'patient', 'is_closed', 'last_message_at'))]
@@ -912,6 +918,8 @@ class MessageThreadParticipant(CompanyScopedModel):
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='message_thread_links')
     added_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name='+')
     last_read_at = models.DateTimeField(null=True, blank=True)
+    # The message they were last emailed about (its time); the next email waits until they've read up to it.
+    last_emailed_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         constraints = [models.UniqueConstraint(fields=('thread', 'user'), name='one_participant_link_per_thread')]
@@ -968,6 +976,8 @@ class TeamThreadMember(CompanyScopedModel):
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='team_thread_links')
     added_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name='+')
     last_read_at = models.DateTimeField(null=True, blank=True)
+    # The message they were last emailed about (its time); the next email waits until they've read up to it.
+    last_emailed_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         constraints = [models.UniqueConstraint(fields=('thread', 'user'), name='one_member_link_per_team_thread')]

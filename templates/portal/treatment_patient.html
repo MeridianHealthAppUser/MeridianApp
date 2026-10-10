@@ -2,7 +2,7 @@
 {% load static workspace_ui %}
 
 {% block title %}My Treatment | Meridian{% endblock %}
-{% block patient_extra_css %}<link rel="stylesheet" href="{% static 'css/treatment.css' %}">{% endblock %}
+{% block patient_extra_css %}<link rel="stylesheet" href="{% static 'css/treatment.css' %}?v=20261010">{% endblock %}
 {% block patient_content_class %}patient-treatment{% endblock %}
 {% block patient_breadcrumbs %}{% breadcrumbs 'My Treatment' %}{% endblock %}
 {% block patient_heading %}<header class="patient-page-heading"><div><h1>My Treatment</h1></div></header>{% endblock %}
@@ -21,15 +21,15 @@
     </div>
     <div class="patient-stack">
       {% for task in tasks %}
-        <article class="patient-bar{% if task.urgent %} patient-bar--urgent{% endif %}">
+        <article class="patient-bar patient-bar--task{% if task.urgent %} patient-bar--urgent{% endif %}">
           <span class="patient-pill {% if task.urgent %}patient-pill--amber{% else %}patient-pill--blue{% endif %}">{% if task.urgent %}Action needed{% else %}To do{% endif %}</span>
           <div class="patient-bar__copy">
             <h3 class="patient-bar__title">{{ task.title }}</h3>
             <p class="patient-bar__body">{{ task.body }}</p>
-            <div class="patient-bar__actions">
-              {% for action in task.actions %}<a class="console-button {% if action.primary %}console-button--primary{% else %}console-button--secondary{% endif %}" href="{{ action.url }}">{{ action.label }}</a>{% endfor %}
-            </div>
           </div>
+          {% if task.actions %}<div class="patient-bar__actions">
+            {% for action in task.actions %}<a class="console-button {% if action.primary %}console-button--primary{% else %}console-button--secondary{% endif %}" href="{{ action.url }}">{{ action.label }}</a>{% endfor %}
+          </div>{% endif %}
         </article>
       {% empty %}
         <div class="patient-bar patient-bar--done">
@@ -137,7 +137,7 @@
           <p class="patient-plan__empty-title">No treatment authorised yet</p>
           <p class="patient-small">Your doctor records an authorisation after reviewing your care at a consult. Completing a questionnaire or booking does not guarantee a prescription.</p>
           {% if enrollment_form.errors %}{{ enrollment_form.authorization.errors }}{{ enrollment_form.confirm.errors }}{% endif %}
-          <div class="patient-card-actions"><a class="console-button console-button--primary" href="{% url 'portal:patient-appointments' %}#book">Book a consult</a></div>
+          <div class="patient-card-actions"><a class="console-button console-button--primary" href="{% url 'portal:patient-appointments' %}?book=1">Book a consult</a></div>
         {% endif %}
       </div>
     </section>

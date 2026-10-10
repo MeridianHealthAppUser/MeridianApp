@@ -1,0 +1,8 @@
+{% extends 'emails/base.html' %}{% block content %}
+        <p style="margin:0 0 16px;">Hello{% if greeting %} {{ greeting }}{% endif %},</p>
+        <p style="margin:0 0 16px;">{% if by_patient %}Your appointment has been cancelled, as you asked.{% else %}Your appointment has been cancelled by the practice.{% endif %}</p>
+        {% if reason %}<p style="margin:0 0 16px;"><span style="color:#5a7274;">Reason:</span> {{ reason }}</p>
+        {% endif %}{% include 'emails/details.html' %}
+        <p style="margin:0 0 16px;">If you'd like a new time, you can book one or message your care team in the Meridian Health app.</p>
+        {% include 'emails/button.html' with label='View my appointments' %}
+{% endblock %}

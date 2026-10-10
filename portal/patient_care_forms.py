@@ -1,15 +1,15 @@
 """Narrow, patient-owned booking, self-reported profile and timeline forms."""
 
-from datetime import date, timedelta
+from datetime import date, datetime, time, timedelta
 
 from django import forms
-from django.core import signing
 from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.utils import timezone
-from django.utils.dateparse import parse_datetime
 
+from care.availability import SAST
 from care.models import Appointment, PatientEvent
+from care.widgets import QUARTER_HOUR_CHOICES
 from .staff_forms import DoctorChoiceField, practice_doctors
 
 
@@ -19,51 +19,29 @@ BOOKING_TYPES = (
     (Appointment.Type.FOLLOW_UP, 'Follow-up · 15 minutes'),
     (Appointment.Type.AD_HOC, 'Ad-hoc consultation · 15 minutes'),
 )
-BOOKING_SLOT_SALT = 'portal.patient-booking-slot.v1'
-BOOKING_SLOT_MAX_AGE = 20 * 60
-SLOT_ERROR = 'This time is no longer available or the selection has expired. Choose a time again.'
 
 
-def make_booking_slot(request, company, patient, slot, appointment_type):
-    return signing.dumps({
-        'actor_id': request.user.pk, 'company_id': company.pk, 'patient_id': patient.pk,
-        'clinician_id': slot.clinician_id, 'starts_at': slot.starts_at.isoformat(),
-        'appointment_type': appointment_type, 'duration_minutes': 15,
-    }, salt=BOOKING_SLOT_SALT)
+class PatientBookingForm(forms.Form):
+    """Book appointment, as staff book one: a clinician, the type, a date, then a time from that clinician's free
+    quarter hours (the Time list fills in once both are chosen; static/js/appointment_booking.js). Without scripts
+    the list has every quarter hour, and booking checks the time."""
 
-
-def read_booking_slot(token, request, company, patient):
-    if not isinstance(token, str) or not token or len(token) > 4096:
-        raise ValidationError(SLOT_ERROR)
-    try:
-        data = signing.loads(token, salt=BOOKING_SLOT_SALT, max_age=BOOKING_SLOT_MAX_AGE)
-    except (signing.BadSignature, ValueError, TypeError):
-        raise ValidationError(SLOT_ERROR) from None
-    if not isinstance(data, dict) or any(data.get(key) != value for key, value in {
-        'actor_id': request.user.pk, 'company_id': company.pk, 'patient_id': patient.pk,
-        'duration_minutes': 15,
-    }.items()) or data.get('appointment_type') not in dict(BOOKING_TYPES):
-        raise ValidationError(SLOT_ERROR)
-    if type(data.get('clinician_id')) is not int or not isinstance(data.get('starts_at'), str):
-        raise ValidationError(SLOT_ERROR)
-    try:
-        starts_at = parse_datetime(data['starts_at'])
-    except (ValueError, TypeError):
-        raise ValidationError(SLOT_ERROR) from None
-    if starts_at is None or timezone.is_naive(starts_at):
-        raise ValidationError(SLOT_ERROR)
-    return data
-
-
-class BookingFilterForm(forms.Form):
-    date = forms.DateField(label='Date (SAST)', widget=forms.DateInput(attrs={'type': 'date'}))
-    clinician = DoctorChoiceField(label='Doctor', required=False, queryset=None,
-                                  empty_label='Any available doctor')
+    clinician = DoctorChoiceField(label='Clinician', queryset=None, empty_label='Choose a clinician')
     appointment_type = forms.ChoiceField(label='Appointment type', choices=BOOKING_TYPES)
+    date = forms.DateField(label='Date', widget=forms.DateInput(format='%Y-%m-%d', attrs={'type': 'date'}))
+    time = forms.ChoiceField(label='Time', choices=[('', 'Choose a time'), *QUARTER_HOUR_CHOICES],
+                             error_messages={'required': 'Choose a time.'})
 
-    def __init__(self, *args, company, **kwargs):
+    def __init__(self, *args, company, patient, **kwargs):
+        kwargs.setdefault('auto_id', 'booking_%s')
         super().__init__(*args, **kwargs)
-        self.fields['clinician'].queryset = practice_doctors(company)
+        doctors = practice_doctors(company)
+        self.fields['clinician'].queryset = doctors
+        self.fields['clinician'].label_from_instance = (
+            lambda person: f'{person.get_title_display()} {person.full_name}' if person.title else person.full_name)
+        # Their own clinician to start with.
+        if not self.is_bound and patient.assigned_doctor_id and doctors.filter(pk=patient.assigned_doctor_id).exists():
+            self.initial.setdefault('clinician', patient.assigned_doctor_id)
         today = timezone.localdate()
         self.fields['date'].widget.attrs.update(min=today.isoformat(), max=(today + timedelta(days=BOOKING_DAYS)).isoformat())
 
@@ -74,11 +52,24 @@ class BookingFilterForm(forms.Form):
             raise ValidationError(f'Choose a date from today to {BOOKING_DAYS} days ahead.')
         return value
 
+    def clean(self):
+        cleaned = super().clean()
+        if cleaned.get('date') and cleaned.get('time'):
+            cleaned['starts_at'] = datetime.combine(cleaned['date'], time.fromisoformat(cleaned['time']), tzinfo=SAST)
+        return cleaned
 
-class BookingConfirmationForm(forms.Form):
-    slot = forms.CharField(label='Available time', max_length=4096,
-                           error_messages={'required': 'Choose an available appointment time.'})
-    confirm_booking = forms.BooleanField(label='I confirm this appointment time works for me')
+
+class BookingTimesQuery(forms.Form):
+    """What Book appointment's Time list asks for: a practice clinician and a date."""
+
+    clinician = forms.ModelChoiceField(queryset=None)
+    date = forms.DateField()
+
+    def __init__(self, *args, company, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['clinician'].queryset = practice_doctors(company)
+
+    clean_date = PatientBookingForm.clean_date
 
 
 PROFILE_FIELDS = (

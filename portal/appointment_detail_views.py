@@ -65,10 +65,12 @@ class AppointmentStatusForm(forms.Form):
     reason = forms.CharField(label='Note / cancellation reason', max_length=500, required=False, widget=forms.Textarea(attrs={'rows': 3}))
     confirm = forms.BooleanField(label='I confirm this appointment update. A new time must be agreed separately.')
 
-    def __init__(self, *args, attendance=False, **kwargs):
+    def __init__(self, *args, attendance=False, staff=False, **kwargs):
         super().__init__(*args, **kwargs)
         if not attendance:
             self.fields['status'].choices = (('cancelled', 'Cancel booking'),)
+        if staff:
+            self.fields['reason'].help_text = 'For a cancellation, the patient sees this in the app and in their cancellation email.'
 
 
 @method_decorator(never_cache, name='dispatch')
@@ -96,7 +98,7 @@ class StaffBookingView(LoginRequiredMixin, StaffCompanyRequiredMixin, View):
             validate_workflow_context(request, self.company, 'staff-booking')
             if valid:
                 appointment = book_staff_appointment(company=self.company, actor=request.user, request=request, **form.cleaned_data)
-                messages.success(request, 'Appointment booked. No payment collected or email sent.')
+                messages.success(request, 'Appointment booked. No payment collected.')
                 return redirect('portal:appointment-detail', pk=appointment.pk)
         except ValidationError as error:
             for message in error.messages:
@@ -152,7 +154,7 @@ class AppointmentDetailMixin:
             conversation=MessageThread.objects.for_company(company).filter(
                 patient=appointment.patient, is_closed=False,
                 participants=appointment.clinician if self.patient_portal else request.user).first(),
-            form=form if form is not None else AppointmentStatusForm(attendance=self.attendance(appointment)),
+            form=form if form is not None else AppointmentStatusForm(attendance=self.attendance(appointment), staff=not self.patient_portal),
             workflow_context=request.POST.get('workflow_context', '') if request.method == 'POST' else make_workflow_context(request, company, 'appointment-status', appointment, patient=self.patient if self.patient_portal else None))
         allowed_role = 'patient' if self.patient_portal else ('doctor' if self.membership.is_clinician else None)
         context.update(appointment_video_context(request, appointment, allowed_role=allowed_role))
@@ -169,7 +171,7 @@ class AppointmentDetailMixin:
 
     def post(self, request, pk):
         appointment = self.resolve(pk)
-        form = AppointmentStatusForm(request.POST, attendance=self.attendance(appointment))
+        form = AppointmentStatusForm(request.POST, attendance=self.attendance(appointment), staff=not self.patient_portal)
         valid = form.is_valid()
         company = self.patient_company if self.patient_portal else self.company
         try:

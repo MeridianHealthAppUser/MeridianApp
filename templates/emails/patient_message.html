@@ -1,0 +1,6 @@
+{% extends 'emails/base.html' %}{% block content %}
+        <p style="margin:0 0 16px;">Hello{% if greeting %} {{ greeting }}{% endif %},</p>
+        <p style="margin:0 0 16px;">You have a new message from {{ sender }} in the Meridian Health app.</p>
+        <p style="margin:0 0 16px;">For your privacy, we don't include messages in emails. Open the app to read it and reply.</p>
+        {% include 'emails/button.html' with label='Read message' %}
+{% endblock %}

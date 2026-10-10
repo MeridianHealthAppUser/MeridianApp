@@ -1,0 +1,6 @@
+{% extends 'emails/base.txt' %}{% block content %}Hello{% if greeting %} {{ greeting }}{% endif %},
+
+{{ sender }} sent you a new team message.
+
+Messages aren't included in emails. Open Team messages to read it and reply:
+{{ url }}{% endblock %}

@@ -1,0 +1,9 @@
+{% extends 'emails/base.txt' %}{% block content %}Hello{% if greeting %} {{ greeting }}{% endif %},
+
+{% if moved %}Your appointment has moved to a new time.{% else %}Your appointment is confirmed.{% endif %}
+
+{% for label, value in details %}{{ label }}: {{ value }}{% if not forloop.last %}
+{% endif %}{% endfor %}
+
+You can find it, and any of your other appointments, under My Appointments in the Meridian Health app:
+{{ url }}{% endblock %}

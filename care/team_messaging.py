@@ -18,6 +18,7 @@ from django.utils import timezone
 from practices.models import CompanyMembership, Patient
 from practices.tenancy import require_enabled_company
 from .models import TeamMessage, TeamThread, TeamThreadMember
+from .notifications import queue as notify
 from .services import record_audit
 
 
@@ -98,6 +99,7 @@ def post_team_message(*, thread, sender, body, request=None):
     # Internal discussion stays out of the patient-facing access history; the link is kept for the practice audit.
     record_audit(company=thread.company, actor=sender, action='team_message.sent', target=message, request=request,
                  metadata={'thread_id': thread.pk, 'patient_id': thread.patient_id})
+    notify('team_message', message.pk)
     return message
 
 

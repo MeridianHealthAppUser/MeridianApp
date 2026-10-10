@@ -350,8 +350,9 @@ def _appointment_end():
     return ExpressionWrapper(F('starts_at') + duration, output_field=DateTimeField())
 
 
-def open_slots_for_day(*, company, clinicians, day, duration_minutes=30, limit=100):
-    """Read-only slot previews, excluding occupied time across all practices."""
+def open_slots_for_day(*, company, clinicians, day, duration_minutes=30, limit=100, exclude_appointment=None):
+    """Read-only slot previews, excluding occupied time across all practices. The appointment being moved, if
+    given, doesn't occupy its own time."""
     if not isinstance(day, date) or isinstance(day, datetime):
         raise ValidationError('Choose a valid diary date.')
     if not isinstance(limit, int) or limit <= 0:
@@ -384,6 +385,8 @@ def open_slots_for_day(*, company, clinicians, day, duration_minutes=30, limit=1
     bookings = Appointment.objects.filter(clinician_id__in=doctor_ids, starts_at__lt=end).exclude(
         status__in=(Appointment.Status.CANCELLED, Appointment.Status.NO_SHOW),
     ).annotate(availability_ends_at=_appointment_end()).filter(availability_ends_at__gt=start)
+    if exclude_appointment is not None:
+        bookings = bookings.exclude(pk=exclude_appointment.pk)
     for doctor_id, begins, finishes in bookings.values_list('clinician_id', 'starts_at', 'availability_ends_at'):
         blocked[doctor_id].append((begins, finishes))
     absences = DoctorTimeOff.objects.filter(clinician_id__in=doctor_ids, is_active=True, starts_at__lt=end, ends_at__gt=start)
@@ -424,22 +427,25 @@ def open_slots_for_day(*, company, clinicians, day, duration_minutes=30, limit=1
     return available
 
 
-def bookable_start_times(*, company, clinician, day, duration_minutes, patient=None):
+def bookable_start_times(*, company, clinician, day, duration_minutes, patient=None, exclude_appointment=None):
     """The quarter-hour start times a booking of this length could take with a clinician on a day, for the
-    booking form's Time list: in their hours, not on time off, clear of their other bookings in any practice and,
-    when a patient is given, of the patient's. Booking checks it all again when saved."""
+    booking form's and the suggest-a-new-time form's Time lists: in their hours, not on time off, clear of their
+    other bookings in any practice and, when a patient is given, of the patient's. An appointment being moved
+    (exclude_appointment) doesn't block times near its own. Saving checks it all again."""
     configured = (DoctorWorkingPattern.objects.for_company(company).filter(clinician=clinician).exists()
                   or DoctorSpecialDay.objects.for_company(company).filter(clinician=clinician, date=day).exists())
     if configured:
         starts = [slot.starts_at for slot in open_slots_for_day(
-            company=company, clinicians=[clinician], day=day, duration_minutes=duration_minutes, limit=1000)]
+            company=company, clinicians=[clinician], day=day, duration_minutes=duration_minutes, limit=1000,
+            exclude_appointment=exclude_appointment)]
     else:
         # No working hours set up yet: booking allows any free quarter hour, so the list offers them all.
         start, end = datetime.combine(day, time.min, tzinfo=SAST), datetime.combine(day + timedelta(days=1), time.min, tzinfo=SAST)
         duration, now = timedelta(minutes=duration_minutes), timezone.now()
         busy = list(Appointment.objects.filter(clinician=clinician, starts_at__lt=end).exclude(
             status__in=(Appointment.Status.CANCELLED, Appointment.Status.NO_SHOW),
-        ).annotate(availability_ends_at=_appointment_end()).filter(availability_ends_at__gt=start).values_list('starts_at', 'availability_ends_at'))
+        ).exclude(pk=getattr(exclude_appointment, 'pk', None)).annotate(availability_ends_at=_appointment_end()).filter(
+            availability_ends_at__gt=start).values_list('starts_at', 'availability_ends_at'))
         busy += list(DoctorTimeOff.objects.filter(clinician=clinician, is_active=True, starts_at__lt=end, ends_at__gt=start)
                      .values_list('starts_at', 'ends_at'))
         starts = [moment for moment in (start + timedelta(minutes=15 * step) for step in range(96))
@@ -448,7 +454,8 @@ def bookable_start_times(*, company, clinician, day, duration_minutes, patient=N
     if patient is not None and starts:
         theirs = Appointment.objects.filter(starts_at__lt=starts[-1] + timedelta(minutes=duration_minutes)).exclude(
             status__in=(Appointment.Status.CANCELLED, Appointment.Status.NO_SHOW),
-        ).filter(Q(patient__user_id=patient.user_id) if patient.user_id else Q(patient=patient))
+        ).exclude(pk=getattr(exclude_appointment, 'pk', None)).filter(
+            Q(patient__user_id=patient.user_id) if patient.user_id else Q(patient=patient))
         busy = list(theirs.annotate(availability_ends_at=_appointment_end()).filter(availability_ends_at__gt=starts[0])
                     .values_list('starts_at', 'availability_ends_at'))
         starts = [moment for moment in starts

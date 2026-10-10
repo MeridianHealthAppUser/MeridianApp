@@ -1,0 +1,7 @@
+{% extends 'emails/base.html' %}{% block content %}
+        <p style="margin:0 0 16px;">Hello{% if greeting %} {{ greeting }}{% endif %},</p>
+        <p style="margin:0 0 16px;">{{ doctor }} has requested blood tests for you. The PathCare request form is attached.</p>
+        <p style="margin:0 0 16px;">Take the form, printed or on your phone, to any PathCare collection point.</p>
+        {% if url %}<p style="margin:0 0 16px;">You can also open it in the Meridian Health app under Blood tests until you upload your results.</p>
+        {% include 'emails/button.html' with label='View blood tests' %}{% endif %}
+{% endblock %}

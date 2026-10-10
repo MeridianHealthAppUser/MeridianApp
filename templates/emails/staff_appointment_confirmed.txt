@@ -1,0 +1,9 @@
+{% extends 'emails/base.txt' %}{% block content %}Hello{% if greeting %} {{ greeting }}{% endif %},
+
+{% if moved %}An appointment with you has moved to a new time.{% else %}A new appointment has been booked with you.{% endif %}{% if booked_by %} Booked by {{ booked_by }}.{% endif %}
+
+{% for label, value in details %}{{ label }}: {{ value }}{% if not forloop.last %}
+{% endif %}{% endfor %}
+
+Open Calendar & Bookings:
+{{ url }}{% endblock %}

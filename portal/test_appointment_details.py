@@ -58,7 +58,7 @@ class AppointmentDetailPageTests(AppointmentLifecycleFixture):
         url = self.url('appointment-book')
         response = self.client.get(url)
         self.assertTemplateUsed(response, 'portal/appointment_booking.html')
-        self.assertContains(response, 'No external meeting link is needed; no email or payment is created')
+        self.assertContains(response, 'No external meeting link is needed and no payment is created. The patient, if they have a login, and the doctor, if someone else books, are emailed a confirmation.')
         self.assertIn('no-store', response['Cache-Control'])
         rejected = self.client.post(url, self.booking_data())
         self.assertEqual(rejected.status_code, 400)
@@ -379,6 +379,40 @@ class AppointmentDetailPageTests(AppointmentLifecycleFixture):
         # Anything not offered here can't be asked about.
         self.assertEqual(self.client.get(url, {'clinician': self.doctor.pk, 'date': day.isoformat(), 'duration': 20}).status_code, 400)
         self.assertEqual(self.client.get(url, {'clinician': self.other_user.pk, 'date': day.isoformat(), 'duration': 15}).status_code, 400)
+
+    def test_suggesting_a_new_time_lists_the_doctors_free_quarter_hours_that_day(self):
+        from care.models import DoctorWorkingPattern
+
+        day = timezone.localdate() + timedelta(days=7)
+        DoctorWorkingPattern.objects.create(company=self.company, clinician=self.doctor, weekday=day.weekday(), is_working=True,
+                                            starts_at=time(9, 0), ends_at=time(11, 0))
+        moving = self.appointment(starts_at=timezone.make_aware(datetime.combine(day, time(9, 30))), duration_minutes=30)
+        self.appointment(patient=self.other_patient, starts_at=timezone.make_aware(datetime.combine(day, time(10, 30))), duration_minutes=15)
+
+        def times(url, **query):
+            return self.client.get(url, {'appointment': moving.pk, 'date': day.isoformat(), **query})
+
+        # The patient, from My Messages: the doctor's hours that day, for this 30-minute appointment, clear of the
+        # doctor's 10:30 booking, never its own current time, but free to move to just before or after it.
+        self.login(self.patient_user)
+        patient_url = self.url('patient-appointment-propose-times', self.thread.pk)
+        self.assertEqual(times(patient_url).json()['times'], ['09:00', '09:15', '09:45', '10:00'])
+        # Outside the doctor's hours, nothing; and only appointments in this conversation can be asked about.
+        self.assertEqual(times(patient_url, date=(day + timedelta(days=1)).isoformat()).json()['times'], [])
+        other = self.appointment(patient=self.other_patient, clinician=self.colleague, starts_at=timezone.make_aware(datetime.combine(day, time(9, 0))))
+        self.assertEqual(times(patient_url, appointment=other.pk).status_code, 400)
+        self.assertEqual(times(patient_url, date='not-a-date').status_code, 400)
+        # The doctor gets the same list from the record; a colleague who isn't in the conversation gets nothing.
+        self.login(self.doctor)
+        staff_url = self.url('staff-appointment-propose-times', self.thread.pk)
+        self.assertEqual(times(staff_url).json()['times'], ['09:00', '09:15', '09:45', '10:00'])
+        self.login(self.colleague)
+        self.assertEqual(times(staff_url).status_code, 404)
+        # The form asks for them.
+        self.login(self.patient_user)
+        page = self.client.get(reverse('portal:patient-messages'), {'thread': self.thread.pk})
+        self.assertContains(page, f'data-proposal-times-url="{patient_url}"')
+        self.assertContains(page, 'js/proposal_times.js')
 
     def test_admin_cannot_forge_attendance_action_and_own_doctor_waits_for_end(self):
         appointment = self.appointment()

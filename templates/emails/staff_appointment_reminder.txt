@@ -1,0 +1,9 @@
+{% extends 'emails/base.txt' %}{% block content %}Hello{% if greeting %} {{ greeting }}{% endif %},
+
+This is a reminder of an upcoming appointment with you.
+
+{% for label, value in details %}{{ label }}: {{ value }}{% if not forloop.last %}
+{% endif %}{% endfor %}
+
+View appointment:
+{{ url }}{% endblock %}

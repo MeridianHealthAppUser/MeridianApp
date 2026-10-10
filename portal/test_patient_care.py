@@ -1,9 +1,7 @@
 """Patient care pages retain tenant, identity, availability and version boundaries."""
 
 from django.test import override_settings
-import time as wall_time
 from datetime import datetime, time, timedelta
-from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
@@ -59,19 +57,20 @@ class PatientCareTests(TestCase):
         return reverse(f'portal:{name}', kwargs=kwargs or None)
 
     def booking_page(self, **changes):
-        data = {'date': self.day.isoformat(), 'clinician': self.doctor.pk, 'appointment_type': 'review'}
+        data = {'book': 1, 'date': self.day.isoformat(), 'clinician': self.doctor.pk, 'appointment_type': 'review'}
         data.update(changes)
         return self.client.get(self.url('patient-appointments'), data)
 
-    def booking_data(self):
+    def times(self, **changes):
+        """What Book appointment's Time list offers."""
+        return self.client.get(self.url('patient-booking-times'), {'clinician': self.doctor.pk, 'date': self.day.isoformat(), **changes})
+
+    def booking_data(self, **changes):
         response = self.booking_page()
         self.assertEqual(response.status_code, 200)
-        self.assertTrue(response.context['slots'])
-        return {
-            'date': self.day.isoformat(), 'clinician': self.doctor.pk, 'appointment_type': 'review',
-            'slot': response.context['slots'][0]['token'], 'patient_context': response.context['patient_context'],
-            'confirm_booking': 'on',
-        }
+        self.assertIn('10:00', self.times().json()['times'])
+        return {'clinician': self.doctor.pk, 'appointment_type': 'review', 'date': self.day.isoformat(), 'time': '10:00',
+                'patient_context': response.context['patient_context'], **changes}
 
     def profile_data(self, **answers):
         response = self.client.get(self.url('patient-medical-profile'))
@@ -116,17 +115,67 @@ class PatientCareTests(TestCase):
                     self.assertIn('no-store', response.headers['Cache-Control'])
         self.assertEqual(before, self.counts())
 
-    def test_old_booking_address_opens_booking_on_my_appointments(self):
+    def test_book_appointment_is_a_button_that_opens_the_booking_dialog(self):
         self.login()
-        response = self.client.get(self.url('patient-book-appointment'), {'date': self.day.isoformat(), 'clinician': self.doctor.pk})
-        self.assertRedirects(
-            response, f"{self.url('patient-appointments')}?date={self.day.isoformat()}&clinician={self.doctor.pk}#book",
-            fetch_redirect_response=False,
-        )
-        page = self.booking_page()
-        self.assertTemplateUsed(page, 'portal/patient_appointments.html')
-        self.assertContains(page, 'id="book"')
+        page = self.client.get(self.url('patient-appointments'))
+        self.assertContains(page, f'<a class="console-button console-button--primary" href="{self.url("patient-appointments")}?book=1" '
+                                  'data-modal-open="book-appointment" aria-haspopup="dialog">Book Appointment</a>', html=True)
+        self.assertContains(page, '<dialog class="app-dialog" id="book-appointment" aria-labelledby="book-appointment-title">')
+        self.assertNotContains(page, 'Book a consult')
+        form = page.context['booking_form']
+        # Clinician, type, date, then a time from the clinician's free times; their own clinician to start with.
+        self.assertEqual(list(form.fields), ['clinician', 'appointment_type', 'date', 'time'])
+        self.assertEqual(form['clinician'].value(), self.doctor.pk)
+        self.assertContains(page, f'data-booking-form data-times-url="{self.url("patient-booking-times")}"')
         self.assertContains(page, f'action="{self.url("patient-book-appointment")}"')
+        # Links from other pages, and the old booking address, open it.
+        self.assertContains(self.booking_page(), 'aria-labelledby="book-appointment-title" open>')
+        response = self.client.get(self.url('patient-book-appointment'), {'date': self.day.isoformat(), 'clinician': self.doctor.pk})
+        self.assertRedirects(response, f"{self.url('patient-appointments')}?book=1&date={self.day.isoformat()}&clinician={self.doctor.pk}",
+                             fetch_redirect_response=False)
+
+    def test_the_booked_banner_shows_once_after_booking(self):
+        self.login()
+        self.create_appointment(starts_at=self.starts_at + timedelta(days=1))
+        self.assertIsNone(self.client.get(self.url('patient-appointments')).context['just_booked'])
+        self.assertNotContains(self.client.get(self.url('patient-appointments')), 'id="next-consult-title"')
+        self.client.post(self.url('patient-book-appointment'), self.booking_data())
+        appointment = Appointment.objects.get(starts_at=self.starts_at)
+        page = self.client.get(self.url('patient-appointments'))
+        self.assertEqual(page.context['just_booked'], appointment)
+        self.assertContains(page, '<p class="patient-eyebrow">Booked</p>', html=True)
+        self.assertContains(page, f'{self.url("patient-appointment-detail", pk=appointment.pk)}')
+        # Gone when they come back.
+        self.assertNotContains(self.client.get(self.url('patient-appointments')), 'id="next-consult-title"')
+
+    def test_appointments_filter_by_status_date_clinician_and_type(self):
+        self.login()
+        now = timezone.localtime()
+        today = self.create_appointment(starts_at=now + timedelta(minutes=30), appointment_type='follow_up')
+        later = self.create_appointment(starts_at=now + timedelta(days=40), clinician=self.other_doctor)
+        past = self.create_appointment(starts_at=now - timedelta(days=3), status='completed')
+
+        def listed(**query):
+            return self.client.get(self.url('patient-appointments'), query).context['appointments']
+
+        self.assertEqual(listed(), [today, later])
+        self.assertEqual(listed(status='history'), [past])
+        self.assertEqual(listed(status='all', when='today'), [today])
+        self.assertEqual(listed(when='month'), [today] if later.starts_at.month != now.month else [today, later])
+        self.assertEqual(listed(clinician=self.other_doctor.pk), [later])
+        self.assertEqual(listed(type='follow_up'), [today])
+        self.assertEqual(listed(type=['follow_up', 'review']), [today, later])
+        page = self.client.get(self.url('patient-appointments'), {'clinician': self.other_doctor.pk, 'type': 'review'})
+        self.assertContains(page, '<h2 id="patient-appointments-heading">My Appointments</h2>', html=True)
+        self.assertNotContains(page, 'All your consults')
+        self.assertNotContains(page, 'View appointments')
+        menu = page.context['filter_menu']
+        self.assertEqual([section['label'] for section in menu['sections']], ['Status', 'Date', 'Clinician', 'Appointment type'])
+        self.assertEqual([option['label'] for option in menu['sections'][1]['options']], ['Any time', 'Today', 'This week', 'This month'])
+        # Only the clinicians they've had appointments with; Upcoming is the default, so it isn't counted.
+        self.assertEqual([option['label'] for option in menu['sections'][2]['options']], ['Doctor One', 'Doctor Two'])
+        self.assertEqual(menu['count'], 2)
+        self.assertContains(page, 'class="filter-menu filter-menu--compact"')
 
     def test_csrf_protects_booking_and_profile(self):
         client = Client(enforce_csrf_checks=True)
@@ -138,25 +187,27 @@ class PatientCareTests(TestCase):
         self.login()
         response = self.booking_page()
         self.assertNotContains(response, 'Beta Doctor')
-        response = self.booking_page(clinician=self.beta_doctor.pk)
-        self.assertTrue(response.context['booking_filter_form'].errors)
-        self.assertEqual(response.context['slots'], [])
+        self.assertEqual(self.times(clinician=self.beta_doctor.pk).status_code, 400)
+        response = self.client.post(self.url('patient-book-appointment'), self.booking_data(clinician=self.beta_doctor.pk))
+        self.assertTrue(response.context['booking_form'].errors['clinician'])
+        self.assertFalse(Appointment.objects.exists())
 
-    def test_invalid_dates_do_not_show_slots(self):
+    def test_invalid_dates_offer_no_times(self):
         self.login()
         for date in ('invalid', '9999-12-31', (self.day - timedelta(days=5)).isoformat(), (self.day + timedelta(days=91)).isoformat()):
             with self.subTest(date=date):
-                response = self.booking_page(date=date)
-                self.assertTrue(response.context['booking_filter_form'].errors)
-                self.assertEqual(response.context['slots'], [])
+                self.assertEqual(self.times(date=date).status_code, 400)
+                response = self.client.post(self.url('patient-book-appointment'), self.booking_data(date=date))
+                self.assertTrue(response.context['booking_form'].errors['date'])
+        self.assertFalse(Appointment.objects.exists())
 
-    def test_booking_needs_explicit_confirmation(self):
+    def test_booking_needs_a_time(self):
         self.login()
-        data = self.booking_data()
-        data.pop('confirm_booking')
         before = self.counts()
-        response = self.client.post(self.url('patient-book-appointment'), data)
-        self.assertTrue(response.context['booking_form'].errors)
+        response = self.client.post(self.url('patient-book-appointment'), self.booking_data(time=''))
+        self.assertEqual(response.context['booking_form'].errors['time'], ['Choose a time.'])
+        # The dialog stays open to show it.
+        self.assertContains(response, 'aria-labelledby="book-appointment-title" open>')
         self.assertEqual(before, self.counts())
 
     def test_booking_creates_one_owned_appointment_and_event_without_account(self):
@@ -185,18 +236,17 @@ class PatientCareTests(TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertEqual(before, self.counts())
 
-    def test_missing_tampered_and_expired_slot_tokens_are_rejected(self):
+    def test_only_offered_times_can_be_booked(self):
         self.login()
-        data = self.booking_data()
-        for token in ('', data['slot'] + 'tampered'):
-            response = self.client.post(self.url('patient-book-appointment'), {**data, 'slot': token})
-            self.assertTrue(response.context['booking_form'].non_field_errors())
-        with patch('django.core.signing.time.time', return_value=wall_time.time() + 21 * 60):
-            response = self.client.post(self.url('patient-book-appointment'), data)
+        # 10:15 is inside the clinician's 10:00 slot but isn't a time it offers; 10:03 isn't a quarter hour.
+        self.assertNotIn('10:15', self.times().json()['times'])
+        response = self.client.post(self.url('patient-book-appointment'), self.booking_data(time='10:15'))
         self.assertTrue(response.context['booking_form'].non_field_errors())
+        response = self.client.post(self.url('patient-book-appointment'), self.booking_data(time='10:03'))
+        self.assertTrue(response.context['booking_form'].errors['time'])
         self.assertFalse(Appointment.objects.exists())
 
-    def test_stale_practice_booking_token_cannot_write_other_practice(self):
+    def test_stale_practice_booking_cannot_write_other_practice(self):
         self.login()
         data = self.booking_data()
         self.login(company=self.beta)
@@ -205,7 +255,7 @@ class PatientCareTests(TestCase):
         self.assertTrue(response.context['booking_form'].non_field_errors())
         self.assertEqual(before, self.counts())
 
-    def test_foreign_patient_cannot_replay_booking_token(self):
+    def test_foreign_patient_cannot_replay_booking(self):
         self.login()
         data = self.booking_data()
         self.login(self.other_user)
@@ -233,8 +283,7 @@ class PatientCareTests(TestCase):
     def test_busy_patient_slots_are_not_advertised(self):
         self.login()
         self.create_appointment(company=self.beta, patient=self.beta_patient, clinician=self.other_doctor)
-        response = self.booking_page()
-        self.assertNotIn(self.starts_at, [slot['starts_at'] for slot in response.context['slots']])
+        self.assertNotIn('10:00', self.times().json()['times'])
 
     def test_booking_rechecks_global_time_off_without_revealing_reason(self):
         self.login()
@@ -269,7 +318,7 @@ class PatientCareTests(TestCase):
         data = self.booking_data()
         CompanyMembership.objects.filter(company=self.company, user=self.doctor).update(is_active=False)
         response = self.client.post(self.url('patient-book-appointment'), data)
-        self.assertTrue(response.context['booking_form'].non_field_errors())
+        self.assertTrue(response.context['booking_form'].errors)
         self.assertFalse(Appointment.objects.exists())
 
     def test_booking_service_rejects_arbitrary_unoffered_time_and_initial_type(self):

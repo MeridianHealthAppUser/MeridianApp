@@ -22,7 +22,9 @@ DigitalOcean App Platform supports Dockerfile source builds and a `PRE_DEPLOY` j
 - `MULTI_PRACTICE_ENABLED=false` and `SINGLE_PRACTICE_SLUG=meridian-health`: keep the application restricted to Meridian Health (also the defaults). Existing other-practice data is not automatically deleted. See [single-practice operation](SINGLE_PRACTICE.md).
 - `REDIS_URL` (or `VIDEO_REDIS_URL`): private shared Redis for video signalling and expiring room presence; video is unavailable in production without it.
 - `CELERY_BROKER_URL` (optional): the broker for background tasks, such as emailing PathCare blood-test forms. It can point at the same Redis as `REDIS_URL`, but `REDIS_URL` alone does not turn it on. When you set it, also run a **worker** component from the same image with `celery -A config worker --loglevel=info` and the same environment as the web component; failed emails are then retried. Without it, tasks run inside the web request and a failed email is marked failed straight away, to be resent from the clinical log.
-- `DJANGO_EMAIL_HOST` and the other `DJANGO_EMAIL_*` settings: the transactional email (Brevo) used for password reset links and PathCare forms. Until a host is set, production sends no email: Forgot password points people to support, and PathCare forms are kept in the clinical log marked not emailed (nothing is printed to the server log), ready to resend once email is set up.
+- `DJANGO_EMAIL_HOST` and the other `DJANGO_EMAIL_*` settings: the transactional email (Brevo) used for password reset links, PathCare forms, welcome emails, and message and appointment notifications. Until a host is set, production sends no email: Forgot password points people to support, no notifications go out, and PathCare forms are kept in the clinical log marked not emailed (nothing is printed to the server log), ready to resend once email is set up.
+- `DJANGO_SITE_URL`: the app's public address, such as `https://app.meridianhealth.co.za`, for the links and logo in emails sent outside a page request (notifications and reminders). Set it to `${APP_URL}` on DigitalOcean. Without it, the first `DJANGO_ALLOWED_HOSTS` entry is used over HTTPS.
+- `DJANGO_SUPPORT_EMAIL` (optional): the address every email's "Please do not reply" line points to. Default `support@meridianhealth.co.za`.
 - `SPACES_BUCKET`, `SPACES_REGION`, `SPACES_ACCESS_KEY_ID` and `SPACES_SECRET_ACCESS_KEY` (all four or none) and optional `SPACES_PREFIX`: the private DigitalOcean Space for patient files (PathCare forms and uploaded lab reports). Without them, production keeps those files in the database. Set them on web, worker and the migrate job. See [Patient files on Spaces](#patient-files-on-spaces).
 - Configure a separate TURN relay for reliable cross-network video. See [native video setup](VIDEO_CONSULTATIONS.md).
 - Review `DJANGO_SECURE_HSTS_SECONDS` before enabling a long HSTS lifetime on a real domain.
@@ -39,7 +41,7 @@ Recommended release order:
 
 HSTS preload is deliberately not enabled automatically. A deployment check may report that the domain is not configured for browser preload; review domain-wide HTTPS policy before opting in.
 
-Payments, third-party Zoom integration and courier APIs are not configured. Transactional email (password reset links and PathCare forms) uses the `DJANGO_EMAIL_*` settings. Native WebRTC video is included; production Redis and TURN must be provisioned separately. Configure any future integration separately; never infer payment success from a browser flag. The local review-reminder command can be scheduled only after choosing an authorised operational account and reviewing its scope.
+Payments, third-party Zoom integration and courier APIs are not configured. Transactional email (password reset links, PathCare forms and notifications; see [Emails and appointment reminders](#emails-and-appointment-reminders)) uses the `DJANGO_EMAIL_*` settings. Native WebRTC video is included; production Redis and TURN must be provisioned separately. Configure any future integration separately; never infer payment success from a browser flag. The local review-reminder command can be scheduled only after choosing an authorised operational account and reviewing its scope.
 
 ## Patient files on Spaces
 
@@ -62,6 +64,32 @@ DigitalOcean has no South African region. Choose the nearest one, ideally the re
 7. **Plan backups.** Once the files are moved, database backups no longer contain these PDFs. Consider turning on versioning for the Space (DigitalOcean supports it through the S3-compatible API), so that a deleted or overwritten file can be recovered. Also consider a scheduled copy to a second Space or another location, and include the Space in your restore tests.
 
 Local development keeps patient files under `media/patient-files/`. Git ignores that folder and the app never serves it. The test suite keeps them in memory and never reaches a real Space.
+
+## Emails and appointment reminders
+
+With the `DJANGO_EMAIL_*` settings in place, the app emails:
+
+| Email | To | When |
+| --- | --- | --- |
+| Welcome | The patient | They create their account at the questionnaire checkout |
+| New message | Everyone else in the conversation (patient, staff in it, team members) | A message is sent. Once per conversation until they've opened it since; the message itself is never in the email |
+| Appointment confirmed | The patient, and the clinician unless they made the booking | An appointment is booked, or moved to an agreed new time |
+| Appointment cancelled | The patient (with the practice's reason, when the practice cancelled), and the clinician unless they cancelled it | A booking is cancelled |
+| Appointment reminder | The patient and the clinician | 24 hours before it starts |
+| PathCare form | The patient | A doctor requests blood tests, or resends the form |
+
+Patients are emailed only when they have an active login, and staff only while active in the practice. Each email links into the app. `templates/emails/` holds their look; `care/notifications.py` decides who gets what.
+
+Reminders need a **scheduled job**, because nothing else runs on a timer:
+
+1. Add a **job** component to the app on DigitalOcean, or add the `appointment-reminders` job from `.do/app.yaml.example` to the app spec.
+2. Build it from the same repository and Dockerfile as the web component, with run command `python manage.py send_appointment_reminders`.
+3. Under **Job Trigger**, choose **On a schedule**, cron `*/15 * * * *` (every 15 minutes, the shortest App Platform allows), time zone `Africa/Johannesburg`.
+4. Give it the same environment as the web component: `DATABASE_URL`, `DJANGO_SECRET_KEY`, `DJANGO_SITE_URL`, the `DJANGO_EMAIL_*` settings, `MULTI_PRACTICE_ENABLED`, `SINGLE_PRACTICE_SLUG` and `DJANGO_DEBUG=false`, plus `CELERY_BROKER_URL` if you run a worker.
+
+Each appointment is reminded once, even if two runs overlap. An appointment booked less than 24 hours ahead gets no separate reminder: its confirmation serves as one. Moving an appointment to a new time brings a new reminder. You can run the command by hand from the web component's **Console** at any time. Without email set up it sends nothing and leaves the reminders for later.
+
+Locally, every email is printed in the terminal running `runserver` instead of being sent. Run `python manage.py send_appointment_reminders` to see the reminders for the next 24 hours. `seed_demo` sends nothing.
 
 ## Meridian administration and first login
 

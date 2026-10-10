@@ -7,24 +7,21 @@ from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.exceptions import ValidationError
 from django.core.paginator import Paginator
-from django.http import HttpResponse
+from django.http import HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
-from django.utils.dateparse import parse_datetime
-from django.utils.formats import date_format
+from django.utils.decorators import method_decorator
 from django.views import View
+from django.views.decorators.cache import never_cache
 
 from care.availability import SAST, open_slots_for_day
 from care.models import Appointment, PatientEvent, PatientMedicalProfile
 from care.patient_care import book_patient_appointment, patient_busy_intervals, save_patient_medical_profile
 from .clinical_forms import make_clinical_context, validate_clinical_context
-from .patient_care_forms import (
-    BOOKING_SLOT_MAX_AGE, BOOKING_TYPES, BookingConfirmationForm, BookingFilterForm,
-    PatientMedicalProfileForm, PatientUpdatesFilterForm, make_booking_slot, read_booking_slot,
-)
+from .patient_care_forms import BookingTimesQuery, PatientBookingForm, PatientMedicalProfileForm, PatientUpdatesFilterForm
 from .patient_context import validate_patient_context
-from .patient_views import patient_appointments_context, patient_page_context
+from .patient_views import JUST_BOOKED, patient_appointments_context, patient_page_context
 from .views import PatientPortalRequiredMixin
 
 
@@ -40,68 +37,25 @@ def add_error(form, error):
         form.add_error(None, message)
 
 
-BOOKING_DAY_CHIPS = 7
-
-
-def _booking_chips(filters, data):
-    """Links that change one booking choice at a time and keep the others."""
-    today = timezone.localdate()
-    chosen = {key: str(data.get(key) or '') for key in ('date', 'clinician', 'appointment_type', 'status')}
-
-    def link(**changes):
-        params = {key: value for key, value in {**chosen, **changes}.items() if value}
-        return f"{reverse('portal:patient-appointments')}?{urlencode(params)}#book"
-
-    days = []
-    for offset in range(BOOKING_DAY_CHIPS):
-        day = today + timedelta(days=offset)
-        label = 'Today' if offset == 0 else 'Tomorrow' if offset == 1 else date_format(day, 'D j M')
-        days.append({'label': label, 'url': link(date=day.isoformat()), 'active': chosen['date'] == day.isoformat()})
-    doctors = [{'label': 'Any clinician', 'url': link(clinician=''), 'active': not chosen['clinician']}]
-    doctors += [{'label': doctor.full_name, 'url': link(clinician=str(doctor.pk)), 'active': chosen['clinician'] == str(doctor.pk)}
-                for doctor in filters.fields['clinician'].queryset]
-    types = [{'label': label.split(' · ')[0], 'url': link(appointment_type=value), 'active': chosen['appointment_type'] == value}
-             for value, label in BOOKING_TYPES]
-    return {'days': days, 'doctors': doctors, 'types': types}
+def patient_booking_times(company, patient, clinician, day):
+    """The 15-minute times the patient can book with a clinician on a day: in the clinician's working hours, not on
+    leave, and clear of the clinician's and the patient's other bookings."""
+    busy = list(patient_busy_intervals(patient, day))
+    return [timezone.localtime(slot.starts_at, SAST).strftime('%H:%M')
+            for slot in open_slots_for_day(company=company, clinicians=[clinician], day=day, duration_minutes=15, limit=1000)
+            if not any(slot.starts_at < finish and slot.starts_at + timedelta(minutes=15) > begin for begin, finish in busy)]
 
 
 def booking_context(request, company, patient, booking_form=None):
-    """The booking card on My Appointments: choices, open 15-minute times and the confirmation form."""
-    data = (request.POST if request.method == 'POST' else request.GET).copy()
-    data.setdefault('date', timezone.localdate().isoformat())
-    data.setdefault('appointment_type', Appointment.Type.REVIEW)
-    filters = BookingFilterForm(data, company=company, auto_id='booking_filter_%s')
-    slots = []
-    selected = None
-    if request.method == 'POST':
-        try:
-            selected = read_booking_slot(request.POST.get('slot', ''), request, company, patient)
-        except ValidationError:
-            pass
-    if filters.is_valid():
-        clinician = filters.cleaned_data['clinician']
-        doctors = [clinician] if clinician else filters.fields['clinician'].queryset
-        day = filters.cleaned_data['date']
-        busy = list(patient_busy_intervals(patient, day))
-        for slot in open_slots_for_day(company=company, clinicians=doctors, day=day, duration_minutes=15, limit=100):
-            if any(slot.starts_at < finish and slot.starts_at + timedelta(minutes=15) > begin for begin, finish in busy):
-                continue
-            slots.append({
-                'token': make_booking_slot(request, company, patient, slot, filters.cleaned_data['appointment_type']),
-                'starts_at': slot.starts_at, 'clinician': slot.clinician,
-                'selected': bool(selected and selected.get('clinician_id') == slot.clinician_id
-                                 and parse_datetime(selected.get('starts_at', '')) == slot.starts_at
-                                 and selected.get('appointment_type') == filters.cleaned_data['appointment_type']),
-            })
-    return {
-        'booking_filter_form': filters, 'booking_form': booking_form or BookingConfirmationForm(),
-        'slots': slots, 'slot_expiry_minutes': BOOKING_SLOT_MAX_AGE // 60,
-        'booking_chips': _booking_chips(filters, data),
-    }
+    """Book appointment on My Appointments: a dialog behind the button, open when asked (?book=1, as links from
+    other pages ask) or after a booking that didn't go through."""
+    form = booking_form or PatientBookingForm(company=company, patient=patient, initial={
+        key: request.GET[key] for key in ('clinician', 'appointment_type', 'date') if request.GET.get(key)})
+    return {'booking_form': form, 'booking_open': booking_form is not None or request.GET.get('book') == '1'}
 
 
 class PatientBookingView(PatientCarePage):
-    """Booking now happens on My Appointments; this address keeps old links and the booking POST working."""
+    """Booking from the Book appointment dialog. This address also keeps old links working, opening the dialog."""
 
     def display(self, request, booking_form=None):
         context = patient_appointments_context(request, self.patient_company, self.patient)
@@ -109,32 +63,46 @@ class PatientBookingView(PatientCarePage):
         return render(request, 'portal/patient_appointments.html', context)
 
     def get(self, request):
-        query = request.GET.urlencode()
-        return redirect(f"{reverse('portal:patient-appointments')}{'?' + query if query else ''}#book")
+        query = urlencode({'book': 1, **{key: value for key, value in request.GET.items() if key != 'book'}})
+        return redirect(f"{reverse('portal:patient-appointments')}?{query}")
 
     def post(self, request):
-        form = BookingConfirmationForm(request.POST)
+        form = PatientBookingForm(request.POST, company=self.patient_company, patient=self.patient)
         valid = form.is_valid()
         try:
             validate_patient_context(request, self.patient_company, self.patient)
-            slot = read_booking_slot(request.POST.get('slot', ''), request, self.patient_company, self.patient)
         except ValidationError as error:
             add_error(form, error)
             valid = False
         if valid:
             try:
-                starts_at = parse_datetime(slot.get('starts_at', ''))
                 appointment, created = book_patient_appointment(
                     company=self.patient_company, patient=self.patient, actor=request.user,
-                    clinician_id=slot.get('clinician_id'), starts_at=starts_at,
-                    appointment_type=slot.get('appointment_type'), request=request,
+                    clinician_id=form.cleaned_data['clinician'].pk, starts_at=form.cleaned_data['starts_at'],
+                    appointment_type=form.cleaned_data['appointment_type'], request=request,
                 )
             except ValidationError as error:
                 add_error(form, error)
             else:
                 messages.success(request, 'Appointment booked. No payment was taken.' if created else 'This appointment is already booked.')
+                # Shown once at the top of My Appointments; it's gone when they come back.
+                request.session[JUST_BOOKED] = appointment.pk
                 return redirect('portal:patient-appointments')
         return self.display(request, form)
+
+
+@method_decorator(never_cache, name='dispatch')
+class PatientBookingTimesView(LoginRequiredMixin, PatientPortalRequiredMixin, View):
+    """The times Book appointment's Time list offers for a clinician on a date."""
+
+    http_method_names = ('get', 'head', 'options')
+
+    def get(self, request):
+        query = BookingTimesQuery(request.GET, company=self.patient_company)
+        if not query.is_valid():
+            return JsonResponse({'times': []}, status=400)
+        return JsonResponse({'times': patient_booking_times(
+            self.patient_company, self.patient, query.cleaned_data['clinician'], query.cleaned_data['date'])})
 
 
 class PatientMedicalProfileView(PatientCarePage):

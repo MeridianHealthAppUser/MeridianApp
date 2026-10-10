@@ -268,8 +268,13 @@ class PatientWebAppTests(TestCase):
 
     def test_brand_theme_fonts_are_served_from_the_app(self):
         theme = Path(finders.find('css/patient_theme.css')).read_text()
-        for colour in ('#48c1c9', '#46afcf', '#1599de', '#29698b', '#0097b2'):
+        # The practice console's teal (console.css), not the brand blues the logo keeps.
+        console = Path(finders.find('css/console.css')).read_text()
+        for colour in ('#07877f', '#056f69', '#e4f5f1'):
             self.assertIn(colour, theme)
+            self.assertIn(colour, console)
+        for colour in ('#29698b', '#0097b2', '#1599de', '#1072aa'):
+            self.assertNotIn(colour, theme)
         # Roboto is self-hosted and loaded on every page, the practice console's included.
         faces = Path(finders.find('css/fonts.css')).read_text()
         fonts = re.findall(r"url\('\.\./(fonts/[^']+)'\)", faces)

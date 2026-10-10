@@ -1,0 +1,6 @@
+{% extends 'emails/base.html' %}{% block content %}
+        <p style="margin:0 0 16px;">Hello{% if greeting %} {{ greeting }}{% endif %},</p>
+        <p style="margin:0 0 16px;">Welcome to Meridian Health. Your account is ready.</p>
+        <p style="margin:0 0 16px;">Sign in with this email address, {{ email }}, and the password you chose. In the app you can see your appointments, message your care team and keep track of your progress.</p>
+        {% include 'emails/button.html' with label='Go to my account' %}
+{% endblock %}

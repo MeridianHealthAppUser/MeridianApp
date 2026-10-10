@@ -8,6 +8,7 @@ from practices.models import CompanyMembership
 from practices.tenancy import require_enabled_company, scope_queryset
 
 from .models import AuditEvent, ClinicalTask, MessageThread, PatientEvent, PatientMessage
+from .notifications import queue as notify
 
 
 def _has_staff_access(user, company_id):
@@ -97,6 +98,7 @@ def post_patient_message(*, thread, sender, body, request=None):
         request=request,
         metadata={'thread_id': thread.pk, 'event_id': event.pk},
     )
+    notify('patient_message', message.pk)
     return message
 
 

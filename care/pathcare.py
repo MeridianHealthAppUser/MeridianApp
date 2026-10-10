@@ -12,11 +12,11 @@ from pathlib import Path
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
-from django.core.mail import EmailMessage
 from django.db import transaction
 from django.utils import timezone
 
 from .clinical import _lock_context, _require_doctor, create_lab_request
+from .emails import build_email, site_link
 from .models import Lead, PathCareRequestForm, PatientFile, PharmacyOrder
 from .patient_files import read_patient_file, store_patient_file
 from .services import record_audit
@@ -267,16 +267,9 @@ def deliver(form_id):
     form = PathCareRequestForm.objects.select_related('company', 'patient', 'lab_request__requested_by').get(pk=form_id)
     PathCareRequestForm.objects.filter(pk=form.pk).update(email_attempts=form.email_attempts + 1)
     doctor = form.lab_request.requested_by
-    message = EmailMessage(
-        subject=f'Your blood test request from {form.company.name}',
-        body=(f'Hello {form.patient.first_name},\n\n'
-              f'{doctor_name(doctor)} has requested blood tests for you. The PathCare request form is attached.\n\n'
-              'Take the form, printed or on your phone, to any PathCare collection point.\n\n'
-              + ('You can also open it in the Meridian app under Blood tests until you upload your results.\n\n'
-                 if form.patient.user_id else '')
-              + f'{form.company.name}\n'),
-        from_email=settings.DEFAULT_FROM_EMAIL, to=[form.email_to],
-    )
+    message = build_email(to=form.email_to, subject=f'Your blood test request from {form.company.name}', template='pathcare_form',
+                          context={'greeting': form.patient.first_name, 'doctor': doctor_name(doctor),
+                                   'url': site_link('portal:patient-labs') if form.patient.user_id else ''})
     message.attach(FILENAME, read_patient_file(form.file), 'application/pdf')
     message.send(fail_silently=False)
     PathCareRequestForm.objects.filter(pk=form.pk).update(

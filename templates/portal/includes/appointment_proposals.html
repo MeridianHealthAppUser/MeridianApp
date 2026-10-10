@@ -2,7 +2,9 @@
   Included inside an open secure-conversation thread. The parent supplies
   `thread`, `is_patient_portal`, `can_propose_appointments`, `failed_form`, `conversation_return_to`,
   `reply_thread_id`, `proposal_error`, and `failed_proposal_id`.
-{% endcomment %}
+  The suggestion form's Time list waits for a date, then lists the appointment's clinician's free quarter hours
+  that day (static/js/proposal_times.js); without scripts it lists every quarter hour and sending checks the time.
+{% endcomment %}{% load static %}
 <section class="appointment-proposals" aria-labelledby="appointment-proposals-{{ thread.pk }}">
   <div class="appointment-proposals__heading">
     <div>
@@ -86,10 +88,13 @@
       {% if thread.has_selectable_appointments or thread.proposal_form.is_bound %}
         {% if is_patient_portal %}
           {% url 'portal:patient-appointment-propose' thread.pk as appointment_proposal_url %}
+          {% url 'portal:patient-appointment-propose-times' thread.pk as proposal_times_url %}
         {% else %}
           {% url 'portal:staff-appointment-propose' thread.pk as appointment_proposal_url %}
+          {% url 'portal:staff-appointment-propose-times' thread.pk as proposal_times_url %}
         {% endif %}
-        <form class="console-form proposal-create__form" method="post" action="{{ appointment_proposal_url }}">
+        <script src="{% static 'js/proposal_times.js' %}?v=20261010a" defer></script>
+        <form class="console-form proposal-create__form" method="post" action="{{ appointment_proposal_url }}" data-proposal-times-url="{{ proposal_times_url }}">
           {% csrf_token %}
           {% if conversation_return_to %}<input type="hidden" name="return_to" value="{{ conversation_return_to }}">{% endif %}
           {{ thread.proposal_form.non_field_errors }}

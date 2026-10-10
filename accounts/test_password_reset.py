@@ -56,6 +56,29 @@ class PasswordResetTests(TestCase):
             self.assertRedirects(self.request_link(email), reverse('accounts:password-reset-done'))
         self.assertEqual(len(mail.outbox), 1)
 
+    def test_the_email_says_when_the_link_expires_shows_the_logo_and_points_to_support(self):
+        sent_at = timezone.localtime()
+        self.request_link()
+        email = mail.outbox[0]
+        html, mimetype = email.alternatives[0]
+        self.assertEqual(mimetype, 'text/html')
+        # "Link valid until 20:49 SAST, 10 October 2026.", from either side of a minute boundary.
+        expiries = {f'Link valid until {moment:%H:%M %Z}, {moment.day} {moment:%B %Y}.'
+                    for moment in (sent_at + timedelta(hours=1), timezone.localtime() + timedelta(hours=1))}
+        for part in (email.body, html):
+            self.assertTrue(any(line in part for line in expiries), part)
+            self.assertIn('Please do not reply to this email. If you need help, please email', part)
+        self.assertIn('please email support@meridianhealth.co.za.', email.body)
+        self.assertIn(f'<a href="http://testserver{self.emailed_link()}"', html)
+        self.assertIn('<a href="mailto:support@meridianhealth.co.za"', html)
+        self.assertRegex(html, r'<img src="http://testserver/static/images/meridian-logo[^"]*\.png" alt="Meridian Health - Medical Weight Loss"')
+
+    def test_staff_are_greeted_by_title_and_surname(self):
+        get_user_model().objects.filter(pk=self.user.pk).update(title='DR', last_name='Czech')
+        self.request_link()
+        self.assertIn('Hello Dr Czech,', mail.outbox[0].body)
+        self.assertIn('Hello Dr Czech,', mail.outbox[0].alternatives[0][0])
+
     def test_link_sets_a_new_password_once_and_is_audited(self):
         other_device = Client()
         other_device.force_login(self.user)

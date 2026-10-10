@@ -1,0 +1,8 @@
+{% extends 'emails/base.txt' %}{% block content %}Hello{% if greeting %} {{ greeting }}{% endif %},
+
+{{ doctor }} has requested blood tests for you. The PathCare request form is attached.
+
+Take the form, printed or on your phone, to any PathCare collection point.{% if url %}
+
+You can also open it in the Meridian Health app under Blood tests until you upload your results:
+{{ url }}{% endif %}{% endblock %}

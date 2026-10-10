@@ -25,6 +25,7 @@ from .models import (
     Appointment, AvailabilitySlot, ConsentRecord, Invoice, InvoiceLine, Lead, Payment, PatientEvent,
     PracticeSettings, ScreeningQuestionnaire,
 )
+from .notifications import queue as notify
 from .scheduling import ensure_clinician_available, ensure_patient_available
 from .services import record_audit
 
@@ -258,5 +259,8 @@ def complete_checkout(*, lead, user, password, clinician_id, starts_at, code, re
     record_audit(company=company, actor=account, patient=patient, action='lead.converted', target=lead, request=request,
                  metadata={'appointment_id': appointment.pk, 'invoice_id': invoice.pk, 'payment_id': payment.pk,
                            'test_code': True, 'account_created': account_created})
+    if account_created:
+        notify('welcome', account.pk)
+    notify('appointment_booked', appointment.pk, account.pk)
     return CheckoutResult(user=account, patient=patient, appointment=appointment, payment=payment,
                           account_created=account_created)

@@ -226,10 +226,11 @@ elif DEBUG:
 # Without storage, patient files are kept in the database (PatientFile.content).
 PATIENT_FILES_STORAGE_ENABLED = 'patient_files' in STORAGES
 
-# Outgoing email (password reset links and PathCare forms). Brevo's SMTP relay: DJANGO_EMAIL_HOST=smtp-relay.brevo.com,
-# port 587 with TLS, the Brevo SMTP login as user and an SMTP key as password. Until a host is set, local
-# development prints emails to the console and production sends none: it offers no email reset, and PathCare
-# forms are kept in the clinical log, marked not emailed, so they never end up in the server log.
+# Outgoing email (password reset links, PathCare forms, welcome emails, and message and appointment notifications;
+# care/emails.py). Brevo's SMTP relay: DJANGO_EMAIL_HOST=smtp-relay.brevo.com, port 587 with TLS, the Brevo SMTP
+# login as user and an SMTP key as password. Until a host is set, local development prints emails to the console
+# and production sends none: it offers no email reset, sends no notifications, and PathCare forms are kept in the
+# clinical log, marked not emailed, so they never end up in the server log.
 EMAIL_HOST = os.getenv('DJANGO_EMAIL_HOST', '').strip()
 EMAIL_PORT = int(os.getenv('DJANGO_EMAIL_PORT', '').strip() or 587)
 EMAIL_HOST_USER = os.getenv('DJANGO_EMAIL_HOST_USER', '')
@@ -237,6 +238,14 @@ EMAIL_HOST_PASSWORD = os.getenv('DJANGO_EMAIL_HOST_PASSWORD', '')
 EMAIL_USE_TLS = os.getenv('DJANGO_EMAIL_USE_TLS', 'true').lower() == 'true'
 EMAIL_TIMEOUT = 10
 DEFAULT_FROM_EMAIL = os.getenv('DJANGO_DEFAULT_FROM_EMAIL', 'Meridian Health <no-reply@meridianhealth.co.za>')
+# Replies to the from address aren't read; emails point here instead.
+SUPPORT_EMAIL = os.getenv('DJANGO_SUPPORT_EMAIL', 'support@meridianhealth.co.za')
+# The app's public address, for links and the logo in emails sent outside a request (notifications, reminders).
+# Without it, production uses the first allowed host over HTTPS.
+SITE_URL = (os.getenv('DJANGO_SITE_URL', '').strip()
+            or (f'https://{ALLOWED_HOSTS[0]}' if ALLOWED_HOSTS and not DEBUG else 'http://127.0.0.1:8000')).rstrip('/')
+# Appointment reminders go this long before the start, from `manage.py send_appointment_reminders` every 15 minutes.
+APPOINTMENT_REMINDER_HOURS = 24
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend' if EMAIL_HOST else 'django.core.mail.backends.console.EmailBackend'
 EMAIL_ENABLED = bool(EMAIL_HOST) or DEBUG or TESTING  # The test suite keeps sent email in memory.
 PASSWORD_RESET_EMAIL_ENABLED = EMAIL_ENABLED

@@ -15,7 +15,7 @@
 
 .patient-product { background: #fff; border: 1px solid var(--console-line); border-radius: .9rem; display: flex; flex-direction: column; min-width: 0; overflow: hidden; }
 .patient-product__art { align-items: center; background: linear-gradient(135deg, var(--console-teal-soft), #fff); border-bottom: 1px solid var(--console-line); display: flex; height: 5.6rem; justify-content: center; }
-.patient-product__art span { background: linear-gradient(180deg, #fff, #e9f2f4); border: 1px solid var(--patient-teal-line); border-radius: .5rem; height: 3.4rem; position: relative; width: 1rem; }
+.patient-product__art span { background: linear-gradient(180deg, #fff, #edf3f1); border: 1px solid var(--patient-teal-line); border-radius: .5rem; height: 3.4rem; position: relative; width: 1rem; }
 .patient-product__art span::after { background: var(--console-teal); border-radius: .2rem; content: ''; height: 1.25rem; left: .19rem; opacity: .22; position: absolute; right: .19rem; top: .6rem; }
 .patient-product--open .patient-product__art { background: linear-gradient(135deg, var(--patient-blue-soft), #fff); }
 .patient-product--open .patient-product__art span { border-color: var(--patient-blue-line); }
@@ -31,7 +31,7 @@
 .patient-product__form { align-items: center; display: flex; flex-wrap: wrap; gap: .5rem; margin-top: auto; padding-top: .35rem; }
 .patient-product__form .patient-product__price { margin-right: auto; }
 .patient-product__form input { border: 1px solid var(--console-line); border-radius: .55rem; color: var(--console-ink); font: inherit; font-size: .85rem; min-height: 2.35rem; padding: .3rem .45rem; text-align: center; width: 3.6rem; }
-.patient-product__form input:focus { border-color: var(--console-teal); box-shadow: 0 0 0 3px var(--patient-focus-ring, rgba(0, 151, 178, .16)); outline: none; }
+.patient-product__form input:focus { border-color: var(--console-teal); box-shadow: 0 0 0 3px var(--patient-focus-ring, rgba(7, 135, 127, .16)); outline: none; }
 .patient-product__form .console-button { min-height: 2.35rem; }
 .patient-product__plan { align-items: center; border-top: 1px solid var(--console-line); display: flex; flex-wrap: wrap; font-size: .82rem; gap: .5rem .75rem; justify-content: space-between; margin-top: auto; padding-top: .75rem; }
 .patient-product__plan strong { color: var(--console-ink); }

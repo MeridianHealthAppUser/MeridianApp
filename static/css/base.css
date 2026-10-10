@@ -73,5 +73,6 @@ h1 { font-size: clamp(2rem, 4vw, 3rem); letter-spacing: -.02em; margin: .2rem 0 
 .booking-fields { display: grid; gap: .9rem; }
 .booking-fields__when { display: grid; gap: .75rem; grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .booking-fields__when .console-form__field { min-width: 0; }
+.booking-fields__when--pair { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .booking-fields select:disabled { background: #f3f6f6; color: #8a9b9d; cursor: not-allowed; }
 @media (max-width: 34rem) { .booking-fields__when { grid-template-columns: minmax(0, 1fr); } }

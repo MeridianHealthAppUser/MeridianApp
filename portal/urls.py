@@ -86,7 +86,9 @@ urlpatterns = [
     path('messages/new/', views.StaffInboxThreadCreateView.as_view(), name='staff-inbox-thread-create'),
     path('messages/<int:pk>/read-state/', views.StaffThreadReadStateView.as_view(), name='staff-thread-read-state'),
     path('messages/<int:pk>/appointment-proposals/', appointment_views.StaffAppointmentProposeView.as_view(), name='staff-appointment-propose'),
+    path('messages/<int:pk>/appointment-proposals/times/', appointment_views.StaffProposalTimesView.as_view(), name='staff-appointment-propose-times'),
     path('appointment-proposals/<int:pk>/respond/', appointment_views.StaffAppointmentRespondView.as_view(), name='staff-appointment-respond'),
     path('patient/messages/<int:pk>/appointment-proposals/', appointment_views.PatientAppointmentProposeView.as_view(), name='patient-appointment-propose'),
+    path('patient/messages/<int:pk>/appointment-proposals/times/', appointment_views.PatientProposalTimesView.as_view(), name='patient-appointment-propose-times'),
     path('patient/appointment-proposals/<int:pk>/respond/', appointment_views.PatientAppointmentRespondView.as_view(), name='patient-appointment-respond'),
 ]

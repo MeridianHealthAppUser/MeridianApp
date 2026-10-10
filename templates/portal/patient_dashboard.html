@@ -13,7 +13,7 @@
         <h1 id="patient-dashboard-heading">Welcome back, {{ patient.first_name|default:user.first_name }}.</h1>
         <div class="patient-home__actions">
           <a class="console-button console-button--primary" href="{% url 'portal:patient-treatment' %}">Go to my treatment</a>
-          <a class="console-button console-button--secondary" href="{% url 'portal:patient-appointments' %}#book">Book my follow-up</a>
+          <a class="console-button console-button--secondary" href="{% url 'portal:patient-appointments' %}?book=1">Book my follow-up</a>
           <a class="console-button console-button--secondary" href="#weight-log" data-weight-log-open>Log my weight</a>
         </div>
         <div class="patient-pills" aria-label="Your treatment at a glance">

@@ -1,0 +1,6 @@
+{% extends 'emails/base.txt' %}{% block content %}Hello{% if greeting %} {{ greeting }}{% endif %},
+
+You have a new message from {{ sender }} in the Meridian Health app.
+
+For your privacy, we don't include messages in emails. Open the app to read it and reply:
+{{ url }}{% endblock %}

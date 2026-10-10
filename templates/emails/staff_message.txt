@@ -1,0 +1,6 @@
+{% extends 'emails/base.txt' %}{% block content %}Hello{% if greeting %} {{ greeting }}{% endif %},
+
+{% if from_patient %}You have a new message from {{ patient }}.{% else %}{{ sender }} sent a new message in your conversation with {{ patient }}.{% endif %}
+
+Messages aren't included in emails. Open Patient messages to read it and reply:
+{{ url }}{% endblock %}
