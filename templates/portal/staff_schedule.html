@@ -2,7 +2,7 @@
 {% load static workspace_ui %}
 
 {% block title %}{{ title|default:page_title }} | {{ company.name }} | Meridian{% endblock %}
-{% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/schedule_availability.css' %}?v=20261008g"><link rel="stylesheet" href="{% static 'css/dialogs.css' %}?v=20261008b"><script src="{% static 'js/dialogs.js' %}?v=20261008a" defer></script><script src="{% static 'js/appointment_booking.js' %}?v=20261010b" defer></script>{% endblock %}
+{% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/schedule_availability.css' %}?v=20261012a"><link rel="stylesheet" href="{% static 'css/dialogs.css' %}?v=20261008b"><script src="{% static 'js/dialogs.js' %}?v=20261008a" defer></script><script src="{% static 'js/appointment_booking.js' %}?v=20261010b" defer></script><script src="{% static 'js/time_ranges.js' %}?v=20261011a" defer></script><script src="{% static 'js/working_hours.js' %}?v=20261012a" defer></script>{% endblock %}
 
 
 {% block breadcrumbs %}{% breadcrumbs page_title %}{% endblock %}
@@ -20,7 +20,7 @@
   </header>
   <nav class="records-tabs schedule-tabs" aria-label="Calendar &amp; Bookings">
     <a href="{{ bookings_tab_url }}"{% if schedule_section == 'bookings' %} class="is-active" aria-current="page"{% endif %}>Calendar &amp; Bookings</a>
-    <a href="{{ availability_tab_url }}"{% if schedule_section == 'availability' %} class="is-active" aria-current="page"{% endif %}>Working Pattern &amp; Availability</a>
+    <a href="{{ availability_tab_url }}"{% if schedule_section == 'availability' %} class="is-active" aria-current="page"{% endif %}>Working Hours &amp; Availability</a>
   </nav>
 {% endblock %}
 
@@ -55,23 +55,6 @@
   {% if filter_form.errors %}
     <div class="staff-filter-error" role="alert">{% if is_doctor %}That date can't be shown. <a href="{% url 'portal:staff-schedule' %}">Go to today</a>.{% else %}Correct the filter fields above to view appointments.{% endif %}</div>
   {% else %}
-    {% if clash_count %}
-      <section class="schedule-clash" aria-labelledby="schedule-clash-heading">
-        <span class="schedule-pill schedule-pill--rose">Action needed</span>
-        <div class="schedule-clash__body">
-          <h2 id="schedule-clash-heading">{{ clash_count }} appointment{{ clash_count|pluralize }} sitting on {% if day_state.kind == 'off' %}{% if is_doctor %}a day you are now unavailable{% else %}a day this doctor is now unavailable{% endif %}{% elif is_doctor %}time outside your special hours{% else %}time outside this day's special hours{% endif %}</h2>
-          <p>{% if is_doctor %}The practice has been notified. Nobody is moved automatically: you or the practice can offer each patient a new time, and nothing changes until the patient confirms.{% else %}Nobody is moved automatically. Agree a new time with each patient, then cancel and rebook the appointment. Nothing changes for the patient until then.{% endif %}</p>
-          {% if can_manage_days %}
-            <form method="post" action="{{ undo_url }}">
-              {% csrf_token %}
-              <input type="hidden" name="schedule_context" value="{{ schedule_context }}">
-              <button class="console-button console-button--secondary" type="submit">Undo the change</button>
-            </form>
-          {% endif %}
-        </div>
-      </section>
-    {% endif %}
-
     {% if schedule_section == 'availability' %}
       {% include 'portal/includes/schedule_availability.html' %}
     {% else %}
@@ -228,7 +211,7 @@
               <li class="staff-availability-list__empty">No available times for this date.</li>
             {% endfor %}
           </ul>
-          <p class="staff-availability-card__note">Where a working pattern is saved, these are 30-minute consultation windows with start times every 15 minutes. Up to 100 available windows are shown. These times are not bookings or reservations.</p>
+          <p class="staff-availability-card__note">Where regular working hours are saved, these are 30-minute consultation windows with start times every 15 minutes. Up to 100 available windows are shown. These times are not bookings or reservations.</p>
         </section>
       {% endif %}
 

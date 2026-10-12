@@ -11,7 +11,7 @@
     {# Roboto, Meridian's typeface, on every page. #}
     <link rel="preload" href="{% static 'fonts/roboto/roboto-latin.woff2' %}" as="font" type="font/woff2" crossorigin>
     <link rel="stylesheet" href="{% static 'css/fonts.css' %}?v=20261007">
-    <link rel="stylesheet" href="{% static 'css/base.css' %}?v=20261010c">
+    <link rel="stylesheet" href="{% static 'css/base.css' %}?v=20261011a">
     {% block extra_css %}{% endblock %}
     {% if is_workspace_page %}<link rel="stylesheet" href="{% static 'css/workspace_polish.css' %}?v=20261007"><script src="{% static 'js/workspace_polish.js' %}" defer></script>{% endif %}
     {% if user.is_authenticated %}<link rel="stylesheet" href="{% static 'css/account_menu.css' %}"><script src="{% static 'js/account_menu.js' %}" defer></script>{% endif %}

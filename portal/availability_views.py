@@ -15,13 +15,14 @@ from django.views import View
 from django.views.decorators.cache import never_cache
 
 from care.availability import (
-    SAST, appointments_requiring_attention, attention_kind, cancel_time_off, create_days_off, day_bounds,
+    SAST, appointments_requiring_attention, attention_kind, cancel_time_off, create_days_off,
     diary_day_states, remove_special_day, save_working_pattern, set_special_day, undo_diary_change,
 )
 from care.models import DoctorSpecialDay, DoctorTimeOff, DoctorWorkingPattern
 
 from .availability_forms import (
-    SpecialDayForm, TimeOffForm, WEEKDAYS, WorkingPatternFormSet, make_schedule_context, validate_schedule_context,
+    WORKING_PERIODS, SpecialDayForm, TimeOffForm, WEEKDAYS, WorkingPatternFormSet, make_schedule_context, period_names,
+    validate_schedule_context,
 )
 from .schedule_calendar import schedule_section, schedule_url
 from .staff_forms import ScheduleFilterForm, practice_doctors
@@ -59,11 +60,15 @@ def schedule_availability_context(request, company, membership, clinician, selec
     # The working pattern is the doctor's own; days off and special days may also be set by an administrator.
     can_manage = bool(clinician and clinician.pk == request.user.pk and membership.is_clinician)
     can_manage_days = bool(clinician and (can_manage or membership.is_admin))
-    rows_by_day = {row.weekday: row for row in DoctorWorkingPattern.objects.for_company(company).filter(clinician=clinician)} if clinician else {}
+    rows_by_day = {}
+    for row in (DoctorWorkingPattern.objects.for_company(company).filter(clinician=clinician) if clinician else ()):
+        rows_by_day.setdefault(row.weekday, []).append(row)
+    # Regular working hours: each day's periods, in order.
+    week = [sorted((row.starts_at, row.ends_at) for row in rows_by_day.get(day, []) if row.is_working) for day in range(7)]
     initial = [
-        {'is_working': rows_by_day[day].is_working, 'starts_at': rows_by_day[day].starts_at, 'ends_at': rows_by_day[day].ends_at}
-        if day in rows_by_day else {'is_working': False, 'starts_at': None, 'ends_at': None}
-        for day in range(7)
+        {'is_working': bool(periods), **{name: value for index, period in enumerate(periods[:WORKING_PERIODS])
+                                          for name, value in zip(period_names(index), period)}}
+        for periods in week
     ]
     filters = {'date': selected_date.isoformat(), 'view': mode} if selected_date else {'view': mode}
     if clinician:
@@ -99,16 +104,6 @@ def schedule_availability_context(request, company, membership, clinician, selec
 
     day_state = diary_day_states(company=company, clinician=clinician, first_day=selected_date,
                                  last_day=selected_date)[selected_date] if clinician and selected_date else None
-    # Bookings left on a day off, or outside a special day's hours, on the day being viewed.
-    clash_count = 0
-    if day_state and day_state['kind'] in ('off', 'special') and mode == 'table':
-        start, end = day_bounds(selected_date)
-        clash_count = sum(
-            attention_kind(appointment) in ('day_off', 'special_hours')
-            for appointment in appointments_requiring_attention(company=company, clinician=clinician).filter(
-                starts_at__gte=start, starts_at__lt=end,
-            )
-        )
 
     def page_url(parameter, number, anchor):
         return reverse('portal:staff-schedule') + '?' + urlencode({
@@ -121,7 +116,7 @@ def schedule_availability_context(request, company, membership, clinician, selec
         'own_diary': bool(clinician and clinician.pk == request.user.pk),
         'working_pattern_configured': bool(rows_by_day),
         'working_pattern_formset': WorkingPatternFormSet(initial=initial, prefix='pattern') if can_manage else None,
-        'weekly_pattern': [dict(day_label=WEEKDAYS[day], **values) for day, values in enumerate(initial)],
+        'weekly_pattern': [dict(day_label=WEEKDAYS[day], is_working=bool(periods), periods=periods) for day, periods in enumerate(week)],
         'time_off_form': TimeOffForm(prefix='timeoff', initial={'starts_on': selected_date, 'ends_on': selected_date}) if can_manage_days else None,
         'special_day_form': SpecialDayForm(prefix='special', initial={'date': selected_date}) if can_manage_days else None,
         'time_off_entries': time_off, 'affected_appointments': affected_appointments, 'affected_count': affected_page.paginator.count,
@@ -138,7 +133,7 @@ def schedule_availability_context(request, company, membership, clinician, selec
         'working_pattern_url': reverse('portal:availability-working-pattern') + '?' + params,
         'time_off_create_url': reverse('portal:availability-time-off-create') + '?' + params,
         'special_day_url': reverse('portal:availability-special-day-set') + '?' + params,
-        'day_state': day_state, 'clash_count': clash_count,
+        'day_state': day_state,
         'undo_url': reverse('portal:availability-undo') + '?' + params,
     }
 
@@ -195,7 +190,7 @@ class WorkingPatternUpdateView(DoctorAvailabilityMixin, View):
             save_working_pattern(company=self.company, clinician=request.user, actor=request.user, days=formset.days(), request=request)
         except ValidationError as error:
             return self.invalid(working_pattern_formset=formset, working_pattern_error=' '.join(error.messages))
-        messages.success(request, 'Your weekly working hours have been saved. Existing appointments have not been changed.')
+        messages.success(request, 'Your regular working hours have been saved. Existing appointments have not been changed.')
         return self.success()
 
 
@@ -228,7 +223,7 @@ class TimeOffCancelView(DoctorAvailabilityMixin, View):
             cancel_time_off(time_off=entry, actor=request.user, request=request)
         except ValidationError as error:
             return self.invalid(time_off_error=' '.join(error.messages))
-        messages.success(request, 'Leave removed. The working pattern applies again; its history is kept.')
+        messages.success(request, 'Leave removed. The regular working hours apply again; its history is kept.')
         return self.success()
 
 
@@ -250,7 +245,7 @@ class SpecialDaySetView(DoctorAvailabilityMixin, View):
             form.add_error(None, ' '.join(error.messages))
             return self.invalid(special_day_form=form)
         day = form.cleaned_data['date']
-        messages.success(request, f'Special hours set for {day:%a} {day.day} {day:%b %Y}. They replace the working pattern that day.')
+        messages.success(request, f'Special hours set for {day:%a} {day.day} {day:%b %Y}. They replace the regular working hours that day.')
         return self.success()
 
 
@@ -263,7 +258,7 @@ class SpecialDayRemoveView(DoctorAvailabilityMixin, View):
             remove_special_day(special_day=special, actor=request.user, request=request)
         except ValidationError as error:
             return self.invalid(special_day_error=' '.join(error.messages))
-        messages.success(request, 'Special hours removed. The working pattern applies again.')
+        messages.success(request, 'Special hours removed. The regular working hours apply again.')
         return self.success()
 
 

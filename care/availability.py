@@ -86,20 +86,26 @@ def save_working_pattern(*, company, clinician, actor, days, request=None):
         or any(type(day.get('is_working')) is not bool for day in days)
     ):
         raise ValidationError('Submit all seven days of the working week exactly once.')
-    existing = {row.weekday: row for row in DoctorWorkingPattern.objects.select_for_update().for_company(company).filter(clinician=doctor)}
     rows = []
     for day in sorted(days, key=lambda item: item['weekday']):
-        row = existing.get(day['weekday']) or DoctorWorkingPattern(company=company, clinician=doctor, weekday=day['weekday'])
-        row.is_working = day['is_working']
-        row.starts_at = day.get('starts_at') if row.is_working else None
-        row.ends_at = day.get('ends_at') if row.is_working else None
-        row.full_clean()
-        rows.append(row)
+        if not day['is_working']:
+            rows.append(DoctorWorkingPattern(company=company, clinician=doctor, weekday=day['weekday'], is_working=False))
+            continue
+        # A day's periods ("periods"), or its one From and Until.
+        periods = sorted(day.get('periods') or [(day.get('starts_at'), day.get('ends_at'))], key=lambda period: period[0] or time.min)
+        for (starts_at, ends_at), following in zip(periods, [*periods[1:], None]):
+            if following is not None and ends_at and following[0] and following[0] < ends_at:
+                raise ValidationError(f'{DoctorWorkingPattern.Weekday(day["weekday"]).label}\'s working periods overlap.')
+            rows.append(DoctorWorkingPattern(company=company, clinician=doctor, weekday=day['weekday'], is_working=True,
+                                             starts_at=starts_at, ends_at=ends_at))
     for row in rows:
-        row.save()
+        row.full_clean()
+    # The whole week is replaced: one row per period worked, or one for a day not worked.
+    DoctorWorkingPattern.objects.select_for_update().for_company(company).filter(clinician=doctor).delete()
+    DoctorWorkingPattern.objects.bulk_create(rows)
     record_audit(
         company=company, actor=actor, action='availability.pattern_updated', target=doctor, request=request,
-        metadata={'working_days': sum(row.is_working for row in rows)},
+        metadata={'working_days': len({row.weekday for row in rows if row.is_working})},
     )
     return rows
 
@@ -268,8 +274,8 @@ def notify_practice_of_conflicts(*, company, clinician, actor, starts_at, ends_a
 def diary_day_states(*, company, clinician, first_day, last_day):
     """What each date is for one doctor, in booking precedence.
 
-    kind is 'off' (a whole day off), 'special' (special hours), 'work' (the weekly pattern),
-    'not_working', or 'unset' when no weekly pattern has been saved yet.
+    kind is 'off' (a whole day off), 'special' (special hours), 'work' (regular working hours, with its periods),
+    'not_working', or 'unset' when no regular working hours have been saved yet.
     """
     start, _ = day_bounds(first_day)
     _, end = day_bounds(last_day)
@@ -279,21 +285,23 @@ def diary_day_states(*, company, clinician, first_day, last_day):
     specials = {row.date: row for row in DoctorSpecialDay.objects.for_company(company).filter(
         clinician=clinician, date__gte=first_day, date__lte=last_day,
     )}
-    patterns = {row.weekday: row for row in DoctorWorkingPattern.objects.for_company(company).filter(clinician=clinician)}
+    patterns = {}
+    for row in DoctorWorkingPattern.objects.for_company(company).filter(clinician=clinician):
+        patterns.setdefault(row.weekday, []).append(row)
     states = {}
     day = first_day
     while day <= last_day:
         day_start, day_end = day_bounds(day)
         special = specials.get(day)
-        row = patterns.get(day.weekday())
+        periods = [(row.starts_at, row.ends_at) for row in patterns.get(day.weekday(), []) if row.is_working]
         if any(begins <= day_start and finishes >= day_end for begins, finishes in absences):
             state = {'kind': 'off'}
         elif special is not None:
             state = {'kind': 'special', 'starts_at': special.starts_at, 'ends_at': special.ends_at}
         elif not patterns:
             state = {'kind': 'unset'}
-        elif row is not None and row.is_working:
-            state = {'kind': 'work', 'starts_at': row.starts_at, 'ends_at': row.ends_at}
+        elif periods:
+            state = {'kind': 'work', 'starts_at': periods[0][0], 'ends_at': periods[-1][1], 'periods': periods}
         else:
             state = {'kind': 'not_working'}
         states[day] = state
@@ -377,7 +385,7 @@ def open_slots_for_day(*, company, clinicians, day, duration_minutes=30, limit=1
     doctor_ids = [doctor.pk for doctor in doctors]
     patterns = {}
     for row in DoctorWorkingPattern.objects.for_company(company).filter(clinician_id__in=doctor_ids):
-        patterns.setdefault(row.clinician_id, {})[row.weekday] = row
+        patterns.setdefault(row.clinician_id, {}).setdefault(row.weekday, []).append(row)
     specials = {row.clinician_id: row for row in DoctorSpecialDay.objects.for_company(company).filter(
         clinician_id__in=doctor_ids, date=day,
     )}
@@ -402,21 +410,23 @@ def open_slots_for_day(*, company, clinicians, day, duration_minutes=30, limit=1
     duration = timedelta(minutes=duration_minutes)
     candidates = []
     for doctor in doctors:
-        # Days off are in `blocked`, so they win over everything below.
-        hours = specials.get(doctor.pk)
-        if hours is None:
-            if doctor.pk not in patterns:
-                candidates.extend(slot for slot in manual.get(doctor.pk, []) if slot.ends_at - slot.starts_at >= duration)
-                continue
-            hours = patterns[doctor.pk].get(day.weekday())
-            if hours is None or not hours.is_working or hours.starts_at is None or hours.ends_at is None:
-                continue
-        cursor = datetime.combine(day, hours.starts_at, tzinfo=SAST)
-        finishes = datetime.combine(day, hours.ends_at, tzinfo=SAST)
-        while cursor + duration <= finishes:
-            if cursor >= now:
-                candidates.append(OpenTimeSlot(clinician=doctor, starts_at=cursor, ends_at=cursor + duration))
-            cursor += timedelta(minutes=15)
+        # Days off are in `blocked`, so they win over everything below. A special day replaces the week's periods.
+        special = specials.get(doctor.pk)
+        if special is not None:
+            periods = [(special.starts_at, special.ends_at)]
+        elif doctor.pk not in patterns:
+            candidates.extend(slot for slot in manual.get(doctor.pk, []) if slot.ends_at - slot.starts_at >= duration)
+            continue
+        else:
+            periods = [(row.starts_at, row.ends_at) for row in patterns[doctor.pk].get(day.weekday(), [])
+                       if row.is_working and row.starts_at is not None and row.ends_at is not None]
+        for begins, ends in periods:
+            cursor = datetime.combine(day, begins, tzinfo=SAST)
+            finishes = datetime.combine(day, ends, tzinfo=SAST)
+            while cursor + duration <= finishes:
+                if cursor >= now:
+                    candidates.append(OpenTimeSlot(clinician=doctor, starts_at=cursor, ends_at=cursor + duration))
+                cursor += timedelta(minutes=15)
     available = []
     for slot in sorted(candidates, key=lambda item: (item.starts_at, item.clinician_id)):
         if any(slot.starts_at < finish and slot.ends_at > begin for begin, finish in blocked[slot.clinician_id]):

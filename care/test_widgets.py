@@ -57,9 +57,14 @@ class QuarterHourPickerTests(SimpleTestCase):
     def test_every_date_and_time_picker_on_the_platform_uses_quarter_hours(self):
         fields = (
             (ClinicalTaskForm, 'due_at'), (TaskEditorForm, 'due_at'), (AppointmentProposalForm, 'proposed_starts_at'),
-            (ConsultationForm, 'occurred_at'), (WorkingDayForm, 'starts_at'), (WorkingDayForm, 'ends_at'),
-            (SpecialDayForm, 'starts_at'), (SpecialDayForm, 'ends_at'),
+            (ConsultationForm, 'occurred_at'), (SpecialDayForm, 'starts_at'), (SpecialDayForm, 'ends_at'),
         )
         for form, name in fields:
             with self.subTest(form=form.__name__, field=name):
                 self.assertIsInstance(form.base_fields[name], (QuarterHourDateTimeField, QuarterHourTimeField))
+        # Every period of a day of regular working hours.
+        periods = [name for name in WorkingDayForm().fields if name != 'is_working']
+        self.assertEqual(len(periods), 8)
+        for name in periods:
+            with self.subTest(form='WorkingDayForm', field=name):
+                self.assertIsInstance(WorkingDayForm().fields[name], QuarterHourTimeField)

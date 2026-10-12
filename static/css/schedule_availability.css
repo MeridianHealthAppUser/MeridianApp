@@ -25,7 +25,16 @@
 .schedule-availability-panels .schedule-working-toggle input:checked { background: var(--console-teal); border-color: var(--console-teal); }
 .schedule-availability-panels .schedule-working-toggle input:checked::before { left: 1.17rem; }
 .schedule-availability-panels .schedule-working-toggle input:focus-visible { outline: 3px solid #84c9bd; outline-offset: 3px; }
-.schedule-pattern-times { display: grid; gap: .45rem; grid-template-columns: repeat(2, minmax(0, 1fr)); min-width: 0; }
+.schedule-pattern-times { align-items: end; display: grid; gap: .45rem; grid-template-columns: repeat(2, minmax(0, 1fr)) 2.1rem; min-width: 0; }
+/* A day's periods, one under another; an extra one has a × at its end, and "+ Add hours" shows another. */
+.schedule-pattern-periods { display: grid; gap: .45rem; min-width: 0; }
+.schedule-pattern-times[hidden], .schedule-period-remove[hidden], .schedule-period-add[hidden] { display: none; }
+.schedule-period-remove { align-items: center; background: #fff; border: 1px solid var(--console-line); border-radius: .55rem; color: var(--console-muted); cursor: pointer; display: inline-flex; font-size: 1.05rem; height: 2.35rem; justify-content: center; padding: 0; width: 2.1rem; }
+.schedule-period-remove:hover { background: #fdf1ef; border-color: #e3a8a0; color: #a73f37; }
+.schedule-period-remove:focus-visible, .schedule-period-add:focus-visible { outline: 2px solid var(--console-teal); outline-offset: 2px; }
+.schedule-period-add { background: none; border: 0; color: var(--console-teal-dark); cursor: pointer; font: inherit; font-size: .72rem; font-weight: 700; justify-self: start; padding: .1rem 0; }
+.schedule-period-add:hover { color: var(--console-teal); }
+.schedule-pattern-day:has(.schedule-working-toggle input:not(:checked)) .schedule-period-add { display: none; }
 .schedule-pattern-times .console-form__field { min-width: 0; }
 .schedule-availability-panels .schedule-pattern-times input { font-size: .77rem; min-height: 2.35rem; padding: .45rem .35rem; width: 100%; }
 .schedule-availability-panels .schedule-time-off-form input { min-width: 0; width: 100%; }
@@ -284,6 +293,11 @@ a.schedule-week__date:focus-visible { outline: 2px solid var(--console-teal); ou
 .schedule-week__booking .console-status { font-size: .6rem; padding: .3rem .45rem; }
 /* On the tinted card the status needs its own white ground to read as a pill. */
 .schedule-week__booking--booked .console-status, .schedule-week__booking--completed .console-status { background: #fff; }
+/* As in Month: a booking not yet completed is white with a teal border; a completed one keeps the teal fill and its tag. */
+.schedule-week__booking--booked { background: #fff; border-color: var(--console-teal); }
+.schedule-week__booking--booked:hover { background: var(--console-teal-soft); border-color: var(--console-teal-dark); }
+.schedule-week__booking--completed { border-color: var(--console-teal); }
+.schedule-week__booking--completed:hover { border-color: var(--console-teal-dark); }
 .schedule-week__booking .schedule-pill { border-radius: .5rem; font-size: .6rem; padding: .25rem .45rem; white-space: normal; }
 .schedule-week__duration, .schedule-week__range { white-space: nowrap; }
 .schedule-week__booking .schedule-attention-badge { margin-top: 0; }

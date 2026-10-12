@@ -206,6 +206,9 @@ class AvailabilityPortalTests(TestCase):
         html = response.content.decode()
         self.assertLess(html.index('07:00 &ndash; 09:30'), html.index('Add special day'))
         self.assertContains(response, '<details class="schedule-add" data-inline-editor>')
+        # Each From and Until pair (the seven days and the special day) offers only Until times after its From.
+        self.assertContains(response, 'data-time-range', count=7 * 4 + 1)
+        self.assertContains(response, 'js/time_ranges.js')
         bad = {**data, 'special-ends_at': '06:00'}
         response = self.client.post(url + '&section=availability', bad)
         self.assertEqual(response.status_code, 200)
@@ -217,7 +220,7 @@ class AvailabilityPortalTests(TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertFalse(DoctorSpecialDay.objects.exists())
 
-    def test_doctor_sees_the_clash_banner_with_undo_and_the_practice_gets_a_task(self):
+    def test_leave_over_a_booking_raises_a_practice_task_and_no_banner(self):
         DoctorWorkingPattern.objects.bulk_create([
             DoctorWorkingPattern(company=self.company, clinician=self.doctor, weekday=day, is_working=day < 5,
                                  starts_at=time(9) if day < 5 else None, ends_at=time(17) if day < 5 else None)
@@ -231,19 +234,14 @@ class AvailabilityPortalTests(TestCase):
         task = ClinicalTask.objects.get()
         self.assertIsNone(task.assigned_to_id)
         response = self.client.get(reverse('portal:staff-schedule'), {'date': self.monday.isoformat()})
-        self.assertEqual(response.context['clash_count'], 1)
-        self.assertContains(response, '1 appointment sitting on a day you are now unavailable')
-        self.assertContains(response, 'The practice has been notified.')
+        # No "Action needed" banner (Dr Czech, 12 Oct): the booking is listed under Appointments needing attention.
+        self.assertNotContains(response, 'Action needed')
+        self.assertNotContains(response, 'sitting on a day you are now unavailable')
+        self.assertNotContains(response, 'Undo the change')
         self.assertContains(response, 'Doctor unavailable')
         self.assertContains(response, 'Not open')
-        self.assertContains(response, f'action="{reverse("portal:availability-undo")}')
-        response = self.client.post(reverse('portal:availability-undo') + query, {'schedule_context': self.token()})
-        self.assert_schedule_redirect(response, day=self.monday)
-        self.assertFalse(DoctorTimeOff.objects.filter(is_active=True).exists())
         booking.refresh_from_db()
         self.assertEqual((booking.status, booking.starts_at), (Appointment.Status.BOOKED, self.at(10)))
-        response = self.client.get(reverse('portal:staff-schedule'), {'date': self.monday.isoformat()})
-        self.assertEqual(response.context['clash_count'], 0)
 
     def test_doctor_saves_seven_day_pattern_and_preserves_calendar_date(self):
         self.login()
@@ -257,6 +255,61 @@ class AvailabilityPortalTests(TestCase):
         self.assertEqual(list(rows.values_list('weekday', flat=True)), list(range(7)))
         self.assertEqual(rows.get(weekday=0).starts_at, time(9))
         self.assertFalse(rows.get(weekday=6).is_working)
+
+    def test_a_day_can_be_worked_in_more_than_one_period(self):
+        from care.availability import appointments_requiring_attention, diary_day_states, ensure_working_time, open_slots_for_day
+        from django.core.exceptions import ValidationError
+
+        self.login()
+        data = self.pattern_data()
+        # Monday 08:00–11:00 and 13:00–16:00, entered in either order.
+        data.update({'pattern-0-starts_at': '13:00', 'pattern-0-ends_at': '16:00',
+                     'pattern-0-starts_at_2': '08:00', 'pattern-0-ends_at_2': '11:00'})
+        response = self.client.post(f'{reverse("portal:availability-working-pattern")}?date={self.monday.isoformat()}&section=availability', data)
+        self.assertEqual(response.status_code, 302)
+        monday = DoctorWorkingPattern.objects.filter(clinician=self.doctor, weekday=0).order_by('starts_at')
+        self.assertEqual(list(monday.values_list('starts_at', 'ends_at')), [(time(8), time(11)), (time(13), time(16))])
+        self.assertEqual(DoctorWorkingPattern.objects.filter(clinician=self.doctor).count(), 8)
+        # The form shows both, earliest first; the read-only week lists them too.
+        page = self.client.get(response.url)
+        day_form = page.context['working_pattern_formset'].forms[0]
+        self.assertEqual([(start.value(), end.value()) for start, end in day_form.periods()[:2]], [(time(8), time(11)), (time(13), time(16))])
+        self.assertContains(page, 'Add hours<span class="sr-only"> on Monday</span>')
+        self.login(self.admin)
+        self.assertContains(self.client.get(response.url), '<dd>08:00–11:00, 13:00–16:00</dd>', html=True)
+        # Bookable times come from both periods, never the gap between them.
+        starts = [timezone.localtime(slot.starts_at).strftime('%H:%M') for slot in open_slots_for_day(
+            company=self.company, clinicians=[self.doctor], day=self.monday, duration_minutes=30)]
+        self.assertIn('08:00', starts)
+        self.assertIn('10:30', starts)
+        self.assertNotIn('10:45', starts)
+        self.assertNotIn('12:00', starts)
+        self.assertEqual(starts[starts.index('10:30') + 1], '13:00')
+        ensure_working_time(company=self.company, clinician=self.doctor, starts_at=self.at(13), duration_minutes=30)
+        with self.assertRaises(ValidationError):
+            ensure_working_time(company=self.company, clinician=self.doctor, starts_at=self.at(11), duration_minutes=30)
+        with self.assertRaises(ValidationError):
+            ensure_working_time(company=self.company, clinician=self.doctor, starts_at=self.at(10, 45), duration_minutes=30)
+        self.assertEqual(diary_day_states(company=self.company, clinician=self.doctor, first_day=self.monday, last_day=self.monday)[self.monday],
+                         {'kind': 'work', 'starts_at': time(8), 'ends_at': time(16), 'periods': [(time(8), time(11)), (time(13), time(16))]})
+        # A booking in the gap needs attention; one inside a period doesn't.
+        gap = Appointment.objects.create(company=self.company, patient=self.patient, clinician=self.doctor, starts_at=self.at(11, 30), duration_minutes=15)
+        Appointment.objects.create(company=self.company, patient=self.patient, clinician=self.doctor, starts_at=self.at(14), duration_minutes=15)
+        self.assertEqual(list(appointments_requiring_attention(company=self.company, clinician=self.doctor)), [gap])
+
+    def test_overlapping_or_unfinished_periods_are_refused(self):
+        self.login()
+        for extra, message in (
+            ({'pattern-0-starts_at_2': '16:00', 'pattern-0-ends_at_2': '18:00'}, 'These working periods overlap.'),
+            ({'pattern-0-starts_at_2': '18:00'}, 'Enter a time for this working day.'),
+        ):
+            with self.subTest(extra=extra):
+                before = self.mutation_snapshot()
+                response = self.client.post(reverse('portal:availability-working-pattern') + '?section=availability',
+                                            {**self.pattern_data(), **extra})
+                self.assertEqual(response.status_code, 200)
+                self.assertContains(response, message)
+                self.assertEqual(before, self.mutation_snapshot())
 
     def test_bad_pattern_retains_bound_values_and_does_not_partially_save(self):
         self.login()
@@ -507,7 +560,7 @@ class AvailabilityPortalTests(TestCase):
         self.assertEqual(bookings.context['schedule_section'], 'bookings')
         self.assertContains(bookings, 'id="appointment-list-heading"')
         self.assertNotContains(bookings, 'id="working-pattern-heading"')
-        self.assertContains(bookings, 'Working Pattern &amp; Availability')
+        self.assertContains(bookings, 'Working Hours &amp; Availability')
         tab = self.client.get(bookings.context['availability_tab_url'])
         self.assertEqual(tab.context['schedule_section'], 'availability')
         self.assertNotContains(tab, 'id="appointment-list-heading"')
@@ -515,7 +568,12 @@ class AvailabilityPortalTests(TestCase):
         # Working pattern on the left; special days above days off on the right.
         self.assertLess(page.index('id="working-pattern-heading"'), page.index('id="special-days-heading"'))
         self.assertLess(page.index('id="special-days-heading"'), page.index('id="time-off-heading"'))
-        self.assertContains(tab, 'The standing week at this practice')
+        # Dr Czech's wording (12 Oct): Regular Working Hours under the doctor's title and name, Days Off/Leave.
+        self.assertContains(tab, '<h2 id="working-pattern-heading">Regular Working Hours</h2>', html=True)
+        self.assertContains(tab, f'<p>{self.doctor.titled_name} · {self.company.name}</p>', html=True)
+        self.assertContains(tab, '<h2 id="time-off-heading">Days Off/Leave</h2>', html=True)
+        self.assertContains(tab, 'These replace your regular working hours for that day only.')
+        self.assertNotContains(tab, 'The standing week at this practice')
         response = self.client.post(f'{reverse("portal:availability-time-off-create")}?date={self.monday.isoformat()}&section=availability',
                                     self.time_off_data())
         self.assertEqual(parse_qs(urlsplit(response.url).query).get('section'), ['availability'])

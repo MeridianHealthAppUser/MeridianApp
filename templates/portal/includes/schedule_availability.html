@@ -3,12 +3,11 @@
     <div class="schedule-availability-tab__column">
     <section class="staff-page-card schedule-working-pattern" aria-labelledby="working-pattern-heading">
       <header class="staff-page-card__header">
-        <div><h2 id="working-pattern-heading">Working pattern</h2><p>{{ selected_clinician.full_name }} · {{ company.name }}</p></div>
+        <div><h2 id="working-pattern-heading">Regular Working Hours</h2><p>{{ selected_clinician.titled_name }} · {{ company.name }}</p></div>
       </header>
       <div class="schedule-panel-body">
-        <p class="schedule-panel-description">The standing week at this practice, in South Africa time (SAST). Saving these hours changes future booking availability, never an appointment already booked.</p>
         {% if not working_pattern_configured %}
-          <p class="schedule-panel-notice">No weekly pattern has been saved yet. Existing manually recorded availability still applies until a pattern is saved.</p>
+          <p class="schedule-panel-notice">No regular working hours have been saved yet. Existing manually recorded availability still applies until they are.</p>
         {% endif %}
 
         {% if can_manage_availability %}
@@ -20,7 +19,9 @@
             {{ working_pattern_formset.non_form_errors }}
             <div class="schedule-working-week">
               {% for day_form in working_pattern_formset %}
-                <fieldset class="schedule-pattern-day">
+                {# A day's periods, such as 08:00–11:00 and 13:00–16:00. Extra empty periods wait behind "+ Add hours" #}
+                {# (static/js/working_hours.js); without scripts, all of them show and empty ones are ignored. #}
+                <fieldset class="schedule-pattern-day" data-working-day>
                   <legend>{{ day_form.day_label }}</legend>
                   {% for hidden in day_form.hidden_fields %}{{ hidden }}{% endfor %}
                   {{ day_form.non_field_errors }}
@@ -29,33 +30,39 @@
                     <span>Working<span class="sr-only"> on {{ day_form.day_label }}</span></span>
                   </label>
                   {{ day_form.is_working.errors }}
-                  <div class="schedule-pattern-times">
-                    <div class="console-form__field">
-                      <label for="{{ day_form.starts_at.id_for_label }}">From<span class="sr-only"> on {{ day_form.day_label }} (SAST)</span></label>
-                      {{ day_form.starts_at }}
-                      {{ day_form.starts_at.errors }}
-                    </div>
-                    <div class="console-form__field">
-                      <label for="{{ day_form.ends_at.id_for_label }}">Until<span class="sr-only"> on {{ day_form.day_label }} (SAST)</span></label>
-                      {{ day_form.ends_at }}
-                      {{ day_form.ends_at.errors }}
-                    </div>
+                  <div class="schedule-pattern-periods">
+                    {% for start, end in day_form.periods %}
+                      <div class="schedule-pattern-times" data-time-range data-working-period>
+                        <div class="console-form__field">
+                          <label{% if not forloop.first %} class="sr-only"{% endif %} for="{{ start.id_for_label }}">From<span class="sr-only"> on {{ day_form.day_label }}{% if not forloop.first %}, hours {{ forloop.counter }}{% endif %} (SAST)</span></label>
+                          {{ start }}
+                          {{ start.errors }}
+                        </div>
+                        <div class="console-form__field">
+                          <label{% if not forloop.first %} class="sr-only"{% endif %} for="{{ end.id_for_label }}">Until<span class="sr-only"> on {{ day_form.day_label }}{% if not forloop.first %}, hours {{ forloop.counter }}{% endif %} (SAST)</span></label>
+                          {{ end }}
+                          {{ end.errors }}
+                        </div>
+                        {% if forloop.first %}<span class="schedule-period-remove-spacer" aria-hidden="true"></span>{% else %}<button class="schedule-period-remove" type="button" data-period-remove hidden aria-label="Remove these hours on {{ day_form.day_label }}">&times;</button>{% endif %}
+                      </div>
+                    {% endfor %}
+                    <button class="schedule-period-add" type="button" data-period-add hidden><span aria-hidden="true">+</span> Add hours<span class="sr-only"> on {{ day_form.day_label }}</span></button>
                   </div>
                 </fieldset>
               {% endfor %}
             </div>
-            <p class="schedule-form-help">Turn Working off for a day you do not work here. Its time fields are ignored.</p>
-            <button class="console-button console-button--primary" type="submit">Save working pattern</button>
+            <p class="schedule-form-help">Turn Working off for a day you do not work here. Its times are ignored. Use “Add hours” for a day worked in more than one period.</p>
+            <button class="console-button console-button--primary" type="submit">Save regular working hours</button>
           </form>
         {% else %}
           {% if working_pattern_configured %}
             <dl class="schedule-readonly-week">
               {% for day in weekly_pattern %}
-                <div><dt>{{ day.day_label }}</dt><dd>{% if day.is_working %}{{ day.starts_at|time:"H:i" }}–{{ day.ends_at|time:"H:i" }}{% else %}Not working{% endif %}</dd></div>
+                <div><dt>{{ day.day_label }}</dt><dd>{% if day.is_working %}{% for starts_at, ends_at in day.periods %}{{ starts_at|time:"H:i" }}–{{ ends_at|time:"H:i" }}{% if not forloop.last %}, {% endif %}{% endfor %}{% else %}Not working{% endif %}</dd></div>
               {% endfor %}
             </dl>
           {% endif %}
-          <p class="schedule-form-help">Read-only view. Doctors manage their own working hours.</p>
+          <p class="schedule-form-help">Read-only view. Doctors manage their own regular working hours.</p>
         {% endif %}
       </div>
     </section>
@@ -63,7 +70,7 @@
     </div>
     <div class="schedule-availability-tab__column">
     <section class="staff-page-card schedule-special-days" aria-labelledby="special-days-heading">
-      <header class="staff-page-card__header"><div><h2 id="special-days-heading">{% include 'portal/includes/special_hours_icon.html' %}Special days</h2><p>Different hours on a specific date. These replace {% if own_diary %}your{% else %}this doctor's{% endif %} working pattern for that day only.</p></div></header>
+      <header class="staff-page-card__header"><div><h2 id="special-days-heading">{% include 'portal/includes/special_hours_icon.html' %}Special days</h2><p>Different hours on a specific date. These replace {% if own_diary %}your{% else %}this doctor's{% endif %} regular working hours for that day only.</p></div></header>
       <div class="schedule-panel-body">
         {% if special_day_error %}<div class="schedule-form-error" role="alert">{{ special_day_error }}</div>{% endif %}
         {% if special_days %}
@@ -104,7 +111,7 @@
               {{ special_day_form.date }}
               {{ special_day_form.date.errors }}
             </div>
-            <div class="schedule-field-pair">
+            <div class="schedule-field-pair" data-time-range>
               <div class="console-form__field">
                 <label for="{{ special_day_form.starts_at.id_for_label }}">From<span class="sr-only"> (SAST)</span></label>
                 {{ special_day_form.starts_at }}
@@ -127,7 +134,7 @@
     </section>
 
     <section class="staff-page-card schedule-time-off" aria-labelledby="time-off-heading">
-      <header class="staff-page-card__header"><div><h2 id="time-off-heading">Leave</h2></div></header>
+      <header class="staff-page-card__header"><div><h2 id="time-off-heading">Days Off/Leave</h2></div></header>
       <div class="schedule-panel-body">
         {% if time_off_error %}<div class="schedule-form-error" role="alert">{{ time_off_error }}</div>{% endif %}
         {% if time_off_entries %}
@@ -187,8 +194,8 @@
     </div>
   {% else %}
     <section class="staff-page-card schedule-select-doctor" aria-labelledby="availability-doctor-heading">
-      <header class="staff-page-card__header"><div><h2 id="availability-doctor-heading">Working pattern, leave and special days</h2></div></header>
-      <div class="schedule-panel-body"><p class="schedule-panel-description">Choose a clinician in the schedule filter to see their working pattern, leave and special days at this practice.</p><p class="schedule-form-help">Doctors set their own working pattern. Practice administrators and Super Admins can add or remove leave and special days for the doctor they choose.</p></div>
+      <header class="staff-page-card__header"><div><h2 id="availability-doctor-heading">Working hours, leave and special days</h2></div></header>
+      <div class="schedule-panel-body"><p class="schedule-panel-description">Choose a clinician in the schedule filter to see their regular working hours, leave and special days at this practice.</p><p class="schedule-form-help">Doctors set their own regular working hours. Practice administrators and Super Admins can add or remove leave and special days for the doctor they choose.</p></div>
     </section>
   {% endif %}
 </div>

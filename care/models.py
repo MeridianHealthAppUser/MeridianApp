@@ -424,7 +424,11 @@ class AvailabilitySlot(CompanyScopedModel):
 
 
 class DoctorWorkingPattern(CompanyScopedModel):
-    """A practice-specific standing week, including explicit non-working days."""
+    """A practice-specific standing week ("Regular working hours"), including explicit non-working days.
+
+    A working day has one row per period it's worked, such as Monday 08:00–11:00 and 13:00–16:00; a day not
+    worked has a single row with no times. care.availability.save_working_pattern keeps a day's periods apart.
+    """
 
     class Weekday(models.IntegerChoices):
         MONDAY = 0, 'Monday'
@@ -442,9 +446,9 @@ class DoctorWorkingPattern(CompanyScopedModel):
     ends_at = models.TimeField(null=True, blank=True)
 
     class Meta:
-        ordering = ('weekday',)
+        ordering = ('weekday', 'starts_at')
+        indexes = [models.Index(fields=('company', 'clinician', 'weekday'), name='doctor_working_day_idx')]
         constraints = [
-            models.UniqueConstraint(fields=('company', 'clinician', 'weekday'), name='unique_doctor_working_day'),
             models.CheckConstraint(condition=models.Q(weekday__gte=0, weekday__lte=6), name='doctor_working_weekday_range'),
             models.CheckConstraint(
                 condition=(
