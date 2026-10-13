@@ -13,7 +13,7 @@ from django.utils import timezone
 
 from care.models import (
     Appointment, AuditEvent, ClinicalNote, ClinicalTask, MessageThread,
-    PatientEvent, PatientMessage, RecordTag, TaskTagAssignment, WeightEntry,
+    PatientEvent, PatientMessage, PharmacyOrder, RecordTag, TaskTagAssignment, WeightEntry,
 )
 from practices.models import Company, CompanyMembership, Patient
 from practices.services import ACTIVE_COMPANY_SESSION_KEY, ACTIVE_PATIENT_COMPANY_SESSION_KEY
@@ -40,7 +40,7 @@ class PatientNavigationParser(HTMLParser):
 
 @override_settings(MULTI_PRACTICE_ENABLED=True)
 class PatientStandalonePagesTests(TestCase):
-    page_names = ('patient-dashboard', 'patient-appointments', 'patient-messages', 'patient-progress', 'patient-account')
+    page_names = ('patient-dashboard', 'patient-appointments', 'patient-messages', 'patient-progress', 'patient-profile')
     nav_pages = ('patient-dashboard', 'patient-treatment', 'patient-appointments', 'patient-messages', 'patient-pharmacy')
 
     @classmethod
@@ -148,7 +148,6 @@ class PatientStandalonePagesTests(TestCase):
 
     def guarded_posts(self):
         return (
-            ('patient-account', 'contact_form', {'phone': '083 222 1111', 'city': 'Changed city'}),
             ('patient-weight-add', 'weight_form', {
                 'recorded_on': timezone.localdate().isoformat(), 'weight_kg': '88.25', 'note': 'Guarded weight draft.',
             }),
@@ -183,7 +182,7 @@ class PatientStandalonePagesTests(TestCase):
             'patient-appointments': 'portal/patient_appointments.html',
             'patient-messages': 'portal/patient_messages.html',
             'patient-progress': 'portal/patient_progress.html',
-            'patient-account': 'portal/patient_account.html',
+            'patient-profile': 'portal/patient_profile.html',
             'patient-treatment': 'portal/treatment_patient.html',
             'patient-pharmacy': 'portal/pharmacy_catalogue.html',
         }
@@ -195,7 +194,7 @@ class PatientStandalonePagesTests(TestCase):
                 self.assertIn('no-store', response.headers.get('Cache-Control', ''))
                 navigation = PatientNavigationParser(response.content.decode()).links
                 hrefs = {item.get('href') for item in navigation}
-                for section in (*self.nav_pages, 'patient-account'):
+                for section in (*self.nav_pages, 'patient-profile'):
                     self.assertIn(reverse(f'portal:{section}'), hrefs)
                 current = {item.get('href') for item in navigation if item.get('aria-current') == 'page'}
                 self.assertEqual(current, {reverse(f'portal:{name}')} if name in self.nav_pages else set())
@@ -216,14 +215,13 @@ class PatientStandalonePagesTests(TestCase):
         for action in (
             reverse('portal:patient-thread-create'),
             reverse('portal:patient-message-create', args=[self.thread.pk]),
-            reverse('portal:patient-appointment-propose', args=[self.thread.pk]),
         ):
             self.assertNotContains(response, f'action="{action}"')
 
     def test_overview_and_non_message_pages_never_mark_incoming_messages_read(self):
         incoming = self.message()
         self.login()
-        for name in ('patient-dashboard', 'patient-appointments', 'patient-progress', 'patient-account'):
+        for name in ('patient-dashboard', 'patient-appointments', 'patient-progress', 'patient-profile'):
             with self.subTest(page=name):
                 self.assertEqual(self.page(name).status_code, 200)
                 incoming.refresh_from_db()
@@ -422,84 +420,54 @@ class PatientStandalonePagesTests(TestCase):
         self.assertRedirects(response, self.message_destination(thread), fetch_redirect_response=False)
         self.assertEqual((thread.company_id, thread.patient_id), (self.company.pk, self.patient.pk))
 
-    def test_account_exposes_only_contact_edit_fields(self):
+    def test_my_profile_shows_personal_details_without_editing_them(self):
+        """The care team keeps a patient's details; the patient asks support for a change by email."""
+        Patient.objects.filter(pk=self.patient.pk).update(title='MS')
+        PharmacyOrder.objects.create(company=self.company, patient=self.patient, status=PharmacyOrder.Status.SUBMITTED,
+                                     submitted_at=timezone.now(), delivery_address={
+                                         'line1': '12 Main Road', 'line2': 'Gardens', 'city': 'Cape Town',
+                                         'province': 'Western Cape', 'postal_code': '8001', 'phone': '082 000 0001'})
         self.login()
-        response = self.page('patient-account')
-        self.assertEqual(set(response.context['contact_form'].fields), {'title', 'phone', 'city'})
-        self.assertEqual(response.context['contact_form']['title'].value(), self.patient.title)
-        self.assertEqual(response.context['contact_form']['phone'].value(), self.patient.phone)
-        self.assertEqual(response.context['contact_form']['city'].value(), self.patient.city)
-
-    def test_contact_update_changes_only_owned_patient_contact_and_audits_field_names(self):
-        self.login()
-        response = self.client.post(reverse('portal:patient-account'), {
-            'patient_context': self.patient_token(),
-            'phone': '083 765 4321', 'city': 'Johannesburg',
-            'email': 'forged-email@example.test', 'user': self.other_user.pk, 'id_number': 'FORGED-ID',
-            'practice': self.other_company.pk, 'company': self.other_company.pk, 'patient': self.other_patient.pk,
-            'assigned_doctor': self.other_user.pk, 'first_name': 'Forged name',
-        })
-        self.assertRedirects(response, reverse('portal:patient-account'), fetch_redirect_response=False)
+        response = self.page('patient-profile')
+        for label, value in (('Title', 'Ms'), ('Name', 'Alice Alpha Patient'), ('Email', 'pages-patient@example.test'),
+                             ('Contact number', '082 000 0001'), ('ID / passport', 'ALPHA-IDENTITY'), ('City', 'Cape Town'),
+                             ('Shipping address', '12 Main Road, Gardens, Cape Town, 8001')):
+            with self.subTest(label=label):
+                self.assertContains(response, f'<div><dt>{label}</dt><dd>{value}</dd></div>', html=True)
+        for field in ('title', 'phone', 'city', 'first_name', 'last_name'):
+            self.assertNotContains(response, f'name="{field}"')
+        self.assertContains(response, '<a class="console-button console-button--secondary patient-card-actions__wide" '
+                                      'href="mailto:support@meridianhealth.co.za?subject=Request%20for%20Detail%20Change%3A%20Alice%20Alpha%20Patient">'
+                                      'Request a change</a>', html=True)
+        # What the old contact form sent changes nothing now.
+        before = self.write_snapshot()
+        self.client.post(reverse('portal:patient-profile'), {'patient_context': self.patient_token(),
+                                                             'title': 'MR', 'phone': '083 765 4321', 'city': 'Johannesburg'})
+        self.assertEqual(self.write_snapshot(), before)
         self.patient.refresh_from_db()
-        self.beta_patient.refresh_from_db()
-        self.other_patient.refresh_from_db()
-        self.user.refresh_from_db()
-        self.assertEqual((self.patient.phone, self.patient.city), ('083 765 4321', 'Johannesburg'))
-        self.assertEqual((self.patient.user_id, self.patient.company_id, self.patient.assigned_doctor_id), (self.user.pk, self.company.pk, self.doctor.pk))
-        self.assertEqual((self.patient.id_number, self.patient.first_name), ('ALPHA-IDENTITY', 'Alice'))
-        self.assertEqual(self.user.email, 'pages-patient@example.test')
-        self.assertEqual((self.beta_patient.phone, self.beta_patient.city), ('082 000 0002', 'Durban'))
-        self.assertEqual((self.other_patient.phone, self.other_patient.city), ('', ''))
-        event = AuditEvent.objects.get(patient=self.patient, actor=self.user)
-        self.assertEqual(event.company_id, self.company.pk)
-        self.assertCountEqual(event.metadata['changed_fields'], ['phone', 'city'])
-        self.assertEqual(set(event.metadata), {'changed_fields'})
-        self.assertNotIn('083 765 4321', str(event.metadata))
-        self.assertNotIn('Johannesburg', str(event.metadata))
+        self.assertEqual((self.patient.title, self.patient.phone, self.patient.city), ('MS', '082 000 0001', 'Cape Town'))
 
-    def test_patient_sees_and_changes_their_title(self):
+    def test_my_profile_keeps_security_on_the_page_without_practice_access_or_activity(self):
         self.login()
-        page = self.page('patient-account')
-        self.assertContains(page, 'Printed on your blood test forms.')
-        self.assertContains(page, '<option value="MS">Ms</option>', html=True)
-        response = self.client.post(reverse('portal:patient-account'), {
-            'patient_context': self.patient_token(), 'title': 'MS', 'phone': self.patient.phone, 'city': self.patient.city,
-        })
-        self.assertRedirects(response, reverse('portal:patient-account'), fetch_redirect_response=False)
-        self.patient.refresh_from_db()
-        self.beta_patient.refresh_from_db()
-        self.assertEqual((self.patient.title, self.beta_patient.title), ('MS', ''))
-        self.assertEqual(list(AuditEvent.objects.filter(patient=self.patient, actor=self.user).values_list('action', flat=True)),
-                         ['patient.title_updated'])
-        self.assertContains(self.page('patient-account'), '<option value="MS" selected>Ms</option>', html=True)
+        response = self.page('patient-profile')
+        self.assertContains(response, 'Security and account settings')
+        self.assertContains(response, f'<a class="console-button console-button--secondary" href="{reverse("accounts:password-change")}">Change password</a>', html=True)
+        self.assertContains(response, f'action="{reverse("accounts:logout")}"')
+        self.assertContains(response, '<button class="console-button patient-button--red" type="submit">Sign out</button>', html=True)
+        # Personal details beside Security, then data requests, consents and marketing.
+        html = response.content.decode()
+        headings = ('Personal details', 'Security and account settings', 'My data requests', 'Recorded consent',
+                    'Optional marketing communications')
+        self.assertEqual([html.index(f'>{heading}</h2>') for heading in headings],
+                         sorted(html.index(f'>{heading}</h2>') for heading in headings))
+        for removed in ('Your practice access', 'Your recent account activity', 'Questions about your information',
+                        'Title and contact details', 'Recorded consents'):
+            self.assertNotContains(response, removed)
 
-    def test_a_form_without_the_title_leaves_it_alone(self):
-        Patient.objects.filter(pk=self.patient.pk).update(title='MR')
-        self.login()
-        self.client.post(reverse('portal:patient-account'), {
-            'patient_context': self.patient_token(), 'phone': '083 765 4321', 'city': 'Johannesburg'})
-        self.patient.refresh_from_db()
-        self.assertEqual((self.patient.title, self.patient.phone), ('MR', '083 765 4321'))
-
-    def test_invalid_contact_values_preserve_form_and_do_not_write(self):
-        self.login()
-        response = self.client.post(reverse('portal:patient-account'), {
-            'patient_context': self.patient_token(), 'phone': '1' * 33, 'city': 'Keep my city draft',
-        })
-        self.assertEqual(response.status_code, 200)
-        self.assertTemplateUsed(response, 'portal/patient_account.html')
-        self.assertIn('phone', response.context['contact_form'].errors)
-        self.assertContains(response, 'Keep my city draft')
-        self.patient.refresh_from_db()
-        self.assertEqual(self.patient.phone, '082 000 0001')
-        self.assertEqual(self.patient.city, 'Cape Town')
-        self.assertFalse(AuditEvent.objects.filter(patient=self.patient, actor=self.user).exists())
-
-    def test_contact_weight_and_message_writes_require_csrf(self):
+    def test_weight_and_message_writes_require_csrf(self):
         browser = Client(enforce_csrf_checks=True)
         self.login(client=browser)
         for url, data in (
-            (reverse('portal:patient-account'), {'phone': '123', 'city': 'City'}),
             (reverse('portal:patient-weight-add'), {'recorded_on': timezone.localdate().isoformat(), 'weight_kg': '90'}),
             (reverse('portal:patient-thread-create'), {'subject': 'Forbidden', 'body': 'Forbidden'}),
             (reverse('portal:patient-message-create', args=[self.thread.pk]), {'body': 'Forbidden'}),
@@ -512,7 +480,7 @@ class PatientStandalonePagesTests(TestCase):
 
     def test_patient_write_forms_include_their_signed_context(self):
         self.login()
-        for name, params in (('patient-account', {}), ('patient-progress', {}), ('patient-messages', {'compose': 1})):
+        for name, params in (('patient-progress', {}), ('patient-messages', {'compose': 1})):
             with self.subTest(page=name):
                 response = self.page(name, **params)
                 self.assertTrue(response.context['patient_context'])
@@ -560,11 +528,6 @@ class PatientStandalonePagesTests(TestCase):
         incoming.refresh_from_db()
         self.assertIsNone(incoming.read_at)
         self.assertEqual(response.context['patient'].pk, self.beta_patient.pk)
-
-    def test_old_tab_contact_form_cannot_update_the_newly_selected_practice(self):
-        self.assert_stale_write_rejected('patient-account', 'patient-account', 'contact_form', {
-            'phone': '083 999 9999', 'city': 'Old tab contact values',
-        })
 
     def test_old_tab_weight_form_cannot_write_into_the_newly_selected_practice(self):
         self.assert_stale_write_rejected('patient-progress', 'patient-weight-add', 'weight_form', {

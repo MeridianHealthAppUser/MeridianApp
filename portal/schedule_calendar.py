@@ -106,11 +106,11 @@ def _shift_week(day, offset):
     return min(max(shifted, MIN_DATE), MAX_DATE)
 
 
-def week_context(*, appointments, selected_date, clinician, company, states=None):
+def week_context(*, appointments, selected_date, clinician, company, states=None, flag_attention=True):
     """Monday to Sunday of the selected date's ISO week, every booking per day in time order.
 
     Cancelled and no-show bookings stay in the list (marked as in Day view) but aren't counted as booked.
-    One query loads the week; one more marks the bookings that need a new time.
+    One query loads the week; one more marks the bookings that need a new time, unless flag_attention is off.
     """
     monday, sunday = week_range(selected_date)
     tz = timezone.get_current_timezone()
@@ -120,7 +120,7 @@ def week_context(*, appointments, selected_date, clinician, company, states=None
         calendar_date=TruncDate('starts_at', tzinfo=tz),
     ).select_related('patient', 'clinician').order_by('starts_at', 'pk'))
     attention = {}
-    if bookings:
+    if bookings and flag_attention:
         attention = {appointment.pk: attention_kind(appointment) for appointment in appointments_requiring_attention(
             company=company, clinician=clinician,
         ).filter(pk__in=[appointment.pk for appointment in bookings])}

@@ -2,7 +2,7 @@
 {% load static workspace_ui %}
 
 {% block title %}{{ active_company.name }} | Meridian{% endblock %}
-{% block extra_css %}<link rel="stylesheet" href="{% static 'css/console.css' %}?v=20261008n"><link rel="stylesheet" href="{% static 'css/person_tags.css' %}?v=20261009e">{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{% static 'css/console.css' %}?v=20261013b"><link rel="stylesheet" href="{% static 'css/person_tags.css' %}?v=20261009e">{% endblock %}
 {% block content %}
   <div class="meridian-console console-desktop workspace-overview">
     <div class="console-shell">
@@ -27,7 +27,7 @@
           <section class="console-welcome" aria-labelledby="workspace-heading">
             <div>
               <h1 id="workspace-heading">Welcome, {{ user.first_name|default:user.full_name }}.</h1>
-              <p class="console-welcome__subtext">A focused view of your patients, clinical follow-ups and conversations.</p>
+              <p class="console-welcome__subtext">{% if active_membership.role == 'doctor' %}Your upcoming appointments and open tasks.{% else %}A focused view of your patients, clinical follow-ups and conversations.{% endif %}</p>
             </div>
           </section>
 
@@ -86,16 +86,15 @@
               <div class="console-card__body">
                 <ul class="console-list task-list">
                   {% for task in open_tasks %}
-                    <li class="task-list__item">
-                      <div class="task-list__top">
-                        <div>
-                          <strong>{{ task.title }}</strong>
-                          <p class="task-list__meta">{{ task.patient|default:"General practice" }}{% if task.assigned_to %} · {{ task.assigned_to.full_name }}{% endif %}</p>
-                        </div>
-                        <span class="console-priority">{{ task.get_priority_display }}</span>
+                    {# The task, its priority in the middle, and its button at the right. #}
+                    <li class="task-list__item task-list__item--row">
+                      <div class="task-list__details">
+                        <strong>{{ task.title }}</strong>
+                        <p class="task-list__meta">{{ task.patient|default:"General practice" }}{% if task.assigned_to %} · {{ task.assigned_to.full_name }}{% endif %}</p>
+                        {% if task.due_at %}<time class="task-list__due" datetime="{{ task.due_at|date:'c' }}">Due {{ task.due_at|date:"j M, H:i" }}</time>{% endif %}
                       </div>
-                      <div class="task-list__footer">
-                        {% if task.due_at %}<time datetime="{{ task.due_at|date:'c' }}">Due {{ task.due_at|date:"j M, H:i" }}</time>{% else %}<span></span>{% endif %}
+                      <span class="console-priority">{{ task.get_priority_display }}</span>
+                      <div class="task-list__actions">
                         {% if task.is_clinical_workflow %}
                           {% if task.workflow_url %}<a class="console-button console-button--quiet" href="{{ task.workflow_url }}">{{ task.workflow_label }}</a>{% else %}<span class="console-status">Clinical workflow</span>{% endif %}
                         {% else %}<form class="console-inline-form" method="post" action="{% url 'portal:task-complete' task.pk %}">
@@ -113,11 +112,12 @@
             </section>
           </div>
 
+          {# Clinicians find their patients in Patient Records and conversations in Messages, so Overview doesn't list them. #}{% if active_membership.role != 'doctor' %}
           <section class="console-section console-card" id="patients" aria-labelledby="patients-heading">
             <header class="console-card__header">
               <div class="console-card__heading">
                 <h2 id="patients-heading">Patients</h2>
-                <p>{% if active_membership.role == 'doctor' %}Patients assigned to you{% else %}People currently receiving care{% endif %}</p>
+                <p>People currently receiving care</p>
               </div>
               <a class="console-button console-button--primary" href="{% url 'portal:patient-list' %}">View patients</a>
             </header>
@@ -148,7 +148,7 @@
                     </tr>
                   {% empty %}
                     <tr>
-                      <td colspan="5"><div class="console-empty"><p>{% if active_membership.role == 'doctor' %}No patients are assigned to you yet.{% else %}There are no patient records yet. Add the first patient to begin a secure clinical record.{% endif %}</p></div></td>
+                      <td colspan="5"><div class="console-empty"><p>There are no patient records yet. Add the first patient to begin a secure clinical record.</p></div></td>
                     </tr>
                   {% endfor %}
                 </tbody>
@@ -185,6 +185,7 @@
               </ul>
             </div>
           </section>
+          {% endif %}
 
           {# Only shown when the app runs more than one practice. #}{% if multi_practice_enabled %}
           <section id="insights" class="patient-summary">

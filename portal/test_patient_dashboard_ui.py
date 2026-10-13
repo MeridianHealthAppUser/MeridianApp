@@ -50,7 +50,7 @@ class PatientDashboardPresentationTests(TestCase):
         PatientEvent.objects.create(company=self.company, patient=self.patient, category='appointment', title='Your appointment is confirmed')
 
     def test_duplicate_practice_strip_is_removed_from_all_patient_pages(self):
-        for name in ('patient-dashboard', 'patient-appointments', 'patient-progress', 'patient-messages', 'patient-account', 'patient-updates'):
+        for name in ('patient-dashboard', 'patient-appointments', 'patient-progress', 'patient-messages', 'patient-profile', 'patient-updates'):
             with self.subTest(page=name):
                 response = self.page(name)
                 self.assertContains(response, 'class="patient-navigation"')

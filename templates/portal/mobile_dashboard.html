@@ -126,6 +126,7 @@
         </div>
       </section>
 
+      {# Clinicians find their patients in Patient Records and conversations in Messages, so Overview doesn't list them. #}{% if active_membership.role != 'doctor' %}
       <section class="console-card mobile-card" id="messages" aria-labelledby="mobile-messages-heading">
         <header class="console-card__header">
           <div class="console-card__heading">
@@ -186,6 +187,7 @@
             </ul>
           </div>
         </section>
+      {% endif %}
       {% endif %}
     </main>
 

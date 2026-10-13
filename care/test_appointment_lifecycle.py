@@ -17,8 +17,7 @@ from practices.models import Company, CompanyMembership, Patient
 from .appointment_lifecycle import book_staff_appointment, change_appointment_status
 from .clinical import save_consultation
 from .messaging import add_participant
-from .models import Appointment, AuditEvent, AvailabilitySlot, ClinicalNote, MessageThread, PatientEvent
-from .scheduling import propose_appointment_time, respond_to_appointment_proposal
+from .models import Appointment, AppointmentProposal, AuditEvent, AvailabilitySlot, ClinicalNote, MessageThread, PatientEvent
 from .widgets import floor_quarter_hour
 
 
@@ -79,10 +78,14 @@ class AppointmentLifecycleFixture(TestCase):
         return change_appointment_status(**values)
 
     def proposal(self, appointment, **overrides):
-        values = dict(appointment=appointment, thread=self.thread, actor=self.doctor,
-                      actor_role='doctor', proposed_starts_at=self.starts_at + timedelta(days=1))
+        """A pending time suggestion left from before suggestions were removed (13 Oct 2026); none can be made now."""
+        values = dict(company=appointment.company, patient=appointment.patient, appointment=appointment, thread=self.thread,
+                      proposed_by=self.doctor, recipient=self.patient_user, proposer_role='doctor', kind='reschedule',
+                      original_starts_at=appointment.starts_at, original_status=appointment.status,
+                      original_clinician=appointment.clinician, original_duration_minutes=appointment.duration_minutes,
+                      proposed_starts_at=self.starts_at + timedelta(days=1))
         values.update(overrides)
-        return propose_appointment_time(**values)
+        return AppointmentProposal.objects.create(**values)
 
 
 class AppointmentLifecycleTests(AppointmentLifecycleFixture):
@@ -198,8 +201,6 @@ class AppointmentLifecycleTests(AppointmentLifecycleFixture):
         before = AuditEvent.objects.count()
         self.assertEqual(self.change(appointment).pk, cancelled.pk)
         self.assertEqual(AuditEvent.objects.count(), before)
-        with self.assertRaises(ValidationError):
-            respond_to_appointment_proposal(proposal=proposal, actor=self.patient_user, actor_role='patient', decision='accept')
         appointment.refresh_from_db()
         self.assertEqual(appointment.starts_at, self.starts_at)
 
@@ -233,33 +234,6 @@ class AppointmentLifecycleTests(AppointmentLifecycleFixture):
             self.book(patient=first)
         self.assertEqual(self.book(patient=second).patient_id, second.pk)
 
-    def test_proposal_rechecks_patient_availability_after_intervening_booking(self):
-        appointment = self.appointment()
-        proposed_at = self.starts_at + timedelta(days=1)
-        proposal = self.proposal(appointment, proposed_starts_at=proposed_at)
-        self.book(company=self.beta, patient=self.beta_patient, clinician=self.colleague, starts_at=proposed_at)
-        with self.assertRaisesMessage(ValidationError, 'patient already has an appointment'):
-            respond_to_appointment_proposal(proposal=proposal, actor=self.patient_user, actor_role='patient', decision='accept')
-        proposal.refresh_from_db()
-        appointment.refresh_from_db()
-        self.assertEqual(proposal.status, 'pending')
-        self.assertEqual(appointment.starts_at, self.starts_at)
-
-    def test_booking_rechecks_patient_after_intervening_proposal_acceptance(self):
-        appointment = self.appointment()
-        proposed_at = self.starts_at + timedelta(days=1)
-        proposal = self.proposal(appointment, proposed_starts_at=proposed_at)
-        respond_to_appointment_proposal(proposal=proposal, actor=self.patient_user, actor_role='patient', decision='accept')
-        with self.assertRaisesMessage(ValidationError, 'patient already has an appointment'):
-            self.book(company=self.beta, patient=self.beta_patient, clinician=self.colleague, starts_at=proposed_at)
-
-    def test_patient_clash_prevents_creating_proposal(self):
-        appointment = self.appointment()
-        proposed_at = self.starts_at + timedelta(days=1)
-        self.appointment(company=self.beta, patient=self.beta_patient, clinician=self.colleague, starts_at=proposed_at)
-        with self.assertRaisesMessage(ValidationError, 'patient already has an appointment'):
-            self.proposal(appointment, proposed_starts_at=proposed_at)
-
     def test_booking_locks_fresh_patient_identity_and_rejects_changed_key(self):
         manager = get_user_model().objects
         original = manager.select_for_update
@@ -272,19 +246,6 @@ class AppointmentLifecycleTests(AppointmentLifecycleFixture):
             with self.assertRaisesMessage(ValidationError, 'patient identity changed'):
                 self.book()
         self.assertFalse(Appointment.objects.exists())
-
-    def test_proposal_rejects_patient_identity_changed_while_waiting_for_lock(self):
-        appointment = self.appointment()
-        manager = get_user_model().objects
-        original = manager.select_for_update
-
-        def changed_identity(*args, **kwargs):
-            Patient.objects.filter(pk=self.patient.pk).update(user=None)
-            return original(*args, **kwargs)
-
-        with patch.object(manager, 'select_for_update', side_effect=changed_identity):
-            with self.assertRaisesMessage(ValidationError, 'appointment patient changed'):
-                self.proposal(appointment)
 
     def test_status_rejects_patient_identity_changed_while_waiting_for_lock(self):
         appointment = self.appointment()

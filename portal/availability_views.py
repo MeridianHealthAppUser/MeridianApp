@@ -18,7 +18,7 @@ from care.availability import (
     SAST, appointments_requiring_attention, attention_kind, cancel_time_off, create_days_off,
     diary_day_states, remove_special_day, save_working_pattern, set_special_day, undo_diary_change,
 )
-from care.models import DoctorSpecialDay, DoctorTimeOff, DoctorWorkingPattern
+from care.models import Appointment, DoctorSpecialDay, DoctorTimeOff, DoctorWorkingPattern
 
 from .availability_forms import (
     WORKING_PERIODS, SpecialDayForm, TimeOffForm, WEEKDAYS, WorkingPatternFormSet, make_schedule_context, period_names,
@@ -95,7 +95,9 @@ def schedule_availability_context(request, company, membership, clinician, selec
         for special in special_days:
             special.remove_url = reverse('portal:availability-special-day-remove', args=[special.pk]) + '?' + params
             special.overridden = states[special.date]['kind'] == 'off'
-    affected = appointments_requiring_attention(company=company, clinician=clinician)
+    # Appointments needing attention is the practice's list, for moving bookings; clinicians don't get it.
+    affected = (Appointment.objects.none() if membership.role == membership.Role.DOCTOR
+                else appointments_requiring_attention(company=company, clinician=clinician))
     affected_page = Paginator(affected, 20).get_page(request.GET.get('affected_page'))
     affected_appointments = list(affected_page.object_list)
     for appointment in affected_appointments:

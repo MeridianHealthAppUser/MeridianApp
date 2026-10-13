@@ -200,14 +200,21 @@ class RecordsAndMessagesTests(TestCase):
     def test_overview_wording_matches_what_each_role_sees(self):
         self.login(self.dietitian)
         page = self.client.get(reverse('portal:desktop-dashboard'))
-        for text in ('Patients assigned to you', 'No patients are assigned to you yet.', 'Your booked appointments',
-                     'You have no upcoming appointments.', 'Your latest patient conversations', 'View patient messages'):
+        for text in ('Your upcoming appointments and open tasks.', 'Your booked appointments', 'You have no upcoming appointments.'):
             self.assertContains(page, text)
-        for stale in ('Open inbox', 'in this practice', 'View Patients', 'within Meridian Health'):
+        # Clinicians find patients in Patient Records and conversations in Messages, so Overview doesn't list them.
+        for stale in ('Open inbox', 'in this practice', 'View Patients', 'within Meridian Health', 'id="patients-heading"',
+                      'id="messages-heading"', 'Recent conversations', 'View patient messages'):
             self.assertNotContains(page, stale)
+        self.assertNotIn('patients', page.context)
+        self.assertNotIn('recent_messages', page.context)
+        mobile = self.client.get(reverse('portal:mobile-dashboard'))
+        for stale in ('id="mobile-patients-heading"', 'id="mobile-messages-heading"'):
+            self.assertNotContains(mobile, stale)
         self.login(self.admin)
         page = self.client.get(reverse('portal:desktop-dashboard'))
-        self.assertContains(page, 'People currently receiving care')
+        for text in ('People currently receiving care', 'Recent conversations', 'Your latest patient conversations', 'View patient messages'):
+            self.assertContains(page, text)
         self.assertNotContains(page, 'Patients assigned to you')
 
     def test_back_to_conversation_returns_to_where_the_conversation_was_opened(self):

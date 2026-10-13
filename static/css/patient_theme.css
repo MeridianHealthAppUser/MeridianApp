@@ -122,13 +122,6 @@
 .patient-app .meridian-console :is(input[type="checkbox"], input[type="radio"]) { accent-color: var(--patient-teal-dark); }
 .patient-app .meridian-console .console-form ul.errorlist { color: var(--patient-rose); }
 
-/* Appointment suggestions inside a conversation. */
-.patient-app .meridian-console .appointment-proposal { background: var(--patient-bg); border-color: var(--patient-line); border-left-color: var(--patient-teal); }
-.patient-app .meridian-console .appointment-proposal--accepted { border-left-color: var(--patient-teal-dark); }
-.patient-app .meridian-console .proposal-status { background: var(--patient-accent-soft); color: var(--patient-teal-dark); }
-.patient-app .meridian-console :is(.proposal-create, .proposal-create__form, .proposal-create__empty) { border-color: var(--patient-accent-line); }
-.patient-app .meridian-console .proposal-error { background: var(--patient-rose-soft); border-color: var(--patient-rose-line); color: var(--patient-rose); }
-
 /* Care plan and delivery tables on My Treatment. */
 .patient-app .treatment-workspace :is(input:not([type=checkbox]), select, textarea) { border-color: var(--patient-field-line); color: var(--patient-ink); }
 .patient-app .treatment-workspace :is(input, select, textarea):focus-visible { outline-color: var(--patient-teal); }

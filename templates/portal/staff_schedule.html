@@ -174,7 +174,6 @@
                     <td class="staff-schedule-table__actions-cell" data-label="Actions">
                       <div class="staff-schedule-table__actions">
                         <a class="console-button console-button--secondary schedule-action" href="{% url 'portal:appointment-detail' appointment.pk %}">Appointment details</a>
-                        {% if appointment.proposal_url %}<a class="console-button console-button--secondary schedule-action" href="{{ appointment.proposal_url }}">{{ appointment.proposal_label }}</a>{% endif %}
                         <a class="console-button console-button--primary schedule-action" href="{% url 'portal:patient-detail' appointment.patient_id %}">Open record<span class="sr-only"> for {{ appointment.patient }}</span></a>
                       </div>
                     </td>
@@ -215,6 +214,7 @@
         </section>
       {% endif %}
 
+      {# The practice's list for moving bookings; clinicians see each booking's status only. #}{% if not is_doctor %}
         <section class="staff-page-card schedule-attention-card" aria-labelledby="affected-appointments-heading">
           <header class="staff-page-card__header">
             <div><h2 id="affected-appointments-heading">Appointments needing attention</h2><p>Future bookings at {{ company.name }} outside working hours, outside special hours or on leave.</p></div>
@@ -239,6 +239,7 @@
           {% endif %}
           <p class="schedule-attention-note">Existing appointments stay booked. Agree a new time with the patient before changing an appointment.</p>
         </section>
+      {% endif %}
       </div>
     {% endif %}
   {% endif %}

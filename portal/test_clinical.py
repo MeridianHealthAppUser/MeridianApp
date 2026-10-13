@@ -432,7 +432,7 @@ class ClinicalPortalTests(TestCase):
         lab = self.uploaded_lab()
         review_lab_request(lab_request=lab, actor=self.doctor, review_note='Internal laboratory interpretation.')
         self.login(self.patient_user)
-        for route in ('patient-dashboard', 'patient-progress', 'patient-account', 'patient-labs'):
+        for route in ('patient-dashboard', 'patient-progress', 'patient-profile', 'patient-labs'):
             with self.subTest(route=route):
                 response = self.client.get(reverse(f'portal:{route}'))
                 self.assertNotContains(response, 'Signed clinician narrative not for portal.')

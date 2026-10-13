@@ -99,6 +99,19 @@
 .patient-card-actions__wide { justify-content: center; width: 100%; }
 .patient-card-actions--split > .patient-card-actions__wide { grid-column: 1 / -1; }
 .workspace-page .meridian-console .console-button.patient-button--rose { border-color: var(--patient-rose-line); color: var(--console-red); }
+/* A filled red button, such as Sign out. */
+.workspace-page .meridian-console .console-button.patient-button--red { background: var(--console-red); border-color: var(--console-red); color: #fff; }
+.workspace-page .meridian-console .console-button.patient-button--red:hover { background: color-mix(in srgb, var(--console-red) 86%, #000); border-color: color-mix(in srgb, var(--console-red) 86%, #000); }
+/* Buttons one above the other, each the full width of the card. */
+.patient-card-actions--stack { flex-direction: column; }
+.patient-card-actions--stack > form { margin: 0; }
+.patient-card-actions--stack .console-button { justify-content: center; width: 100%; }
+/* A document's text in a dialog, scrolling inside so Close stays in view. */
+.patient-document { border: 1px solid var(--console-soft-line); border-radius: .7rem; color: var(--console-ink); font-size: .86rem; line-height: 1.65; margin-bottom: 1rem; max-height: min(60vh, 34rem); overflow: auto; overflow-wrap: anywhere; padding: 1rem; white-space: pre-wrap; }
+/* A choice with its Save button at the right, on the same line; the button goes underneath on a phone. */
+.patient-preference { align-items: center; display: flex; gap: .75rem 1.5rem; justify-content: space-between; }
+.patient-preference > .console-form__field { flex: 1 1 auto; min-width: 0; }
+.patient-preference > .console-button { flex: 0 0 auto; }
 .workspace-page .meridian-console .console-button.patient-button--rose:hover { background: var(--patient-rose-soft); }
 
 .patient-chip-row { display: flex; flex-wrap: wrap; gap: .4rem; }
@@ -187,6 +200,8 @@ a.patient-chip { display: inline-block; text-decoration: none; }
 }
 
 @media (max-width: 42rem) {
+  .patient-preference { align-items: stretch; flex-direction: column; }
+  .patient-preference > .console-button { justify-content: center; }
   .patient-two-up { grid-template-columns: 1fr; }
   .patient-bar { flex-direction: column; gap: .55rem; }
   .patient-bar > .patient-pill { min-width: 0; }

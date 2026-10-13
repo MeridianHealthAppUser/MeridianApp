@@ -174,12 +174,17 @@ class TaskManagementTests(TestCase):
 
     def test_task_type_and_freeform_tag_filters_compose(self):
         TaskTagAssignment.objects.create(company=self.company, task=self.created_task, tag=self.tag)
-        self.login()
+        # Free-form tags filter the practice's task list; a clinician's has no tag filter.
+        self.login(self.admin)
         response = self.client.get(reverse('portal:staff-tasks'), {'kind': 'general', 'tag': self.tag.pk})
         self.assertEqual([task.pk for task in response.context['tasks']], [self.created_task.pk])
         response = self.client.get(reverse('portal:staff-tasks'), {'kind': 'patient', 'tag': self.tag.pk})
         self.assertEqual(list(response.context['tasks']), [])
+        self.login()
         response = self.client.get(reverse('portal:staff-tasks'), {'kind': 'patient'})
+        self.assertEqual([task.pk for task in response.context['tasks']], [self.own_task.pk])
+        # A tag left in the address doesn't filter a clinician's list.
+        response = self.client.get(reverse('portal:staff-tasks'), {'kind': 'patient', 'tag': self.tag.pk})
         self.assertEqual([task.pk for task in response.context['tasks']], [self.own_task.pk])
 
     def test_task_filters_are_in_a_filters_menu_where_patients_and_tags_tick_any(self):
@@ -197,16 +202,29 @@ class TaskManagementTests(TestCase):
         # Only patients in your tasks are offered.
         self.assertContains(response, f'<input type="checkbox" name="patient" value="{self.patient.pk}">')
         self.assertNotContains(response, f'name="patient" value="{self.inactive_patient.pk}"')
+        # Clinicians have no Free-form tag section.
+        self.assertEqual([section['label'] for section in response.context['filter_menu']['sections']], ['Status', 'Task type', 'Patient'])
+        self.assertNotContains(response, 'name="tag"')
 
         def tasks(**query):
             return {task.pk for task in self.client.get(url, {'status': 'all', **query}).context['tasks']}
 
+        self.assertEqual(tasks(patient=[self.patient.pk]), {self.own_task.pk})
+        self.login(self.admin)
+        self.assertIn('Free-form tag', [section['label'] for section in self.client.get(url).context['filter_menu']['sections']])
         self.assertEqual(tasks(tag=[self.tag.pk]), {self.created_task.pk})
         self.assertEqual(tasks(tag=[self.tag.pk, second_tag.pk]), {self.created_task.pk, self.own_task.pk})
-        self.assertEqual(tasks(patient=[self.patient.pk]), {self.own_task.pk})
         response = self.client.get(url, {'status': 'all', 'tag': [self.tag.pk, second_tag.pk]})
         self.assertContains(response, '<span class="filter-menu__badge">3<span class="sr-only"> applied</span></span>')
         self.assertContains(response, f'<a class="filter-menu__clear" href="{url}">Clear all</a>')
+
+    def test_a_tasks_patient_is_a_tag_as_in_messages(self):
+        self.login()
+        response = self.client.get(reverse('portal:staff-tasks'), {'status': 'all'})
+        self.assertContains(response, 'person_tags.css')
+        link = response.content.decode().split(f'<a class="staff-task-table__patient" href="{reverse("portal:patient-detail", args=[self.patient.pk])}">', 1)[1].split('</a>', 1)[0]
+        self.assertIn(f'<span class="person-tag person-tag--patient" title="{self.patient} · Patient">', link)
+        self.assertContains(response, '<span class="staff-task-table__general">General practice</span>', html=True)
 
     def test_task_rows_have_secondary_buttons_then_a_tick_to_complete(self):
         self.login()
@@ -217,8 +235,8 @@ class TaskManagementTests(TestCase):
         self.assertContains(response, 'css/task_list.css')
 
     def test_invalid_type_and_foreign_tag_filters_do_not_fall_back_to_all_tasks(self):
-        self.login()
-        for field, value in (('kind', 'unsupported-type'), ('tag', self.foreign_tag.pk)):
+        for user, field, value in ((self.doctor, 'kind', 'unsupported-type'), (self.admin, 'tag', self.foreign_tag.pk)):
+            self.login(user)
             with self.subTest(field=field):
                 response = self.client.get(reverse('portal:staff-tasks'), {field: value})
                 self.assertEqual(response.status_code, 200)

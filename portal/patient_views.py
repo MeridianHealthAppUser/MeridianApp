@@ -4,11 +4,8 @@ from datetime import timedelta
 from urllib.parse import urlencode
 
 from django import forms
-from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.core.exceptions import ValidationError
 from django.core.paginator import Paginator
-from django.db import transaction
 from django.db.models import Count, DateTimeField, DurationField, ExpressionWrapper, F, IntegerField, OuterRef, Q, Subquery, Value
 from django.db.models.functions import Cast, Coalesce
 from django.http import Http404
@@ -17,20 +14,18 @@ from django.urls import reverse
 from django.utils import timezone
 from django.views import View
 
-from care.forms import AppointmentProposalForm, PatientMessageForm, PatientThreadForm, WeightEntryForm
+from care.forms import PatientMessageForm, PatientThreadForm, WeightEntryForm
 from care.models import (
-    Appointment, ConsentRecord, MessageThread, PatientMessage, PracticeSettings, WeightEntry,
+    Appointment, MessageThread, PatientMessage, PracticeSettings, WeightEntry,
 )
-from care.messaging import recipient_choices
 from care.services import record_audit
-from practices.models import Patient
 from video.access import attach_video_join
 
 from .inbox import latest_from, search_text, search_threads
-from .patient_context import make_patient_context, validate_patient_context
+from .patient_context import make_patient_context
 from .people_tags import in_join_order
 from .video_links import safe_video_link
-from .views import PatientPortalRequiredMixin, PatientThreadCreateView, _attach_appointment_proposals
+from .views import PatientPortalRequiredMixin, PatientThreadCreateView
 
 
 APPOINTMENT_STATUS_CHOICES = (('upcoming', 'Upcoming'), ('history', 'Past and cancelled'), ('all', 'All appointments'))
@@ -63,17 +58,6 @@ class MessageFilterForm(forms.Form):
     status = forms.ChoiceField(choices=(
         ('all', 'All conversations'), ('open', 'Open'), ('closed', 'Closed'),
     ))
-
-
-class PatientContactForm(forms.Form):
-    # Deliberately not a broad profile ModelForm: identity, access and care-team
-    # fields are not editable through a patient's contact-details form.
-    # The title is printed on PathCare blood test forms; the care team can set it too.
-    title = forms.ChoiceField(choices=[('', 'No title'), *Patient.Title.choices], required=False)
-    phone = forms.CharField(label='Contact number', max_length=32, required=False,
-                            widget=forms.TextInput(attrs={'type': 'tel', 'autocomplete': 'tel'}))
-    city = forms.CharField(max_length=120, required=False,
-                           widget=forms.TextInput(attrs={'autocomplete': 'address-level2'}))
 
 
 # Five sidebar destinations. Pages without their own entry light up the one
@@ -196,7 +180,7 @@ def _appointment_list(request, company, patient, now):
 
 
 def patient_appointments_context(request, company, patient):
-    from .patient_summary import RENEWAL_WINDOW_DAYS, current_authorization, current_plan, next_consult, pending_proposals
+    from .patient_summary import RENEWAL_WINDOW_DAYS, current_authorization, current_plan, next_consult
 
     context = patient_page_context(request, company, patient, 'appointments', 'My Appointments')
     consult = next_consult(request, company, patient)
@@ -204,7 +188,7 @@ def patient_appointments_context(request, company, patient):
     renewal_due = None
     if authorization is not None and consult is None and (authorization.expires_on - timezone.localdate()).days <= RENEWAL_WINDOW_DAYS:
         renewal_due = authorization.expires_on
-    context.update(next_consult=consult, proposals=pending_proposals(request, company, patient), renewal_due=renewal_due)
+    context.update(next_consult=consult, renewal_due=renewal_due)
     now = timezone.now()
     # The appointment just booked, at the top of the page this once.
     just_booked = Appointment.objects.for_company(company).filter(
@@ -214,41 +198,9 @@ def patient_appointments_context(request, company, patient):
         attach_video_join([just_booked], request.user.pk, allowed_role='patient', now=now)
     context['just_booked'] = just_booked
     context.update(_appointment_list(request, company, patient, now))
-    # A new time is suggested in the patient's open conversation with that appointment's clinician.
-    thread_for = {}
-    for open_thread in MessageThread.objects.for_company(company).filter(patient=patient, is_closed=False).prefetch_related('participant_links'):
-        for link in open_thread.participant_links.all():
-            thread_for.setdefault(link.user_id, open_thread)
-    eligible_ids = set()
-    for open_thread in {open_thread.pk: open_thread for open_thread in thread_for.values()}.values():
-        proposal_form = AppointmentProposalForm(
-            company=company, patient=patient, thread=open_thread, actor=request.user, actor_role='patient',
-        )
-        eligible_ids |= set(proposal_form.fields['appointment'].queryset.filter(
-            pk__in=[appointment.pk for appointment in context['appointments']],
-        ).values_list('pk', flat=True))
-    # Without a conversation to suggest a time in, the patient messages the appointment's clinician, or
-    # their assigned clinician when that clinician was never assigned to them and so can't be chosen.
-    recipients = recipient_choices(patient)
-    recipient_ids = {clinician.pk for clinician in recipients}
     for appointment in context['appointments']:
         # Never turn an untrusted imported link into an executable URL.
         appointment.video_link = safe_video_link(appointment.video_link)
-        can_reschedule = appointment.status == Appointment.Status.BOOKED and appointment.starts_at > now
-        can_rebook = appointment.status in (Appointment.Status.CANCELLED, Appointment.Status.NO_SHOW)
-        thread = thread_for.get(appointment.clinician_id)
-        if can_reschedule or can_rebook:
-            if thread and appointment.pk in eligible_ids:
-                appointment.proposal_url = (
-                    f'{reverse("portal:patient-messages")}?thread={thread.pk}&appointment={appointment.pk}'
-                    f'#appointment-proposals-{thread.pk}'
-                )
-                appointment.proposal_label = 'Suggest New Time' if can_reschedule else 'Ask to Rebook'
-            elif not thread and recipients:
-                to = appointment.clinician if appointment.clinician_id in recipient_ids else recipients[0]
-                query = urlencode({'compose': 1, 'to': to.pk, 'subject': 'My appointment'})
-                appointment.proposal_url = f'{reverse("portal:patient-messages")}?{query}#patient-conversation'
-                appointment.proposal_label = f'Message {to.full_name}'
     return context
 
 
@@ -365,17 +317,6 @@ def patient_messages_context(request, company, patient, *, selected_thread_id=No
     )
     if request.method == 'GET':
         record_audit(company=company, actor=request.user, patient=patient, action='message.thread_viewed', target=selected, request=request)
-    return _attach_appointment_proposals(context, request, company, patient, actor_role='patient', allowed=True)
-
-
-def patient_account_context(request, company, patient, **overrides):
-    context = patient_page_context(request, company, patient, 'account', 'Account settings')
-    context.update(
-        contact_form=PatientContactForm(initial={'title': patient.title, 'phone': patient.phone, 'city': patient.city}),
-        details_change_url=f"{reverse('portal:patient-messages')}?{urlencode({'compose': 1, 'subject': 'Change to my personal details'})}#patient-conversation",
-        consents=ConsentRecord.objects.for_company(company).filter(patient=patient).order_by('-created_at', '-pk'),
-    )
-    context.update(overrides)
     return context
 
 
@@ -404,45 +345,3 @@ class PatientMessagesView(PatientThreadCreateView):
 
     def get(self, request):
         return render(request, 'portal/patient_messages.html', patient_messages_context(request, self.patient_company, self.patient))
-
-
-class PatientAccountView(LoginRequiredMixin, PatientPortalRequiredMixin, View):
-    http_method_names = ('get', 'head', 'post', 'options')
-
-    def get(self, request):
-        return render(request, 'portal/patient_account.html', patient_account_context(request, self.patient_company, self.patient))
-
-    def post(self, request):
-        form = PatientContactForm(request.POST)
-        try:
-            validate_patient_context(request, self.patient_company, self.patient)
-        except ValidationError as error:
-            form.add_error(None, error)
-        if not form.is_valid():
-            return render(request, 'portal/patient_account.html', patient_account_context(
-                request, self.patient_company, self.patient, contact_form=form,
-            ))
-        with transaction.atomic():
-            patient = get_object_or_404(
-                Patient.objects.select_for_update(), pk=self.patient.pk, user=request.user,
-                company=self.patient_company, company__is_active=True, is_active=True,
-            )
-            # A form from before the title was added leaves the title as it is.
-            fields = ('title', 'phone', 'city') if 'title' in request.POST else ('phone', 'city')
-            changed = [name for name in fields if getattr(patient, name) != form.cleaned_data[name]]
-            if changed:
-                for name in changed:
-                    setattr(patient, name, form.cleaned_data[name])
-                patient.save(update_fields=(*changed, 'updated_at'))
-            if 'title' in changed:
-                record_audit(company=self.patient_company, actor=request.user, patient=patient,
-                             action='patient.title_updated', target=patient, request=request)
-            contact = [name for name in changed if name != 'title']
-            if contact:
-                record_audit(
-                    company=self.patient_company, actor=request.user, patient=patient,
-                    action='patient.contact_updated', target=patient, request=request,
-                    metadata={'changed_fields': contact},
-                )
-        messages.success(request, 'Your details have been saved for this practice.')
-        return redirect('portal:patient-account')

@@ -11,7 +11,7 @@ from django.urls import reverse
 from django.utils import timezone
 
 from care.messaging import add_participant
-from care.models import Appointment, AppointmentProposal, AuditEvent, MessageThread, MessageThreadParticipant, PatientMessage
+from care.models import Appointment, AuditEvent, MessageThread, MessageThreadParticipant, PatientMessage
 from care.widgets import floor_quarter_hour
 from practices.models import Company, CompanyMembership, Patient
 from practices.services import ACTIVE_COMPANY_SESSION_KEY
@@ -97,7 +97,7 @@ class StaffInboxTests(TestCase):
         return f'{self.inbox_url()}?thread={thread.pk}'
 
     def record_thread_url(self, thread):
-        # Replies and suggestions sent from the record's Messages tab go back there.
+        # Replies sent from the record's Messages tab go back there.
         record = reverse('portal:patient-detail', args=[thread.patient_id])
         return f'{record}?tab=messages&thread={thread.pk}'
 
@@ -223,7 +223,8 @@ class StaffInboxTests(TestCase):
         self.assertEqual(dict(MessageThreadParticipant.objects.values_list('pk', 'last_read_at')), positions)
 
     def test_desktop_and_mobile_link_to_staff_inbox(self):
-        self.login()
+        # The practice's Overview lists recent conversations; a clinician's has none and opens Messages from Patient Records.
+        self.login(self.administrator)
         for name in ('desktop-dashboard', 'mobile-dashboard'):
             with self.subTest(workspace=name):
                 response = self.client.get(reverse(f'portal:{name}'))
@@ -464,77 +465,6 @@ class StaffInboxTests(TestCase):
         self.assertIn('body', response.context['record_message_form'].errors)
         self.assertEqual(response.context['record_message_form']['body'].value(), draft)
         self.assertFalse(PatientMessage.objects.exists())
-
-    def test_inbox_proposal_returns_to_conversation_without_changing_booking(self):
-        appointment = self.make_appointment()
-        original_time = appointment.starts_at
-        self.login()
-        response = self.client.post(reverse('portal:staff-appointment-propose', args=[self.older_thread.pk]), {
-            'appointment': appointment.pk, 'proposed_starts_at': (original_time + timedelta(days=1)).isoformat(),
-            'note': 'Would this new time work?', 'return_to': 'inbox',
-        })
-        self.assertRedirects(response, self.record_thread_url(self.older_thread), fetch_redirect_response=False)
-        proposal = AppointmentProposal.objects.get()
-        self.assertEqual((proposal.thread_id, proposal.status), (self.older_thread.pk, 'pending'))
-        appointment.refresh_from_db()
-        self.assertEqual(appointment.starts_at, original_time)
-
-    def test_invalid_inbox_proposal_keeps_thread_and_form_input(self):
-        appointment = self.make_appointment()
-        self.login()
-        response = self.client.post(reverse('portal:staff-appointment-propose', args=[self.older_thread.pk]), {
-            'appointment': appointment.pk, 'proposed_starts_at': 'bad-date',
-            'note': 'Retain this proposal explanation.', 'return_to': 'inbox',
-        })
-        self.assertEqual(response.status_code, 400)
-        self.assertEqual(response.context['record_thread'].pk, self.older_thread.pk)
-        self.assertEqual(response.context['failed_form'], 'proposal_form')
-        form = response.context['record_thread'].proposal_form
-        self.assertIn('proposed_starts_at', form.errors)
-        self.assertEqual(form['note'].value(), 'Retain this proposal explanation.')
-        self.assertFalse(AppointmentProposal.objects.exists())
-
-    def test_inbox_acceptance_of_patient_proposal_returns_to_same_conversation(self):
-        appointment = self.make_appointment()
-        new_time = appointment.starts_at + timedelta(days=1)
-        self.login(self.patient_user)
-        response = self.client.post(reverse('portal:patient-appointment-propose', args=[self.older_thread.pk]), {
-            'appointment': appointment.pk, 'proposed_starts_at': new_time.isoformat(),
-        })
-        self.assertEqual(response.status_code, 302)
-        proposal = AppointmentProposal.objects.get()
-        self.login()
-        response = self.client.post(reverse('portal:staff-appointment-respond', args=[proposal.pk]), {
-            'decision': 'accept', 'return_to': 'inbox',
-        })
-        self.assertRedirects(response, self.record_thread_url(self.older_thread), fetch_redirect_response=False)
-        appointment.refresh_from_db()
-        self.assertEqual(appointment.starts_at, new_time)
-
-    def test_conflicting_proposal_acceptance_renders_error_in_selected_inbox_thread(self):
-        appointment = self.make_appointment()
-        original_time = appointment.starts_at
-        new_time = original_time + timedelta(days=1)
-        self.login(self.patient_user)
-        response = self.client.post(reverse('portal:patient-appointment-propose', args=[self.older_thread.pk]), {
-            'appointment': appointment.pk, 'proposed_starts_at': new_time.isoformat(),
-        })
-        self.assertEqual(response.status_code, 302)
-        proposal = AppointmentProposal.objects.get()
-        Appointment.objects.create(
-            company=self.other_company, patient=self.other_practice_patient,
-            clinician=self.doctor, starts_at=new_time, duration_minutes=30,
-        )
-        self.login()
-        response = self.client.post(reverse('portal:staff-appointment-respond', args=[proposal.pk]), {
-            'decision': 'accept', 'return_to': 'inbox',
-        })
-        self.assertEqual(response.status_code, 400)
-        self.assertEqual(response.context['record_thread'].pk, self.older_thread.pk)
-        self.assertEqual(response.context['failed_proposal_id'], proposal.pk)
-        self.assertTrue(response.context['proposal_error'])
-        appointment.refresh_from_db()
-        self.assertEqual(appointment.starts_at, original_time)
 
     def test_the_page_has_no_intro_or_count_cards_and_rows_open_the_patient_record(self):
         self.add_message()

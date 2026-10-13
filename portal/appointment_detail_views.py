@@ -1,6 +1,8 @@
 from datetime import timedelta
+from urllib.parse import quote, urlencode
 
 from django import forms
+from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.exceptions import ValidationError
@@ -8,6 +10,7 @@ from django.db.models import Q
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
+from django.utils.formats import date_format
 from django.utils.decorators import method_decorator
 from django.views import View
 from django.views.decorators.cache import never_cache
@@ -150,12 +153,17 @@ class AppointmentDetailMixin:
         company = self.patient_company if self.patient_portal else self.company
         context = patient_page_context(request, company, self.patient, 'appointments', 'Appointment details') if self.patient_portal else dict(company=company, active_membership=self.membership, nav_section='schedule')
         context.update(appointment=appointment, can_edit=self.can_edit(appointment),
-            # Patients reach the appointment's clinician; staff reach only their own conversations.
-            conversation=MessageThread.objects.for_company(company).filter(
-                patient=appointment.patient, is_closed=False,
-                participants=appointment.clinician if self.patient_portal else request.user).first(),
+            # Staff reach only their own conversations with the patient.
+            conversation=None if self.patient_portal else MessageThread.objects.for_company(company).filter(
+                patient=appointment.patient, is_closed=False, participants=request.user).first(),
             form=form if form is not None else AppointmentStatusForm(attendance=self.attendance(appointment), staff=not self.patient_portal),
             workflow_context=request.POST.get('workflow_context', '') if request.method == 'POST' else make_workflow_context(request, company, 'appointment-status', appointment, patient=self.patient if self.patient_portal else None))
+        if self.patient_portal:
+            # A patient asks support for a new time by email, and the practice moves the appointment.
+            when = date_format(timezone.localtime(appointment.starts_at), 'D j M Y, H:i')
+            subject = f'Request for Appointment Change: {appointment.patient.first_name} {appointment.patient.last_name}, {when} SAST'
+            context.update(support_email=settings.SUPPORT_EMAIL,
+                           change_request_url=f"mailto:{settings.SUPPORT_EMAIL}?{urlencode({'subject': subject}, quote_via=quote)}")
         allowed_role = 'patient' if self.patient_portal else ('doctor' if self.membership.is_clinician else None)
         context.update(appointment_video_context(request, appointment, allowed_role=allowed_role))
         if not self.patient_portal:
@@ -178,7 +186,7 @@ class AppointmentDetailMixin:
             token = validate_workflow_context(request, company, 'appointment-status', appointment, patient=self.patient if self.patient_portal else None)
             if valid:
                 change_appointment_status(appointment=appointment, actor=request.user, expected_updated=token['updated'], patient_portal=self.patient_portal, request=request, **form.cleaned_data)
-                messages.success(request, 'Appointment status recorded. Any pending time suggestion is no longer active.')
+                messages.success(request, 'Appointment status recorded.')
                 return redirect('portal:patient-appointment-detail' if self.patient_portal else 'portal:appointment-detail', pk=pk)
         except ValidationError as error:
             for message in error.messages:

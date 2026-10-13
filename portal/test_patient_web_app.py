@@ -1,24 +1,22 @@
 """The patient web app's five sections show only what the record holds."""
 
 import re
-from datetime import datetime, time, timedelta
+from datetime import timedelta
 from decimal import Decimal
 from pathlib import Path
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.staticfiles import finders
-from django.test import Client, TestCase, override_settings
+from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
-from care.availability import SAST
 from care.messaging import add_participant
 from care.models import (
-    Appointment, AppointmentProposal, AuditEvent, MedicationProduct, MessageThread, PatientEvent, PatientMessage,
+    Appointment, AuditEvent, MedicationProduct, MessageThread, PatientEvent, PatientMessage,
     PracticeSettings, TreatmentAuthorization, WeightEntry,
 )
-from care.scheduling import propose_appointment_time
 from care.treatment import create_authorization, enroll_local_subscription
 from practices.models import Company, CompanyMembership, Patient
 from practices.services import ACTIVE_PATIENT_COMPANY_SESSION_KEY
@@ -183,51 +181,6 @@ class PatientWebAppTests(TestCase):
         self.assertContains(response, f'action="{reverse("portal:patient-basket-item", args=[supply.pk])}"')
         self.assertNotContains(response, f'action="{reverse("portal:patient-basket-item", args=[earlier.pk])}"')
 
-    def test_doctors_see_appointment_suggestions_only_when_there_is_one_and_patients_can_still_suggest(self):
-        from practices.services import ACTIVE_COMPANY_SESSION_KEY
-
-        appointment = self.book()
-        mine = self.page('patient-messages', thread=self.thread.pk)
-        self.assertContains(mine, 'Suggest a different appointment time')
-        doctor = Client()
-        doctor.force_login(self.doctor)
-        session = doctor.session
-        session[ACTIVE_COMPANY_SESSION_KEY] = self.company.pk
-        session.save()
-        inbox = reverse('portal:staff-inbox') + f'?thread={self.thread.pk}'
-        response = doctor.get(inbox)
-        self.assertEqual(response.status_code, 200)
-        for hidden in ('Appointment suggestions', 'Suggest a different appointment time'):
-            self.assertNotContains(response, hidden)
-        # "Offer a new time" on the calendar opens the conversation with the form ready for that appointment.
-        record = reverse('portal:patient-detail', args=[self.patient.pk])
-        offered = doctor.get(f'{record}?tab=messages&thread={self.thread.pk}&appointment={appointment.pk}')
-        self.assertContains(offered, 'Suggest a different appointment time')
-        self.assertContains(offered, f'action="{reverse("portal:staff-appointment-propose", args=[self.thread.pk])}"')
-        self.assertEqual(str(offered.context['record_thread'].proposal_form['appointment'].value()), str(appointment.pk))
-        proposed = datetime.combine(timezone.localdate() + timedelta(days=5), time(10), tzinfo=SAST)
-        propose_appointment_time(appointment=appointment, thread=self.thread, actor=self.user, actor_role='patient',
-                                 proposed_starts_at=proposed)
-        response = doctor.get(inbox)
-        self.assertContains(response, 'Appointment suggestions')
-        self.assertContains(response, 'value="accept"')
-        self.assertNotContains(response, 'Suggest a different appointment time')
-
-    def test_suggested_time_can_be_answered_from_my_appointments(self):
-        appointment = self.book()
-        proposed = datetime.combine(timezone.localdate() + timedelta(days=5), time(10), tzinfo=SAST)
-        proposal = propose_appointment_time(appointment=appointment, thread=self.thread, actor=self.doctor,
-                                            actor_role='doctor', proposed_starts_at=proposed)
-        response = self.page('patient-appointments')
-        self.assertContains(response, 'Time suggested')
-        self.assertContains(response, f'action="{reverse("portal:patient-appointment-respond", args=[proposal.pk])}"')
-        answered = self.client.post(reverse('portal:patient-appointment-respond', args=[proposal.pk]),
-                                    {'decision': 'decline', 'return_to': 'appointments'})
-        self.assertRedirects(answered, reverse('portal:patient-appointments'), fetch_redirect_response=False)
-        proposal.refresh_from_db()
-        self.assertEqual(proposal.status, AppointmentProposal.Status.DECLINED)
-        self.assertNotContains(self.page('patient-appointments'), 'Time suggested')
-
     def test_weight_logged_on_home_returns_to_home(self):
         home = self.page('patient-dashboard')
         data = {'patient_context': home.context['patient_context'], 'weight_kg': '91.20',
@@ -254,7 +207,7 @@ class PatientWebAppTests(TestCase):
         self.assertContains(filtered, 'Nothing here yet')
 
     def test_brand_theme_is_loaded_last_on_patient_pages_only(self):
-        for name in ('patient-dashboard', 'patient-treatment', 'patient-appointments', 'patient-messages', 'patient-pharmacy', 'patient-account'):
+        for name in ('patient-dashboard', 'patient-treatment', 'patient-appointments', 'patient-messages', 'patient-pharmacy', 'patient-profile'):
             with self.subTest(page=name):
                 html = self.page(name).content.decode()
                 self.assertIn('<body class="workspace-page patient-app">', html)

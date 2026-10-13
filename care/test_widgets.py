@@ -5,7 +5,7 @@ from datetime import datetime, time
 
 from django.test import SimpleTestCase
 
-from care.forms import AppointmentProposalForm, ClinicalTaskForm
+from care.forms import ClinicalTaskForm
 from care.widgets import (
     QuarterHourDateTimeField, QuarterHourDateTimeWidget, QuarterHourTimeField, QuarterHourTimeWidget,
     floor_quarter_hour, on_quarter_hour,
@@ -56,7 +56,7 @@ class QuarterHourPickerTests(SimpleTestCase):
 
     def test_every_date_and_time_picker_on_the_platform_uses_quarter_hours(self):
         fields = (
-            (ClinicalTaskForm, 'due_at'), (TaskEditorForm, 'due_at'), (AppointmentProposalForm, 'proposed_starts_at'),
+            (ClinicalTaskForm, 'due_at'), (TaskEditorForm, 'due_at'),
             (ConsultationForm, 'occurred_at'), (SpecialDayForm, 'starts_at'), (SpecialDayForm, 'ends_at'),
         )
         for form, name in fields:

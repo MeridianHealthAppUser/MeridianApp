@@ -194,7 +194,7 @@ def patient_treatment_context(request, company, patient, *, enrollment_form=None
     """My Treatment: tasks, the record the doctor has on file, and the care plan."""
     from .patient_summary import (
         current_authorization, intake_answers, latest_weight, medical_information, medical_profile,
-        next_consult, open_lab_requests, patient_tasks, pending_proposals,
+        next_consult, open_lab_requests, patient_tasks,
     )
 
     context = patient_page_context(request, company, patient, 'treatment', 'My Treatment')
@@ -210,7 +210,7 @@ def patient_treatment_context(request, company, patient, *, enrollment_form=None
         next_consult=consult,
         tasks=patient_tasks(
             authorization=authorization, plan=current, consult=consult, weight=weight, profile=profile,
-            labs=open_lab_requests(company, patient), proposals=pending_proposals(request, company, patient),
+            labs=open_lab_requests(company, patient),
         ),
         medical_rows=medical_information(profile=profile, intake=intake_answers(company, patient), weight=weight),
         medical_profile=profile,

@@ -68,19 +68,6 @@ class MessageManagementTests(AppointmentLifecycleFixture):
                 self.manage(**changes)
         self.assertFalse(AuditEvent.objects.exists())
 
-    def test_close_blocks_pending_proposal_and_preserves_booking(self):
-        appointment = self.appointment()
-        proposal = self.proposal(appointment)
-        self.thread.refresh_from_db()
-        with self.assertRaisesMessage(ValidationError, 'pending appointment suggestions'):
-            self.manage(action='close')
-        self.thread.refresh_from_db()
-        proposal.refresh_from_db()
-        appointment.refresh_from_db()
-        self.assertFalse(self.thread.is_closed)
-        self.assertEqual(proposal.status, 'pending')
-        self.assertEqual(appointment.status, 'booked')
-
     def test_close_and_reopen_preserve_messages_and_do_not_change_appointments(self):
         appointment = self.appointment()
         message = post_patient_message(thread=self.thread, sender=self.patient_user, body='Original question')
@@ -105,11 +92,6 @@ class MessageManagementTests(AppointmentLifecycleFixture):
         with self.assertRaisesMessage(ValidationError, 'conversation changed'):
             self.manage(action='close')
         self.assertFalse(MessageThread.objects.get(pk=self.thread.pk).is_closed)
-
-    def test_other_practice_pending_proposal_does_not_block_unrelated_thread(self):
-        self.proposal(self.appointment())
-        self.assertTrue(self.manage(thread=self.beta_thread, expected_updated=self.beta_thread.updated_at.isoformat(),
-                                    action='close').is_closed)
 
     def test_reassignment_leaves_conversations_with_the_previous_clinician(self):
         from .patient_assignment import assign_doctor

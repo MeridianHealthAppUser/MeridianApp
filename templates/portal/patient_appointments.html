@@ -20,23 +20,6 @@
 
 {% block patient_content %}
 <div class="patient-page-stack patient-appointments__body">
-  {% for proposal in proposals %}
-    <section class="patient-bar patient-bar--urgent" aria-labelledby="proposal-{{ proposal.pk }}-title">
-      <span class="patient-pill patient-pill--amber">Time suggested</span>
-      <div class="patient-bar__copy">
-        <h2 class="patient-bar__title" id="proposal-{{ proposal.pk }}-title">{{ proposal.proposed_by.full_name }} suggested {{ proposal.proposed_starts_at|date:"l j F \a\t H:i" }} SAST</h2>
-        <p class="patient-bar__body">{% if proposal.kind == 'rebook' %}To rebook your consult from {{ proposal.original_starts_at|date:"j F" }}.{% else %}Instead of {{ proposal.original_starts_at|date:"l j F \a\t H:i" }}.{% endif %}{% if proposal.note %} “{{ proposal.note }}”{% endif %} Nothing changes until you accept it.</p>
-        <form class="patient-bar__actions" method="post" action="{% url 'portal:patient-appointment-respond' proposal.pk %}">
-          {% csrf_token %}
-          <input type="hidden" name="return_to" value="appointments">
-          <button class="console-button console-button--primary" type="submit" name="decision" value="accept">That time works</button>
-          <button class="console-button console-button--secondary" type="submit" name="decision" value="decline">Decline</button>
-          <a class="console-button console-button--secondary" href="{% url 'portal:patient-messages' %}?thread={{ proposal.thread_id }}#appointment-proposals-{{ proposal.thread_id }}">Suggest another time</a>
-        </form>
-      </div>
-    </section>
-  {% endfor %}
-
   {% include 'portal/includes/patient_next_consult.html' with consult=just_booked eyebrow='Booked' %}
 
   <section class="console-card" aria-labelledby="patient-appointments-heading">
@@ -59,11 +42,10 @@
                 <td data-label="Clinician">{% if appointment.clinician %}{{ appointment.clinician.full_name }}{% else %}Your care team{% endif %}</td>
                 <td data-label="Status"><span class="console-status console-status--{{ appointment.status }}">{{ appointment.get_status_display }}</span></td>
                 <td class="patient-table__fit" data-label="Actions">
-                  {# Download (a calendar file) and Suggest New Time, then View Appointment; Join comes first while the room is open. #}
+                  {# Download (a calendar file), then View Appointment; Join comes first while the room is open. A new time is asked of support, and the practice moves the appointment. #}
                   <div class="patient-table__actions">
                     {% if appointment.video_room_url %}{% include 'portal/includes/video_join_link.html' %}{% endif %}
                     <a class="console-button console-button--secondary" data-no-loader href="{% url 'portal:patient-appointment-calendar' appointment.pk %}" aria-label="Download to your calendar"><svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4m10-4v4M3 10h18M12 13v5m-2.5-2.5L12 18l2.5-2.5"/></svg>Download</a>
-                    <a class="console-button console-button--secondary" href="{% if appointment.proposal_url %}{{ appointment.proposal_url }}{% else %}{% url 'portal:patient-messages' %}{% endif %}"><svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a3 3 0 0 1-3 3H9l-6 3V6a3 3 0 0 1 3-3h12a3 3 0 0 1 3 3Z"/><path d="M7 8h10M7 12h7"/></svg>{% if appointment.proposal_url %}{{ appointment.proposal_label }}{% else %}Contact Care Team{% endif %}</a>
                     <a class="console-button {% if appointment.video_room_url %}console-button--secondary{% else %}console-button--primary{% endif %}" href="{% url 'portal:patient-appointment-detail' appointment.pk %}">View Appointment</a>
                   </div>
                 </td>
@@ -77,9 +59,6 @@
     {% endif %}
   </section>
   {% include 'portal/includes/patient_pagination.html' with pagination_label='Appointment' %}
-  <aside class="patient-care-notice">
-    <p><strong>Need a different time?</strong> You or your clinician can suggest a new time in Messages. Your existing appointment stays in place until the other person accepts the change.</p>
-  </aside>
 </div>
 
 {# Opened by Book Appointment above, or by ?book=1 from links on other pages; it stays open to show a mistake. #}

@@ -6,7 +6,7 @@ from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
 from django.utils import timezone
 
-from care.models import Appointment, AppointmentProposal, ClinicalEncounter, CompoundingRecord, LabRequest, TreatmentAuthorization
+from care.models import Appointment, ClinicalEncounter, CompoundingRecord, LabRequest, TreatmentAuthorization
 from care.services import record_audit
 from .models import Company, CompanyMembership, Patient
 
@@ -17,7 +17,7 @@ class ActiveClinicalWorkError(ValidationError):
 
 def _require_no_active_clinical_work(company, user):
     # Called while company and user are locked: clinical/treatment writes share
-    # the company lock; booking/proposal writes share the clinician's user lock.
+    # the company lock; booking writes share the clinician's user lock.
     # Past booked visits still need the doctor to record attendance, so there
     # is deliberately no starts_at cutoff for unresolved appointments.
     dependencies = (
@@ -31,9 +31,6 @@ def _require_no_active_clinical_work(company, user):
         )),
         ('booked appointments', Appointment.objects.filter(
             company=company, clinician=user, status=Appointment.Status.BOOKED,
-        )),
-        ('pending appointment changes', AppointmentProposal.objects.filter(
-            company=company, original_clinician=user, status=AppointmentProposal.Status.PENDING,
         )),
         ('unsigned consultations', ClinicalEncounter.objects.filter(
             company=company, clinician=user,

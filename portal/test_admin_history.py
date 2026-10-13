@@ -5,7 +5,6 @@ from datetime import timedelta
 from django.test import override_settings
 from django.urls import reverse
 
-from care.scheduling import respond_to_appointment_proposal
 from care.test_appointment_lifecycle import AppointmentLifecycleFixture
 from practices.services import ACTIVE_COMPANY_SESSION_KEY
 
@@ -28,8 +27,3 @@ class AdminHistoryTests(AppointmentLifecycleFixture):
         labels = self.history_labels()
         for label in ('Appointment cancelled', 'Appointment completion recorded', 'Appointment non-attendance recorded'):
             self.assertIn(label, labels)
-
-    def test_an_agreed_new_time_is_shown(self):
-        proposal = self.proposal(self.appointment())
-        respond_to_appointment_proposal(proposal=proposal, actor=self.patient_user, actor_role='patient', decision='accept')
-        self.assertIn('Appointment time changed', self.history_labels())

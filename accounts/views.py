@@ -57,17 +57,23 @@ class AccountProfileView(LoginRequiredMixin, View):
             'membership_page': page,
             'has_staff_access': has_staff_access,
             'has_patient_access': has_patient_access,
-            'is_patient_portal': has_patient_access and not has_staff_access,
         })
 
     def get(self, request):
+        from practices.models import CompanyMembership, Patient
+
+        # Patients have their own My profile in the patient app, with their details as the practice holds them.
+        if (scope_queryset(Patient.objects.filter(user=request.user, is_active=True, company__is_active=True)).exists() and
+                not scope_queryset(CompanyMembership.objects.filter(user=request.user, is_active=True, company__is_active=True)).exists()):
+            return redirect('portal:patient-profile')
         return self.display(request)
 
     def post(self, request):
-        from practices.models import CompanyMembership
+        from practices.models import CompanyMembership, Patient
 
-        # Staff names are maintained centrally (Users and roles); staff read them here but can't change them.
-        if scope_queryset(CompanyMembership.objects.filter(user=request.user, is_active=True, company__is_active=True)).exists():
+        # Staff names are maintained centrally (Users and roles), and a patient's by their care team: neither changes them here.
+        if any(scope_queryset(model.objects.filter(user=request.user, is_active=True, company__is_active=True)).exists()
+               for model in (CompanyMembership, Patient)):
             raise PermissionDenied('Your details are maintained by the practice.')
         user = get_object_or_404(get_user_model(), pk=request.user.pk, is_active=True)
         form = AccountProfileForm(request.POST, instance=user)

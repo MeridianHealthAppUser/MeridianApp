@@ -127,8 +127,6 @@
           {% endfor %}
         </ol>
 
-        {% include 'portal/includes/appointment_proposals.html' with thread=selected_thread %}
-
         {% if not selected_thread.is_closed %}
           <form class="console-form patient-conversation-reply" method="post" action="{% url 'portal:patient-message-create' selected_thread.pk %}">
             {% csrf_token %}

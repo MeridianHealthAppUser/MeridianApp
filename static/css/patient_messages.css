@@ -46,7 +46,6 @@
 .patient-conversation-message__meta { color: var(--console-muted); display: flex; flex-wrap: wrap; font-size: .68rem; gap: .2rem .5rem; margin-top: .35rem; }
 .patient-conversation-message__meta strong { font-weight: 500; }
 .patient-conversation-message--mine .patient-conversation-message__meta { justify-content: flex-end; }
-.patient-conversation > .appointment-proposals { border-top: 1px solid var(--console-soft-line); padding: 1rem 1.25rem; }
 .patient-conversation-reply { border-top: 1px solid var(--console-line); gap: .6rem; margin: 0; padding: .9rem 1.25rem 1rem; }
 .patient-conversation-reply textarea { min-height: 4.5rem; }
 .patient-conversation-reply__footer { align-items: center; display: flex; flex-wrap: wrap; gap: .6rem; justify-content: space-between; }
@@ -71,9 +70,8 @@
 }
 
 @media (max-width: 34rem) {
-  .patient-conversation__header, .patient-conversation-messages, .patient-conversation-reply, .patient-compose, .patient-conversation > .appointment-proposals { padding-left: 1rem; padding-right: 1rem; }
+  .patient-conversation__header, .patient-conversation-messages, .patient-conversation-reply, .patient-compose { padding-left: 1rem; padding-right: 1rem; }
   .patient-conversation-message { max-width: 92%; }
   .patient-conversation-reply__footer { align-items: stretch; flex-direction: column; }
   .patient-compose__actions > * { flex: 1 1 auto; justify-content: center; }
-  .patient-conversation .appointment-proposal__times { grid-template-columns: minmax(0, 1fr); }
 }

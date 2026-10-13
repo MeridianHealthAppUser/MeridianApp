@@ -1,4 +1,6 @@
 """Shared account identity, role-aware destinations and safe sign-out markup."""
+import re
+
 from django.test import override_settings
 from django.contrib.auth import get_user_model
 from django.test import TestCase
@@ -76,9 +78,12 @@ class AccountMenuPresentationTests(TestCase):
         self.assertContains(response, 'Account menu for Nadia Mokoena, Patient')
         self.assertContains(response, 'id="patient-company-select"')
         self.assertNotContains(response, 'class="patient-console__account"')
-        for name in ('patient-account', 'patient-privacy', 'patient-data-requests'):
-            self.assertIn(reverse(f'portal:{name}'), self.menu(response))
-        self.assertNotIn(reverse('portal:account-access-history'), self.menu(response))
+        # My profile and Sign out only: the password, preferences, consents and data requests are on My profile.
+        links = self.menu(response).split('aria-label="Your account">', 1)[1].split('</nav>', 1)[0]
+        self.assertEqual(re.findall(r'<a href="([^"]+)">([^<]+)</a>', links), [(reverse('portal:patient-profile'), 'My profile')])
+        self.assertIn('<button type="submit">Sign out</button>', self.menu(response))
+        for url in (reverse('accounts:profile'), reverse('accounts:password-change'), reverse('portal:account-access-history')):
+            self.assertNotIn(f'href="{url}"', self.menu(response))
 
     def test_mixed_identity_matches_the_portal_and_keeps_switch_links(self):
         Patient.objects.create(company=self.company, user=self.doctor, first_name='Sam', last_name='Marchant')
@@ -89,6 +94,9 @@ class AccountMenuPresentationTests(TestCase):
         patient = self.client.get(reverse('portal:patient-dashboard'))
         self.assertContains(patient, 'Account menu for Sam Marchant, Patient')
         self.assertIn('Switch to workspace', self.menu(patient))
+        # My profile follows the side they're on.
+        self.assertIn(f'href="{reverse("accounts:profile")}"', self.menu(staff))
+        self.assertIn(f'href="{reverse("portal:patient-profile")}"', self.menu(patient))
 
     def test_account_security_page_keeps_identity_for_all_authenticated_accounts(self):
         for user, label in ((self.doctor, 'Doctor'), (self.patient_user, 'Patient'), (self.unassigned, 'Account')):

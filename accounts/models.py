@@ -83,4 +83,10 @@ class User(AbstractUser):
         name = ' '.join(filter(None, [self.given_name, self.last_name.strip()]))
         return f'{self.get_title_display()} {name}' if self.title and name else self.full_name
 
+    @property
+    def formal_name(self):
+        """Their title and surname, "Dr Westraadt", or their titled name when either is missing."""
+        last = self.last_name.strip()
+        return f'{self.get_title_display()} {last}' if self.title and last else self.titled_name
+
 # Create your models here.

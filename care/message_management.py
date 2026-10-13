@@ -7,7 +7,7 @@ from django.db import transaction
 from practices.models import Company, CompanyMembership
 from practices.tenancy import require_enabled_company
 from .messaging import hand_over, is_participant
-from .models import AppointmentProposal, MessageThread
+from .models import MessageThread
 from .services import record_audit
 
 
@@ -34,8 +34,6 @@ def manage_conversation(*, thread, actor, action, expected_updated, doctor=None,
     closed = action == 'close'
     if thread.is_closed == closed:
         return thread
-    if closed and AppointmentProposal.objects.for_company(company).filter(thread=thread, status='pending').exists():
-        raise ValidationError('Resolve or withdraw pending appointment suggestions before closing this conversation. The appointment is unchanged.')
     thread.is_closed = closed
     thread.save(update_fields=('is_closed', 'updated_at'))
     record_audit(company=company, actor=actor, patient=thread.patient, action='message.thread_closed' if closed else 'message.thread_reopened', target=thread, request=request)

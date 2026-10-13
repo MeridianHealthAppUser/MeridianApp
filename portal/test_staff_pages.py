@@ -3,7 +3,7 @@
 from django.test import override_settings
 from datetime import datetime, time, timedelta
 from html.parser import HTMLParser
-from urllib.parse import parse_qs, urlsplit
+from urllib.parse import urlsplit
 from zoneinfo import ZoneInfo
 
 from django.contrib.auth import get_user_model
@@ -199,7 +199,8 @@ class StaffPagesTests(TestCase):
         self.assertEqual([patient.pk for patient in response.context['patients']], [self.patient.pk])
         overview = self.page('desktop-dashboard')
         self.assertEqual(overview.context['metrics']['patients'], 1)
-        self.assertEqual([patient.pk for patient in overview.context['patients']], [self.patient.pk])
+        # Overview doesn't list a clinician's patients; Patient Records does.
+        self.assertNotIn('patients', overview.context)
 
     def test_directory_search_and_clinician_filter_work_within_practice(self):
         self.login(self.administrator)
@@ -425,32 +426,24 @@ class StaffPagesTests(TestCase):
         self.assertNotIn(reverse('portal:staff-patient-record', args=[self.patient.pk]), parser.active_links)
         self.assertTrue(all(not urlsplit(href).fragment for href, label in parser.links))
 
-    def test_schedule_proposal_link_preselects_eligible_appointment_in_conversation(self):
+    def test_schedule_rows_offer_no_new_time_and_conversations_have_no_suggestions(self):
+        """A patient contacts support for a new time and the practice moves the booking (owner, 13 Oct 2026)."""
         thread = MessageThread.objects.create(
             company=self.company, patient=self.patient, subject='Review appointment arrangements',
         )
         add_participant(thread, self.doctor)
         self.login()
         response = self.page('staff-schedule', date=self.day.isoformat())
-        appointment = next(item for item in response.context['appointments'] if item.pk == self.midnight_appointment.pk)
-        proposal_url = urlsplit(appointment.proposal_url)
-        # The conversation opens on the record's Messages tab.
-        self.assertEqual(proposal_url.path, reverse('portal:patient-detail', args=[self.patient.pk]))
-        self.assertEqual(parse_qs(proposal_url.query)['appointment'], [str(appointment.pk)])
-        self.assertEqual(parse_qs(proposal_url.query)['thread'], [str(thread.pk)])
-        self.assertEqual(proposal_url.fragment, f'appointment-proposals-{thread.pk}')
-        response = self.client.get(appointment.proposal_url)
-        self.assertEqual(response.status_code, 200)
-        form = response.context['record_thread'].proposal_form
-        self.assertEqual(str(form['appointment'].value()), str(appointment.pk))
-        self.assertTrue(form.fields['appointment'].queryset.filter(pk=appointment.pk).exists())
+        self.assertIn(self.midnight_appointment.pk, [item.pk for item in response.context['appointments']])
+        for label in ('Offer a new time', 'Discuss rebooking', 'Start a conversation', 'appointment-proposals'):
+            self.assertNotContains(response, label)
+        self.assertContains(response, 'Appointment details')
         response = self.client.get(reverse('portal:patient-detail', args=[self.patient.pk]), {
-            'tab': 'messages', 'thread': thread.pk, 'appointment': self.foreign_appointment.pk,
+            'tab': 'messages', 'thread': thread.pk, 'appointment': self.midnight_appointment.pk,
         })
         self.assertEqual(response.status_code, 200)
-        form = response.context['record_thread'].proposal_form
-        self.assertFalse(form.fields['appointment'].queryset.filter(pk=self.foreign_appointment.pk).exists())
-        self.assertNotIn(f'<option value="{self.foreign_appointment.pk}"', str(form['appointment']))
+        for label in ('Appointment suggestions', 'Suggest a different appointment time', 'proposal-create'):
+            self.assertNotContains(response, label)
 
     def test_practice_switch_sends_a_doctor_from_admin_only_pages_to_the_overview(self):
         for name in ('ops-stock', 'treatment-subscriptions', 'metrics', 'treatment-review-rules', 'activity-statements'):

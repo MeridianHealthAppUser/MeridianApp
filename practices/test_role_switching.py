@@ -14,7 +14,7 @@ from care.availability import save_working_pattern
 from care.models import (
     Appointment, AppointmentProposal, AuditEvent, ClinicalEncounter, ClinicalTask,
     CompoundingRecord, DoctorWorkingPattern, LabRequest, LabResult, MedicationProduct,
-    MessageThread, PatientSubscription, TreatmentAuthorization,
+    PatientSubscription, TreatmentAuthorization,
 )
 from practices.models import Company, CompanyMembership, Patient
 from practices.role_switching import ActiveClinicalWorkError, can_switch_practice_role, switch_own_practice_role
@@ -371,21 +371,6 @@ class DoctorRoleContinuityTests(TestCase):
         self.assert_departure_blocked('active patient assignments')
         self.patient.refresh_from_db()
         self.patient.full_clean()
-
-    def test_pending_rebook_on_cancelled_appointment_also_blocks(self):
-        appointment = Appointment.objects.create(
-            company=self.company, patient=self.patient, clinician=self.admin,
-            starts_at=timezone.now() - timedelta(days=1), status='cancelled',
-        )
-        thread = MessageThread.objects.create(company=self.company, patient=self.patient, subject='Test booking')
-        AppointmentProposal.objects.create(
-            company=self.company, patient=self.patient, appointment=appointment, thread=thread,
-            proposed_by=self.admin, recipient=self.patient_user, proposer_role='doctor', kind='rebook',
-            original_clinician=self.admin, original_duration_minutes=15,
-            original_starts_at=appointment.starts_at, original_status='cancelled',
-            proposed_starts_at=timezone.now() + timedelta(days=1),
-        )
-        self.assert_departure_blocked('pending appointment changes')
 
     def test_historical_closed_records_and_ordinary_tasks_do_not_prevent_clean_departure(self):
         self.authorization(expires_on=timezone.localdate() - timedelta(days=1))

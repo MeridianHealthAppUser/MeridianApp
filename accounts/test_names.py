@@ -19,3 +19,8 @@ class TitledNameTests(SimpleTestCase):
                 self.assertEqual(User(first_name=first, last_name='Westraadt', title=title).titled_name, expected)
         self.assertEqual(User(first_name='Dr James', title='DR').given_name, 'James')
         self.assertEqual(User(email='only@example.test', title='DR').titled_name, 'only@example.test')
+
+    def test_the_formal_name_is_title_and_surname(self):
+        self.assertEqual(User(first_name='Dr James', last_name='Westraadt', title='DR').formal_name, 'Dr Westraadt')
+        self.assertEqual(User(first_name='James', last_name='Westraadt', title='').formal_name, 'James Westraadt')
+        self.assertEqual(User(first_name='James', title='DR').formal_name, 'Dr James')

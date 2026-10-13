@@ -53,7 +53,7 @@
           {% if weight_chart %}
             {% include 'portal/includes/patient_weight_chart.html' with chart=weight_chart chart_id='home-weight-chart' %}
             <p class="patient-home__legend"><span class="patient-home__legend-dot" aria-hidden="true"></span>Your recorded weight</p>
-            <p class="patient-home__note">Recorded check-ins only. The chart does not predict results or set a target; your doctor discusses goals with you at your consult.</p>
+            <p class="patient-home__note">Recorded check-ins only. The first four weeks are a starter dose, so little change is expected. After that, the aim is to lose 500g to 1kg per week. The projection assumes 700g per week towards the goal set by {% if care_doctor %}{{ care_doctor.formal_name }}{% else %}your doctor{% endif %} at your consult.</p>
           {% else %}
             <p class="patient-empty">No check-ins yet. Log your first weight below and it will appear here.</p>
           {% endif %}

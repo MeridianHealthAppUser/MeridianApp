@@ -17,7 +17,6 @@ from .messaging import add_participant, mark_read_by_staff
 from .models import Appointment, DoctorWorkingPattern, MessageThread, PatientMessage
 from .notifications import paused
 from .patient_care import book_patient_appointment
-from .scheduling import propose_appointment_time, respond_to_appointment_proposal
 from .services import post_patient_message
 from .team_messaging import mark_team_thread_read, post_team_message, start_team_conversation
 
@@ -199,23 +198,6 @@ class AppointmentNotificationTests(NotificationTestCase):
         self.assertEqual(self.emails(lambda: book_patient_appointment(
             company=self.company, patient=self.patient, actor=self.patient_user, clinician_id=self.doctor.pk,
             starts_at=starts_at, appointment_type='follow_up')), {})
-
-    def test_an_agreed_new_time_confirms_the_move_and_brings_a_new_reminder(self):
-        appointment, _ = self.book(self.doctor)
-        Appointment.objects.filter(pk=appointment.pk).update(reminder_sent_at=timezone.now())
-        proposal = propose_appointment_time(appointment=appointment, thread=self.thread, actor=self.doctor,
-                                            actor_role='doctor', proposed_starts_at=self.starts_at + timedelta(days=1))
-        sent = self.emails(lambda: respond_to_appointment_proposal(
-            proposal=proposal, actor=self.patient_user, actor_role='patient', decision='accept'))
-        when = self.when(self.starts_at + timedelta(days=1))
-        self.assertEqual(sent['nadia@notify.test'].subject, f'Your appointment has moved to {when}')
-        self.assertIn('Your appointment has moved to a new time.', sent['nadia@notify.test'].body)
-        self.assertEqual(sent['sam@notify.test'].subject, f'Appointment moved: Nadia Mokoena on {when}')
-        self.assertIn('An appointment with you has moved to a new time.', sent['sam@notify.test'].body)
-        # The "Appointment rescheduled" message in the conversation isn't emailed as well.
-        self.assertEqual(set(sent), {'nadia@notify.test', 'sam@notify.test'})
-        appointment.refresh_from_db()
-        self.assertIsNone(appointment.reminder_sent_at)
 
     def cancel(self, appointment, actor, reason, **options):
         appointment.refresh_from_db()

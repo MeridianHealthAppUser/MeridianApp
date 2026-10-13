@@ -17,7 +17,6 @@ from django.views.decorators.cache import never_cache
 from django.views.generic import DetailView, TemplateView
 
 from care.forms import (
-    AppointmentProposalForm,
     ClinicalNoteForm,
     ClinicalTaskForm,
     PatientMessageForm,
@@ -141,11 +140,12 @@ class StaffDashboardContextMixin(StaffCompanyRequiredMixin):
             active_membership=self.membership,
             today=today,
             metrics=metrics,
-            patients=patients.select_related('assigned_doctor')[:8],
             upcoming_appointments=upcoming_appointments[:8],
             open_tasks=attach_clinical_task_links(list(open_tasks[:8]), self.request.user, self.membership),
-            recent_messages=self.tagged(recent_threads[:6]),
         )
+        # Clinicians find their patients in Patient Records and conversations in Messages, so Overview doesn't list them.
+        if self.membership.role != self.membership.Role.DOCTOR:
+            context.update(patients=patients.select_related('assigned_doctor')[:8], recent_messages=self.tagged(recent_threads[:6]))
         return context
 
     def tagged(self, threads):
@@ -265,12 +265,11 @@ class ActivatePatientCompanyView(LoginRequiredMixin, View):
         next_path = request.POST.get('next', '').split('?', 1)[0].split('#', 1)[0]
         for destination in (
             'portal:patient-appointments', 'portal:patient-messages',
-            'portal:patient-progress', 'portal:patient-account', 'portal:patient-labs',
+            'portal:patient-progress', 'portal:patient-profile', 'portal:patient-labs',
             'portal:patient-treatment', 'portal:patient-subscription', 'portal:patient-medical-profile', 'portal:patient-updates',
             'portal:patient-pharmacy', 'portal:patient-orders',
-            'portal:patient-privacy', 'portal:patient-data-requests',
         ):
-            if next_path == reverse(destination) or (destination in ('portal:patient-labs', 'portal:patient-appointments', 'portal:patient-subscription', 'portal:patient-pharmacy', 'portal:patient-orders', 'portal:patient-data-requests') and next_path.startswith(reverse(destination))):
+            if next_path == reverse(destination) or (destination in ('portal:patient-labs', 'portal:patient-appointments', 'portal:patient-subscription', 'portal:patient-pharmacy', 'portal:patient-orders') and next_path.startswith(reverse(destination))):
                 return redirect(destination)
         return redirect('portal:patient-dashboard')
 
@@ -336,54 +335,6 @@ def _conversation_threads(company, patient, *, patient_view, viewer=None, mark_r
     return threads
 
 
-def _attach_appointment_proposals(context, request, company, patient, *, actor_role, allowed):
-    from care.models import AppointmentProposal
-
-    threads = context['message_threads']
-    open_thread_ids = {thread.pk for thread in threads if not thread.is_closed}
-    proposals = AppointmentProposal.objects.for_company(company).filter(
-        patient=patient, thread_id__in=[thread.pk for thread in threads],
-        thread__company=company, thread__patient=patient,
-        appointment__company=company, appointment__patient=patient,
-    ).filter(Q(resulting_appointment__isnull=True) | Q(resulting_appointment__company=company, resulting_appointment__patient=patient)).select_related('proposed_by', 'recipient', 'appointment', 'original_clinician', 'resulting_appointment')
-    by_thread = {}
-    for proposal in proposals:
-        pending = proposal.status == AppointmentProposal.Status.PENDING
-        thread_open = proposal.thread_id in open_thread_ids
-        doctor_matches = actor_role != 'doctor' or proposal.appointment.clinician_id == request.user.pk
-        proposal.can_respond = (
-            allowed and pending and thread_open and doctor_matches and proposal.recipient_id == request.user.pk
-            and proposal.proposed_by_id != request.user.pk and proposal.proposer_role != actor_role
-        )
-        proposal.can_withdraw = (
-            allowed and pending and thread_open and doctor_matches and proposal.proposed_by_id == request.user.pk
-            and proposal.proposer_role == actor_role
-        )
-        by_thread.setdefault(proposal.thread_id, []).append(proposal)
-    for thread in threads:
-        thread.appointment_proposals_list = by_thread.get(thread.pk, [])
-        thread.proposal_form = None
-        thread.has_selectable_appointments = False
-        failed_here = context.get('failed_form') == 'proposal_form' and context.get('reply_thread_id') == thread.pk
-        # Patients can always suggest a time. Staff suggest one only when they come from the calendar's
-        # "Offer a new time" or "Discuss rebooking" link (which opens this conversation for that appointment).
-        thread.offers_proposal_form = actor_role == 'patient' or failed_here or (
-            bool(request.GET.get('appointment')) and request.GET.get('thread') == str(thread.pk)
-        )
-        if allowed and not thread.is_closed and thread.offers_proposal_form:
-            if failed_here:
-                form = context['proposal_form']
-            else:
-                form = AppointmentProposalForm(
-                    company=company, patient=patient, thread=thread, actor=request.user, actor_role=actor_role,
-                    initial={'appointment': request.GET.get('appointment')},
-                )
-            thread.proposal_form = form
-            thread.has_selectable_appointments = form.has_selectable_appointments
-    context['can_propose_appointments'] = allowed
-    return context
-
-
 def _patient_record_context(request, company, membership, patient, **overrides):
     from video.access import attach_video_join
     from .clinical_tasks import attach_clinical_task_links
@@ -440,7 +391,7 @@ def _patient_record_context(request, company, membership, patient, **overrides):
         None,
     )
     context.update(overrides)
-    return _attach_appointment_proposals(context, request, company, patient, actor_role='doctor', allowed=can_add_note)
+    return context
 
 
 def _patient_portal_context(request, company, patient, **overrides):

@@ -539,13 +539,18 @@ class ScheduleCalendarTests(TestCase):
         self.assertContains(response, '08:00&ndash;10:00</span>')
         self.assertContains(response, 'Not working</p>', count=2)
         self.assertContains(response, 'Not working</li>')
-        # A booking left on leave is marked as in Day view.
+        # A booking left on leave shows its own status to the clinician, with no special mention.
         self.assertEqual(days[off_on]['appointments'][0].pk, on_leave.pk)
-        self.assertEqual(days[off_on]['appointments'][0].attention, 'day_off')
+        self.assertIsNone(days[off_on]['appointments'][0].attention)
+        self.assertNotContains(response, 'schedule-week__booking--attention')
+        self.assertNotContains(response, 'Doctor unavailable')
+        # The practice sees it marked, as in Day view.
+        self.login(self.admin)
+        response = self.page(view='week', clinician=self.doctor.pk)
+        self.assertEqual(self.week_days(response)[off_on]['appointments'][0].attention, 'day_off')
         self.assertContains(response, 'schedule-week__booking--attention', count=1)
         self.assertContains(response, 'schedule-pill--leave">Doctor unavailable')
         # Every clinician together has no single day state.
-        self.login(self.admin)
         response = self.page(view='week')
         self.assertIsNone(self.week_days(response)[off_on]['state'])
         self.assertNotContains(response, 'schedule-week__day--off')

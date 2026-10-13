@@ -100,7 +100,7 @@ def change_appointment_status(*, appointment, actor, status, expected_updated, c
     if appointment.status == status:
         return appointment
     if appointment.status != 'booked' or appointment.updated_at.isoformat() != expected_updated:
-        raise ValidationError('Only an unchanged booked appointment may be updated. Rebooking is a separate agreed proposal.')
+        raise ValidationError('Only an unchanged booked appointment may be updated. Rebooking is a new booking.')
     if status in ('completed', 'no_show') and appointment.starts_at + timedelta(minutes=appointment.duration_minutes) > timezone.now():
         raise ValidationError('Attendance can only be recorded after the appointment has ended.')
     if patient_portal and appointment.starts_at <= timezone.now():

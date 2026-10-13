@@ -20,10 +20,9 @@ from .availability import (
 from .forms import AppointmentForm
 from .messaging import add_participant
 from .models import (
-    Appointment, AppointmentProposal, AuditEvent, AvailabilitySlot, ClinicalTask,
-    DoctorSpecialDay, DoctorTimeOff, DoctorWorkingPattern, MessageThread, PatientEvent, PatientMessage,
+    Appointment, AuditEvent, AvailabilitySlot, ClinicalTask,
+    DoctorSpecialDay, DoctorTimeOff, DoctorWorkingPattern, MessageThread,
 )
-from .scheduling import propose_appointment_time, respond_to_appointment_proposal
 
 
 class AvailabilityTestData:
@@ -296,45 +295,6 @@ class DoctorAvailabilityTests(AvailabilityTestData, TestCase):
                 self.assertFalse(form.is_valid())
                 self.assertIn('starts_at', form.errors)
         self.assertFalse(Appointment.objects.exists())
-
-    def test_pending_proposal_acceptance_rechecks_new_time_off_without_mutation(self):
-        self.pattern()
-        appointment = self.appointment()
-        proposal = propose_appointment_time(
-            appointment=appointment, thread=self.thread, actor=self.doctor, actor_role='doctor', proposed_starts_at=self.at(10),
-        )
-        self.leave(company=self.beta)
-        before = (PatientMessage.objects.count(), PatientEvent.objects.count(), AuditEvent.objects.count())
-        with self.assertRaises(ValidationError):
-            respond_to_appointment_proposal(proposal=proposal, actor=self.patient_user, actor_role='patient', decision='accept')
-        appointment.refresh_from_db()
-        proposal.refresh_from_db()
-        self.assertEqual(appointment.starts_at, self.at(9))
-        self.assertEqual(proposal.status, AppointmentProposal.Status.PENDING)
-        self.assertEqual((PatientMessage.objects.count(), PatientEvent.objects.count(), AuditEvent.objects.count()), before)
-
-    def test_pending_proposal_acceptance_rechecks_a_changed_working_pattern(self):
-        self.pattern()
-        appointment = self.appointment()
-        proposal = propose_appointment_time(
-            appointment=appointment, thread=self.thread, actor=self.doctor, actor_role='doctor', proposed_starts_at=self.at(10),
-        )
-        self.pattern(days=self.days(starts=time(11)))
-        with self.assertRaises(ValidationError):
-            respond_to_appointment_proposal(proposal=proposal, actor=self.patient_user, actor_role='patient', decision='accept')
-        appointment.refresh_from_db()
-        proposal.refresh_from_db()
-        self.assertEqual(appointment.starts_at, self.at(9))
-        self.assertEqual(proposal.status, AppointmentProposal.Status.PENDING)
-
-    def test_new_proposals_are_rejected_outside_configured_hours(self):
-        self.pattern()
-        appointment = self.appointment()
-        with self.assertRaises(ValidationError):
-            propose_appointment_time(
-                appointment=appointment, thread=self.thread, actor=self.doctor, actor_role='doctor', proposed_starts_at=self.at(8),
-            )
-        self.assertFalse(AppointmentProposal.objects.exists())
 
 
 @override_settings(MULTI_PRACTICE_ENABLED=True)

@@ -5,9 +5,8 @@
 {% block card %}
       <div class="login-eyebrow-row"><a class="page-breadcrumbs__back page-breadcrumbs__back--large" href="{% url 'landing' %}" aria-label="Back to home" title="Back to home"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M19 12H5"/><path d="m11 6-6 6 6 6"/></svg></a><p class="eyebrow">Secure sign in</p></div>
       <h1 id="login-title">Welcome back</h1>
-      <p>Use the email address associated with your Meridian account.</p>
 
-      <form class="login-form" method="post" novalidate>
+      <form style="border-top: 1px solid #e5eeec;" class="login-form" method="post" novalidate>
         {% csrf_token %}
         {% if form.non_field_errors %}
           <ul class="login-errors" role="alert">
@@ -34,13 +33,13 @@
       </form>
 
       <div class="login-help">
-        Need help accessing your account? Please contact your practice administrator or <a href="mailto:support@meridianhealth.co.za">email Meridian support</a>.
+        Need help accessing your account? <a href="mailto:support@meridianhealth.co.za">Please email Meridian support</a>.
       </div>
 
-      <div class="login-new-patient">
+      <!-- <div class="login-new-patient">
         <div class="login-new-patient__text">
           Not a patient yet? Start with the questionnaire below.
         </div>
         <a class="login-secondary" href="{% url 'portal:questionnaire' %}">Get started</a>
-      </div>
+      </div> -->
 {% endblock %}

@@ -133,8 +133,10 @@ class SinglePracticeSurfacesTests(TestCase):
         session = self.client.session
         session[ACTIVE_PATIENT_COMPANY_SESSION_KEY] = self.other.pk
         session.save()
-        response = self.client.get(reverse('accounts:profile'))
-        self.assertEqual(list(response.context['membership_page']), [self.company])
+        self.assertRedirects(self.client.get(reverse('accounts:profile')), reverse('portal:patient-profile'),
+                             fetch_redirect_response=False)
+        response = self.client.get(reverse('portal:patient-profile'))
+        self.assertEqual(response.context['patient_company'], self.company)
         self.assertNotContains(response, 'company-switcher')
         self.assertNotContains(response, self.other.name)
         dashboard = self.client.get(reverse('portal:patient-dashboard'))

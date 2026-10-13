@@ -23,7 +23,7 @@
   <dialog class="app-dialog" id="conversation-manage" aria-labelledby="conversation-manage-title">
     <div class="app-dialog__body">
       <h2 id="conversation-manage-title">Message action</h2>
-      <p class="app-dialog__sub">In this conversation: {{ patient }}{% for row in thread.participant_rows %}, {{ row.user.full_name }}{% endfor %}. Only these people can read it. Closing keeps every message; resolve pending appointment suggestions first.</p>
+      <p class="app-dialog__sub">In this conversation: {{ patient }}{% for row in thread.participant_rows %}, {{ row.user.full_name }}{% endfor %}. Only these people can read it. Closing keeps every message.</p>
       <form class="console-form" method="post" action="{{ manage_url }}{% if conversation_return_to == 'record' %}?from=record{% endif %}" data-conversation-manage>
         {% csrf_token %}<input type="hidden" name="workflow_context" value="{{ thread.manage_context }}">
         {% for field in thread.manage_form %}{% if field.name == 'doctor' %}<div data-shows-for-action="handover">{% include 'portal/includes/form_field.html' %}</div>{% else %}{% include 'portal/includes/form_field.html' %}{% endif %}{% endfor %}
@@ -47,10 +47,6 @@
     <li class="record-conversation__empty">No messages in this conversation yet.</li>
   {% endfor %}
 </ol>
-
-{# Appointment suggestions take room, so they show only once this conversation has one to read or answer, #}
-{# or when the doctor came from the calendar to offer a new time for an appointment. #}
-{% if can_propose_appointments %}{% if thread.appointment_proposals_list or thread.proposal_form %}{% include 'portal/includes/appointment_proposals.html' with thread=thread %}{% endif %}{% endif %}
 
 {% if not patient.user_id %}
   <p class="record-messages__note">{{ patient.first_name }} doesn’t have a login yet, so they can’t read messages.</p>

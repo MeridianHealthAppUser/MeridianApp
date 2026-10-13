@@ -6,12 +6,12 @@ from django import forms
 from django.contrib.auth import get_user_model
 from django.core.exceptions import NON_FIELD_ERRORS, ValidationError
 from django.core.validators import MaxLengthValidator
-from django.db.models import Case, Q, When
+from django.db.models import Case, When
 from django.utils import timezone
 
 from practices.models import Company, CompanyMembership, Patient
 
-from .models import Appointment, AppointmentProposal, ClinicalNote, ClinicalTask, WeightEntry
+from .models import Appointment, ClinicalNote, ClinicalTask, WeightEntry
 from .tag_forms import TagFieldsMixin
 from .widgets import QUARTER_HOUR_CHOICES, QuarterHourDateTimeField, quarter_hour_text
 
@@ -284,79 +284,6 @@ class PatientThreadForm(PatientMessageForm):
         if recipient is None:
             raise ValidationError('You can message a clinician once your practice assigns one to you.')
         return recipient
-
-
-class ProposalAppointmentChoiceField(forms.ModelChoiceField):
-    def label_from_instance(self, appointment):
-        start = timezone.localtime(appointment.starts_at).strftime('%d %b %Y, %H:%M')
-        return (
-            f'{appointment.get_appointment_type_display()} · {start} · '
-            f'{appointment.clinician.full_name} ({appointment.get_status_display()})'
-        )
-
-
-class AppointmentProposalForm(forms.Form):
-    appointment = ProposalAppointmentChoiceField(queryset=Appointment.objects.none(), label='Appointment')
-    proposed_starts_at = QuarterHourDateTimeField(label='Suggested date and time (SAST)')
-    note = forms.CharField(
-        label='Message (optional)', max_length=2000, required=False,
-        widget=forms.Textarea(attrs={'rows': 2, 'placeholder': 'Add a note about the suggested time…'}),
-    )
-
-    def __init__(self, *args, company, patient, thread, actor, actor_role, **kwargs):
-        kwargs.setdefault('auto_id', f'proposal_{thread.pk}_%s')
-        super().__init__(*args, **kwargs)
-        appointments = Appointment.objects.for_company(company).filter(patient=patient).filter(
-            Q(status=Appointment.Status.BOOKED, starts_at__gt=timezone.now())
-            | Q(status__in=(Appointment.Status.CANCELLED, Appointment.Status.NO_SHOW)),
-        ).exclude(pk__in=AppointmentProposal.objects.for_company(company).filter(
-            kind=AppointmentProposal.Kind.REBOOK, status=AppointmentProposal.Status.ACCEPTED,
-        ).values('appointment_id')).filter(
-            clinician__is_active=True,
-            clinician__company_memberships__company=company,
-            clinician__company_memberships__is_active=True,
-            clinician__company_memberships__clinician_type__in=CompanyMembership.CLINICIAN_TYPES,
-        ).select_related('clinician').distinct()
-        if actor_role == 'doctor':
-            active_doctor = CompanyMembership.objects.filter(
-                company=company, user=actor, clinician_type__in=CompanyMembership.CLINICIAN_TYPES, is_active=True,
-            ).exists()
-            appointments = appointments.filter(clinician=actor) if active_doctor else appointments.none()
-        elif actor_role != 'patient' or patient.user_id != actor.pk:
-            appointments = appointments.none()
-        if (
-            thread.company_id != company.pk or thread.patient_id != patient.pk or thread.is_closed
-            or not company.is_active or not patient.is_active or not actor.is_active or not patient.user_id
-        ):
-            appointments = appointments.none()
-        # Only appointments whose clinician is in this conversation can be discussed in it.
-        appointments = appointments.filter(clinician__message_thread_links__thread=thread)
-        self.fields['appointment'].queryset = appointments
-        self.has_selectable_appointments = appointments.exists()
-
-    def clean_proposed_starts_at(self):
-        starts_at = self.cleaned_data['proposed_starts_at']
-        if starts_at <= timezone.now():
-            raise ValidationError('Choose a future appointment time.')
-        return starts_at
-
-    def clean(self):
-        cleaned = super().clean()
-        appointment = cleaned.get('appointment')
-        starts_at = cleaned.get('proposed_starts_at')
-        if appointment and starts_at:
-            if appointment.status == Appointment.Status.BOOKED and starts_at == appointment.starts_at:
-                self.add_error('proposed_starts_at', 'Choose a different time from the current appointment.')
-            else:
-                from .scheduling import ensure_clinician_available
-                try:
-                    ensure_clinician_available(
-                        company=appointment.company, clinician=appointment.clinician, starts_at=starts_at,
-                        duration_minutes=appointment.duration_minutes, exclude_appointment=appointment,
-                    )
-                except ValidationError as error:
-                    self.add_error('proposed_starts_at', ' '.join(error.messages))
-        return cleaned
 
 
 class EligibilityQuestionnaireForm(forms.Form):

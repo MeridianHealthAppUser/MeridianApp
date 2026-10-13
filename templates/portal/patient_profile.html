@@ -1,0 +1,146 @@
+{% extends 'portal/patient_page_base.html' %}
+{% load static workspace_ui %}
+
+{% block patient_extra_css %}<link rel="stylesheet" href="{% static 'css/filter_menu.css' %}?v=20261010a"><script src="{% static 'js/filter_menu.js' %}?v=20261008b" defer></script><link rel="stylesheet" href="{% static 'css/dialogs.css' %}?v=20261008b"><script src="{% static 'js/dialogs.js' %}?v=20261008a" defer></script>{% endblock %}
+{% block patient_breadcrumbs %}{% breadcrumbs 'My profile' %}{% endblock %}
+{% block patient_heading %}
+  <header class="patient-page-heading">
+    <div>
+      <h1>My profile</h1>
+    </div>
+  </header>
+{% endblock %}
+
+{% block patient_content %}
+  <div class="patient-two-up">
+    {# The practice keeps these; the patient asks for a change by email to support. #}
+    <section class="console-card" aria-labelledby="profile-details-heading">
+      <div class="console-card__body">
+        <h2 class="patient-eyebrow" id="profile-details-heading">Personal details</h2>
+        <dl class="patient-kv">
+          <div><dt>Title</dt><dd{% if not patient.title %} class="patient-kv__quiet"{% endif %}>{{ patient.get_title_display|default:"Not recorded" }}</dd></div>
+          <div><dt>Name</dt><dd>{{ patient.first_name }} {{ patient.last_name }}</dd></div>
+          <div><dt>Email</dt><dd>{{ user.email }}</dd></div>
+          <div><dt>Contact number</dt><dd{% if not patient.phone %} class="patient-kv__quiet"{% endif %}>{{ patient.phone|default:"Not recorded" }}</dd></div>
+          <div><dt>ID / passport</dt><dd{% if not patient.id_number %} class="patient-kv__quiet"{% endif %}>{{ patient.id_number|default:"Not recorded" }}</dd></div>
+          <div><dt>Date of birth</dt><dd{% if not patient.date_of_birth %} class="patient-kv__quiet"{% endif %}>{{ patient.date_of_birth|date:"j F Y"|default:"Not recorded" }}</dd></div>
+          <div><dt>City</dt><dd{% if not patient.city %} class="patient-kv__quiet"{% endif %}>{{ patient.city|default:"Not recorded" }}</dd></div>
+          <div><dt>Shipping address</dt><dd{% if not shipping_address %} class="patient-kv__quiet"{% endif %}>{{ shipping_address|default:"Not recorded" }}</dd></div>
+          <div><dt>Practice</dt><dd>{{ patient_company.name }}</dd></div>
+          <div><dt>Your clinician</dt><dd>{% if patient.assigned_doctor %}{{ patient.assigned_doctor.full_name }}{% else %}Your practice will assign a clinician{% endif %}</dd></div>
+          {% if patient.medical_record_number %}<div><dt>Record number</dt><dd>{{ patient.medical_record_number }}</dd></div>{% endif %}
+        </dl>
+        <div class="patient-card-actions"><a class="console-button console-button--secondary patient-card-actions__wide" href="{{ details_change_url }}">Request a change</a></div>
+        <p class="patient-small">Your care team keeps these details, so your record stays matched to your ID. Request a change emails {{ support_email }}. Your shipping address is the one on your latest supply request.</p>
+      </div>
+    </section>
+
+    <section class="console-card" aria-labelledby="profile-security-heading">
+      <div class="console-card__body">
+        <h2 class="patient-eyebrow" id="profile-security-heading">Security and account settings</h2>
+        <p class="patient-small">Your password protects your account and personal information.</p>
+        <dl class="patient-kv">
+          <div><dt>Account created</dt><dd>{{ user.date_joined|date:"j M Y" }}</dd></div>
+          <div><dt>Last sign-in</dt><dd{% if not user.last_login %} class="patient-kv__quiet"{% endif %}>{% if user.last_login %}{{ user.last_login|date:"j M Y, H:i" }} SAST{% else %}Not recorded{% endif %}</dd></div>
+          <div><dt>Password last changed</dt><dd{% if not user.last_change_password %} class="patient-kv__quiet"{% endif %}>{% if user.last_change_password %}{{ user.last_change_password|date:"j M Y, H:i" }} SAST{% else %}Not changed yet{% endif %}</dd></div>
+          <div><dt>Last reset with Forgot password</dt><dd{% if not user.last_forgot_password_reset %} class="patient-kv__quiet"{% endif %}>{% if user.last_forgot_password_reset %}{{ user.last_forgot_password_reset|date:"j M Y, H:i" }} SAST{% else %}Never{% endif %}</dd></div>
+        </dl>
+        <div class="patient-card-actions patient-card-actions--stack">
+          <a class="console-button console-button--secondary" href="{% url 'accounts:password-change' %}">Change password</a>
+          <form method="post" action="{% url 'accounts:logout' %}">{% csrf_token %}<button class="console-button patient-button--red" type="submit">Sign out</button></form>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <section class="console-card patient-page-section" id="profile-requests" aria-labelledby="profile-requests-heading">
+    <header class="console-card__header">
+      <div class="console-card__heading"><h2 id="profile-requests-heading">My data requests</h2><p>Requests and responses at {{ patient_company.name }}.</p></div>
+      <div class="patient-page-heading__actions">
+        {% include 'portal/includes/filter_menu.html' with filter_menu_class='filter-menu--compact' %}
+        <a class="console-button console-button--primary" href="{% url 'portal:patient-profile' %}?request=1#profile-requests" data-modal-open="new-data-request" aria-haspopup="dialog">New request</a>
+      </div>
+    </header>
+    <div class="patient-table-wrap">
+      <table class="patient-table" aria-labelledby="profile-requests-heading">
+        <thead><tr><th scope="col">Request</th><th scope="col">Submitted</th><th scope="col">Status</th><th class="patient-table__fit" scope="col">Actions</th></tr></thead>
+        <tbody>
+          {% for item in page_obj %}
+            <tr>
+              <td data-label="Request">{{ item.get_kind_display }}</td>
+              <td data-label="Submitted">{{ item.created_at|date:"j M Y, H:i" }}</td>
+              <td data-label="Status"><span class="console-status">{{ item.get_status_display }}</span></td>
+              <td class="patient-table__fit" data-label="Actions"><div class="patient-table__actions"><a class="console-button console-button--secondary" href="{% url 'portal:patient-data-request-detail' item.pk %}">Open request</a></div></td>
+            </tr>
+          {% empty %}
+            <tr><td class="patient-table__empty" colspan="4">{% if filter_menu.count %}No requests match these filters.{% else %}You haven’t made any requests yet.{% endif %}</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+  {% include 'portal/includes/patient_pagination.html' with pagination_label='Data request' pagination_fragment='profile-requests' %}
+
+  <section class="console-card patient-page-section" aria-labelledby="profile-consents-heading">
+    <header class="console-card__header"><div class="console-card__heading"><h2 id="profile-consents-heading">Recorded consent</h2><p>These historical records are unchanged by your marketing preference.</p></div></header>
+    <div class="console-card__body">
+      <ul class="patient-consent-list">
+        {% for consent in consents %}
+          <li>
+            <div><strong>{{ consent.get_consent_type_display }}</strong><small>Version {{ consent.document_version }} · {% if consent.accepted %}Accepted{% else %}Not accepted{% endif %}{% if consent.accepted_at %} · {{ consent.accepted_at|date:"j M Y" }}{% endif %}</small></div>
+            {# Read opens the text in a dialog. Without scripts, or with no text on record, it goes to the published page: the treatment terms on Terms, the rest on Privacy. #}
+            <a class="console-button console-button--secondary" href="{% if consent.consent_type == 'telehealth' %}{% url 'portal:public-terms' %}{% else %}{% url 'portal:public-privacy' %}{% endif %}?practice={{ patient_company.pk }}#document-{{ consent.consent_type }}"{% if consent.text %} data-modal-open="consent-text-{{ consent.pk }}" aria-haspopup="dialog"{% endif %} aria-label="Read the {{ consent.get_consent_type_display|lower }}">Read</a>
+          </li>
+        {% empty %}
+          <li><div class="patient-empty">No consent records available here yet.</div></li>
+        {% endfor %}
+      </ul>
+    </div>
+  </section>
+
+  <section class="console-card patient-page-section" id="profile-marketing" aria-labelledby="profile-marketing-heading">
+    <header class="console-card__header"><div class="console-card__heading"><h2 id="profile-marketing-heading">Optional marketing communications</h2><p>Manage your marketing preference without changing the consent already recorded for your care. This application does not currently send marketing emails.</p></div></header>
+    <div class="console-card__body">
+      <form class="console-form" method="post" action="{% url 'portal:patient-profile' %}">
+        {% csrf_token %}
+        <input type="hidden" name="privacy_context" value="{{ privacy_context }}">
+        {{ form.non_field_errors }}
+        <div class="patient-preference">
+          <div class="console-form__field">
+            {{ form.marketing_enabled }}
+            <label for="{{ form.marketing_enabled.id_for_label }}">{{ form.marketing_enabled.label }}</label>
+            <span class="helptext">{{ form.marketing_enabled.help_text }}</span>
+            {{ form.marketing_enabled.errors }}
+          </div>
+          <button class="console-button console-button--primary" type="submit">Save preferences</button>
+        </div>
+      </form>
+    </div>
+  </section>
+
+  {% for consent in consents %}{% if consent.text %}
+    <dialog class="app-dialog app-dialog--wide" id="consent-text-{{ consent.pk }}" aria-labelledby="consent-text-{{ consent.pk }}-title">
+      <div class="app-dialog__body">
+        <h2 id="consent-text-{{ consent.pk }}-title">{{ consent.text.title }}</h2>
+        <p class="app-dialog__sub">{{ consent.get_consent_type_display }} · Version {{ consent.text.version }} · Effective {{ consent.text.effective_from|date:"j F Y" }}{% if consent.text.pk != consent.document_id %} · The practice’s current version{% endif %}</p>
+        <div class="patient-document" tabindex="0">{{ consent.text.body }}</div>
+        <div class="app-dialog__actions"><button class="console-button console-button--primary" type="button" data-dialog-close autofocus>Close</button></div>
+      </div>
+    </dialog>
+  {% endif %}{% endfor %}
+
+  {# Opened by New request above, or by ?request=1 from links and without scripts; it stays open to show a mistake. #}
+  <dialog class="app-dialog" id="new-data-request" aria-labelledby="new-data-request-title"{% if request_dialog_open %} open{% endif %}>
+    <div class="app-dialog__body">
+      <h2 id="new-data-request-title">Ask about your information</h2>
+      <p class="app-dialog__sub">Your request goes to {{ patient_company.name }} for review. It doesn’t automatically delete information, change your medical record or cancel treatment.</p>
+      <form class="console-form" method="post" action="{% url 'portal:patient-data-request-create' %}">{% csrf_token %}
+        <input type="hidden" name="privacy_context" value="{{ request_context }}">
+        {% if request_form.non_field_errors %}<div role="alert">{{ request_form.non_field_errors }}</div>{% endif %}
+        {% include 'portal/includes/form_field.html' with field=request_form.kind %}
+        {% include 'portal/includes/form_field.html' with field=request_form.description %}
+        <div class="app-dialog__actions"><button class="console-button console-button--secondary" type="button" data-dialog-close>Cancel</button><button class="console-button console-button--primary" type="submit">Submit request</button></div>
+      </form>
+    </div>
+  </dialog>
+{% endblock %}

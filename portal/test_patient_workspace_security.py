@@ -1,14 +1,11 @@
 """Adversarial patient-workspace reads keep existing role and tenant boundaries."""
 
 from django.test import override_settings
-from datetime import timedelta
-
 from django.test import TestCase
 from django.urls import reverse
-from django.utils import timezone
 
 from care.messaging import add_participant
-from care.models import (Appointment, AppointmentProposal, AuditEvent, ClinicalEncounter,
+from care.models import (AuditEvent, ClinicalEncounter,
     ClinicalNote, ClinicalNoteTagAssignment, ClinicalTask, MessageThread, PatientMessage,
     RecordTag, TaskTagAssignment)
 from practices.models import CompanyMembership, Patient
@@ -203,12 +200,3 @@ class PatientWorkspaceSecurityTests(TestCase):
         self.assertTrue(target.tags_form.errors)
         self.assertEqual(target.tags_form['new_tag'].value(), 'x' * 65)
         self.assertEqual(AuditEvent.objects.count(), before)
-
-    def test_foreign_appointment_in_corrupt_proposal_is_not_shown_in_local_messages(self):
-        appointment = Appointment.objects.create(company=self.beta, patient=self.beta_patient, clinician=self.doctor,
-                                                starts_at=timezone.now() + timedelta(days=2))
-        AppointmentProposal.objects.create(company=self.alpha, patient=self.patient, appointment=appointment,
-            thread=self.thread, proposed_by=self.doctor, recipient=self.user, proposer_role='doctor', kind='reschedule',
-            original_starts_at=appointment.starts_at, original_status='booked', original_clinician=self.doctor,
-            original_duration_minutes=15, proposed_starts_at=appointment.starts_at + timedelta(hours=1), note='CORRUPT_FOREIGN_PROPOSAL_SECRET')
-        self.assertNotContains(self.get('messages'), 'CORRUPT_FOREIGN_PROPOSAL_SECRET')

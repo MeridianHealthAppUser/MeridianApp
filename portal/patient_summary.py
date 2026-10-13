@@ -14,7 +14,7 @@ from django.utils import timezone
 from django.utils.formats import date_format
 
 from care.models import (
-    Appointment, AppointmentProposal, LabRequest, Lead, PatientMedicalProfile, PatientSubscription,
+    Appointment, LabRequest, Lead, PatientMedicalProfile, PatientSubscription,
     ScreeningQuestionnaire, Shipment, TreatmentAuthorization, WeightEntry,
 )
 from care.treatment import authorization_is_current
@@ -78,16 +78,6 @@ def next_delivery(company, patient):
         status__in=(Shipment.Status.DRAFT, Shipment.Status.HELD, Shipment.Status.READY),
         scheduled_for__gte=timezone.localdate(),
     ).order_by('scheduled_for', 'pk').first()
-
-
-def pending_proposals(request, company, patient):
-    """Suggested appointment times this patient can answer, by the same rules as Messages."""
-    return list(AppointmentProposal.objects.for_company(company).filter(
-        patient=patient, recipient=request.user, status=AppointmentProposal.Status.PENDING,
-        proposer_role=AppointmentProposal.ProposerRole.DOCTOR,
-        thread__company=company, thread__patient=patient, thread__is_closed=False,
-        appointment__company=company, appointment__patient=patient,
-    ).exclude(proposed_by=request.user).select_related('proposed_by', 'appointment', 'thread').order_by('proposed_starts_at', 'pk')[:5])
 
 
 def open_lab_requests(company, patient):
@@ -164,7 +154,7 @@ def _task(title, body, actions, *, urgent=False):
             'actions': [{'label': label, 'url': url, 'primary': primary} for label, url, primary in actions]}
 
 
-def patient_tasks(*, authorization, plan, consult, weight, profile, labs, proposals):
+def patient_tasks(*, authorization, plan, consult, weight, profile, labs):
     """What needs doing, most urgent first. Each task disappears once its record changes."""
     today = timezone.localdate()
     book_url = reverse('portal:patient-appointments') + '?book=1'
@@ -184,15 +174,6 @@ def patient_tasks(*, authorization, plan, consult, weight, profile, labs, propos
             'Deliveries on your plan are held until your doctor renews your authorisation. Book a consult so they '
             'can review your treatment.',
             [('Book a consult', book_url, True)], urgent=True,
-        ))
-    for proposal in proposals:
-        local = timezone.localtime(proposal.proposed_starts_at)
-        when = f'{date_format(local, "j F")} at {local:%H:%M}'
-        tasks.append(_task(
-            'Reply to a suggested appointment time',
-            f'{proposal.proposed_by.full_name} suggested {when} SAST. Nothing changes until you accept it.',
-            [('Open the conversation', reverse('portal:patient-messages') + f'?thread={proposal.thread_id}'
-              f'#appointment-proposals-{proposal.thread_id}', True)],
         ))
     for lab in labs:
         due = f' Please have it done by {date_format(lab.due_on, "j F")}.' if lab.due_on else ''

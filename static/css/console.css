@@ -554,6 +554,17 @@
 .task-list__meta { color: var(--console-muted); font-size: .72rem; line-height: 1.45; margin: .3rem 0 0; }
 .task-list__footer { align-items: center; display: flex; justify-content: space-between; margin-top: .55rem; }
 .task-list__footer time { color: var(--console-muted); font-size: .7rem; }
+/* Overview's Open tasks: the task, its priority in the middle of the row, its button at the right. */
+.task-list__item--row { align-items: center; display: grid; gap: .55rem 1rem; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); }
+.task-list__details { min-width: 0; }
+.task-list__details strong { display: block; font-size: .84rem; line-height: 1.35; }
+.task-list__due { color: var(--console-muted); display: block; font-size: .7rem; margin-top: .3rem; }
+.task-list__actions { display: flex; justify-content: flex-end; }
+@media (max-width: 40rem) {
+  .task-list__item--row { grid-template-columns: minmax(0, 1fr) auto; }
+  .task-list__item--row .task-list__details { grid-column: 1 / -1; }
+  .task-list__item--row .console-priority { justify-self: start; }
+}
 .console-inline-form { display: inline; margin: 0; }
 
 .console-section {
@@ -802,93 +813,6 @@
 .conversation-thread__form,
 .record-thread__form { border-top: 1px solid var(--console-soft-line); margin: 0 .9rem; }
 
-.appointment-proposals {
-  border-top: 1px solid var(--console-soft-line);
-  margin-top: .15rem;
-  padding: .9rem;
-}
-.appointment-proposals__heading { align-items: baseline; display: flex; gap: .75rem; justify-content: space-between; }
-.appointment-proposals__heading h3 { color: var(--console-ink); font-size: .82rem; margin: 0; }
-.appointment-proposals__heading p { color: var(--console-muted); font-size: .67rem; line-height: 1.4; margin: .2rem 0 0; }
-.appointment-proposal-list { display: grid; gap: .65rem; margin-top: .7rem; }
-.appointment-proposal {
-  background: #f8fbfa;
-  border: 1px solid #dceae7;
-  border-left: .22rem solid var(--console-teal);
-  border-radius: .7rem;
-  padding: .75rem;
-}
-.appointment-proposal--accepted { border-left-color: var(--console-teal-dark); }
-.appointment-proposal--declined,
-.appointment-proposal--withdrawn { border-left-color: var(--console-amber); }
-.appointment-proposal--superseded { border-left-color: #9aadae; }
-.appointment-proposal__topline { align-items: center; display: flex; flex-wrap: wrap; gap: .45rem; justify-content: space-between; }
-.proposal-kind { color: var(--console-ink); font-size: .72rem; font-weight: 800; }
-.proposal-status {
-  background: #e7f4f1;
-  border-radius: 99rem;
-  color: var(--console-teal-dark);
-  font-size: .64rem;
-  font-weight: 800;
-  letter-spacing: .025em;
-  padding: .22rem .48rem;
-}
-.proposal-status--declined,
-.proposal-status--withdrawn { background: #fbf0dc; color: #87550f; }
-.proposal-status--superseded { background: #eef2f1; color: #687d7e; }
-.appointment-proposal__times { display: grid; gap: .55rem; grid-template-columns: repeat(2, minmax(0, 1fr)); margin-top: .72rem; }
-.appointment-proposal__times div { display: grid; gap: .18rem; min-width: 0; }
-.appointment-proposal__times span { color: var(--console-muted); font-size: .64rem; font-weight: 700; }
-.appointment-proposal__times strong { color: var(--console-ink); font-size: .74rem; line-height: 1.35; overflow-wrap: anywhere; }
-.appointment-proposal__people,
-.appointment-proposal__note,
-.appointment-proposal__waiting,
-.appointment-proposals__empty,
-.proposal-create__empty,
-.proposal-create__note {
-  color: var(--console-muted);
-  font-size: .73rem;
-  line-height: 1.48;
-  margin: .65rem 0 0;
-  overflow-wrap: anywhere;
-}
-.appointment-proposal__note { color: var(--console-ink); }
-.appointment-proposal__waiting { color: var(--console-teal-dark); font-weight: 700; }
-.proposal-error {
-  background: #fff3f1;
-  border: 1px solid #f1d3ce;
-  border-radius: .45rem;
-  color: var(--console-red);
-  font-size: .72rem;
-  line-height: 1.4;
-  margin: .65rem 0 0;
-  padding: .5rem .6rem;
-}
-.proposal-actions { display: flex; flex-wrap: wrap; gap: .45rem; margin-top: .75rem; }
-.proposal-actions .console-button { font-size: .72rem; min-height: 2.25rem; padding: .45rem .7rem; }
-.proposal-actions--withdraw { margin-top: .55rem; }
-.proposal-create {
-  background: var(--console-teal-soft);
-  border: 1px solid #cce5df;
-  border-radius: .7rem;
-  margin-top: .8rem;
-  overflow: hidden;
-}
-.proposal-create > summary {
-  color: var(--console-teal-dark);
-  cursor: pointer;
-  font-size: .76rem;
-  font-weight: 800;
-  list-style: none;
-  padding: .75rem;
-}
-.proposal-create > summary::-webkit-details-marker { display: none; }
-.proposal-create > summary::after { content: '+'; float: right; font-size: 1rem; font-weight: 500; }
-.proposal-create[open] > summary::after { content: '−'; }
-.proposal-create__form { background: #fff; border-top: 1px solid #cce5df; margin: 0 .75rem; }
-.proposal-create__form .console-button { justify-self: start; }
-.proposal-create__empty { background: #fff; border-top: 1px solid #cce5df; margin: 0; padding: .75rem; }
-
 /* Staff inbox */
 .inbox-content { max-width: 112rem; }
 /* Patients and Team tabs on Messages. */
@@ -991,9 +915,11 @@
 .staff-task-table__row--overdue td:first-child { box-shadow: inset .2rem 0 0 var(--console-amber); }
 .staff-task-table__task { color: var(--console-ink); min-width: 17rem; }
 .staff-task-table__task > strong { color: var(--console-ink); display: block; font-size: .82rem; line-height: 1.35; overflow-wrap: anywhere; }
-.staff-task-table__patient { color: var(--console-ink); font-weight: 800; text-decoration: none; }
-.staff-task-table__patient:hover,
-.staff-task-table__patient:focus-visible { color: var(--console-teal-dark); text-decoration: underline; }
+.staff-task-table__patient { display: inline-flex; max-width: 100%; text-decoration: none; }
+/* The patient is a tag, as in Messages; it fills light teal to show it opens their record. */
+.staff-task-table__patient:hover .person-tag,
+.staff-task-table__patient:focus-visible .person-tag { background: var(--console-teal-soft); }
+.staff-task-table__patient:focus-visible { border-radius: 99rem; outline: 2px solid var(--console-teal); outline-offset: 2px; }
 .staff-task-table__general { color: #617b7d; font-weight: 750; }
 .staff-task-detail { margin-top: .38rem; }
 .staff-task-detail summary { color: var(--console-teal-dark); cursor: pointer; font-size: .67rem; font-weight: 800; list-style: none; text-decoration: underline; text-underline-offset: .16em; width: fit-content; }
@@ -1414,11 +1340,6 @@
   .thread-message__meta { align-items: flex-start; flex-direction: column; gap: .15rem; }
   .conversation-thread__form,
   .record-thread__form { margin: 0 .75rem; }
-  .appointment-proposals { padding: .75rem; }
-  .appointment-proposals__heading { align-items: flex-start; flex-direction: column; gap: .15rem; }
-  .appointment-proposal__times { grid-template-columns: 1fr; }
-  .proposal-actions .console-button { flex: 1 1 auto; }
-  .proposal-create__form { margin: 0 .65rem; }
   .record-action-grid { padding: .8rem; }
   .inbox-filters { gap: .35rem; }
   .inbox-filters a { font-size: .68rem; padding: .42rem .58rem; }

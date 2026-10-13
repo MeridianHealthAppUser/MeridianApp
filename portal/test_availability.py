@@ -234,12 +234,18 @@ class AvailabilityPortalTests(TestCase):
         task = ClinicalTask.objects.get()
         self.assertIsNone(task.assigned_to_id)
         response = self.client.get(reverse('portal:staff-schedule'), {'date': self.monday.isoformat()})
-        # No "Action needed" banner (Dr Czech, 12 Oct): the booking is listed under Appointments needing attention.
-        self.assertNotContains(response, 'Action needed')
-        self.assertNotContains(response, 'sitting on a day you are now unavailable')
-        self.assertNotContains(response, 'Undo the change')
+        # No "Action needed" banner (Dr Czech, 12 Oct). The clinician sees the booking's own status only, with no
+        # Appointments needing attention list: the practice moves bookings (owner, 13 Oct).
+        for hidden in ('Action needed', 'sitting on a day you are now unavailable', 'Undo the change', 'Doctor unavailable',
+                       'Appointments needing attention', 'Needs rescheduling', 'schedule-appointment-attention'):
+            self.assertNotContains(response, hidden)
+        self.assertContains(response, '<span class="console-status console-status--booked">Booked</span>', html=True)
+        # The practice still sees why it needs a new time, and the list.
+        self.login(self.admin)
+        response = self.client.get(reverse('portal:staff-schedule'), {'date': self.monday.isoformat(), 'clinician': self.doctor.pk})
         self.assertContains(response, 'Doctor unavailable')
         self.assertContains(response, 'Not open')
+        self.assertContains(response, 'Appointments needing attention')
         booking.refresh_from_db()
         self.assertEqual((booking.status, booking.starts_at), (Appointment.Status.BOOKED, self.at(10)))
 
@@ -521,7 +527,10 @@ class AvailabilityPortalTests(TestCase):
         ) for day in range(21)]
         beta_patient = Patient.objects.create(company=self.beta, first_name='Secret', last_name='Beta Patient')
         foreign = Appointment.objects.create(company=self.beta, patient=beta_patient, clinician=self.doctor, starts_at=self.at(9), duration_minutes=30)
+        # The practice's list; a clinician doesn't get it.
         self.login()
+        self.assertEqual(self.client.get(reverse('portal:staff-schedule'), {'date': self.monday.isoformat()}).context['affected_count'], 0)
+        self.login(self.admin)
         response = self.client.get(reverse('portal:staff-schedule'), {
             'date': self.monday.isoformat(), 'clinician': self.doctor.pk, 'view': 'calendar',
         })

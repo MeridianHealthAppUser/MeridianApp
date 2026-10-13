@@ -5,14 +5,14 @@ from urllib.parse import urlencode
 
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.paginator import Paginator
-from django.db.models import Case, F, IntegerField, OuterRef, Q, Subquery, Value, When
+from django.db.models import Case, F, IntegerField, Q, Value, When
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.decorators import method_decorator
 from django.views.decorators.cache import never_cache
 from django.views.generic import TemplateView
 
-from care.models import Appointment, AppointmentProposal, ClinicalTask, MessageThread
+from care.models import Appointment, ClinicalTask
 from care.availability import appointments_requiring_attention, attention_kind, diary_day_states, open_slots_for_day
 from care.task_services import visible_tasks
 from practices.models import CompanyMembership, Patient
@@ -23,6 +23,7 @@ from .schedule_calendar import (
 )
 from .clinical_tasks import attach_clinical_task_links
 from .filter_menus import choice_section, filter_menu
+from .people_tags import person_tag
 from .views import StaffCompanyRequiredMixin
 
 
@@ -86,8 +87,11 @@ class StaffTaskListView(StaffPageView):
         data = self.request.GET.copy()
         data.setdefault('status', 'open')
         data.setdefault('kind', 'all')
+        if context['is_doctor']:
+            # Clinicians filter by status, type and patient; a task's free-form tags still show on it.
+            data.setlist('tag', [])
         form = TaskFilterForm(data, company=self.company)
-        menu = self.filter_menu(form, data, queryset)
+        menu = self.filter_menu(form, data, queryset, tags=not context['is_doctor'])
         filters = {}
         if form.is_valid():
             status = form.cleaned_data['status']
@@ -119,29 +123,32 @@ class StaffTaskListView(StaffPageView):
         tasks = list(context['page_obj'].object_list)
         attach_clinical_task_links(tasks, self.request.user, self.membership)
         for task in tasks:
+            # The patient as a tag, as Messages shows them.
+            task.patient_tag = person_tag(str(task.patient), 'patient') if task.patient_id else None
             task.is_actionable = task.status in open_statuses and not task.is_clinical_workflow
             task.is_overdue = task.status in open_statuses and task.due_at is not None and task.due_at < now
         context.update(filter_form=form, filter_menu=menu, tasks=tasks)
         return context
 
-    def filter_menu(self, form, data, tasks):
+    def filter_menu(self, form, data, tasks, tags=True):
         """Status and Task type pick one; Patient and Free-form tag tick any. Patients are the ones in your tasks."""
         ticked = data.getlist('patient')
         patients = Patient.objects.for_company(self.company).filter(is_active=True).filter(
             Q(pk__in=tasks.order_by().values('patient')) | Q(pk__in=[value for value in ticked if value.isdecimal()]),
         ).order_by('last_name', 'first_name', 'pk')
-        return filter_menu(
-            action=reverse('portal:staff-tasks'), form=form, clear_url=reverse('portal:staff-tasks'), label='Filter tasks',
-            sections=[
-                choice_section('status', 'Status', form.fields['status'].choices, [data.get('status')], pick=True,
-                               default='open', errors=form['status'].errors),
-                choice_section('kind', 'Task type', form.fields['kind'].choices, [data.get('kind')], icon='list', pick=True,
-                               default='all', errors=form['kind'].errors),
-                choice_section('patient', 'Patient', [(patient.pk, str(patient)) for patient in patients], ticked,
-                               icon='person', errors=form['patient'].errors),
-                choice_section('tag', 'Free-form tag', [(tag.pk, tag.name) for tag in form.fields['tag'].queryset.order_by('name')],
-                               data.getlist('tag'), icon='tag', errors=form['tag'].errors),
-            ])
+        sections = [
+            choice_section('status', 'Status', form.fields['status'].choices, [data.get('status')], pick=True,
+                           default='open', errors=form['status'].errors),
+            choice_section('kind', 'Task type', form.fields['kind'].choices, [data.get('kind')], icon='list', pick=True,
+                           default='all', errors=form['kind'].errors),
+            choice_section('patient', 'Patient', [(patient.pk, str(patient)) for patient in patients], ticked,
+                           icon='person', errors=form['patient'].errors),
+        ]
+        if tags:
+            sections.append(choice_section('tag', 'Free-form tag', [(tag.pk, tag.name) for tag in form.fields['tag'].queryset.order_by('name')],
+                                           data.getlist('tag'), icon='tag', errors=form['tag'].errors))
+        return filter_menu(action=reverse('portal:staff-tasks'), form=form, clear_url=reverse('portal:staff-tasks'),
+                           label='Filter tasks', sections=sections)
 
 
 @method_decorator(never_cache, name='dispatch')
@@ -198,6 +205,7 @@ class StaffScheduleView(StaffPageView):
                 first_day, last_day = week_range(selected_date)
                 context.update(week_context(
                     appointments=queryset, selected_date=selected_date, clinician=selected_clinician, company=self.company,
+                    flag_attention=not context['is_doctor'],
                     states=diary_day_states(
                         company=self.company, clinician=selected_clinician, first_day=first_day, last_day=last_day,
                     ) if selected_clinician else None,
@@ -231,46 +239,20 @@ class StaffScheduleView(StaffPageView):
             queryset = queryset.none()
         context['metrics'] = {status: queryset.filter(status=status).count() for status in Appointment.Status.values}
         context['day_booked'] = sum(context['metrics'].values()) - context['metrics'][Appointment.Status.CANCELLED]
-        # The clinician's own open conversation with the patient, if they have one.
-        open_thread = MessageThread.objects.for_company(self.company).filter(
-            patient_id=OuterRef('patient_id'), is_closed=False, participant_links__user_id=OuterRef('clinician_id'),
-        ).order_by('-last_message_at', '-created_at', '-pk')
-        queryset = queryset.annotate(conversation_id=Subquery(open_thread.values('pk')[:1])).order_by('starts_at', 'pk')
+        queryset = queryset.order_by('starts_at', 'pk')
         context.update(self.paginate(queryset, **filters))
         appointments = list(context['page_obj'].object_list)
         from video.access import attach_video_join
 
         attach_video_join(appointments, self.request.user.pk, allowed_role='doctor' if context['is_clinician'] else None)
-        attention = {appointment.pk: attention_kind(appointment) for appointment in appointments_requiring_attention(
+        # Clinicians see each booking's status; the practice also sees which fall outside working hours or on leave.
+        attention = {} if context['is_doctor'] else {appointment.pk: attention_kind(appointment) for appointment in appointments_requiring_attention(
             company=self.company, clinician=selected_clinician,
         ).filter(pk__in=[appointment.pk for appointment in appointments])}
-        already_rebooked = set(AppointmentProposal.objects.for_company(self.company).filter(
-            appointment_id__in=[appointment.pk for appointment in appointments],
-            kind=AppointmentProposal.Kind.REBOOK, status=AppointmentProposal.Status.ACCEPTED,
-        ).values_list('appointment_id', flat=True))
+        # A new time is arranged by the practice, when the patient contacts support; the diary only shows bookings.
         for appointment in appointments:
             appointment.attention = attention.get(appointment.pk)
             appointment.needs_attention = appointment.attention is not None
-            appointment.proposal_url = None
-            may_change = (
-                appointment.status == Appointment.Status.BOOKED and appointment.starts_at > timezone.now()
-            ) or (
-                appointment.status in (Appointment.Status.CANCELLED, Appointment.Status.NO_SHOW)
-                and appointment.pk not in already_rebooked
-            )
-            if (
-                context['is_clinician'] and appointment.clinician_id == self.request.user.pk and may_change
-                and appointment.patient.user_id and appointment.patient.user.is_active
-            ):
-                # Conversations are answered on the record's Messages tab.
-                record_url = reverse('portal:patient-detail', args=[appointment.patient_id])
-                if appointment.conversation_id:
-                    params = urlencode({'tab': 'messages', 'thread': appointment.conversation_id, 'appointment': appointment.pk})
-                    appointment.proposal_url = f'{record_url}?{params}#appointment-proposals-{appointment.conversation_id}'
-                    appointment.proposal_label = 'Offer a new time' if appointment.status == Appointment.Status.BOOKED else 'Discuss rebooking'
-                else:
-                    appointment.proposal_url = f'{record_url}?tab=messages'
-                    appointment.proposal_label = 'Start a conversation'
         context.update(
             filter_form=form, appointments=appointments, open_slots=slots,
             selected_date=selected_date, selected_clinician=selected_clinician,

@@ -286,7 +286,7 @@ def workspace_tab_context(request, company, membership, patient, tab, **override
 
 def render_workspace_form_error(request, company, membership, patient, name, form, **extra):
     tab = {'appointment_form': 'appointments', 'task_form': 'tasks', 'note_form': 'notes',
-           'note_tags_form': 'notes', 'message_form': 'messages', 'thread_form': 'messages', 'proposal_form': 'messages'}[name]
+           'note_tags_form': 'notes', 'message_form': 'messages', 'thread_form': 'messages'}[name]
     context = workspace_tab_context(request, company, membership, patient, tab, **{name: form, 'failed_form': name}, **extra)
     return render(request, 'portal/patient_workspace.html', context)
 

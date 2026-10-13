@@ -1,13 +1,15 @@
 """Separate privacy pages; no email delivery, automatic erasure or legal claims."""
 
-from urllib.parse import urlencode
+from urllib.parse import quote, urlencode
 
+from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.core.paginator import Paginator
 from django.db.models import F
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 from django.utils import timezone
 from django.utils.decorators import method_decorator
 from django.views import View
@@ -83,24 +85,74 @@ def filtered_requests(request, queryset):
     return dict(paginate(request, queryset.order_by('-created_at', '-pk'), **filters), filter_form=form)
 
 
-class PatientPrivacyView(PatientCarePage):
+def patient_data_requests(request, company, patient):
+    """My data requests on My profile, newest first, with Filters for Status and Type."""
+    from .filter_menus import choice_section, filter_menu, ticked_values
+
+    statuses = [value for value in ticked_values(request.GET.getlist('status')) if value in PatientDataRequest.Status.values]
+    kinds = [value for value in ticked_values(request.GET.getlist('kind')) if value in PatientDataRequest.Kind.values]
+    queryset = PatientDataRequest.objects.filter(company=company, patient=patient)
+    if statuses:
+        queryset = queryset.filter(status__in=statuses)
+    if kinds:
+        queryset = queryset.filter(kind__in=kinds)
+    page = Paginator(queryset.order_by('-created_at', '-pk'), 20).get_page(request.GET.get('page'))
+    action = f"{reverse('portal:patient-profile')}#profile-requests"
+    return {'page_obj': page, 'pagination_query': urlencode({'status': statuses, 'kind': kinds}, doseq=True),
+            'filter_menu': filter_menu(action=action, clear_url=action, label='Filter data requests', sections=[
+                choice_section('status', 'Status', PatientDataRequest.Status.choices, statuses),
+                choice_section('kind', 'Type', PatientDataRequest.Kind.choices, kinds, icon='type'),
+            ])}
+
+
+class PatientProfileView(PatientCarePage):
+    """My profile: their details as the practice holds them, account security, the marketing choice, recorded
+    consents and data requests. Details are changed by the care team, asked for by email to support."""
+
     def preference(self):
         return PatientCommunicationPreference.objects.filter(company=self.patient_company, patient=self.patient).first()
 
-    def display(self, request, form=None):
+    def consents(self):
+        """Recorded consents, each with the text Read opens: the version accepted, or for an older record without
+        one, the practice's current published document of that kind."""
+        consents = list(ConsentRecord.objects.filter(company=self.patient_company, patient=self.patient)
+                        .select_related('document').order_by('-created_at', '-pk'))
+        published = {}
+        for consent in consents:
+            if consent.document is None and consent.consent_type not in published:
+                published[consent.consent_type] = ConsentDocument.objects.filter(
+                    company=self.patient_company, kind=consent.consent_type, is_active=True,
+                    effective_from__lte=timezone.localdate()).order_by('-effective_from', '-created_at', '-pk').first()
+            consent.text = consent.document or published[consent.consent_type]
+        return consents
+
+    def display(self, request, form=None, request_form=None):
+        """A form that didn't save is shown again with its own signed context; the other gets a fresh one."""
+        from care.pathcare import patient_address
+
         preference = self.preference()
-        form = form if form is not None else CommunicationPreferenceForm(initial={
-            'marketing_enabled': preference.marketing_enabled if preference else False,
-        })
-        token = request.POST.get('privacy_context') or privacy_context(
+        posted = request.POST.get('privacy_context', '')
+        token = (posted if form is not None else '') or privacy_context(
             request, self.patient_company, 'preference', record_id=self.patient.pk,
             version=preference.updated_at.isoformat() if preference else None,
         )
-        context = self.context('account', 'Privacy and preferences', form=form, privacy_context=token,
-            consents=ConsentRecord.objects.filter(company=self.patient_company, patient=self.patient).order_by('-created_at', '-pk'),
-            access_rows=safe_access_rows(AuditEvent.objects.filter(company=self.patient_company, patient=self.patient,
-                actor=request.user).exclude(action__in=ACCESS_ACTIONS).order_by('-created_at', '-pk')[:10]))
-        return render(request, 'portal/privacy_patient_preferences.html', context)
+        form = form if form is not None else CommunicationPreferenceForm(initial={
+            'marketing_enabled': preference.marketing_enabled if preference else False,
+        })
+        request_token = (posted if request_form is not None else '') or privacy_context(
+            request, self.patient_company, 'data-request', record_id=self.patient.pk)
+        # Request a change is an email to support, the patient's name in the subject.
+        subject = ' '.join(filter(None, ('Request for Detail Change:', self.patient.first_name, self.patient.last_name)))
+        context = self.context('account', 'My profile', form=form, privacy_context=token,
+            # New request opens its dialog; ?request=1 (the button without scripts) or a mistake opens it with the page.
+            request_form=request_form if request_form is not None else DataRequestForm(), request_context=request_token,
+            request_dialog_open=request_form is not None or request.GET.get('request') == '1',
+            shipping_address=', '.join(part for part in patient_address(self.patient_company, self.patient) if part),
+            support_email=settings.SUPPORT_EMAIL,
+            details_change_url=f"mailto:{settings.SUPPORT_EMAIL}?{urlencode({'subject': subject}, quote_via=quote)}",
+            consents=self.consents(),
+            **patient_data_requests(request, self.patient_company, self.patient))
+        return render(request, 'portal/patient_profile.html', context)
 
     def get(self, request):
         return self.display(request)
@@ -121,27 +173,15 @@ class PatientPrivacyView(PatientCarePage):
                 add_error(form, error)
             else:
                 messages.success(request, 'Your preferences have been saved. Recorded consent is unchanged.' if changed else 'Your preferences are already up to date.')
-                return redirect('portal:patient-privacy')
+                return redirect(f"{reverse('portal:patient-profile')}#profile-marketing")
         return self.display(request, form)
 
 
-class PatientDataRequestListView(PatientCarePage):
-    http_method_names = ('get', 'head', 'options')
+class PatientDataRequestCreateView(PatientProfileView):
+    """A request from the New request dialog on My profile. This address also keeps old links working, opening it."""
 
     def get(self, request):
-        context = self.context('account', 'Your privacy requests', **filtered_requests(request,
-            PatientDataRequest.objects.filter(company=self.patient_company, patient=self.patient)))
-        return render(request, 'portal/privacy_patient_requests.html', context)
-
-
-class PatientDataRequestCreateView(PatientCarePage):
-    def display(self, request, form=None):
-        return render(request, 'portal/privacy_patient_request_form.html', self.context('account', 'New privacy request',
-            form=form if form is not None else DataRequestForm(),
-            privacy_context=request.POST.get('privacy_context') or privacy_context(request, self.patient_company, 'data-request', record_id=self.patient.pk)))
-
-    def get(self, request):
-        return self.display(request)
+        return redirect(f"{reverse('portal:patient-profile')}?request=1#profile-requests")
 
     def post(self, request):
         form = DataRequestForm(request.POST)
@@ -153,14 +193,14 @@ class PatientDataRequestCreateView(PatientCarePage):
             valid = False
         if valid:
             try:
-                data_request, created = create_data_request(actor=request.user, company=self.patient_company, patient=self.patient,
+                _, created = create_data_request(actor=request.user, company=self.patient_company, patient=self.patient,
                     kind=form.cleaned_data['kind'], description=form.cleaned_data['description'], submission_key=token.get('submission_key'), request=request)
             except ValidationError as error:
                 add_error(form, error)
             else:
                 messages.success(request, 'Your request is saved for the practice to review.' if created else 'This request was already submitted.')
-                return redirect('portal:patient-data-request-detail', pk=data_request.pk)
-        return self.display(request, form)
+                return redirect(f"{reverse('portal:patient-profile')}#profile-requests")
+        return self.display(request, request_form=form)
 
 
 class PatientDataRequestDetailView(PatientCarePage):

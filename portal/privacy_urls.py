@@ -2,8 +2,8 @@ from django.urls import path
 from . import privacy_views as views
 
 urlpatterns = [
-    path('patient/privacy/', views.PatientPrivacyView.as_view(), name='patient-privacy'),
-    path('patient/data-requests/', views.PatientDataRequestListView.as_view(), name='patient-data-requests'),
+    # My profile: personal details, security, preferences, consents and data requests on one page.
+    path('patient/profile/', views.PatientProfileView.as_view(), name='patient-profile'),
     path('patient/data-requests/new/', views.PatientDataRequestCreateView.as_view(), name='patient-data-request-create'),
     path('patient/data-requests/<int:pk>/', views.PatientDataRequestDetailView.as_view(), name='patient-data-request-detail'),
     path('data-requests/', views.StaffDataRequestListView.as_view(), name='staff-data-requests'),

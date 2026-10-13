@@ -215,9 +215,6 @@ def staff_inbox_context(request, company, membership, *, selected_id=None, **ove
         'message_threads': [],
         'failed_form': overrides.get('failed_form', ''), 'reply_thread_id': overrides.get('reply_thread_id'),
     }
-    for key in ('proposal_form', 'proposal_error', 'failed_proposal_id'):
-        if key in overrides:
-            context[key] = overrides[key]
     if selected is not None:
         context.update(
             inbox_patient=selected.patient,
@@ -234,7 +231,7 @@ def staff_inbox_context(request, company, membership, *, selected_id=None, **ove
 
 
 def render_staff_inbox(request, company, membership, *, status=400, **overrides):
-    """Patient messages again, with a reply or suggestion error shown in the open conversation."""
+    """Patient messages again, with a reply error shown in the open conversation."""
     return render(request, 'portal/staff_inbox.html', staff_inbox_context(request, company, membership, **overrides), status=status)
 
 

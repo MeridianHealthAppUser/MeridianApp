@@ -57,7 +57,6 @@
 .record-bubble--mine { align-self: flex-end; background: #fff; }
 .record-bubble--mine .record-bubble__meta { text-align: right; }
 .record-conversation__empty { align-self: center; color: var(--console-muted); font-size: .78rem; margin: auto 0; }
-.record-messages__pane .appointment-proposals { margin-top: .85rem; }
 .record-reply { align-items: flex-end; display: grid; gap: .55rem; grid-template-columns: minmax(0, 1fr) auto; margin-top: .75rem; }
 .record-reply .record-error { background: #fff4f2; border: 1px solid #eccbc5; border-radius: .6rem; color: #a8433d; font-size: .74rem; grid-column: 1 / -1; line-height: 1.5; margin: 0; padding: .55rem .7rem; }
 .record-reply textarea { border: 1px solid var(--console-line); border-radius: .7rem; font: inherit; font-size: .82rem; line-height: 1.45; max-height: 160px; min-height: 2.6rem; padding: .6rem .75rem; resize: none; width: 100%; }

@@ -8,12 +8,14 @@ import shutil
 import subprocess
 from unittest import skipUnless
 from unittest.mock import patch
+from urllib.parse import quote
 
 from django.conf import settings
 from django.core import mail
 from django.test import Client
 from django.urls import reverse
 from django.utils import timezone
+from django.utils.formats import date_format
 
 from care.appointment_lifecycle import change_appointment_status
 from care.clinical import save_consultation
@@ -380,40 +382,6 @@ class AppointmentDetailPageTests(AppointmentLifecycleFixture):
         self.assertEqual(self.client.get(url, {'clinician': self.doctor.pk, 'date': day.isoformat(), 'duration': 20}).status_code, 400)
         self.assertEqual(self.client.get(url, {'clinician': self.other_user.pk, 'date': day.isoformat(), 'duration': 15}).status_code, 400)
 
-    def test_suggesting_a_new_time_lists_the_doctors_free_quarter_hours_that_day(self):
-        from care.models import DoctorWorkingPattern
-
-        day = timezone.localdate() + timedelta(days=7)
-        DoctorWorkingPattern.objects.create(company=self.company, clinician=self.doctor, weekday=day.weekday(), is_working=True,
-                                            starts_at=time(9, 0), ends_at=time(11, 0))
-        moving = self.appointment(starts_at=timezone.make_aware(datetime.combine(day, time(9, 30))), duration_minutes=30)
-        self.appointment(patient=self.other_patient, starts_at=timezone.make_aware(datetime.combine(day, time(10, 30))), duration_minutes=15)
-
-        def times(url, **query):
-            return self.client.get(url, {'appointment': moving.pk, 'date': day.isoformat(), **query})
-
-        # The patient, from My Messages: the doctor's hours that day, for this 30-minute appointment, clear of the
-        # doctor's 10:30 booking, never its own current time, but free to move to just before or after it.
-        self.login(self.patient_user)
-        patient_url = self.url('patient-appointment-propose-times', self.thread.pk)
-        self.assertEqual(times(patient_url).json()['times'], ['09:00', '09:15', '09:45', '10:00'])
-        # Outside the doctor's hours, nothing; and only appointments in this conversation can be asked about.
-        self.assertEqual(times(patient_url, date=(day + timedelta(days=1)).isoformat()).json()['times'], [])
-        other = self.appointment(patient=self.other_patient, clinician=self.colleague, starts_at=timezone.make_aware(datetime.combine(day, time(9, 0))))
-        self.assertEqual(times(patient_url, appointment=other.pk).status_code, 400)
-        self.assertEqual(times(patient_url, date='not-a-date').status_code, 400)
-        # The doctor gets the same list from the record; a colleague who isn't in the conversation gets nothing.
-        self.login(self.doctor)
-        staff_url = self.url('staff-appointment-propose-times', self.thread.pk)
-        self.assertEqual(times(staff_url).json()['times'], ['09:00', '09:15', '09:45', '10:00'])
-        self.login(self.colleague)
-        self.assertEqual(times(staff_url).status_code, 404)
-        # The form asks for them.
-        self.login(self.patient_user)
-        page = self.client.get(reverse('portal:patient-messages'), {'thread': self.thread.pk})
-        self.assertContains(page, f'data-proposal-times-url="{patient_url}"')
-        self.assertContains(page, 'js/proposal_times.js')
-
     def test_admin_cannot_forge_attendance_action_and_own_doctor_waits_for_end(self):
         appointment = self.appointment()
         url = self.url('appointment-detail', appointment.pk)
@@ -446,6 +414,13 @@ class AppointmentDetailPageTests(AppointmentLifecycleFixture):
         self.assertTemplateUsed(response, 'portal/patient_appointment_detail.html')
         self.assertContains(response, '/static/css/patient_pages.css')
         self.assertContains(response, 'Add to calendar')
+        # A new time is asked of support by email; the practice moves the appointment.
+        self.assertNotContains(response, 'Discuss a new time')
+        self.assertNotContains(response, 'accepted proposal')
+        when = date_format(timezone.localtime(appointment.starts_at), 'D j M Y, H:i')
+        subject = quote(f'Request for Appointment Change: {self.patient.first_name} {self.patient.last_name}, {when} SAST')
+        self.assertContains(response, f'href="mailto:{settings.SUPPORT_EMAIL}?subject={subject}">Request a change</a>')
+        self.assertContains(response, f'email {settings.SUPPORT_EMAIL} and the practice will move your appointment.')
         self.assertNotContains(response, 'javascript:')
         self.assertNotContains(response, 'Write consultation note')
         self.assertNotContains(response, 'Record completed')
@@ -554,13 +529,15 @@ class AppointmentDetailPageTests(AppointmentLifecycleFixture):
         self.assertContains(response, 'record changed in another tab', status_code=400)
         self.assertEqual(list(self.thread.participants.all()), [self.doctor])
 
-    def test_conversation_pending_proposal_error_and_other_practice_token(self):
+    def test_conversation_closes_despite_an_old_pending_suggestion_and_rejects_other_practice_token(self):
+        # Time suggestions are gone, so one left pending doesn't stop the conversation closing.
         self.proposal(self.appointment())
         self.login(self.doctor)
         url = self.url('conversation-manage', self.thread.pk)
         token = self.client.get(url).context['workflow_context']
-        response = self.client.post(url, self.management_data(token, action='close'))
-        self.assertContains(response, 'pending appointment suggestions', status_code=400)
+        self.assertEqual(self.client.post(url, self.management_data(token, action='close')).status_code, 302)
+        self.thread.refresh_from_db()
+        self.assertTrue(self.thread.is_closed)
         self.login(self.doctor, self.beta)
         self.assertEqual(self.client.post(url, self.management_data(token)).status_code, 404)
         beta_url = self.url('conversation-manage', self.beta_thread.pk)

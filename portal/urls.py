@@ -1,6 +1,6 @@
 from django.urls import include, path
 
-from . import appointment_views, availability_views, pathcare_views, prescription_views, clinical_views, intake_views, lead_views, menu_views, message_management_views, patient_assignment_views, patient_views, practice_settings_views, staff_views, task_views, team_views, views
+from . import availability_views, pathcare_views, prescription_views, clinical_views, intake_views, lead_views, menu_views, message_management_views, patient_assignment_views, patient_views, practice_settings_views, staff_views, task_views, team_views, views
 from .patient_workspace import PatientWorkspaceView, RecordConversationSearchView
 
 app_name = 'portal'
@@ -54,7 +54,6 @@ urlpatterns = [
     path('patient/', views.PatientDashboardView.as_view(), name='patient-dashboard'),
     path('patient/appointments/', patient_views.PatientAppointmentsView.as_view(), name='patient-appointments'),
     path('patient/progress/', patient_views.PatientProgressView.as_view(), name='patient-progress'),
-    path('patient/account/', patient_views.PatientAccountView.as_view(), name='patient-account'),
     path('patient/blood-tests/', clinical_views.PatientLabListView.as_view(), name='patient-labs'),
     path('patient/blood-tests/<int:pk>/', clinical_views.PatientLabDetailView.as_view(), name='patient-lab-detail'),
     path('patient/blood-tests/<int:pk>/report/', clinical_views.PatientLabResultDownloadView.as_view(), name='patient-lab-result-download'),
@@ -85,10 +84,4 @@ urlpatterns = [
     path('messages/<int:pk>/', views.StaffMessageCreateView.as_view(), name='staff-message-create'),
     path('messages/new/', views.StaffInboxThreadCreateView.as_view(), name='staff-inbox-thread-create'),
     path('messages/<int:pk>/read-state/', views.StaffThreadReadStateView.as_view(), name='staff-thread-read-state'),
-    path('messages/<int:pk>/appointment-proposals/', appointment_views.StaffAppointmentProposeView.as_view(), name='staff-appointment-propose'),
-    path('messages/<int:pk>/appointment-proposals/times/', appointment_views.StaffProposalTimesView.as_view(), name='staff-appointment-propose-times'),
-    path('appointment-proposals/<int:pk>/respond/', appointment_views.StaffAppointmentRespondView.as_view(), name='staff-appointment-respond'),
-    path('patient/messages/<int:pk>/appointment-proposals/', appointment_views.PatientAppointmentProposeView.as_view(), name='patient-appointment-propose'),
-    path('patient/messages/<int:pk>/appointment-proposals/times/', appointment_views.PatientProposalTimesView.as_view(), name='patient-appointment-propose-times'),
-    path('patient/appointment-proposals/<int:pk>/respond/', appointment_views.PatientAppointmentRespondView.as_view(), name='patient-appointment-respond'),
 ]

@@ -2,7 +2,7 @@
 {% load static workspace_ui %}
 
 {% block title %}{{ title|default:page_title }} | {{ company.name }} | Meridian{% endblock %}
-{% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/filter_menu.css' %}?v=20261010a"><script src="{% static 'js/filter_menu.js' %}?v=20261008b" defer></script><link rel="stylesheet" href="{% static 'css/task_list.css' %}?v=20261008b">{% endblock %}
+{% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/filter_menu.css' %}?v=20261010a"><script src="{% static 'js/filter_menu.js' %}?v=20261008b" defer></script><link rel="stylesheet" href="{% static 'css/task_list.css' %}?v=20261008b"><link rel="stylesheet" href="{% static 'css/person_tags.css' %}?v=20261009e">{% endblock %}
 
 
 {% block breadcrumbs %}{% breadcrumbs page_title %}{% endblock %}
@@ -71,7 +71,7 @@
                   {% if task.due_at %}<p class="staff-task-table__due{% if task.is_overdue %} is-overdue{% endif %}">Due <time datetime="{{ task.due_at|date:'c' }}">{{ task.due_at|date:"j M Y, H:i" }} SAST</time>{% if task.is_overdue %} · Overdue{% endif %}</p>{% endif %}
                 </td>
                 <td data-label="Patient / general">
-                  {% if task.patient %}<a class="staff-task-table__patient" href="{% url 'portal:patient-detail' task.patient_id %}">{{ task.patient }}</a>{% else %}<span class="staff-task-table__general">General practice</span>{% endif %}
+                  {% if task.patient %}<a class="staff-task-table__patient" href="{% url 'portal:patient-detail' task.patient_id %}">{% include 'portal/includes/person_tag.html' with tag=task.patient_tag %}</a>{% else %}<span class="staff-task-table__general">General practice</span>{% endif %}
                 </td>
                 <td data-label="Assigned to">{% if task.assigned_to %}{{ task.assigned_to.full_name }}{% else %}Unassigned{% endif %}</td>
                 <td data-label="Raised" class="staff-task-table__raised">

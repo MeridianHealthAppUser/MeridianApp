@@ -70,6 +70,12 @@ class PrivacyTests(TestCase):
         self.assertEqual(response.status_code, 200)
         return {'privacy_context': response.context['privacy_context'], **fields}
 
+    def request_data(self, **fields):
+        """What the New request dialog on My profile sends."""
+        response = self.get('patient-profile')
+        self.assertEqual(response.status_code, 200)
+        return {'privacy_context': response.context['request_context'], **fields}
+
     def post(self, name, data, pk=None):
         return self.client.post(self.url(name, pk), data)
 
@@ -79,7 +85,7 @@ class PrivacyTests(TestCase):
         )}
 
     def test_patient_privacy_pages_require_owned_active_patient(self):
-        names = ('patient-privacy', 'patient-data-requests', 'patient-data-request-create')
+        names = ('patient-profile', 'patient-data-request-create')
         for name in names:
             self.assertEqual(self.get(name).status_code, 302)
         self.login(self.doctor)
@@ -88,7 +94,7 @@ class PrivacyTests(TestCase):
 
     def test_patient_can_only_view_own_current_practice_requests(self):
         self.login()
-        response = self.get('patient-data-requests')
+        response = self.get('patient-profile')
         self.assertEqual([item.pk for item in response.context['page_obj']], [self.request_record.pk])
         for record in (self.foreign_request, self.other_request):
             self.assertEqual(self.get('patient-data-request-detail', record.pk).status_code, 404)
@@ -96,80 +102,87 @@ class PrivacyTests(TestCase):
     def test_patient_get_and_head_are_read_only(self):
         self.login()
         before = self.privacy_counts()
-        for name, pk in (('patient-privacy', None), ('patient-data-requests', None),
-                         ('patient-data-request-create', None), ('patient-data-request-detail', self.request_record.pk)):
+        for name, pk in (('patient-profile', None), ('patient-data-request-detail', self.request_record.pk)):
             for method in ('get', 'head'):
                 response = getattr(self.client, method)(self.url(name, pk))
                 self.assertEqual(response.status_code, 200)
                 self.assertIn('no-store', response.headers['Cache-Control'])
+        # The old New request page opens My profile with its dialog open.
+        self.assertRedirects(self.get('patient-data-request-create'), f"{self.url('patient-profile')}?request=1#profile-requests",
+                             fetch_redirect_response=False)
+        self.assertTrue(self.get('patient-profile', request=1).context['request_dialog_open'])
+        self.assertFalse(self.get('patient-profile').context['request_dialog_open'])
         self.assertEqual(self.privacy_counts(), before)
 
     def test_marketing_defaults_off_without_creating_preference(self):
         self.login()
-        response = self.get('patient-privacy')
+        response = self.get('patient-profile')
         self.assertFalse(response.context['form']['marketing_enabled'].value())
         self.assertFalse(PatientCommunicationPreference.objects.exists())
 
     def test_preference_changes_are_separate_from_immutable_consent(self):
         self.login()
         before = list(ConsentRecord.objects.values())
-        data = self.form_data('patient-privacy', marketing_enabled='on')
-        self.assertEqual(self.post('patient-privacy', data).status_code, 302)
+        data = self.form_data('patient-profile', marketing_enabled='on')
+        self.assertEqual(self.post('patient-profile', data).status_code, 302)
         self.assertTrue(PatientCommunicationPreference.objects.get(patient=self.patient).marketing_enabled)
-        data = self.form_data('patient-privacy')
-        self.assertEqual(self.post('patient-privacy', data).status_code, 302)
+        data = self.form_data('patient-profile')
+        self.assertEqual(self.post('patient-profile', data).status_code, 302)
         self.assertFalse(PatientCommunicationPreference.objects.get(patient=self.patient).marketing_enabled)
         self.assertEqual(list(ConsentRecord.objects.values()), before)
         self.assertFalse(PatientCommunicationPreference.objects.filter(patient=self.beta_patient).exists())
 
     def test_replaying_preference_has_no_additional_audit_write(self):
         self.login()
-        data = self.form_data('patient-privacy', marketing_enabled='on')
-        self.post('patient-privacy', data)
+        data = self.form_data('patient-profile', marketing_enabled='on')
+        self.post('patient-profile', data)
         before = self.privacy_counts()
-        self.assertEqual(self.post('patient-privacy', data).status_code, 302)
+        self.assertEqual(self.post('patient-profile', data).status_code, 302)
         self.assertEqual(self.privacy_counts(), before)
 
     def test_preference_stale_other_tab_cannot_overwrite_new_setting(self):
         self.login()
-        old = self.form_data('patient-privacy')
-        data = self.form_data('patient-privacy', marketing_enabled='on')
-        self.post('patient-privacy', data)
-        response = self.post('patient-privacy', old)
+        old = self.form_data('patient-profile')
+        data = self.form_data('patient-profile', marketing_enabled='on')
+        self.post('patient-profile', data)
+        response = self.post('patient-profile', old)
         self.assertTrue(response.context['form'].non_field_errors())
         self.assertTrue(PatientCommunicationPreference.objects.get(patient=self.patient).marketing_enabled)
 
     def test_patient_forms_detect_changed_practice_and_preserve_draft(self):
         self.login()
-        for name, fields in (('patient-privacy', {'marketing_enabled': 'on'}),
-                             ('patient-data-request-create', {'kind': 'question', 'description': 'Keep my draft'})):
+        for name, form_name, fields in (('patient-profile', 'form', {'marketing_enabled': 'on'}),
+                                        ('patient-data-request-create', 'request_form', {'kind': 'question', 'description': 'Keep my draft'})):
             self.login()
-            data = self.form_data(name, **fields)
+            data = self.form_data(name, **fields) if name == 'patient-profile' else self.request_data(**fields)
             self.login(company=self.beta)
             before = self.privacy_counts()
             response = self.post(name, data)
-            self.assertTrue(response.context['form'].non_field_errors())
+            self.assertTrue(response.context[form_name].non_field_errors())
             self.assertEqual(self.privacy_counts(), before)
             if 'description' in fields:
+                # My profile again, with the dialog open on the draft.
+                self.assertTemplateUsed(response, 'portal/patient_profile.html')
+                self.assertTrue(response.context['request_dialog_open'])
                 self.assertContains(response, fields['description'])
 
     def test_missing_tampered_and_expired_tokens_write_nothing(self):
         self.login()
-        data = self.form_data('patient-data-request-create', kind='question', description='Token test')
+        data = self.request_data(kind='question', description='Token test')
         before = self.privacy_counts()
         for token in ('', 'invalid'):
             response = self.post('patient-data-request-create', {**data, 'privacy_context': token})
-            self.assertTrue(response.context['form'].non_field_errors())
+            self.assertTrue(response.context['request_form'].non_field_errors())
         with patch('django.core.signing.time.time', return_value=timezone.now().timestamp() + 13 * 60 * 60):
             response = self.post('patient-data-request-create', data)
-            self.assertTrue(response.context['form'].non_field_errors())
+            self.assertTrue(response.context['request_form'].non_field_errors())
         self.assertEqual(self.privacy_counts(), before)
 
     def test_create_request_is_owned_idempotent_and_does_not_delete_records(self):
         self.login()
-        data = self.form_data('patient-data-request-create', kind='deletion', description='Please review deletion. PRIVATE_DESCRIPTION')
+        data = self.request_data(kind='deletion', description='Please review deletion. PRIVATE_DESCRIPTION')
         response = self.post('patient-data-request-create', data)
-        self.assertEqual(response.status_code, 302)
+        self.assertRedirects(response, f"{self.url('patient-profile')}#profile-requests", fetch_redirect_response=False)
         record = PatientDataRequest.objects.get(description=data['description'])
         self.assertEqual((record.company_id, record.patient_id, record.status), (self.alpha.pk, self.patient.pk, 'open'))
         before = self.privacy_counts()
@@ -182,18 +195,18 @@ class PrivacyTests(TestCase):
 
     def test_request_duplicate_key_cannot_be_reused_for_different_content(self):
         self.login()
-        data = self.form_data('patient-data-request-create', kind='question', description='First question')
+        data = self.request_data(kind='question', description='First question')
         self.post('patient-data-request-create', data)
         response = self.post('patient-data-request-create', {**data, 'description': 'Different question'})
-        self.assertTrue(response.context['form'].non_field_errors())
+        self.assertTrue(response.context['request_form'].non_field_errors())
 
     def test_required_and_oversized_request_details_validated(self):
         self.login()
         for kind, description in (('question', ''), ('invalid', 'Hello'), ('question', 'x' * 5001)):
-            data = self.form_data('patient-data-request-create', kind=kind, description=description)
+            data = self.request_data(kind=kind, description=description)
             before = PatientDataRequest.objects.count()
             response = self.post('patient-data-request-create', data)
-            self.assertTrue(response.context['form'].errors)
+            self.assertTrue(response.context['request_form'].errors)
             self.assertEqual(PatientDataRequest.objects.count(), before)
 
     def test_staff_requests_only_for_practice_admin_and_super_admin(self):
@@ -264,20 +277,32 @@ class PrivacyTests(TestCase):
         for index in range(22):
             PatientDataRequest.objects.create(company=self.alpha, patient=self.patient, kind='question', description=f'Request {index}', submission_key=uuid.uuid4())
         self.login()
-        first = self.get('patient-data-requests', status='open', kind='question')
-        second = self.get('patient-data-requests', status='open', kind='question', page=2)
+        first = self.get('patient-profile', status='open', kind='question')
+        second = self.get('patient-profile', status='open', kind='question', page=2)
         self.assertEqual(len(first.context['page_obj']), 20)
         self.assertEqual(len(second.context['page_obj']), 2)
+        # Paging keeps the filters and comes back to My data requests.
+        self.assertContains(first, '?status=open&amp;kind=question&amp;page=2#profile-requests')
         for index in range(21):
             PatientDataRequestReply.objects.create(company=self.alpha, data_request=self.request_record, author=self.admin,
                 body=f'Response {index}', status='in_review', submission_key=uuid.uuid4())
         self.assertEqual(len(self.get('patient-data-request-detail', self.request_record.pk, page=2).context['page_obj']), 1)
 
-    def test_invalid_request_filter_does_not_broaden_list(self):
+    def test_request_filters_are_status_and_type_and_never_show_other_requests(self):
+        PatientDataRequest.objects.create(company=self.alpha, patient=self.patient, kind='question', description='Mine too',
+                                          status='closed', submission_key=uuid.uuid4())
         self.login()
-        response = self.get('patient-data-requests', status='invalid')
-        self.assertTrue(response.context['filter_form'].errors)
-        self.assertEqual(len(response.context['page_obj']), 0)
+        response = self.get('patient-profile')
+        self.assertEqual([section['label'] for section in response.context['filter_menu']['sections']], ['Status', 'Type'])
+        self.assertContains(response, 'data-modal-open="new-data-request"')
+        self.assertContains(response, f'action="{self.url("patient-data-request-create")}"')
+        self.assertEqual([item.kind for item in self.get('patient-profile', kind='question').context['page_obj']], ['question'])
+        self.assertEqual([item.kind for item in self.get('patient-profile', status='open').context['page_obj']], ['correction'])
+        # Values that aren't a status or type are ignored, and never reach another patient's or practice's requests.
+        response = self.get('patient-profile', status='invalid', kind=['access', 'nonsense'])
+        self.assertEqual(response.context['filter_menu']['count'], 1)
+        self.assertEqual(list(response.context['page_obj']), [])
+        self.assertContains(response, 'No requests match these filters.')
 
     def test_data_requests_cannot_be_edited_or_deleted_by_patient_post(self):
         self.login()
@@ -309,13 +334,40 @@ class PrivacyTests(TestCase):
         self.assertEqual(response.context['access_rows'], [])
         self.assertEqual(AuditEvent.objects.count(), before)
 
-    def test_patient_recent_activity_is_own_current_record_only(self):
+    def test_recorded_consent_opens_each_documents_text_in_its_own_dialog(self):
+        # Accepted before records kept their document: Read shows the practice's current one, and says so.
+        telehealth = ConsentRecord.objects.create(company=self.alpha, patient=self.patient, user=self.user, consent_type='telehealth',
+                                                  document_version='t1', accepted=True, accepted_at=timezone.now())
+        ConsentDocument.objects.create(company=self.alpha, kind='telehealth', version='t2', title='Treatment terms',
+                                       body='Treatment text.', effective_from=timezone.localdate() - timedelta(days=1))
+        # Nothing published to show: Read goes to the published page instead.
+        marketing = ConsentRecord.objects.create(company=self.alpha, patient=self.patient, user=self.user, consent_type='marketing',
+                                                 document_version='m1', accepted=False)
         AuditEvent.objects.create(company=self.alpha, actor=self.user, patient=self.patient, action='privacy.preference_updated')
-        AuditEvent.objects.create(company=self.beta, actor=self.user, patient=self.beta_patient, action='privacy.preference_updated')
-        AuditEvent.objects.create(company=self.alpha, actor=self.admin, patient=self.patient, action='privacy.request_viewed')
         self.login()
-        response = self.get('patient-privacy')
-        self.assertEqual(len(response.context['access_rows']), 1)
+        response = self.get('patient-profile')
+        html = response.content.decode()
+        for consent, name in ((self.consent, 'public-privacy'), (telehealth, 'public-terms')):
+            href = f'{self.url(name)}?practice={self.alpha.pk}#document-{consent.consent_type}'
+            self.assertIn(f'href="{href}" data-modal-open="consent-text-{consent.pk}" aria-haspopup="dialog"', html)
+            self.assertIn(f'<dialog class="app-dialog app-dialog--wide" id="consent-text-{consent.pk}"', html)
+        # The version they accepted, escaped.
+        dialog = html.split(f'id="consent-text-{self.consent.pk}"', 1)[1].split('</dialog>', 1)[0]
+        self.assertIn('Approved combined notice', dialog)
+        self.assertIn('Version v1', dialog)
+        self.assertIn('Alpha actual policy text. &lt;script&gt;', dialog)
+        self.assertNotIn('current version', dialog)
+        dialog = html.split(f'id="consent-text-{telehealth.pk}"', 1)[1].split('</dialog>', 1)[0]
+        self.assertIn('Treatment text.', dialog)
+        self.assertIn('Version t2', dialog)
+        self.assertIn('The practice’s current version', dialog)
+        self.assertNotIn(f'consent-text-{marketing.pk}', html)
+        self.assertIn(f'href="{self.url("public-privacy")}?practice={self.alpha.pk}#document-marketing" aria-label', html)
+        for name, kind in (('public-privacy', 'service'), ('public-terms', 'telehealth')):
+            self.assertContains(self.client.get(f'{self.url(name)}?practice={self.alpha.pk}'), f'id="document-{kind}"')
+        # The old text links and the recent activity log are gone.
+        for removed in ('Published terms', 'Published privacy notice', 'Your recent account activity', 'Communication preferences updated'):
+            self.assertNotContains(response, removed)
         self.assertNotContains(response, '192.0.2.45')
 
     def policy_data(self, **changes):
@@ -434,7 +486,7 @@ class PrivacyTests(TestCase):
 
     def test_csrf_required_for_all_mutating_privacy_forms(self):
         client = Client(enforce_csrf_checks=True)
-        for actor, names in ((self.user, ('patient-privacy', 'patient-data-request-create')),
+        for actor, names in ((self.user, ('patient-profile', 'patient-data-request-create')),
                              (self.super_admin, ('policy-create',))):
             client.force_login(actor)
             for name in names:

@@ -88,9 +88,6 @@ def record_messages_context(request, company, membership, patient, *, selected_i
         'message_threads': [selected] if selected else [],
         'failed_form': overrides.get('failed_form', ''), 'reply_thread_id': overrides.get('reply_thread_id'),
     }
-    for key in ('proposal_form', 'proposal_error', 'failed_proposal_id'):
-        if key in overrides:
-            context[key] = overrides[key]
     if selected is None:
         return context
     return open_conversation(request, company, membership, selected, context)
@@ -124,10 +121,9 @@ def patient_notes(company, membership, patient, viewer):
 
 
 def open_conversation(request, company, membership, thread, context):
-    """The open conversation: its messages, people and appointment suggestions, Message action's form, and for
-    clinical staff the patient's notes. Reading it marks it read for this staff member."""
+    """The open conversation: its messages, people, Message action's form, and for clinical staff the patient's
+    notes. Reading it marks it read for this staff member."""
     from .message_management_views import ConversationManagementForm
-    from .views import _attach_appointment_proposals
     from .workflow_context import make_workflow_context
 
     patient = thread.patient
@@ -156,12 +152,11 @@ def open_conversation(request, company, membership, thread, context):
                      target=thread, request=request,
                      metadata={'patient_notes': len(context['conversation_notes']['entries'])} if context['conversation_notes'] else None)
     context['message_threads'] = [thread]
-    return _attach_appointment_proposals(context, request, company, patient, actor_role='doctor',
-                                         allowed=membership.is_clinician)
+    return context
 
 
 def render_record_messages(request, company, membership, patient, *, status=400, **overrides):
-    """The record's Messages tab again, with a reply or proposal error shown in it."""
+    """The record's Messages tab again, with a reply error shown in it."""
     from .patient_workspace import workspace_tab_context
 
     context = workspace_tab_context(request, company, membership, patient, 'messages', **overrides)

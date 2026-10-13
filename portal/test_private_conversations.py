@@ -195,20 +195,17 @@ class PrivateConversationTests(TestCase):
         self.assertContains(page, 'With Cara Current, Sid Stranger')
         self.assertContains(page, 'Cara Current added Sid Stranger')
 
-    def test_suggesting_a_new_time_opens_a_conversation_with_that_appointments_clinician(self):
+    def test_appointment_rows_leave_a_new_time_to_the_clinician(self):
+        """A patient asks for a different time in Messages; there's no button on My Appointments to suggest one."""
         Appointment.objects.create(company=self.company, patient=self.patient, clinician=self.past,
                                    starts_at=timezone.now() + timedelta(days=4), duration_minutes=15)
         add_participant(MessageThread.objects.create(company=self.company, patient=self.patient, subject='Dose'), self.current)
         self.login_patient()
-        appointments = self.client.get(reverse('portal:patient-appointments')).context['appointments']
-        past = next(appointment for appointment in appointments if appointment.clinician_id == self.past.pk)
-        self.assertIn(f'to={self.past.pk}', past.proposal_url)
-        self.assertEqual(past.proposal_label, 'Message Pat Past')
-        # A clinician who was never assigned can't be messaged, so the patient asks their own clinician instead.
-        booked = next(appointment for appointment in appointments if appointment.clinician_id == self.booked.pk)
-        self.assertNotIn('appointment=', booked.proposal_url)
-        self.assertIn(f'to={self.current.pk}', booked.proposal_url)
-        self.assertEqual(booked.proposal_label, 'Message Cara Current')
+        page = self.client.get(reverse('portal:patient-appointments'))
+        for text in ('Suggest New Time', 'Ask to Rebook', 'Message Pat Past', 'Message Cara Current', 'Contact Care Team',
+                     'Need a different time?'):
+            self.assertNotContains(page, text)
+        self.assertContains(page, 'View Appointment')
 
     def test_migration_gives_existing_conversations_their_people(self):
         replied = MessageThread.objects.create(company=self.company, patient=self.patient, subject='Replied', opened_by=self.patient_user)
