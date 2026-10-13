@@ -554,8 +554,9 @@
 .task-list__meta { color: var(--console-muted); font-size: .72rem; line-height: 1.45; margin: .3rem 0 0; }
 .task-list__footer { align-items: center; display: flex; justify-content: space-between; margin-top: .55rem; }
 .task-list__footer time { color: var(--console-muted); font-size: .7rem; }
-/* Overview's Open tasks: the task, its priority in the middle of the row, its button at the right. */
-.task-list__item--row { align-items: center; display: grid; gap: .55rem 1rem; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); }
+/* Overview's Open tasks: the task, then its button, then its priority against the right edge (as appointments show Booked). */
+.task-list__item--row { align-items: center; display: grid; gap: .55rem .75rem; grid-template-columns: minmax(0, 1fr) auto auto; }
+.task-list__item--row .console-priority { justify-self: end; }
 .task-list__details { min-width: 0; }
 .task-list__details strong { display: block; font-size: .84rem; line-height: 1.35; }
 .task-list__due { color: var(--console-muted); display: block; font-size: .7rem; margin-top: .3rem; }
@@ -563,7 +564,6 @@
 @media (max-width: 40rem) {
   .task-list__item--row { grid-template-columns: minmax(0, 1fr) auto; }
   .task-list__item--row .task-list__details { grid-column: 1 / -1; }
-  .task-list__item--row .console-priority { justify-self: start; }
 }
 .console-inline-form { display: inline; margin: 0; }
 

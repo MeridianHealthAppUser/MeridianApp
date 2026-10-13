@@ -57,25 +57,6 @@
 .account-profile__row form { margin: 0; }
 .account-profile__row .button { min-height: 2.5rem; padding: .5rem .9rem; }
 
-/* Clinician details with a pen that opens the field in place. */
-.account-profile__editable { align-items: center; display: flex; gap: .35rem; justify-content: flex-end; }
-.account-profile__details > div:has(.account-profile__editor[open]) { flex-direction: column; }
-.account-profile__details > div:has(.account-profile__editor[open]) .account-profile__editable { display: block; text-align: left; }
-.account-profile__editable:has(> .account-profile__editor[open]) > .account-profile__value { display: none; }
-.account-profile__editor > summary { align-items: center; border-radius: .45rem; color: #14756e; cursor: pointer; display: inline-flex; height: 1.75rem; justify-content: center; list-style: none; margin-block: -.25rem; width: 1.75rem; }
-.account-profile__editor > summary::-webkit-details-marker { display: none; }
-.account-profile__editor > summary:hover { background: #e6f5f3; }
-.account-profile__editor > summary:focus-visible { outline: 2px solid #0b958a; outline-offset: 1px; }
-.account-profile__editor > summary svg { fill: none; height: 1rem; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 2; width: 1rem; }
-.account-profile__editor[open] > summary { display: none; }
-.account-profile__editor form { display: grid; gap: .5rem; margin-top: .2rem; }
-.account-profile__editor input[type='text'] { border: 1px solid #c9d9db; border-radius: .6rem; color: #183a43; font: inherit; font-weight: 500; min-height: 2.6rem; padding: .55rem .75rem; width: 100%; }
-.account-profile__editor input[type='text']:focus { border-color: #0b958a; box-shadow: 0 0 0 3px rgba(11, 149, 138, .14); outline: 0; }
-.account-profile__editor input[aria-invalid='true'] { border-color: #c7564d; }
-.account-profile__help { color: #68828a; font-size: .76rem; font-weight: 400; line-height: 1.45; }
-.account-profile__error { color: #a3322b; font-size: .8rem; font-weight: 600; }
-.account-profile__editor-actions { display: flex; flex-wrap: wrap; gap: .5rem; }
-.account-profile__editor-actions .button { min-height: 2.4rem; padding: .45rem .9rem; }
 /* The month so far ends with its provisional total in rand. */
 .account-profile__details > .account-profile__total { align-items: baseline; }
 .account-profile__total dt { color: #11383e; font-weight: 600; }

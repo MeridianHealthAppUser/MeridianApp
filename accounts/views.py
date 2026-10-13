@@ -21,7 +21,7 @@ from django.views import View
 from practices.tenancy import enabled_companies, scope_queryset
 
 from .forms import AccountPasswordResetForm, AccountProfileForm, EmailAuthenticationForm
-from .profile import make_profile_context, save_own_profile, save_own_staff_detail
+from .profile import make_profile_context, save_own_profile
 
 
 @method_decorator(never_cache, name='dispatch')
@@ -30,7 +30,7 @@ class AccountProfileView(LoginRequiredMixin, View):
 
     http_method_names = ('get', 'post', 'head', 'options')
 
-    def display(self, request, form=None, staff_edit=None):
+    def display(self, request, form=None):
         from practices.models import CompanyMembership, Patient
 
         user = get_object_or_404(get_user_model(), pk=request.user.pk, is_active=True)
@@ -45,11 +45,11 @@ class AccountProfileView(LoginRequiredMixin, View):
             Prefetch('practices_patient_records', queryset=patients, to_attr='profile_patients'),
         )
         page = Paginator(companies, 20).get_page(request.GET.get('page'))
-        # Staff names are kept in Users and roles, so staff get no name form; a clinician edits a few details in place.
+        # Staff details are kept by a Super Admin in Users and roles, so staff read them here and edit none.
         editable = {'profile_context': request.POST.get('profile_context', '') if request.method == 'POST' else make_profile_context(user)}
         if not has_staff_access:
             editable['form'] = form if form is not None else AccountProfileForm(instance=user)
-        staff = staff_profile_context(request, user, memberships, staff_edit) if has_staff_access else {}
+        staff = staff_profile_context(request, user, memberships) if has_staff_access else {}
         return render(request, 'accounts/profile.html', {
             **staff,
             **editable,
@@ -89,46 +89,7 @@ class AccountProfileView(LoginRequiredMixin, View):
         return self.display(request, form)
 
 
-class AccountStaffDetailView(AccountProfileView):
-    """A clinician saves how they sign consult notes or a PathCare detail with the pen on My profile."""
-
-    http_method_names = ('post',)
-
-    def post(self, request):
-        field, value = request.POST.get('field', ''), request.POST.get('value', '')
-        try:
-            changed = save_own_staff_detail(actor=request.user, context_token=request.POST.get('profile_context'),
-                                            field=field, value=value, request=request)
-        except ValidationError as error:
-            return self.display(request, staff_edit={'field': field, 'value': value, 'errors': error.messages})
-        messages.success(request, 'Your details have been updated.' if changed else 'Your details are already up to date.')
-        return redirect('accounts:profile')
-
-
-# The details a clinician changes with the pen, in the order My profile lists them.
-STAFF_DETAIL_ROWS = (
-    ('note_signature', 'How you sign consult notes', 'Edit how you sign consult notes'),
-    ('pathcare_name', 'PathCare name', 'Edit your PathCare name'),
-    ('pathcare_code', 'PathCare code', 'Edit your PathCare code'),
-)
-
-
-def staff_detail_rows(user, staff_edit=None):
-    rows = []
-    for field, label, edit_label in STAFF_DETAIL_ROWS:
-        model_field = user._meta.get_field(field)
-        failed = staff_edit if staff_edit and staff_edit['field'] == field else None
-        rows.append({
-            'field': field, 'label': label, 'edit_label': edit_label, 'value': getattr(user, field),
-            'help': model_field.help_text, 'max_length': model_field.max_length,
-            # A rejected save reopens its editor with what the person typed and why it wasn't saved.
-            'draft': failed['value'] if failed else getattr(user, field),
-            'errors': failed['errors'] if failed else [], 'open': failed is not None,
-        })
-    return rows
-
-
-def staff_profile_context(request, user, memberships, staff_edit=None):
+def staff_profile_context(request, user, memberships):
     """My profile for staff: their details, the practice they're in, and a clinician's month so far."""
     from care.reporting import doctor_activity, provisional_total
     from practices.services import active_membership_for, get_active_company
@@ -145,8 +106,7 @@ def staff_profile_context(request, user, memberships, staff_edit=None):
                          'messages': counts['messages'],
                          # Rand with a space between thousands, as in "R14 350.00".
                          'total': f'R{total:,.2f}'.replace(',', '\u00a0') if total is not None else ''}
-    return {'staff_membership': membership, 'staff_is_clinician': is_clinician, 'month_to_date': month_to_date,
-            'staff_detail_rows': staff_detail_rows(user, staff_edit) if is_clinician else []}
+    return {'staff_membership': membership, 'staff_is_clinician': is_clinician, 'month_to_date': month_to_date}
 
 
 @method_decorator(never_cache, name='dispatch')

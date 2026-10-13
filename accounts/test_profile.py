@@ -194,8 +194,8 @@ class AccountProfileTests(TestCase):
                 response = self.client.get(self.url)
                 self.assertNotIn('form', response.context)
                 self.assertNotContains(response, 'name="first_name"')
+                self.assertContains(response, 'Read-only')
                 if user != self.doctor:
-                    self.assertContains(response, 'Read-only')
                     self.assertContains(response, 'These details are maintained centrally.')
                 token = make_profile_context(user)
                 response = self.client.post(self.url, {'profile_context': token, 'first_name': 'Changed', 'last_name': 'Display'})
@@ -204,14 +204,13 @@ class AccountProfileTests(TestCase):
                 self.assertNotEqual(user.first_name, 'Changed')
         self.login(self.doctor)
         response = self.client.get(self.url)
-        for value in ('082 441 7730', 'MP 0728145', 'S. Example, MBChB', 'HPCSA registration number', 'Your month to date'):
+        for value in ('082 441 7730', 'MP 0728145', 'HPCSA registration number', 'Your month to date'):
             self.assertContains(response, value)
         # Clinician-only rows and the month so far are not shown to a practice administrator.
         self.login(self.admin)
         response = self.client.get(self.url)
         self.assertNotContains(response, 'HPCSA registration number')
         self.assertNotContains(response, 'Your month to date')
-        self.assertNotContains(response, 'account-profile__editor')
         self.assertFalse(AuditEvent.objects.filter(action='account.profile_updated').exists())
 
     def test_staff_title_shows_above_first_name_and_is_not_editable(self):
@@ -225,55 +224,25 @@ class AccountProfileTests(TestCase):
         self.login(self.admin)
         self.assertContains(self.client.get(self.url), '<div><dt>Title</dt><dd>Not recorded</dd></div>', html=True)
 
-    def test_clinician_edits_note_signature_and_pathcare_details_with_the_pen(self):
-        detail_url = reverse('accounts:profile-detail')
-        get_user_model().objects.filter(pk=self.doctor.pk).update(pathcare_name='EXAMPLE,DR S', pathcare_code='EXASA0')
+    def test_clinician_reads_every_detail_and_edits_none(self):
+        """A Super Admin keeps these in Users and roles; the clinician's profile shows the PathCare code and no pens (13 Oct 2026)."""
+        get_user_model().objects.filter(pk=self.doctor.pk).update(
+            title='DR', pathcare_name='EXAMPLE,DR S', pathcare_code='EXASA0', note_signature='S. Example, MBChB')
         self.login(self.doctor)
         response = self.client.get(self.url)
-        # PathCare name and code are separate rows, each with its own pen.
-        for label in ('Edit how you sign consult notes', 'Edit your PathCare name', 'Edit your PathCare code'):
-            self.assertContains(response, f'aria-label="{label}"')
-        self.assertContains(response, '<dt>PathCare name</dt>')
-        self.assertContains(response, '<dt>PathCare code</dt>')
-        self.assertNotContains(response, 'PathCare name and code')
-        token = make_profile_context(self.doctor)
-        response = self.client.post(detail_url, {'profile_context': token, 'field': 'pathcare_code', 'value': '  CZEJC0 '})
-        self.assertRedirects(response, self.url)
+        self.assertContains(response, '<div><dt>PathCare code</dt><dd>EXASA0</dd></div>', html=True)
+        for hidden in ('How you sign consult notes', 'S. Example, MBChB', 'PathCare name', 'EXAMPLE,DR S', 'Use the pen',
+                       'account-profile__editor', 'name="value"', 'These details are maintained centrally.'):
+            self.assertNotContains(response, hidden)
+        # Security keeps Change password but not the dates under it.
+        self.assertContains(response, f'href="{reverse("accounts:password-change")}"')
+        for hidden in ('Last changed', 'Never reset with Forgot password', 'Last signed in'):
+            self.assertNotContains(response, hidden)
+        # The address the pen posted to is gone.
+        self.assertEqual(self.client.post('/accounts/profile/details/', {
+            'profile_context': make_profile_context(self.doctor), 'field': 'pathcare_code', 'value': 'CZEJC0'}).status_code, 404)
         self.doctor.refresh_from_db()
-        self.assertEqual(self.doctor.pathcare_code, 'CZEJC0')
-        # Recorded in each active practice the doctor works in.
-        events = AuditEvent.objects.filter(action='account.staff_details_updated')
-        self.assertEqual({event.company for event in events}, {self.alpha, self.beta})
-        self.assertTrue(all(event.metadata['fields'] == ['pathcare_code'] for event in events))
-        self.assertRedirects(self.client.post(detail_url, {'profile_context': token, 'field': 'note_signature',
-                                                           'value': 'S. Example, MBChB'}), self.url)
-        self.doctor.refresh_from_db()
-        self.assertEqual(self.doctor.note_signature, 'S. Example, MBChB')
-        # Too long: the editor reopens with the draft and the reason, and nothing is saved.
-        response = self.client.post(detail_url, {'profile_context': token, 'field': 'pathcare_name', 'value': 'X' * 61})
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'value="' + 'X' * 61 + '"')
-        self.assertContains(response, 'aria-invalid="true"')
-        self.doctor.refresh_from_db()
-        self.assertEqual(self.doctor.pathcare_name, 'EXAMPLE,DR S')
-        response = self.client.post(detail_url, {'profile_context': 'tampered', 'field': 'pathcare_name', 'value': 'NEW,DR S'})
-        self.assertContains(response, 'Reload My profile before saving again.')
-        # Only these three; names, title and HPCSA number stay with the Super Admin.
-        for field in ('first_name', 'title', 'hpcsa_number', 'email', ''):
-            with self.subTest(field=field):
-                self.assertEqual(self.client.post(detail_url, {'profile_context': token, 'field': field, 'value': 'X'}).status_code, 403)
-        self.doctor.refresh_from_db()
-        self.assertEqual((self.doctor.first_name, self.doctor.title, self.doctor.hpcsa_number), ('Sam', '', ''))
-
-    def test_non_clinicians_cannot_use_the_pen(self):
-        for user in (self.admin, self.patient_user):
-            with self.subTest(user=user.email):
-                self.login(user)
-                response = self.client.post(reverse('accounts:profile-detail'), {
-                    'profile_context': make_profile_context(user), 'field': 'pathcare_code', 'value': 'CZEJC0'})
-                self.assertEqual(response.status_code, 403)
-                user.refresh_from_db()
-                self.assertEqual(user.pathcare_code, '')
+        self.assertEqual(self.doctor.pathcare_code, 'EXASA0')
 
     def test_missing_tampered_wrong_shape_and_expired_tokens_rejected(self):
         self.login()

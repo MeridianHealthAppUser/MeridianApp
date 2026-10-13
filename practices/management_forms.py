@@ -1,12 +1,14 @@
 """Constrained forms with expiring, practice-bound write contexts."""
 
+import copy
+
 from django import forms
 from django.contrib.auth import get_user_model
 from django.contrib.auth.password_validation import password_validators_help_text_html, validate_password
 from django.core import signing
 from django.core.exceptions import ValidationError
 
-from .management_services import manageable_practices
+from .management_services import NEW_STAFF_DETAIL_FIELDS, manageable_practices
 from .models import Company, CompanyMembership
 from .tenancy import multi_practice_enabled, require_multi_practice
 
@@ -74,6 +76,13 @@ class StaffUserForm(forms.Form):
 
     def __init__(self, *args, actor, company, **kwargs):
         super().__init__(*args, **kwargs)
+        # The rest of a new account's details, as Users and roles edits them later, straight after the name.
+        for name in NEW_STAFF_DETAIL_FIELDS:
+            field = copy.deepcopy(MembershipForm.base_fields[name])
+            field.label = f'{field.label} (new accounts only)'
+            self.fields[name] = field
+        self.order_fields(['mode', 'email', 'role', 'clinician_type', 'practices', 'title', 'first_name', 'last_name',
+                           *NEW_STAFF_DETAIL_FIELDS])
         self.fields['practices'].queryset = manageable_practices(actor)
         self.initial.setdefault('practices', [company.pk])
         if not multi_practice_enabled():
@@ -98,12 +107,12 @@ class StaffUserForm(forms.Form):
                 except ValidationError as exc:
                     self.add_error('password1', exc)
         elif data.get('mode') == 'link' and any(data.get(key) for key in
-                                              ('first_name', 'last_name', 'password1', 'password2')):
-            raise ValidationError('Leave name and password fields empty when linking an existing account.')
+                                              ('first_name', 'last_name', 'password1', 'password2', *NEW_STAFF_DETAIL_FIELDS)):
+            raise ValidationError('Leave name, password and detail fields empty when linking an existing account.')
         return data
 
 
-STAFF_DETAIL_FIELDS = ('title', 'first_name', 'last_name', 'contact_number', 'hpcsa_number', 'note_signature', 'pathcare_name', 'pathcare_code')
+STAFF_DETAIL_FIELDS = ('title', 'first_name', 'last_name', *NEW_STAFF_DETAIL_FIELDS)
 
 
 class MembershipForm(forms.Form):
@@ -111,7 +120,7 @@ class MembershipForm(forms.Form):
     clinician_type = clinician_type_field()
     is_active = forms.BooleanField(required=False, label='Active in this practice',
         help_text='Turning this off removes only this practice’s staff access. The shared login and other practices stay unchanged.')
-    # Staff read these on My profile; a clinician can change their note signature and PathCare details there.
+    # Kept here by a Super Admin only; staff read some of them on My profile and change none.
     title = forms.ChoiceField(choices=(('', 'Not recorded'), *get_user_model().Title.choices), required=False, label='Title')
     first_name = forms.CharField(max_length=150, required=False, label='First name')
     last_name = forms.CharField(max_length=150, required=False, label='Last name')

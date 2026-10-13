@@ -101,9 +101,9 @@ class PasswordResetTests(TestCase):
         event = AuditEvent.objects.get(action='account.password_reset')
         self.assertEqual((event.company, event.actor, event.metadata), (self.company, self.user, {}))
 
-    def test_changing_the_password_records_when_and_my_profile_shows_it(self):
+    def test_changing_the_password_records_when(self):
         self.client.force_login(self.user)
-        self.assertContains(self.client.get(reverse('accounts:profile')), 'Not changed yet')
+        self.assertIsNone(self.user.last_change_password)
         response = self.client.post(reverse('accounts:password-change'), {
             'old_password': 'Old-Meadow!4Stones', 'new_password1': NEW_PASSWORD, 'new_password2': NEW_PASSWORD})
         self.assertRedirects(response, reverse('accounts:password-change-done'))
@@ -111,9 +111,10 @@ class PasswordResetTests(TestCase):
         self.assertTrue(self.user.check_password(NEW_PASSWORD))
         self.assertLess(timezone.now() - self.user.last_change_password, timedelta(minutes=1))
         self.assertIsNone(self.user.last_forgot_password_reset)
+        # Staff My profile keeps Change password without the dates under it (owner, 13 Oct 2026); the patient's shows them.
         profile = self.client.get(reverse('accounts:profile'))
-        self.assertContains(profile, f'Last changed {timezone.localtime(self.user.last_change_password):%-d %b %Y, %H:%M}')
-        self.assertContains(profile, 'Never reset with Forgot password')
+        self.assertContains(profile, f'href="{reverse("accounts:password-change")}"')
+        self.assertNotContains(profile, 'Last changed')
 
     def test_a_tampered_link_shows_the_expired_page(self):
         self.request_link()

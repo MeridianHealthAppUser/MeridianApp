@@ -11,7 +11,7 @@ from django.views import View
 from django.views.decorators.cache import never_cache
 from django.views.decorators.debug import sensitive_post_parameters
 
-from .management_forms import (STAFF_DETAIL_FIELDS, MembershipForm, PracticeForm, StaffUserForm, UserFilterForm,
+from .management_forms import (NEW_STAFF_DETAIL_FIELDS, STAFF_DETAIL_FIELDS, MembershipForm, PracticeForm, StaffUserForm, UserFilterForm,
                               make_management_context, validate_management_context)
 from .management_services import (add_staff_user, create_practice, manageable_practices,
                                   require_super_admin, update_membership, update_practice, update_staff_details)
@@ -104,7 +104,8 @@ class ManagementUserCreateView(ManagementView):
                 add_staff_user(actor=request.user, source_company=self.company, companies=data['practices'],
                     mode=data['mode'], email=data['email'], role=data['role'], clinician_type=data['clinician_type'],
                     title=data.get('title', '') if data['mode'] == 'create' else '', first_name=data.get('first_name', ''),
-                    last_name=data.get('last_name', ''), password=data.get('password1', ''), request=request)
+                    last_name=data.get('last_name', ''), password=data.get('password1', ''),
+                    details={field: data.get(field, '') for field in NEW_STAFF_DETAIL_FIELDS}, request=request)
             except (ValidationError, IntegrityError) as exc:
                 self.add_service_error(form, exc)
             else:
@@ -121,7 +122,7 @@ class ManagementMembershipEditView(ManagementView):
         return self.form_page(request, form=form, record=record, kind='membership',
             title=f'Staff access: {record.user.full_name}',
             description=f'{record.user.email} · Role and access affect only {self.company.name}. '
-                        'They see their name and details on My profile, where a clinician can also change their note signature and PathCare details. '
+                        'They read their name and details on My profile and can’t change them there; only a Super Admin edits them here. '
                         'The sign-in email and password are not editable here.', status=status)
 
     def get(self, request, pk):

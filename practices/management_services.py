@@ -88,10 +88,20 @@ def update_practice(*, actor, company, name, slug, expected_updated_at=None, req
     return company
 
 
+# A new staff account's details besides its title and name; a Super Admin keeps them in Users and roles afterwards.
+NEW_STAFF_DETAIL_FIELDS = ('contact_number', 'hpcsa_number', 'note_signature', 'pathcare_name', 'pathcare_code')
+
+
 @transaction.atomic
 def add_staff_user(*, actor, source_company, companies, mode, email, role, clinician_type=None,
-                   title='', first_name='', last_name='', password='', request=None):
-    """New login or explicit SSO link. Existing identities are never edited here."""
+                   title='', first_name='', last_name='', password='', details=None, request=None):
+    """New login or explicit SSO link. Existing identities are never edited here.
+
+    details are a new account's contact number, HPCSA number, note signature and PathCare name and code."""
+    details = details or {}
+    if set(details) - set(NEW_STAFF_DETAIL_FIELDS):
+        raise ValidationError('Only contact, HPCSA, consult note signature and PathCare details can be set here.')
+    details = {field: (value or '').strip() for field, value in details.items()}
     companies = list(companies)
     if not companies:
         raise ValidationError('Choose at least one practice.')
@@ -105,7 +115,7 @@ def add_staff_user(*, actor, source_company, companies, mode, email, role, clini
         if matches:
             raise ValidationError('This email already has an account. Use “Link an existing account”.')
         user = User(email=email, title=title, first_name=first_name.strip(), last_name=last_name.strip(),
-                    is_staff=False, is_superuser=False)
+                    is_staff=False, is_superuser=False, **details)
         if not user.first_name or not user.last_name:
             raise ValidationError('A new staff account needs a first and last name.')
         validate_password(password, user=user)
@@ -115,8 +125,8 @@ def add_staff_user(*, actor, source_company, companies, mode, email, role, clini
     elif mode == 'link':
         if len(matches) != 1 or not matches[0].is_active:
             raise ValidationError('No active account matches this email. Check the address with the person.')
-        if password or first_name or last_name:
-            raise ValidationError('Leave name and password fields empty when linking an existing account.')
+        if password or first_name or last_name or any(details.values()):
+            raise ValidationError('Leave name, password and detail fields empty when linking an existing account.')
         user = matches[0]
     else:
         raise ValidationError('Choose whether to create or link a staff account.')

@@ -245,6 +245,34 @@ class ManagementViewTests(ManagementFixture):
         self.assertRedirects(response, reverse('portal:management-users'), fetch_redirect_response=False)
         self.assertEqual(get_user_model().objects.get(email='new.staff@example.test').title, 'PROF')
 
+    def test_new_staff_details_are_set_when_the_account_is_created(self):
+        """A Super Admin sets everything a clinician's My profile shows when creating them, and edits it afterwards."""
+        page = self.client.get(reverse('portal:management-user-create'))
+        html = page.content.decode()
+        fields = ('last_name', 'contact_number', 'hpcsa_number', 'note_signature', 'pathcare_name', 'pathcare_code', 'password1')
+        self.assertEqual([html.index(f'name="{field}"') for field in fields], sorted(html.index(f'name="{field}"') for field in fields))
+        self.assertContains(page, 'PathCare doctor code (new accounts only)')
+        details = {'contact_number': '082 441 7730', 'hpcsa_number': 'MP 0728145', 'note_signature': 'S. Marchant, MBChB',
+                   'pathcare_name': 'MARCHANT,DR S', 'pathcare_code': 'MARSA0'}
+        response = self.client.post(reverse('portal:management-user-create'), self.new_staff_data(
+            management_context=self.token('portal:management-user-create'), **{key: f'  {value} ' for key, value in details.items()}))
+        self.assertRedirects(response, reverse('portal:management-users'), fetch_redirect_response=False)
+        user = get_user_model().objects.get(email='new.staff@example.test')
+        self.assertEqual({key: getattr(user, key) for key in details}, details)
+        # Linking an existing account never changes its details.
+        response = self.client.post(reverse('portal:management-user-create'), self.new_staff_data(
+            management_context=self.token('portal:management-user-create'), mode='link', email=self.patient_user.email,
+            first_name='', last_name='', password1='', password2='', pathcare_code='HIJACK'))
+        self.assertContains(response, 'Leave name, password and detail fields empty when linking an existing account.')
+        self.patient_user.refresh_from_db()
+        self.assertEqual(self.patient_user.pathcare_code, '')
+        # The service sets only these details, whatever it's passed.
+        with self.assertRaises(ValidationError):
+            add_staff_user(actor=self.owner, source_company=self.alpha, companies=[self.alpha], mode='create',
+                email='forged@example.test', role='doctor', clinician_type='doctor', first_name='For', last_name='Ged',
+                password='Forged-Meadow!4Stones', details={'is_superuser': True})
+        self.assertFalse(get_user_model().objects.filter(email='forged@example.test').exists())
+
     def test_form_cannot_select_unauthorized_practice_or_patient_role(self):
         for extra in ({'practices': [self.foreign.pk]}, {'role': 'patient'}):
             response = self.client.post(reverse('portal:management-user-create'), self.new_staff_data(
@@ -296,15 +324,17 @@ class ManagementViewTests(ManagementFixture):
     def test_staff_details_are_kept_here_and_shown_read_only_on_my_profile(self):
         url = reverse('portal:management-membership-edit', args=[self.doctor_alpha.pk])
         page = self.client.get(url)
-        for field in ('title', 'first_name', 'last_name', 'contact_number', 'hpcsa_number', 'note_signature'):
+        for field in ('title', 'first_name', 'last_name', 'contact_number', 'hpcsa_number', 'note_signature', 'pathcare_name', 'pathcare_code'):
             self.assertContains(page, f'name="{field}"')
         token = self.token('portal:management-membership-edit', [self.doctor_alpha.pk])
         self.client.post(url, {'role': 'doctor', 'clinician_type': 'doctor', 'is_active': 'on', 'management_context': token,
                                'title': 'DR', 'first_name': 'Sam', 'last_name': self.doctor.last_name, 'contact_number': '082 441 7730',
-                               'hpcsa_number': 'MP 0728145', 'note_signature': 'S. Marchant, MBChB'})
+                               'hpcsa_number': 'MP 0728145', 'note_signature': 'S. Marchant, MBChB',
+                               'pathcare_name': 'MARCHANT,DR S', 'pathcare_code': 'MARSA0'})
         self.doctor.refresh_from_db()
-        self.assertEqual((self.doctor.title, self.doctor.contact_number, self.doctor.hpcsa_number, self.doctor.note_signature),
-                         ('DR', '082 441 7730', 'MP 0728145', 'S. Marchant, MBChB'))
+        self.assertEqual((self.doctor.title, self.doctor.contact_number, self.doctor.hpcsa_number, self.doctor.note_signature,
+                          self.doctor.pathcare_name, self.doctor.pathcare_code),
+                         ('DR', '082 441 7730', 'MP 0728145', 'S. Marchant, MBChB', 'MARCHANT,DR S', 'MARSA0'))
         # A form without the detail fields leaves them alone.
         token = self.token('portal:management-membership-edit', [self.doctor_alpha.pk])
         self.client.post(url, {'role': 'doctor', 'clinician_type': 'doctor', 'is_active': 'on', 'management_context': token})

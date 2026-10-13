@@ -2,7 +2,7 @@
 {% load static workspace_ui %}
 
 {% block title %}{{ active_company.name }} | Meridian{% endblock %}
-{% block extra_css %}<link rel="stylesheet" href="{% static 'css/console.css' %}?v=20261013b"><link rel="stylesheet" href="{% static 'css/person_tags.css' %}?v=20261009e">{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{% static 'css/console.css' %}?v=20261013c"><link rel="stylesheet" href="{% static 'css/person_tags.css' %}?v=20261009e">{% endblock %}
 {% block content %}
   <div class="meridian-console console-desktop workspace-overview">
     <div class="console-shell">
@@ -86,14 +86,13 @@
               <div class="console-card__body">
                 <ul class="console-list task-list">
                   {% for task in open_tasks %}
-                    {# The task, its priority in the middle, and its button at the right. #}
+                    {# The task, then its button, then its priority against the right edge as appointments show Booked. #}
                     <li class="task-list__item task-list__item--row">
                       <div class="task-list__details">
                         <strong>{{ task.title }}</strong>
                         <p class="task-list__meta">{{ task.patient|default:"General practice" }}{% if task.assigned_to %} · {{ task.assigned_to.full_name }}{% endif %}</p>
                         {% if task.due_at %}<time class="task-list__due" datetime="{{ task.due_at|date:'c' }}">Due {{ task.due_at|date:"j M, H:i" }}</time>{% endif %}
                       </div>
-                      <span class="console-priority">{{ task.get_priority_display }}</span>
                       <div class="task-list__actions">
                         {% if task.is_clinical_workflow %}
                           {% if task.workflow_url %}<a class="console-button console-button--quiet" href="{{ task.workflow_url }}">{{ task.workflow_label }}</a>{% else %}<span class="console-status">Clinical workflow</span>{% endif %}
@@ -103,6 +102,7 @@
                           <button class="console-button console-button--quiet" type="submit">Complete</button>
                         </form>{% endif %}
                       </div>
+                      <span class="console-priority">{{ task.get_priority_display }}</span>
                     </li>
                   {% empty %}
                     <li class="console-empty"><p>No open clinical tasks. The care team is up to date.</p></li>

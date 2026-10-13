@@ -4,7 +4,7 @@ from .role_views import PracticeRoleView
 from .views import (
     AccountLoginView, AccountLogoutView, AccountPasswordChangeDoneView, AccountPasswordChangeView,
     AccountPasswordResetCompleteView, AccountPasswordResetConfirmView, AccountPasswordResetDoneView,
-    AccountPasswordResetView, AccountProfileView, AccountSignOutOthersView, AccountStaffDetailView,
+    AccountPasswordResetView, AccountProfileView, AccountSignOutOthersView,
 )
 
 
@@ -14,7 +14,6 @@ urlpatterns = [
     path('login/', AccountLoginView.as_view(), name='login'),
     path('logout/', AccountLogoutView.as_view(), name='logout'),
     path('profile/', AccountProfileView.as_view(), name='profile'),
-    path('profile/details/', AccountStaffDetailView.as_view(), name='profile-detail'),
     path('profile/sign-out-others/', AccountSignOutOthersView.as_view(), name='sign-out-others'),
     path('practice-role/', PracticeRoleView.as_view(), name='practice-role'),
     path('password/change/', AccountPasswordChangeView.as_view(), name='password-change'),

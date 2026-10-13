@@ -1,7 +1,7 @@
 {% extends 'base.html' %}
 {% load static workspace_ui %}
 {% block title %}My profile | Meridian{% endblock %}
-{% block extra_css %}<link rel="stylesheet" href="{% static 'css/management.css' %}?v=20261007"><link rel="stylesheet" href="{% static 'css/account_profile.css' %}?v=20261007b">{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{% static 'css/management.css' %}?v=20261007"><link rel="stylesheet" href="{% static 'css/account_profile.css' %}?v=20261013a">{% endblock %}
 {% block content %}
 {% if has_staff_access %}
 {% account_identity as identity %}
@@ -18,7 +18,7 @@
   </div>
   <div class="account-profile__grid">
     <section class="account-profile__card" aria-labelledby="profile-details-heading">
-      <div class="account-profile__card-heading"><h2 id="profile-details-heading">Your details</h2>{% if not staff_is_clinician %}<span class="account-profile__role account-profile__role--plain">Read-only</span>{% endif %}</div>
+      <div class="account-profile__card-heading"><h2 id="profile-details-heading">Your details</h2><span class="account-profile__role account-profile__role--plain">Read-only</span></div>
       <dl class="account-profile__facts account-profile__details">
         <div><dt>Title</dt><dd>{{ profile_user.get_title_display|default:"Not recorded" }}</dd></div>
         <div><dt>First name</dt><dd>{{ profile_user.first_name|default:"Not recorded" }}</dd></div>
@@ -26,26 +26,14 @@
         <div><dt>Email (your sign-in)</dt><dd>{{ profile_user.email }}</dd></div>
         <div><dt>Contact number</dt><dd>{{ profile_user.contact_number|default:"Not recorded" }}</dd></div>
         {% if staff_is_clinician %}<div><dt>HPCSA registration number</dt><dd>{{ profile_user.hpcsa_number|default:"Not recorded" }}</dd></div>
-        {% for row in staff_detail_rows %}<div id="profile-{{ row.field }}"><dt>{{ row.label }}</dt><dd class="account-profile__editable">
-          <span class="account-profile__value">{{ row.value|default:"Not recorded" }}</span>
-          {# The pen opens the field in place; without JavaScript, Cancel reloads My profile with it closed. #}
-          <details class="account-profile__editor"{% if row.open %} open{% endif %}>
-            <summary aria-label="{{ row.edit_label }}" title="{{ row.edit_label }}"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4 20h4L19 9a2.83 2.83 0 0 0-4-4L4 16v4Z"/><path d="m13.5 6.5 4 4"/></svg></summary>
-            <form method="post" action="{% url 'accounts:profile-detail' %}">{% csrf_token %}<input type="hidden" name="profile_context" value="{{ profile_context }}"><input type="hidden" name="field" value="{{ row.field }}">
-              <input type="text" name="value" value="{{ row.draft }}" maxlength="{{ row.max_length }}" aria-label="{{ row.label }}"{% if row.errors %} aria-invalid="true" autofocus{% endif %}>
-              {% if row.help %}<span class="account-profile__help">{{ row.help }}</span>{% endif %}
-              {% for error in row.errors %}<span class="account-profile__error" role="alert">{{ error }}</span>{% endfor %}
-              <div class="account-profile__editor-actions"><button class="button button-primary" type="submit">Save</button><a class="button button-secondary" href="{% url 'accounts:profile' %}">Cancel</a></div>
-            </form>
-          </details>
-        </dd></div>{% endfor %}{% endif %}
+        <div><dt>PathCare code</dt><dd>{{ profile_user.pathcare_code|default:"Not recorded" }}</dd></div>{% endif %}
       </dl>
-      <p class="account-profile__note">{% if staff_is_clinician %}Use the pen to update how you sign consult notes or your PathCare details. Everything else is maintained centrally: if it’s wrong, let the practice know and it will be corrected for you.{% else %}These details are maintained centrally. If anything here is wrong, let the practice know and it will be corrected for you.{% endif %}</p>
+      {# A Super Admin keeps every one of these in Users and roles. #}{% if not staff_is_clinician %}<p class="account-profile__note">These details are maintained centrally. If anything here is wrong, let the practice know and it will be corrected for you.</p>{% endif %}
     </section>
     <div class="account-profile__stack">
       <section class="account-profile__card" aria-labelledby="profile-security-heading">
         <h2 id="profile-security-heading">Security</h2>
-        <div class="account-profile__row"><div><strong>Password</strong><span>{% if profile_user.last_change_password %}Last changed {{ profile_user.last_change_password|date:"j M Y, H:i" }}{% else %}Not changed yet{% endif %}</span><span>{% if profile_user.last_forgot_password_reset %}Last reset with Forgot password {{ profile_user.last_forgot_password_reset|date:"j M Y, H:i" }}{% else %}Never reset with Forgot password{% endif %}</span>{% if profile_user.last_login %}<span>Last signed in {{ profile_user.last_login|date:"j M Y, H:i" }}</span>{% endif %}</div><a class="button button-secondary" href="{% url 'accounts:password-change' %}">Change</a></div>
+        <div class="account-profile__row"><div><strong>Password</strong></div><a class="button button-secondary" href="{% url 'accounts:password-change' %}">Change</a></div>
         {# Two-factor isn't built yet, so the row says so rather than showing it as on. #}
         <div class="account-profile__row"><div><strong>Two-factor authentication</strong></div><span class="account-profile__role account-profile__role--plain">Not set up yet</span></div>
         <div class="account-profile__row"><div><strong>Active sessions</strong><span>You stay signed in on this device.</span></div><form method="post" action="{% url 'accounts:sign-out-others' %}">{% csrf_token %}<button class="button button-secondary" type="submit">Sign out others</button></form></div>
