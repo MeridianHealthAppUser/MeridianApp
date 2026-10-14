@@ -577,6 +577,9 @@
 .patient-table td { border-top: 1px solid var(--console-soft-line); color: var(--console-muted); font-size: .78rem; padding: .8rem 1.15rem; vertical-align: middle; }
 .patient-table td:first-child { color: var(--console-ink); font-weight: 700; }
 .patient-table__person { align-items: center; display: flex; gap: .65rem; }
+/* The name with its Covering or Past patient tag beside it, on one line; the email below. */
+.patient-table__name { align-items: center; display: flex; gap: .45rem; white-space: nowrap; }
+.patient-table__name .console-status { margin-left: 0; }
 .patient-table__person .console-patient-avatar { background: #eff6f4; color: var(--console-teal-dark); font-size: .68rem; height: 1.9rem; width: 1.9rem; }
 .patient-table__detail { color: var(--console-muted); display: block; font-size: .67rem; font-weight: 500; margin-top: .15rem; }
 /* Open record sits against the right edge of the row. */
@@ -1310,6 +1313,7 @@
   .staff-patient-table td:first-child { color: var(--console-ink); }
   .staff-patient-table .patient-table__person { min-width: 0; }
   .staff-patient-table .patient-table__person > span:last-child { overflow-wrap: anywhere; }
+  .staff-patient-table .patient-table__name { flex-wrap: wrap; white-space: normal; }
   .staff-patient-table__action-cell .patient-table__action { align-self: center; }
   .staff-patient-table__empty { display: block !important; padding: .8rem !important; }
   .staff-patient-table__empty::before { display: none; }
