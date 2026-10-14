@@ -31,6 +31,8 @@ class ViewLogSettingTests(TestCase):
         session.save()
 
     def test_views_are_not_stored_by_default_but_changes_always_are(self):
+        # Opening a team conversation or a recorded blood result's report is a view like the others.
+        self.assertLessEqual({'team_thread.viewed', 'blood_result.report_viewed'}, ACCESS_ACTIONS)
         for action in ACCESS_ACTIONS:
             self.assertIsNone(record_audit(company=self.company, actor=self.doctor, action=action, patient=self.patient))
         self.assertIsNotNone(record_audit(company=self.company, actor=self.doctor, action='patient.contact_updated', patient=self.patient))
@@ -59,10 +61,14 @@ class ViewLogSettingTests(TestCase):
         self.login(self.doctor)
         self.client.get(reverse('portal:patient-detail', args=[self.patient.pk]))
         self.assertTrue(AuditEvent.objects.filter(action='patient.record_viewed').exists())
-        record = self.client.get(reverse('portal:patient-detail', args=[self.patient.pk]), {'tab': 'history'})
-        self.assertNotContains(record, 'record viewed')
+        # The record's History tab (administrators and Super Admins; doctors don't have it) leaves them out.
+        for user in (self.admin, self.super_admin):
+            with self.subTest(user=user.email):
+                self.login(user)
+                record = self.client.get(reverse('portal:patient-detail', args=[self.patient.pk]), {'tab': 'history'})
+                self.assertEqual(record.status_code, 200)
+                self.assertNotContains(record, 'record viewed')
         # The access history (administrators and Super Admins) leaves view events out too.
-        self.login(self.super_admin)
         self.client.get(reverse('portal:patient-detail', args=[self.patient.pk]))
         self.assertTrue(AuditEvent.objects.filter(action='patient.record_viewed', actor=self.super_admin).exists())
         history = self.client.get(reverse('portal:account-access-history'))

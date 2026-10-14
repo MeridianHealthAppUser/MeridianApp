@@ -1,4 +1,4 @@
 {% extends 'portal/patient_workspace_base.html' %}{% load static %}
 {% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/backoffice.css' %}?v=20261008c"><link rel="stylesheet" href="{% static 'css/clinical_workflow.css' %}"><link rel="stylesheet" href="{% static 'css/dialogs.css' %}?v=20261008b"><script src="{% static 'js/dialogs.js' %}?v=20261008a" defer></script>{% endblock %}
-{% block patient_workspace_heading_actions %}<a class="console-button console-button--quiet" href="{% url 'portal:patient-detail' appointment.patient_id %}?tab=appointments">Back to appointments</a>{% endblock %}
+{% block patient_workspace_heading_actions %}<a class="console-button console-button--quiet" href="{{ workspace_return_url }}">{{ workspace_return_label }}</a>{% endblock %}
 {% block patient_workspace_content %}<div class="backoffice">{% include 'portal/includes/appointment_detail_content.html' with full_details=True %}</div>{% endblock %}

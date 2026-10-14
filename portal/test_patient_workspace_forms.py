@@ -21,6 +21,11 @@ from practices.models import Company, CompanyMembership, Patient
 from practices.services import ACTIVE_COMPANY_SESSION_KEY, ACTIVE_PATIENT_COMPANY_SESSION_KEY
 
 
+def doctor_section(tab):
+    """A doctor (the Clinician role) sees the Overview and Blood results: a page under any other tab sits under the Overview."""
+    return tab if tab in ('overview', 'blood-tests') else 'overview'
+
+
 @override_settings(MULTI_PRACTICE_ENABLED=True)
 class PatientWorkspaceFormTests(TestCase):
     @classmethod
@@ -61,14 +66,14 @@ class PatientWorkspaceFormTests(TestCase):
             ('appointment', 'appointments', reverse('portal:appointment-detail', args=[self.appointment.pk])),
         ]
 
-    def assertWorkspace(self, response, tab, status=200):
+    def assertWorkspace(self, response, tab, status=200, active=None):
         self.assertEqual(response.status_code, status)
         self.assertTemplateUsed(response, 'portal/patient_workspace_base.html')
         self.assertContains(response, 'aria-label="Patient sections"', count=1, status_code=status)
         self.assertContains(response, '<h1>Example Patient</h1>', count=1, status_code=status)
         self.assertContains(response, f'data-patient-section="{tab}"', status_code=status)
         self.assertEqual(response.context['patient'].pk, self.patient.pk)
-        self.assertEqual([item['name'] for item in response.context['workspace_tabs'] if item['active']], [tab])
+        self.assertEqual([item['name'] for item in response.context['workspace_tabs'] if item['active']], [active or tab])
         self.assertIn('no-store', response['Cache-Control'])
 
     def test_patient_bound_screens_keep_one_heading_and_the_current_tab(self):
@@ -76,8 +81,10 @@ class PatientWorkspaceFormTests(TestCase):
         for name, tab, url in self.screens():
             with self.subTest(screen=name):
                 response = self.client.get(url)
-                self.assertWorkspace(response, tab)
-                self.assertContains(response, f'href="{reverse("portal:patient-detail", args=[self.patient.pk])}?tab={tab}"')
+                section = doctor_section(tab)
+                self.assertWorkspace(response, tab, active=section)
+                self.assertContains(response, f'href="{reverse("portal:patient-detail", args=[self.patient.pk])}?tab={section}">'
+                                              f'Back to {"blood results" if section == "blood-tests" else "overview"}</a>')
 
     def test_invalid_submissions_preserve_the_patient_workspace_and_errors(self):
         self.login()
@@ -86,7 +93,7 @@ class PatientWorkspaceFormTests(TestCase):
                 continue
             with self.subTest(screen=name):
                 response = self.client.post(url, {})
-                self.assertWorkspace(response, tab, status=400)
+                self.assertWorkspace(response, tab, status=400, active=doctor_section(tab))
                 self.assertContains(response, 'errorlist', status_code=400)
         self.assertEqual(ClinicalEncounter.objects.count(), 2)
         self.assertEqual(LabRequest.objects.count(), 1)
@@ -101,7 +108,7 @@ class PatientWorkspaceFormTests(TestCase):
             'clinical_context': page.context['clinical_context'], 'summary': 'Updated draft in the patient workspace.',
             'occurred_at': self.encounter.occurred_at.isoformat(), 'appointment': '', 'action': 'save',
         }, follow=True)
-        self.assertWorkspace(response, 'consultations')
+        self.assertWorkspace(response, 'consultations', active='overview')
         self.assertEqual(response.redirect_chain, [(url, 302)])
 
     def test_admin_appointment_workspace_does_not_add_clinical_permissions(self):
@@ -184,8 +191,10 @@ class SharedPatientActionTests(TestCase):
                 self.assertEqual(global_page.status_code, 200)
                 self.assertNotContains(global_page, 'aria-label="Patient sections"')
                 patient_page = self.client.get(url, {'workspace': 'patient', 'patient': self.other_patient.pk})
-                self.assertWorkspace(patient_page, tab)
-                self.assertContains(patient_page, f'href="{reverse("portal:patient-detail", args=[self.patient.pk])}?tab={tab}"')
+                # The practice admin keeps the tab; the doctor's pages sit under the Overview.
+                section = tab if actor else doctor_section(tab)
+                self.assertWorkspace(patient_page, tab, active=section)
+                self.assertContains(patient_page, f'href="{reverse("portal:patient-detail", args=[self.patient.pk])}?tab={section}"')
                 self.assertEqual(patient_page.context['patient'].pk, self.patient.pk)
 
     def test_patient_task_editor_locks_association_and_keeps_context_after_save(self):
@@ -199,7 +208,7 @@ class SharedPatientActionTests(TestCase):
             'title': 'Updated coordination task', 'description': '', 'patient': self.other_patient.pk,
             'assigned_to': self.doctor.pk, 'priority': 'normal', 'status': 'open', 'due_at': '', 'new_tag': '',
         }, follow=True)
-        self.assertWorkspace(response, 'tasks')
+        self.assertWorkspace(response, 'tasks', active='overview')
         self.assertEqual(response.redirect_chain, [(url + '?workspace=patient', 302)])
         self.task.refresh_from_db()
         self.assertEqual(self.task.patient_id, self.patient.pk)
@@ -212,10 +221,10 @@ class SharedPatientActionTests(TestCase):
         self.assertContains(page, reverse('portal:compounding-create', args=[self.authorization.pk]) + '?workspace=patient')
         status_url = reverse('portal:treatment-authorisation-status', args=[self.authorization.pk])
         rejected = self.client.post(status_url, {'workspace': 'patient', 'action': 'pause'})
-        self.assertWorkspace(rejected, 'treatment', status=400)
+        self.assertWorkspace(rejected, 'treatment', status=400, active='overview')
         response = self.client.post(status_url, {'workspace': 'patient', 'treatment_context': page.context['treatment_context'],
             'action': 'pause', 'confirm': 'on'}, follow=True)
-        self.assertWorkspace(response, 'treatment')
+        self.assertWorkspace(response, 'treatment', active='overview')
         self.assertEqual(response.redirect_chain, [(url + '?workspace=patient', 302)])
 
     def test_operations_permissions_and_redirects_remain_unchanged(self):
@@ -232,15 +241,16 @@ class SharedPatientActionTests(TestCase):
         self.assertWorkspace(response, 'deliveries')
         self.assertEqual(response.redirect_chain, [(url + '?workspace=patient', 302)])
 
-    def test_deliveries_tab_shows_rows_to_doctors_but_only_admins_open_the_operations_page(self):
+    def test_deliveries_tab_lists_rows_for_admins_and_sends_doctors_to_the_overview(self):
         record = reverse('portal:patient-detail', args=[self.patient.pk])
         link = reverse('portal:ops-shipment-detail', args=[self.shipment.pk])
+        # Doctors (the Clinician role) don't see Deliveries; the practice admin lists them and opens the Operations page.
         self.login()
+        self.assertRedirects(self.client.get(record, {'tab': 'deliveries'}), f'{record}?tab=overview', fetch_redirect_response=False)
+        self.login(self.admin)
         page = self.client.get(record, {'tab': 'deliveries'})
         self.assertEqual([row.pk for row in page.context['rows']], [self.shipment.pk])
-        self.assertNotContains(page, link)
-        self.login(self.admin)
-        self.assertContains(self.client.get(record, {'tab': 'deliveries'}), link)
+        self.assertContains(page, link)
 
     def test_compounding_followup_remains_in_treatment_context(self):
         self.login()
@@ -249,7 +259,7 @@ class SharedPatientActionTests(TestCase):
         self.assertContains(page, reverse('portal:treatment-authorisation-detail', args=[self.authorization.pk]) + '?workspace=patient')
         response = self.client.post(url, {'workspace': 'patient', 'clinical_context': page.context['clinical_context'],
             'action': 'save', 'preparation_note': 'Updated manual tracking note.'}, follow=True)
-        self.assertWorkspace(response, 'treatment')
+        self.assertWorkspace(response, 'treatment', active='overview')
         self.assertEqual(response.redirect_chain, [(url + '?workspace=patient', 302)])
 
     def test_marker_never_bypasses_practice_or_clinical_permissions(self):
@@ -263,6 +273,8 @@ class SharedPatientActionTests(TestCase):
 
     def test_generated_task_links_merge_the_workspace_marker_with_existing_query(self):
         from .clinical_tasks import attach_clinical_task_links
+        # The Tasks tab isn't shown to the Clinician role, so the doctor here is a Super Admin (still the compounding clinician).
+        CompanyMembership.objects.filter(company=self.company, user=self.doctor).update(role='super_admin')
         self.login()
 
         def linked(tasks, actor, membership):

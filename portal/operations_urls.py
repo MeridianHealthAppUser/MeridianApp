@@ -1,10 +1,13 @@
 from django.urls import path
 from . import operations_views as views
+from .starting_plan_views import StartingPlanEditorView
 
 urlpatterns = [
     path('catalogue/', views.CatalogueView.as_view(), name='ops-catalogue'),
     path('catalogue/new/', views.ProductEditorView.as_view(), name='ops-product-create'),
     path('catalogue/<int:pk>/', views.ProductEditorView.as_view(), name='ops-product-detail'),
+    path('catalogue/starting-plans/new/', StartingPlanEditorView.as_view(), name='ops-starting-plan-create'),
+    path('catalogue/starting-plans/<int:pk>/', StartingPlanEditorView.as_view(), name='ops-starting-plan-detail'),
     path('stock/', views.StockListView.as_view(), name='ops-stock'),
     path('stock/receive/', views.StockReceiveView.as_view(), name='ops-stock-receive'),
     path('stock/export.csv', views.StockExportView.as_view(), name='ops-stock-export'),

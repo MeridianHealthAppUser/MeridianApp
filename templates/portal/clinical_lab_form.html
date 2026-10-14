@@ -3,7 +3,7 @@
 {% block title %}Request blood tests | {{ patient }} | Meridian{% endblock %}
 {% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/clinical_workflow.css' %}">{% endblock %}
 {% block patient_workspace_heading_actions %}
-  <a class="console-button console-button--quiet" href="{% url 'portal:patient-detail' patient.pk %}?tab=blood-tests">Back to blood tests</a>
+  <a class="console-button console-button--quiet" href="{{ workspace_return_url }}">{{ workspace_return_label }}</a>
 {% endblock %}
 
 {% block patient_workspace_content %}

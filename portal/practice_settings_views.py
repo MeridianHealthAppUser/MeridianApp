@@ -27,7 +27,7 @@ EVENT_LOG_SECTIONS = (
     )),
     ('Patient record', (
         ('Patient record and login created', True), ('Enquiry converted to patient', True),
-        ('Contact details updated', True), ('Assigned clinician changed', True),
+        ('Contact details updated', True), ('Prescribing doctor changed', True),
     )),
     ('Appointments', (
         ('Appointments booked by staff or patients', True), ('Appointments cancelled, completed or missed', True),

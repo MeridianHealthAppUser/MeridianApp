@@ -9,7 +9,7 @@ from django.core.paginator import Paginator
 from django.db.models import Prefetch, Q
 from django.db.models.fields.json import KeyTextTransform
 from django.http import Http404
-from django.shortcuts import get_object_or_404, render
+from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.decorators import method_decorator
@@ -21,7 +21,7 @@ from care.models import (
     Appointment, AuditEvent, ClinicalEncounter, ClinicalTask, LabRequest,
     MessageThread, PatientSubscription, Payment, RecordTag, Shipment, TreatmentAuthorization,
 )
-from care.patient_assignment import can_assign_doctor
+from care.patient_assignment import can_assign_doctor, is_care_team
 from care.services import record_audit
 from care.task_services import visible_tasks
 from practices.models import CompanyMembership, Patient
@@ -37,15 +37,17 @@ from .workflow_context import make_workflow_context
 
 TABS = (
     ('overview', 'Overview'), ('history', 'History'), ('appointments', 'Appointments'),
-    ('consultations', 'Consultations'), ('blood-tests', 'Blood tests'), ('notes', 'Notes'),
+    ('consultations', 'Consultations'), ('blood-tests', 'Blood results'), ('notes', 'Notes'),
     ('weights', 'Weight'), ('messages', 'Messages'), ('tasks', 'Tasks'),
     ('payments', 'Payments'), ('treatment', 'Treatment'), ('deliveries', 'Deliveries'),
 )
 CLINICAL_TABS = {'consultations', 'blood-tests', 'notes', 'treatment'}
+# Doctors (the Clinician role) work from the Overview: they also see Blood results and, for their own patients, Messages.
+CLINICIAN_TABS = {'overview', 'blood-tests', 'messages'}
 OPERATIONAL_AUDIT_LABELS = {
     'appointment.created': 'Appointment booked', 'appointment.patient_booked': 'Appointment booked by patient',
     'appointment.status_changed': 'Appointment status changed', 'appointment.proposal.accepted': 'Appointment time changed',
-    'patient.contact_updated': 'Patient contact details updated', 'patient.doctor_assigned': 'Assigned clinician changed',
+    'patient.contact_updated': 'Patient contact details updated', 'patient.doctor_assigned': 'Prescribing doctor changed',
     'shipment.created': 'Delivery prepared',
     'shipment.locked': 'Delivery contents locked', 'shipment.dispatched': 'Delivery dispatched',
     'pharmacy_order.submitted': 'Supply request submitted', 'pharmacy_order.accepted': 'Supply request accepted',
@@ -66,25 +68,56 @@ def workspace_url(patient, tab='overview', **query):
     return f'{reverse("portal:patient-detail", args=[patient.pk])}?{urlencode({"tab": tab, **query}, doseq=True)}'
 
 
+def shows_tab(membership, user, patient, tab):
+    """Doctors (the Clinician role) see the Overview, Blood results and, only as the patient's Prescribing doctor,
+    Messages: another doctor's conversations with the patient aren't theirs to read. Everyone else sees every tab
+    their access allows."""
+    if tab in CLINICAL_TABS and not membership.has_clinical_access:
+        return False
+    if membership.role != CompanyMembership.Role.DOCTOR:
+        return True
+    return tab in CLINICIAN_TABS and (tab != 'messages' or patient.assigned_doctor_id == user.pk)
+
+
 def patient_workspace_context(request, company, membership, patient, tab='overview'):
     from .record_access import CHANGE, COVER, READ, cover_appointment, record_access
 
-    clinical = membership.has_clinical_access
     # A clinician assigned to this patient before reads the record; one covering an appointment also writes notes.
     access = record_access(membership, request.user, patient)
     changeable = access == CHANGE
+    # A page under a tab this person doesn't see (a consultation, an appointment) sits under the Overview.
+    section = tab if shows_tab(membership, request.user, patient, tab) else 'overview'
     return dict(
         can_change_record=changeable, can_write_notes=access in (CHANGE, COVER),
         record_read_only=access == READ,
         record_cover_appointment=cover_appointment(patient, request.user) if access == COVER else None,
         patient_workspace=True, workspace_base_template='portal/patient_workspace_base.html',
         workspace_patient=patient, workspace_tab=tab, workspace_url=workspace_url(patient, tab),
-        workspace_tabs=[dict(name=name, label=label, url=workspace_url(patient, name), active=name == tab)
-                        for name, label in TABS if clinical or name not in CLINICAL_TABS],
+        workspace_tabs=[dict(name=name, label=label, url=workspace_url(patient, name), active=name == section)
+                        for name, label in TABS if shows_tab(membership, request.user, patient, name)],
+        workspace_return_url=workspace_url(patient, section), workspace_return_label=f'Back to {dict(TABS)[section].lower()}',
+        is_super_admin=membership.role == CompanyMembership.Role.SUPER_ADMIN,
         patient=patient, company=company, active_membership=membership, nav_section='record',
-        is_doctor=membership.is_prescriber, is_clinician=membership.is_clinician, can_view_clinical_notes=clinical,
+        is_doctor=membership.is_prescriber, is_clinician=membership.is_clinician, can_view_clinical_notes=membership.has_clinical_access,
         can_add_clinical_note=membership.is_clinician and access in (CHANGE, COVER),
     )
+
+
+def hidden_tab_destination(request, patient, tab):
+    """Where a link to a tab a doctor doesn't see goes: a conversation opens in Patient messages if they're in it,
+    anything else on the Overview."""
+    thread = request.GET.get('thread', '')
+    if tab == 'messages' and thread.isascii() and thread.isdecimal() and len(thread) <= 19:
+        return f'{reverse("portal:staff-inbox")}?{urlencode({"thread": thread})}'
+    return workspace_url(patient)
+
+
+def age(born, today=None):
+    """Whole years since the date of birth, or None when it isn't recorded."""
+    if born is None:
+        return None
+    today = today or timezone.localdate()
+    return today.year - born.year - ((today.month, today.day) < (born.month, born.day))
 
 
 def scoped(model, company, patient):
@@ -183,15 +216,23 @@ def workspace_tab_context(request, company, membership, patient, tab, **override
         raise Http404
     if tab in CLINICAL_TABS and not membership.has_clinical_access:
         raise PermissionDenied('This clinical section is restricted to clinicians and practice Super Admins.')
+    if not shows_tab(membership, request.user, patient, tab):
+        # A form sent from a tab a doctor doesn't see comes back on the Overview.
+        tab = 'overview'
     context = patient_workspace_context(request, company, membership, patient, tab)
     context['page_title'] = dict(TABS)[tab]
     if tab == 'overview' and membership.has_clinical_access:
         # Clinicians and Super Admins get the clinical Overview: log, prescription, weight and summary data.
         from .record_overview import record_overview_context
 
-        dialog = overrides.get('open_dialog') or request.GET.get('prescription', '')
+        dialog = overrides.get('open_dialog') or request.GET.get('prescription', '') or ('note' if request.GET.get('note') == 'new' else '')
         context.update(record_overview_context(request, company, membership, patient, log_filter=request.GET.get('log', 'clinical'),
-                                               open_dialog=dialog if dialog in ('renew', 'change') else ''))
+                                               open_dialog=dialog if dialog in ('initiate', 'renew', 'change', 'note') else ''))
+        if context['can_add_clinical_note']:
+            from care.forms import LogNoteForm
+
+            context['log_note_form'] = overrides.get('log_note_form') or LogNoteForm(
+                company=company, patient=patient, author=request.user, auto_id='log_note_%s')
     if tab == 'overview':
         # Conversations live on the Messages tab, not here.
         if not membership.has_clinical_access:
@@ -204,9 +245,12 @@ def workspace_tab_context(request, company, membership, patient, tab, **override
         # Existing integrations may request this token before their dedicated
         # legacy booking POST. No form or booking list is rendered on Overview.
         context['legacy_appointment_context'] = make_workflow_context(request, company, 'legacy-staff-booking', patient)
-        if can_assign_doctor(membership) and context['can_change_record']:
+        context['patient_age'] = age(patient.date_of_birth)
+        if is_care_team(membership) and context['can_change_record']:
             context.update(title_context_token=make_workflow_context(request, company, 'patient-title', patient=patient),
                            title_choices=Patient.Title.choices)
+        # Writing a prescription makes the prescriber the Prescribing doctor; only administrators change it by hand.
+        if can_assign_doctor(membership) and context['can_change_record']:
             context.update(doctor_form=AssignedDoctorForm(company=company, initial={'doctor': patient.assigned_doctor_id}),
                            doctor_assignment_context=make_workflow_context(request, company, 'patient-doctor-assignment', patient))
     elif tab == 'appointments':
@@ -228,6 +272,10 @@ def workspace_tab_context(request, company, membership, patient, tab, **override
         context.update(paginated(request, patient, tab, encounters, filters=[
             FilterSection('status', 'Status', 'status', ClinicalEncounter.Status.choices), doctor_filter(encounters)]))
     elif tab == 'blood-tests':
+        # Results recorded by hand (most are read on the PathCare portal), then the blood test requests.
+        from .blood_result_views import blood_results_context
+
+        context.update(blood_results_context(request, company, membership, patient, context, **overrides))
         context.update(paginated(request, patient, tab, scoped(LabRequest, company, patient).select_related('requested_by').defer('result_summary').order_by('-requested_on', '-pk'), LabRequest.Status.choices))
     elif tab == 'notes':
         # Signed consult notes and general notes, newest first: the same list as Patient notes in a conversation.
@@ -316,6 +364,9 @@ class PatientWorkspaceView(LoginRequiredMixin, StaffCompanyRequiredMixin, View):
         patient = get_object_or_404(Patient.objects.for_company(self.company).select_related('user', 'assigned_doctor'), pk=pk, is_active=True)
         require_record_view(self.membership, request.user, patient)
         tab = request.GET['tab'] if 'tab' in request.GET else ('messages' if 'thread' in request.GET else 'weights' if 'weight_page' in request.GET else 'overview')
+        if tab in dict(TABS) and not (tab in CLINICAL_TABS and not self.membership.has_clinical_access) \
+                and not shows_tab(self.membership, request.user, patient, tab):
+            return redirect(hidden_tab_destination(request, patient, tab))
         if tab == 'history' and self.membership.has_clinical_access:
             from .record_views import ClinicalRecordView
             return ClinicalRecordView.as_view()(request, pk=pk)

@@ -23,6 +23,7 @@ from care.models import Appointment, AuditEvent, ClinicalTask, PatientMessage
 from care.services import post_patient_message
 from care.test_appointment_lifecycle import AppointmentLifecycleFixture
 from care.widgets import floor_quarter_hour
+from practices.models import CompanyMembership
 from practices.services import ACTIVE_COMPANY_SESSION_KEY, ACTIVE_PATIENT_COMPANY_SESSION_KEY
 
 
@@ -251,8 +252,12 @@ class AppointmentDetailPageTests(AppointmentLifecycleFixture):
     def test_the_record_appointment_list_shows_the_join_window_and_the_video_room_note_behind_an_info_tip(self):
         appointment = self.appointment(starts_at=timezone.make_aware(timezone.datetime(2030, 10, 16, 11, 0)), duration_minutes=15)
         cancelled = self.appointment(starts_at=timezone.make_aware(timezone.datetime(2030, 10, 17, 11, 0)), status='cancelled')
+        record = self.url('patient-detail', self.patient.pk)
         self.login(self.doctor)
-        response = self.client.get(self.url('patient-detail', self.patient.pk), {'tab': 'appointments'})
+        # A doctor in the Clinician role works from the Overview; as a Super Admin they also have the Appointments tab.
+        self.assertRedirects(self.client.get(record, {'tab': 'appointments'}), f'{record}?tab=overview', fetch_redirect_response=False)
+        CompanyMembership.objects.filter(company=self.company, user=self.doctor).update(role='super_admin')
+        response = self.client.get(record, {'tab': 'appointments'})
         self.assertContains(response, '<th scope="col">Date and time</th><th scope="col">Appointment type</th><th scope="col">Join window</th><th scope="col">Doctor</th>')
         self.assertContains(response, '<td>10:55–11:15<small>SAST</small></td>')
         self.assertContains(response, '<td>&mdash;</td>', count=1)
@@ -297,9 +302,10 @@ class AppointmentDetailPageTests(AppointmentLifecycleFixture):
         # A choice that isn't offered shows nothing, rather than everything.
         self.assertEqual(rows(doctor=self.super_admin.pk), set())
         self.assertContains(self.client.get(record, {'tab': 'appointments', 'doctor': self.super_admin.pk}), 'filter-menu__error')
-        # Consultations filter by status and by who wrote them.
+        # Consultations filter by status and by who wrote them; the doctor is a Super Admin to have the Consultations tab.
         save_consultation(company=self.company, patient=self.patient, actor=self.doctor, summary='Final',
                           occurred_at=timezone.now() - timedelta(days=1), sign=True)
+        CompanyMembership.objects.filter(company=self.company, user=self.doctor).update(role='super_admin')
         self.login(self.doctor)
         draft = save_consultation(company=self.company, patient=self.patient, actor=self.doctor, summary='Draft',
                                   occurred_at=timezone.now() - timedelta(hours=1))
@@ -329,9 +335,10 @@ class AppointmentDetailPageTests(AppointmentLifecycleFixture):
         data['starts_at'] = timezone.localtime(self.starts_at + timedelta(days=1)).strftime('%Y-%m-%dT%H:%M')
         self.assertRedirects(self.client.post(create, data), f'{record}?tab=appointments', fetch_redirect_response=False)
         self.assertTrue(Appointment.objects.filter(patient=self.patient, clinician=self.doctor, appointment_type='follow_up').exists())
-        # Someone who can only read the record gets neither.
+        # A doctor covering the appointment, who can't change the booking, is sent to the Overview, which has neither.
         self.login(self.colleague)
-        response = self.client.get(record, {'tab': 'appointments'})
+        response = self.client.get(record, {'tab': 'appointments'}, follow=True)
+        self.assertRedirects(response, f'{record}?tab=overview')
         self.assertNotContains(response, 'Book an appointment')
         self.assertNotContains(response, 'id="book-appointment"')
 

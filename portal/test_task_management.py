@@ -345,6 +345,12 @@ class TaskManagementTests(TestCase):
         self.assertEqual(self.client.post(self.note_tags_url(patient=wrong_patient), {'tags': [self.tag.pk]}).status_code, 404)
         response = self.client.post(self.note_tags_url(), {'tags': [self.foreign_tag.pk], 'new_tag': 'Keep this label'})
         self.assertEqual(response.status_code, 200)
+        # The Clinician role has no Notes tab, so the form comes back on the Overview.
+        self.assertEqual(response.context['workspace_tab'], 'overview')
+        # The author as a Super Admin who is a doctor gets the Notes tab back, with the label they typed.
+        CompanyMembership.objects.filter(company=self.company, user=self.doctor).update(role=CompanyMembership.Role.SUPER_ADMIN)
+        response = self.client.post(self.note_tags_url(), {'tags': [self.foreign_tag.pk], 'new_tag': 'Keep this label'})
+        self.assertEqual(response.context['workspace_tab'], 'notes')
         self.assertContains(response, 'Keep this label')
         self.assertFalse(self.note.tags.exists())
         self.assertFalse(RecordTag.objects.filter(name='Keep this label').exists())

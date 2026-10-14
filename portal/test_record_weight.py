@@ -51,8 +51,10 @@ class RecordWeightTests(TestCase):
         cls.beta = Company.objects.create(name='Weight Beta', slug='weight-beta')
         cls.doctor = get_user_model().objects.create_user(email='weight-doctor@example.test', first_name='Example', last_name='Doctor')
         cls.user = get_user_model().objects.create_user(email='weight-patient@example.test')
+        # A Super Admin who is a doctor: the Clinician role has no Weight tab (see test_a_clinician_has_no_weight_tab).
         for company in (cls.company, cls.beta):
-            CompanyMembership.objects.create(company=company, user=cls.doctor, role=CompanyMembership.Role.DOCTOR)
+            CompanyMembership.objects.create(company=company, user=cls.doctor, role=CompanyMembership.Role.SUPER_ADMIN,
+                                             clinician_type='doctor')
         cls.patient = Patient.objects.create(company=cls.company, user=cls.user, first_name='Example', last_name='Patient', assigned_doctor=cls.doctor)
         cls.beta_patient = Patient.objects.create(company=cls.beta, user=cls.user, first_name='Example', last_name='Patient', assigned_doctor=cls.doctor)
         cls.other_patient = Patient.objects.create(company=cls.company, first_name='Other', last_name='Patient', assigned_doctor=cls.doctor)
@@ -72,6 +74,15 @@ class RecordWeightTests(TestCase):
                       weight_kg=weight, recorded_by=self.doctor)
         values.update(extra)
         return WeightEntry.objects.create(**values)
+
+    def test_a_clinician_has_no_weight_tab(self):
+        clinician = get_user_model().objects.create_user(email='weight-clinician@example.test', first_name='Cleo', last_name='Clinician')
+        CompanyMembership.objects.create(company=self.company, user=clinician, role=CompanyMembership.Role.DOCTOR, clinician_type='doctor')
+        patient = Patient.objects.create(company=self.company, first_name='Their', last_name='Patient', assigned_doctor=clinician)
+        self.login(clinician)
+        overview = reverse('portal:patient-detail', args=[patient.pk]) + '?tab=overview'
+        self.assertRedirects(self.client.get(self.url(patient)), overview, fetch_redirect_response=False)
+        self.assertNotIn('weights', [tab['name'] for tab in self.client.get(overview).context['workspace_tabs']])
 
     def test_chart_summary_and_table_use_only_this_patient_at_this_practice(self):
         self.login()

@@ -1,4 +1,4 @@
-"""Renew or change a prescription and edit summary data from the patient record Overview."""
+"""Initiate, renew or change a prescription and edit summary data from the patient record Overview."""
 
 from django import forms
 from django.contrib import messages
@@ -10,8 +10,11 @@ from django.views import View
 from django.views.decorators.cache import never_cache
 
 from care.clinical_summary import FIELDS, edit_summary
-from care.models import MedicationProduct, TreatmentAuthorization
-from care.prescriptions import MONTH_CHOICES, change_prescription, current_prescription, prescription_options, renew_prescription
+from care.models import MedicationProduct, StartingPlan, TreatmentAuthorization
+from care.prescriptions import (
+    MONTH_CHOICES, change_prescription, current_prescription, plan_steps, prescription_options, renew_prescription,
+)
+from care.starting_plans import initiate_prescription, offered_plans
 from practices.models import Patient
 
 from .record_access import require_record_change
@@ -45,6 +48,28 @@ class ChangePrescriptionForm(forms.Form):
         data = super().clean()
         if data.get('product') and data.get('medicine') and data['product'].name != data['medicine']:
             self.add_error('product', 'Choose a dose of the selected medicine.')
+        return data
+
+
+class InitiatePrescriptionForm(forms.Form):
+    """Initiate prescription: a medicine, one of its starting plans, and how long the whole prescription runs."""
+
+    current = forms.IntegerField(required=False, widget=forms.HiddenInput)
+    medicine = forms.CharField(max_length=255)
+    plan = forms.ModelChoiceField(queryset=StartingPlan.objects.none(), label='Starting plan',
+                                  error_messages={'required': 'Choose a starting plan.'})
+    months = forms.TypedChoiceField(choices=MONTHS, coerce=int, widget=forms.RadioSelect)
+    reason = forms.CharField(required=False, max_length=500, label='Reason')
+    acknowledge_flags = forms.BooleanField(required=False)
+
+    def __init__(self, *args, plans, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['plan'].queryset = StartingPlan.objects.filter(pk__in=[plan.pk for plan in plans])
+
+    def clean(self):
+        data = super().clean()
+        if data.get('plan') and data.get('medicine') and data['plan'].medicine != data['medicine']:
+            self.add_error('plan', 'Choose a starting plan for the selected medicine.')
         return data
 
 
@@ -128,6 +153,30 @@ class PrescriptionChangeView(RecordActionMixin, View):
         return render_overview(request, self, patient, change_form=form, open_dialog='change')
 
 
+class PrescriptionInitiateView(RecordActionMixin, View):
+    def post(self, request, pk):
+        if not self.membership.is_prescriber:
+            raise PermissionDenied('Only a doctor can initiate a prescription.')
+        patient = self.patient(pk)
+        form = InitiatePrescriptionForm(request.POST, plans=offered_plans(self.company))
+        if form.is_valid():
+            try:
+                validate_workflow_context(request, self.company, 'patient-prescription', patient=patient)
+                first = initiate_prescription(
+                    company=self.company, patient=patient, actor=request.user,
+                    current=self.current(patient, form.cleaned_data['current']), plan=form.cleaned_data['plan'],
+                    months=form.cleaned_data['months'], reason=form.cleaned_data['reason'],
+                    acknowledge_flags=form.cleaned_data['acknowledge_flags'], request=request,
+                )
+                messages.success(request, f'Prescription initiated to {plan_steps(first).last().expires_on:%-d %b %Y}, starting on '
+                                          f'{first.product.name} {first.max_dose}. It is written to the clinical log under your name.')
+                return redirect(self.overview_url(patient, 'record-prescription'))
+            except ValidationError as error:
+                for message in error.messages:
+                    form.add_error(None, message)
+        return render_overview(request, self, patient, initiate_form=form, open_dialog='initiate')
+
+
 class SummaryEditView(RecordActionMixin, View):
     def post(self, request, pk):
         if not self.membership.has_clinical_access:
@@ -157,12 +206,12 @@ class PatientTitleView(RecordActionMixin, View):
     def post(self, request, pk):
         from django.db import transaction
 
-        from care.patient_assignment import can_assign_doctor
+        from care.patient_assignment import is_care_team
         from care.services import record_audit
 
         from .patient_workspace import workspace_url
 
-        if not can_assign_doctor(self.membership):
+        if not is_care_team(self.membership):
             raise PermissionDenied('Only the care team can change a patient’s title.')
         patient = self.patient(pk)
         form = PatientTitleForm(request.POST)

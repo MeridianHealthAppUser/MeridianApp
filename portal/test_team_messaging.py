@@ -252,11 +252,16 @@ class TeamMessagingTests(TestCase):
         record = reverse('portal:patient-detail', args=[self.patient.pk])
         self.login(self.doctor)
         self.assertEqual([t.pk for t in self.client.get(record, {'tab': 'messages'}).context['team_threads_about_patient']], [thread.pk])
-        # The dietitian saw Pat before, so can open the record, but isn't in the team conversation.
+        # A Super Admin reads every patient conversation, but a team conversation only once they're in it.
+        super_admin = get_user_model().objects.create_user(email='super@team.test', first_name='Sue', last_name='Super')
+        CompanyMembership.objects.create(company=self.company, user=super_admin, role='super_admin')
+        self.login(super_admin)
+        self.assertEqual(self.client.get(record, {'tab': 'messages'}).context['team_threads_about_patient'], [])
+        # The dietitian saw Pat before, so can open the record, but not its Messages tab: Pat isn't theirs.
         ClinicianAssignment.objects.create(company=self.company, patient=self.patient, clinician=self.dietitian,
                                            ended_at=timezone.now())
         self.login(self.dietitian)
-        self.assertEqual(self.client.get(record, {'tab': 'messages'}).context['team_threads_about_patient'], [])
+        self.assertRedirects(self.client.get(record, {'tab': 'messages'}), f'{record}?tab=overview', fetch_redirect_response=False)
         self.client.force_login(self.patient_user)
         session = self.client.session
         session[ACTIVE_PATIENT_COMPANY_SESSION_KEY] = self.company.pk
@@ -265,6 +270,33 @@ class TeamMessagingTests(TestCase):
         self.assertNotContains(page, 'Delivery for Pat')
         self.assertNotContains(page, 'Has the parcel gone out?')
         self.assertEqual(self.client.get(reverse('portal:team-inbox')).status_code, 403)
+
+    def test_a_conversation_about_a_patient_shows_their_notes_to_clinicians_only(self):
+        from care.models import ClinicalNote, PracticeSettings
+
+        PracticeSettings.objects.create(company=self.company, store_view_log=True)
+        ClinicalNote.objects.create(company=self.company, patient=self.patient, author=self.doctor, note_type='phone',
+                                    body='Phoned about the parcel.')
+        # The dietitian never saw Pat, so may not open the record and gets no notes even when in the conversation.
+        thread = self.start(members=[self.admin, self.dietitian])
+        general = self.start(members=[self.admin], subject='Rota', patient=None)
+        url = f'{reverse("portal:team-inbox")}?thread={thread.pk}'
+        self.login(self.doctor)
+        response = self.client.get(url)
+        self.assertEqual([note.text for note in response.context['conversation_notes']['entries']], ['Phoned about the parcel.'])
+        self.assertContains(response, '<details class="conversation-notes">')
+        self.assertContains(response, 'Phoned about the parcel.')
+        self.assertEqual(AuditEvent.objects.get(action='team_thread.viewed', actor=self.doctor).metadata, {'patient_notes': 1})
+        self.assertIsNone(self.client.get(f'{reverse("portal:team-inbox")}?thread={general.pk}').context['conversation_notes'])
+        for colleague in (self.admin, self.dietitian):
+            with self.subTest(colleague=colleague.email):
+                self.login(colleague)
+                response = self.client.get(url)
+                self.assertEqual(response.status_code, 200)
+                self.assertIsNone(response.context['conversation_notes'])
+                for hidden in ('conversation-notes', 'Phoned about the parcel.'):
+                    self.assertNotContains(response, hidden)
+                self.assertEqual(AuditEvent.objects.get(action='team_thread.viewed', actor=colleague).metadata, {})
 
     def test_compose_from_a_record_preselects_the_patient(self):
         self.login(self.doctor)

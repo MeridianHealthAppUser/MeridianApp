@@ -48,10 +48,12 @@ ACCESS_AUDIT_LABELS = {
     'patient.clinical_record_exported': 'Clinical record exported',
     'lab_result.downloaded': 'Blood test report downloaded',
     'message.thread_viewed': 'Secure conversation viewed',
+    'team_thread.viewed': 'Team conversation viewed',
+    'blood_result.report_viewed': 'Blood result report viewed',
 }
 AUDIT_LABELS = {
     'patient.contact_updated': 'Contact details updated',
-    'patient.doctor_assigned': 'Assigned clinician changed',
+    'patient.doctor_assigned': 'Prescribing doctor changed',
     'weight_entry.created': 'Weight entry recorded',
     'appointment.created': 'Appointment created',
     'appointment.patient_booked': 'Appointment booked by patient',
@@ -61,6 +63,7 @@ AUDIT_LABELS = {
     'consultation.signed': 'Consultation signed',
     'lab_request.created': 'Blood test requested',
     'lab_result.uploaded': 'Blood test report uploaded',
+    'blood_result.recorded': 'Blood result recorded',
     'lab_request.reviewed': 'Blood test report reviewed',
     'treatment.authorized': 'Treatment authorization recorded',
     'subscription.enrolled_local': 'Local subscription recorded',

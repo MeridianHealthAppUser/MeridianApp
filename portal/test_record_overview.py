@@ -1,6 +1,6 @@
 """The clinical Overview of a patient record (Rev 3.10): log, prescription, weight chart and summary data."""
 
-from datetime import timedelta
+from datetime import date, timedelta
 
 from django.contrib.auth import get_user_model
 from django.test import RequestFactory, TestCase, override_settings
@@ -27,10 +27,14 @@ class RecordOverviewTests(TestCase):
         cls.doctor = users.create_user(email='overview-doctor@example.test', first_name='Sam', last_name='Marchant')
         cls.dietitian = users.create_user(email='overview-dietitian@example.test', first_name='Dee', last_name='Titian')
         cls.admin = users.create_user(email='overview-admin@example.test', first_name='Lindiwe', last_name='Admin')
-        for user, role, kind in ((cls.doctor, 'doctor', 'doctor'), (cls.dietitian, 'doctor', 'dietitian'), (cls.admin, 'practice_admin', '')):
+        # A Super Admin who is a doctor: every tab, and the only one who exports the record.
+        cls.owner = users.create_user(email='overview-owner@example.test', first_name='Joshua', last_name='Czech')
+        for user, role, kind in ((cls.doctor, 'doctor', 'doctor'), (cls.dietitian, 'doctor', 'dietitian'), (cls.admin, 'practice_admin', ''),
+                                 (cls.owner, 'super_admin', 'doctor')):
             CompanyMembership.objects.create(company=cls.company, user=user, role=role, clinician_type=kind)
         cls.patient = Patient.objects.create(company=cls.company, first_name='Nadia', last_name='Mokoena', city='Cape Town',
-                                             assigned_doctor=cls.doctor)
+                                             assigned_doctor=cls.doctor, id_number='9201015800087',
+                                             date_of_birth=date(timezone.localdate().year - 34, 1, 1))
         product = dict(company=cls.company, price='100.00', category=MedicationProduct.Category.WEIGHT_MANAGEMENT,
                        dose_frequency=MedicationProduct.DoseFrequency.WEEKLY)
         cls.low = MedicationProduct.objects.create(name='Semaglutide', strength='0.5 mg', **product)
@@ -92,10 +96,21 @@ class RecordOverviewTests(TestCase):
         # Valid but expiring within 30 days.
         self.assertContains(response, f'Prescribed to {self.prescription.expires_on.day} {self.prescription.expires_on:%b}')
         self.assertContains(response, 'Renewal due')
-        self.assertContains(response, 'Export record')
         self.assertContains(response, 'Cape Town')
+        # Title, Age, Location, Prescribing doctor (no pen for a doctor) and ID number.
+        for fact in ('<dt>Title</dt>', '<dt>Age</dt><dd>34</dd>', '<dt>Prescribing doctor</dt>', '<dt>ID number</dt><dd>9201015800087</dd>'):
+            self.assertContains(response, fact, html=False)
+        self.assertNotContains(response, 'Date of birth')
+        self.assertNotContains(response, 'Change Prescribing doctor')
+        self.assertContains(response, 'Initiate prescription')
         self.assertContains(response, 'Renew prescription')
         self.assertContains(response, 'Change prescription')
+        self.assertContains(response, 'Create note')
+        self.assertNotContains(response, 'Listed from the main treatments')
+        # Only a Super Admin exports the record.
+        self.assertNotContains(response, 'Export record')
+        self.login(self.owner)
+        self.assertContains(self.page(), 'Export record')
         self.assertNotContains(response, 'Quantity')
         chart = response.context['weight_chart']
         self.assertEqual([dot['id'] for dot in chart['consults']], [self.consult.pk])
@@ -107,6 +122,7 @@ class RecordOverviewTests(TestCase):
         response = self.page(log='dispensed')
         self.assertEqual(response.context['log_filter'], 'dispensed')
         self.assertContains(response, '1 shipment')
+        self.login(self.owner)
         history = self.page(tab='history')
         self.assertNotContains(history, 'Current consent')
 
@@ -193,7 +209,7 @@ class RecordOverviewTests(TestCase):
         self.assertTrue(AuditEvent.objects.filter(action='summary.updated', patient=self.patient).exists())
 
     def test_weight_tab_has_the_overview_chart_beside_the_history(self):
-        self.login(self.doctor)
+        self.login(self.owner)
         response = self.page(tab='weights')
         self.assertEqual(response.status_code, 200)
         chart = response.context['weight_chart']
@@ -202,8 +218,9 @@ class RecordOverviewTests(TestCase):
         self.assertContains(response, 'class="record-weight__panes"')
         self.assertContains(response, 'Check-in history')
         self.assertContains(response, 'Since first check-in &middot; 3 check-ins')
-        self.assertContains(response, 'class="record-chart__dose"')
-        self.assertContains(response, 'Dose shipped (mg, right scale)')
+        self.assertContains(response, 'class="record-chart__dose record-chart__dose--1"')
+        # The key names the medicine shipped.
+        self.assertContains(response, 'Dose shipped: Semaglutide (mg, right scale)')
         self.assertContains(response, f'data-consult="{self.consult.pk}"')
         # The dot opens the signed note here; "Show in log" goes to it on the Overview.
         self.assertContains(response, f'<template id="record-consult-{self.consult.pk}"')
@@ -218,7 +235,7 @@ class RecordOverviewTests(TestCase):
         summary = get_summary(self.company, self.patient)
         summary.goal_weight_kg = 75
         summary.save()
-        self.login(self.doctor)
+        self.login(self.owner)
         self.assertTrue(self.page(tab='weights').context['weight_chart']['goal_pill'].startswith('Goal 75 kg · around '))
         self.login(self.admin)
         response = self.page(tab='weights')
@@ -277,9 +294,13 @@ class RecordOverviewTests(TestCase):
     def test_notes_tab_lists_signed_consult_notes_with_the_general_notes_as_the_conversation_does(self):
         from care.models import ClinicalNote
 
-        ClinicalNote.objects.create(company=self.company, patient=self.patient, author=self.doctor, note_type='phone',
+        ClinicalNote.objects.create(company=self.company, patient=self.patient, author=self.owner, note_type='phone',
                                     body='Phoned about meal plan.')
+        # Doctors read notes in the Overview's log; the Notes tab is for Super Admins and admins.
         self.login(self.doctor)
+        self.assertRedirects(self.page(tab='notes'), f'{reverse("portal:patient-detail", args=[self.patient.pk])}?tab=overview',
+                             fetch_redirect_response=False)
+        self.login(self.owner)
         response = self.page(tab='notes')
         self.assertEqual(response.status_code, 200)
         self.assertEqual([note.label for note in response.context['notes']], ['Phone call', 'Consult note'])

@@ -69,7 +69,7 @@
 
       <div class="staff-task-form__actions">
         <button class="console-button console-button--primary" type="submit">Save task</button>
-        <a class="console-button console-button--quiet" href="{% if patient_workspace %}{{ workspace_return_url }}{% else %}{% url 'portal:staff-tasks' %}{% endif %}">Back to tasks</a>
+        <a class="console-button console-button--quiet" href="{% if patient_workspace %}{{ workspace_return_url }}{% else %}{% url 'portal:staff-tasks' %}{% endif %}">{% if patient_workspace %}{{ workspace_return_label }}{% else %}Back to tasks{% endif %}</a>
       </div>
     </form>
   </section>

@@ -9,9 +9,13 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from care.models import Appointment, AuditEvent, ClinicalNote, ClinicalTask, MessageThread, PatientMessage, Payment
+from care.models import Appointment, AuditEvent, BloodResult, ClinicalNote, ClinicalTask, MessageThread, PatientMessage, Payment
+from practices.models import CompanyMembership
 from . import test_workflows
 from .patient_workspace import CLINICAL_TABS, TABS
+
+# The tabs a doctor in the Clinician role sees on their own patient's record.
+DOCTOR_TABS = [('overview', 'Overview'), ('blood-tests', 'Blood results'), ('messages', 'Messages')]
 
 
 @override_settings(MULTI_PRACTICE_ENABLED=True)
@@ -26,6 +30,14 @@ class PatientWorkspaceTests(TestCase):
     def page(self, tab='overview', **query):
         return self.client.get(self.path(), {'tab': tab, **query})
 
+    def overview(self):
+        return f'{self.path()}?tab=overview'
+
+    def login_doctor_super_admin(self):
+        # A Super Admin who is also a doctor keeps every tab, with a clinician's forms.
+        CompanyMembership.objects.filter(company=self.company, user=self.super_admin).update(clinician_type='doctor')
+        self.login(self.super_admin)
+
     def test_each_authorized_tab_has_one_patient_heading_and_patient_bound_navigation(self):
         for actor in (self.doctor, self.administrator, self.super_admin):
             self.login(actor)
@@ -34,6 +46,10 @@ class PatientWorkspaceTests(TestCase):
                     continue
                 with self.subTest(actor=actor.pk, tab=tab):
                     response = self.page(tab)
+                    if actor == self.doctor and tab not in dict(DOCTOR_TABS):
+                        # A doctor works from the Overview: the tabs they don't see send them there.
+                        self.assertRedirects(response, self.overview(), fetch_redirect_response=False)
+                        continue
                     self.assertEqual(response.status_code, 200)
                     self.assertEqual(response.context['patient'].pk, self.patient.pk)
                     self.assertEqual(response.context['workspace_tab'], tab)
@@ -44,17 +60,26 @@ class PatientWorkspaceTests(TestCase):
                         self.assertEqual(split.path, self.path())
                         self.assertEqual(parse_qs(split.query)['tab'], [link['name']])
                     self.assertEqual([link['name'] for link in response.context['workspace_tabs'] if link['active']], [tab])
+                    if actor == self.doctor:
+                        self.assertEqual([(link['name'], link['label']) for link in response.context['workspace_tabs']], DOCTOR_TABS)
 
-    def test_overview_shows_no_conversations_or_general_notes_and_the_messages_tab_waits_for_a_choice(self):
+    def test_overview_logs_general_notes_and_blood_results_but_no_conversations_and_the_messages_tab_waits_for_a_choice(self):
         self.login(self.doctor)
         incoming = self.add_message(body='UNREAD_PRIVATE_CONVERSATION_BODY')
         ClinicalNote.objects.create(company=self.company, patient=self.patient, author=self.doctor, body='CLINICAL_NOTE_BODY')
+        BloodResult.objects.create(company=self.company, patient=self.patient, taken_on=timezone.localdate(),
+                                   lab_name='Lancet', results='RECORDED_BLOOD_RESULT', recorded_by=self.doctor)
         response = self.page()
-        for private in ('CLINICAL_NOTE_BODY', 'name="summary"', 'name="starts_at"', 'id="record-messages"', 'Choose a conversation'):
+        for private in ('UNREAD_PRIVATE_CONVERSATION_BODY', 'name="summary"', 'name="starts_at"', 'id="record-messages"', 'Choose a conversation'):
             self.assertNotContains(response, private)
-        # A clinician's Overview is the clinical one. Their conversations are on the Messages tab, where none
-        # opens (or is marked read) until one is chosen.
+        # A clinician's Overview is the clinical one: its log lists general notes and blood results, and Create note
+        # adds a note there. Their conversations are on the Messages tab, where none opens (or is marked read)
+        # until one is chosen.
         self.assertContains(response, 'data-record-overview')
+        self.assertContains(response, 'CLINICAL_NOTE_BODY')
+        self.assertContains(response, 'RECORDED_BLOOD_RESULT')
+        self.assertContains(response, f'<form method="post" action="{reverse("portal:patient-note-create", args=[self.patient.pk])}">')
+        self.assertContains(response, '<input type="hidden" name="return_to" value="overview">')
         self.assertContains(self.page('messages'), 'Choose a conversation')
         incoming.refresh_from_db()
         self.assertIsNone(incoming.staff_read_at)
@@ -91,7 +116,7 @@ class PatientWorkspaceTests(TestCase):
         self.assertEqual(response.context['workspace_row_count'], 1)
 
     def test_appointments_are_paginated_without_changing_patient_or_tab(self):
-        self.login(self.doctor)
+        self.login_doctor_super_admin()
         Appointment.objects.bulk_create([Appointment(company=self.company, patient=self.patient, clinician=self.doctor,
             starts_at=timezone.now() + timedelta(days=index + 1), duration_minutes=30) for index in range(22)])
         response = self.page('appointments', status='booked')
@@ -116,9 +141,13 @@ class PatientWorkspaceTests(TestCase):
         # The administrator sees their own conversation, never the doctor's.
         threads = self.page('messages').context['record_threads']
         self.assertEqual([thread.pk for thread in threads], [new_thread.pk])
+        # A Super Admin sees every conversation with the patient.
+        self.login(self.super_admin)
+        threads = self.page('messages').context['record_threads']
+        self.assertEqual({thread.pk for thread in threads}, {self.thread.pk, new_thread.pk})
 
     def test_add_note_is_a_button_that_opens_the_note_form_in_a_modal(self):
-        self.login(self.doctor)
+        self.login_doctor_super_admin()
         response = self.page('notes')
         self.assertContains(response, f'href="{self.path()}?tab=notes&amp;update=note" data-modal-open="add-note" aria-haspopup="dialog">Add note</a>')
         self.assertContains(response, '<dialog class="app-dialog" id="add-note" aria-labelledby="add-note-title">')
@@ -133,7 +162,7 @@ class PatientWorkspaceTests(TestCase):
         self.assertContains(failed, 'This field is required.')
 
     def test_create_task_is_a_button_that_opens_the_task_form_in_a_modal(self):
-        self.login(self.doctor)
+        self.login_doctor_super_admin()
         response = self.page('tasks')
         html = response.content.decode()
         button = f'href="{self.path()}?tab=tasks&amp;update=task" data-modal-open="create-task" aria-haspopup="dialog">Create task</a>'
@@ -149,7 +178,7 @@ class PatientWorkspaceTests(TestCase):
         self.assertContains(failed, 'Kept draft')
 
     def test_history_filters_are_in_the_filters_menu(self):
-        self.login(self.doctor)
+        self.login_doctor_super_admin()
         response = self.page('history')
         self.assertContains(response, '<details class="filter-menu" data-filter-menu>')
         for label in ('Activity', 'Date'):
@@ -167,14 +196,15 @@ class PatientWorkspaceTests(TestCase):
         self.assertNotContains(response, 'data-record-timeline')
 
     def test_invalid_legacy_forms_render_only_their_own_tab_and_preserve_inputs(self):
-        self.login(self.doctor)
+        self.login_doctor_super_admin()
         incoming = self.add_message(body='Keep unread while validating another section')
-        for route, tab, data, expected in (
+        forms = (
             ('patient-task-create', 'tasks', {'patient': self.patient.pk, 'title': '', 'description': 'Retained task draft', 'priority': 'high'}, 'Retained task draft'),
             ('patient-note-create', 'notes', {'body': '', 'note_type': 'clinical'}, 'This field is required.'),
             ('patient-appointment-create', 'appointments', {'patient': self.patient.pk, 'clinician': self.doctor.pk, 'starts_at': 'invalid'}, 'This patient form is out of date'),
             ('staff-thread-create', 'messages', {'subject': '', 'body': 'Retained new-thread draft'}, 'Retained new-thread draft'),
-        ):
+        )
+        for route, tab, data, expected in forms:
             with self.subTest(route=route):
                 response = self.client.post(reverse(f'portal:{route}', args=[self.patient.pk]), data)
                 self.assertEqual(response.status_code, 200)
@@ -183,6 +213,13 @@ class PatientWorkspaceTests(TestCase):
                 if route != 'patient-appointment-create':
                     self.assertContains(response, expected)
                 self.assertNotContains(response, 'record-action-grid')
+        # A doctor doesn't see the Tasks, Notes or Appointments tabs, so those forms come back on the Overview.
+        self.login(self.doctor)
+        for route, tab, data, _ in forms:
+            with self.subTest(doctor_route=route):
+                response = self.client.post(reverse(f'portal:{route}', args=[self.patient.pk]), data)
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(response.context['workspace_tab'], 'messages' if tab == 'messages' else 'overview')
         incoming.refresh_from_db()
         self.assertIsNone(incoming.read_at)
 
@@ -190,5 +227,14 @@ class PatientWorkspaceTests(TestCase):
         self.login(self.doctor)
         response = self.client.get(self.path(), {'thread': self.thread.pk})
         self.assertEqual(response.context['workspace_tab'], 'messages')
+        # Weight isn't a doctor's tab, so its bookmark opens their Overview; a Super Admin gets the Weight tab.
+        self.assertRedirects(self.client.get(self.path(), {'weight_page': 2}), self.overview(), fetch_redirect_response=False)
+        self.login(self.super_admin)
         response = self.client.get(self.path(), {'weight_page': 2})
         self.assertEqual(response.context['workspace_tab'], 'weights')
+        # A doctor covering an appointment isn't the Prescribing doctor: a conversation link opens in Patient messages.
+        Appointment.objects.create(company=self.company, patient=self.patient, clinician=self.second_doctor,
+                                   starts_at=timezone.now() + timedelta(days=1), duration_minutes=30)
+        self.login(self.second_doctor)
+        self.assertRedirects(self.client.get(self.path(), {'thread': self.thread.pk}),
+                             f'{reverse("portal:staff-inbox")}?thread={self.thread.pk}', fetch_redirect_response=False)

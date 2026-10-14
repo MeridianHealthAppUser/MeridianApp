@@ -65,7 +65,7 @@
               <strong>{% if patient.date_of_birth %}{{ patient.date_of_birth|date:"j F Y" }}{% else %}Not recorded{% endif %}</strong>
             </article>
             <article>
-              <span>Assigned clinician</span>
+              <span>Prescribing doctor</span>
               <strong>{% if patient.assigned_doctor %}{{ patient.assigned_doctor.full_name }}{% else %}Unassigned{% endif %}</strong>
             </article>
             <article>

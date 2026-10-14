@@ -5,7 +5,7 @@ from django.core.exceptions import PermissionDenied, ValidationError
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views import View
 
-from care.patient_assignment import active_doctors, assign_doctor, can_assign_doctor
+from care.patient_assignment import NOT_ASSIGNING, active_doctors, assign_doctor, can_assign_doctor
 from practices.models import Patient
 from .record_access import require_record_change
 from .views import StaffCompanyRequiredMixin
@@ -13,7 +13,7 @@ from .workflow_context import validate_workflow_context
 
 
 class AssignedDoctorForm(forms.Form):
-    doctor = forms.ModelChoiceField(label='Assigned clinician', queryset=None, required=False, empty_label='Unassigned')
+    doctor = forms.ModelChoiceField(label='Prescribing doctor', queryset=None, required=False, empty_label='Unassigned')
 
     def __init__(self, *args, company, **kwargs):
         super().__init__(*args, **kwargs)
@@ -29,7 +29,7 @@ class PatientDoctorAssignmentView(LoginRequiredMixin, StaffCompanyRequiredMixin,
                                     pk=patient_pk, is_active=True)
         require_record_change(self.membership, request.user, patient)
         if not can_assign_doctor(self.membership):
-            raise PermissionDenied('Only an active member of the care team can change the assigned clinician.')
+            raise PermissionDenied(NOT_ASSIGNING)
         form = AssignedDoctorForm(request.POST, company=self.company)
         valid = form.is_valid()
         try:
@@ -37,7 +37,7 @@ class PatientDoctorAssignmentView(LoginRequiredMixin, StaffCompanyRequiredMixin,
             if valid:
                 assign_doctor(patient=patient, actor=request.user, doctor=form.cleaned_data['doctor'],
                               expected_updated=token['updated'], request=request)
-                messages.success(request, 'Assigned clinician updated.')
+                messages.success(request, 'Prescribing doctor updated.')
                 from .patient_workspace import workspace_url
                 return redirect(workspace_url(patient))
         except ValidationError as error:

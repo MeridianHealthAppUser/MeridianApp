@@ -83,3 +83,6 @@
 .patient-workspace-note .note-private { flex: 0 0 auto; font-size: .64rem; padding: .3rem .55rem; }
 .patient-workspace-note .note-actions { display: flex; justify-content: flex-end; margin-top: .5rem; }
 .patient-workspace-note .note-actions__button.console-button { font-size: .72rem; min-height: 2.1rem; padding: .35rem .75rem; }
+
+/* Blood results: the results as written, wide enough to read. */
+.blood-result__text { min-width: 14rem; overflow-wrap: anywhere; }

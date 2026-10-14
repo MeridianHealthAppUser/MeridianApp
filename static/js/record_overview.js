@@ -129,6 +129,46 @@
     fillDoses();
   }
 
+  /* Initiate: the plans follow the medicine chosen, the lengths follow the plan (starting on its usual length),
+     and the preview shows each strength with its dates. */
+  const initiate = document.querySelector('[data-initiate-form]');
+  const initiateMedicine = initiate && initiate.querySelector('[data-initiate-medicine]');
+  if (initiateMedicine) {
+    const plans = [...initiate.querySelectorAll('input[name="plan"]')];
+    const lengths = [...initiate.querySelectorAll('input[name="months"]')];
+    const preview = initiate.querySelector('[data-initiate-preview]');
+    const shown = (input) => !input.closest('label').hidden;
+    const chosenPlan = () => plans.find((input) => input.checked && shown(input));
+    function updatePreview() {
+      const plan = chosenPlan();
+      const length = lengths.find((input) => input.checked && shown(input));
+      const text = plan && length ? JSON.parse(plan.dataset.previews)[length.value] : '';
+      if (preview) preview.textContent = text ? `${initiateMedicine.value} ${text}` : '';
+    }
+    function showLengths(reset) {
+      const plan = chosenPlan();
+      const allowed = plan ? plan.dataset.months.split(',') : [];
+      lengths.forEach((input) => { input.closest('label').hidden = !allowed.includes(input.value); });
+      if (plan && (reset || !lengths.some((input) => input.checked && shown(input)))) {
+        const usual = lengths.find((input) => input.value === plan.dataset.default);
+        if (usual) usual.checked = true;
+      }
+      updatePreview();
+    }
+    function showPlans(reset) {
+      plans.forEach((input) => { input.closest('label').hidden = input.closest('label').dataset.medicine !== initiateMedicine.value; });
+      if (!chosenPlan()) {
+        const first = plans.find(shown);
+        if (first) first.checked = true;
+      }
+      showLengths(reset);
+    }
+    initiateMedicine.addEventListener('change', () => showPlans(true));
+    plans.forEach((input) => input.addEventListener('change', () => showLengths(true)));
+    lengths.forEach((input) => input.addEventListener('change', updatePreview));
+    showPlans(false);
+  }
+
   /* Consult dots on the weight chart open the note. "Show in log" finds it in the Clinical log, or
      from the Weight tab goes to it on the Overview. */
   const consult = document.getElementById('record-consult');

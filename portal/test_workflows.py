@@ -193,7 +193,12 @@ class PortalWorkflowTests(TestCase):
         for user in (self.doctor, self.second_doctor, self.super_admin, self.administrator):
             with self.subTest(user=user.email):
                 self.login(user)
-                response = self.client.get(self.patient_url(), {'tab': 'overview' if user == self.administrator else 'notes'})
+                # Doctors (the Clinician role) read notes in the Overview's log, as they have no Notes tab.
+                doctor = user in (self.doctor, self.second_doctor)
+                if doctor:
+                    self.assertRedirects(self.client.get(self.patient_url(), {'tab': 'notes'}), self.patient_url() + '?tab=overview',
+                                         fetch_redirect_response=False)
+                response = self.client.get(self.patient_url(), {'tab': 'overview' if doctor or user == self.administrator else 'notes'})
                 self.assertEqual(response.status_code, 200)
                 if user == self.doctor:
                     self.assertContains(response, private_body)
@@ -271,10 +276,17 @@ class PortalWorkflowTests(TestCase):
         self.assertFalse(Appointment.objects.exists())
 
     def test_invalid_clinical_note_preserves_draft(self):
+        url = reverse('portal:patient-note-create', args=[self.patient.pk])
+        data = {'note_type': 'unknown-type', 'body': 'Do not lose this clinical draft.', 'is_private': 'on'}
+        # The Notes tab's form: a doctor in the Clinician role, who has no Notes tab, is shown the Overview instead.
         self.login(self.doctor)
-        response = self.client.post(reverse('portal:patient-note-create', args=[self.patient.pk]), {
-            'note_type': 'unknown-type', 'body': 'Do not lose this clinical draft.', 'is_private': 'on',
-        })
+        response = self.client.post(url, data)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context['workspace_tab'], 'overview')
+        # A Super Admin who is a doctor keeps the Notes tab, with the draft and its error.
+        CompanyMembership.objects.filter(company=self.company, user=self.super_admin).update(clinician_type='doctor')
+        self.login(self.super_admin)
+        response = self.client.post(url, data)
         self.assertEqual(response.status_code, 200)
         self.assertIn('note_type', response.context['note_form'].errors)
         self.assertContains(response, 'Do not lose this clinical draft.')

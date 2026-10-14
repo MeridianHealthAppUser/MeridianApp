@@ -1,6 +1,7 @@
-"""The care team chooses the clinician responsible for a patient.
+"""The clinician responsible for a patient: their Prescribing doctor.
 
-Only the pointer on the patient changes: appointments, notes, consultations, results
+Practice administrators and Super Admins choose it, and writing a prescription makes the prescriber it
+(care.prescriptions). Only the pointer on the patient changes: appointments, notes, consultations, results
 and tasks keep their original author or clinician, so nothing is moved or lost.
 """
 
@@ -15,7 +16,14 @@ from .models import ClinicianAssignment
 from .services import record_audit
 
 
-ASSIGNING_ROLES = (CompanyMembership.Role.DOCTOR, CompanyMembership.Role.PRACTICE_ADMIN, CompanyMembership.Role.SUPER_ADMIN)
+# The care team keeps a patient's details, such as their title.
+CARE_TEAM_ROLES = (CompanyMembership.Role.DOCTOR, CompanyMembership.Role.PRACTICE_ADMIN, CompanyMembership.Role.SUPER_ADMIN)
+ASSIGNING_ROLES = (CompanyMembership.Role.PRACTICE_ADMIN, CompanyMembership.Role.SUPER_ADMIN)
+NOT_ASSIGNING = 'Only a practice administrator or Super Admin can change the Prescribing doctor.'
+
+
+def is_care_team(membership):
+    return membership is not None and membership.role in CARE_TEAM_ROLES
 
 
 def can_assign_doctor(membership):
@@ -46,15 +54,15 @@ def record_clinician_history(patient, clinician, previous_id=None):
 
 @transaction.atomic
 def assign_doctor(*, patient, actor, doctor, expected_updated, request=None):
-    """Set or clear the assigned clinician; they must be active in the patient's practice."""
+    """Set or clear the Prescribing doctor; they must be an active clinician in the patient's practice."""
     company = Company.objects.select_for_update().get(pk=patient.company_id)
     require_enabled_company(company)
     if not CompanyMembership.objects.filter(company=company, user=actor, user__is_active=True,
                                             is_active=True, role__in=ASSIGNING_ROLES).exists():
-        raise PermissionDenied('Only an active member of the care team can change the assigned clinician.')
+        raise PermissionDenied(NOT_ASSIGNING)
     patient = Patient.objects.select_for_update().for_company(company).get(pk=patient.pk, is_active=True)
     if patient.updated_at.isoformat() != expected_updated:
-        raise ValidationError('This patient record changed in another tab. Reload before changing the assigned clinician.')
+        raise ValidationError('This patient record changed in another tab. Reload before changing the Prescribing doctor.')
     if doctor is not None and not active_doctors(company).filter(pk=doctor.pk).exists():
         raise ValidationError('Select an active clinician in this practice.')
     previous_id = patient.assigned_doctor_id
@@ -66,3 +74,16 @@ def assign_doctor(*, patient, actor, doctor, expected_updated, request=None):
     record_audit(company=company, actor=actor, patient=patient, action='patient.doctor_assigned', target=patient,
                  request=request, metadata={'previous_doctor_id': previous_id, 'doctor_id': patient.assigned_doctor_id})
     return patient
+
+
+def make_prescribing_doctor(*, company, patient, doctor, request=None):
+    """The doctor who wrote the latest prescription becomes the patient's Prescribing doctor. The caller has
+    locked the patient (care.prescriptions does, in the prescription's transaction)."""
+    previous_id = patient.assigned_doctor_id
+    if previous_id == doctor.pk:
+        return
+    patient.assigned_doctor = doctor
+    patient.save(update_fields=('assigned_doctor', 'updated_at'))
+    record_clinician_history(patient, doctor, previous_id)
+    record_audit(company=company, actor=doctor, patient=patient, action='patient.doctor_assigned', target=patient,
+                 request=request, metadata={'previous_doctor_id': previous_id, 'doctor_id': doctor.pk, 'by_prescription': True})

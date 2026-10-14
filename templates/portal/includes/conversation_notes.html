@@ -1,0 +1,27 @@
+{% comment %}
+  The patient's notes under an open conversation, to read while replying without leaving it: a patient
+  conversation, or a team conversation about a patient. Closed until opened. The parent passes
+  `conversation_notes` (clinical staff only; None for everyone else) and `patient`.
+{% endcomment %}
+{% if conversation_notes %}
+  <details class="conversation-notes">
+    <summary><span class="conversation-notes__title">Patient notes</span><span class="conversation-notes__count">{{ conversation_notes.entries|length }}{% if conversation_notes.more %}+{% endif %}</span><span class="conversation-notes__hint">Consult notes and general notes, newest first</span></summary>
+    {% if conversation_notes.entries %}
+      <ol class="conversation-notes__list" tabindex="0" aria-label="Notes for {{ patient }}">
+        {% for note in conversation_notes.entries %}
+          <li class="conversation-notes__note">
+            <div class="conversation-notes__head">
+              <p class="conversation-notes__meta"><strong>{{ note.label }}</strong> &middot; <time datetime="{{ note.at|date:'c' }}">{{ note.at|date:'j M Y, H:i' }}</time>{% if note.by %} &middot; {{ note.by }}{% endif %}</p>
+              {% if note.private %}<span class="console-status note-private" title="Only visible to you">Private</span>{% endif %}
+            </div>
+            <p class="conversation-notes__text">{{ note.text|default:'No summary recorded.'|linebreaksbr }}</p>
+            {% if note.url %}<div class="note-actions"><a class="console-button console-button--secondary note-actions__button" href="{{ note.url }}">Open consultation</a></div>{% endif %}
+          </li>
+        {% endfor %}
+      </ol>
+    {% else %}
+      <p class="conversation-notes__empty">No notes for {{ patient.first_name }} yet.</p>
+    {% endif %}
+    <p class="conversation-notes__foot">{% if conversation_notes.more %}Showing the latest 100. {% endif %}On {{ patient.first_name }}’s record: <a href="{{ conversation_notes.log_url }}">Log</a>{% if conversation_notes.notes_url %} &middot; <a href="{{ conversation_notes.notes_url }}">Notes</a>{% endif %}{% if conversation_notes.consultations_url %} &middot; <a href="{{ conversation_notes.consultations_url }}">Consultations</a>{% endif %}</p>
+  </details>
+{% endif %}

@@ -1,21 +1,22 @@
 {% extends 'portal/patient_workspace_base.html' %}
 {% load static %}
-{% block extra_css %}{{ block.super }}{% if filter_menu %}<link rel="stylesheet" href="{% static 'css/filter_menu.css' %}?v=20261010a"><script src="{% static 'js/filter_menu.js' %}?v=20261008b" defer></script>{% endif %}{% if workspace_tab == 'appointments' %}<link rel="stylesheet" href="{% static 'css/info_tips.css' %}?v=20261008a"><script src="{% static 'js/info_tips.js' %}?v=20261008a" defer></script><script src="{% static 'js/appointment_booking.js' %}?v=20261010b" defer></script>{% endif %}{% if workspace_tab == 'appointments' or workspace_tab == 'notes' or workspace_tab == 'tasks' %}<link rel="stylesheet" href="{% static 'css/dialogs.css' %}?v=20261008b"><script src="{% static 'js/dialogs.js' %}?v=20261008a" defer></script>{% endif %}{% if workspace_tab == 'weights' %}<link rel="stylesheet" href="{% static 'css/record_weight.css' %}?v=20261007b">{% endif %}{% if workspace_tab == 'overview' or workspace_tab == 'messages' or workspace_tab == 'weights' %}<link rel="stylesheet" href="{% static 'css/record_overview.css' %}?v=20261007"><script src="{% static 'js/record_overview.js' %}?v=20261007b" defer></script>{% endif %}{% if workspace_tab == 'messages' %}<link rel="stylesheet" href="{% static 'css/conversations.css' %}?v=20261009d"><link rel="stylesheet" href="{% static 'css/person_tags.css' %}?v=20261009e"><link rel="stylesheet" href="{% static 'css/message_tones.css' %}?v=20261008a"><link rel="stylesheet" href="{% static 'css/conversation_search.css' %}?v=20261005b"><script src="{% static 'js/conversations.js' %}?v=20261007b" defer></script><script src="{% static 'js/conversation_search.js' %}?v=20261005" defer></script><link rel="stylesheet" href="{% static 'css/dialogs.css' %}?v=20261008b"><script src="{% static 'js/dialogs.js' %}?v=20261008a" defer></script><script src="{% static 'js/conversation_management.js' %}?v=20261008b" defer></script>{% endif %}{% endblock %}
+{% block extra_css %}{{ block.super }}{% if filter_menu %}<link rel="stylesheet" href="{% static 'css/filter_menu.css' %}?v=20261010a"><script src="{% static 'js/filter_menu.js' %}?v=20261008b" defer></script>{% endif %}{% if workspace_tab == 'appointments' %}<link rel="stylesheet" href="{% static 'css/info_tips.css' %}?v=20261008a"><script src="{% static 'js/info_tips.js' %}?v=20261008a" defer></script><script src="{% static 'js/appointment_booking.js' %}?v=20261010b" defer></script>{% endif %}{% if workspace_tab == 'appointments' or workspace_tab == 'notes' or workspace_tab == 'tasks' or workspace_tab == 'blood-tests' %}<link rel="stylesheet" href="{% static 'css/dialogs.css' %}?v=20261008b"><script src="{% static 'js/dialogs.js' %}?v=20261008a" defer></script>{% endif %}{% if workspace_tab == 'weights' %}<link rel="stylesheet" href="{% static 'css/record_weight.css' %}?v=20261007b">{% endif %}{% if workspace_tab == 'overview' or workspace_tab == 'messages' or workspace_tab == 'weights' %}<link rel="stylesheet" href="{% static 'css/record_overview.css' %}?v=20261014a"><script src="{% static 'js/record_overview.js' %}?v=20261014a" defer></script>{% endif %}{% if workspace_tab == 'messages' %}<link rel="stylesheet" href="{% static 'css/conversations.css' %}?v=20261009d"><link rel="stylesheet" href="{% static 'css/person_tags.css' %}?v=20261009e"><link rel="stylesheet" href="{% static 'css/message_tones.css' %}?v=20261008a"><link rel="stylesheet" href="{% static 'css/conversation_search.css' %}?v=20261005b"><script src="{% static 'js/conversations.js' %}?v=20261007b" defer></script><script src="{% static 'js/conversation_search.js' %}?v=20261005" defer></script><link rel="stylesheet" href="{% static 'css/dialogs.css' %}?v=20261008b"><script src="{% static 'js/dialogs.js' %}?v=20261008a" defer></script><script src="{% static 'js/conversation_management.js' %}?v=20261008b" defer></script>{% endif %}{% endblock %}
 {% block patient_workspace_heading_actions %}{% if record_overview %}
   <span class="record-badges">
     {% if prescription_state == 'none' %}<span class="record-pill record-pill--grey">No prescription</span>
-    {% elif prescription_state == 'expired' %}<span class="record-pill record-pill--rose">Prescription expired {{ prescription.expires_on|date:'j M' }}</span>
+    {% elif prescription_state == 'expired' %}<span class="record-pill record-pill--rose">Prescription expired {{ prescription.ends_on|date:'j M' }}</span>
     {% elif prescription_state == 'paused' %}<span class="record-pill record-pill--grey">Prescription paused</span>
-    {% else %}<span class="record-pill record-pill--teal">Prescribed to {{ prescription.expires_on|date:'j M' }}</span>{% if prescription_state == 'due' %}<span class="record-pill record-pill--amber">Renewal due</span>{% endif %}{% endif %}
+    {% else %}<span class="record-pill record-pill--teal">Prescribed to {{ prescription.ends_on|date:'j M' }}</span>{% if prescription_state == 'due' %}<span class="record-pill record-pill--amber">Renewal due</span>{% endif %}{% endif %}
   </span>
-  <a class="console-button console-button--quiet" data-no-loader href="{{ export_url }}">Export record</a>
+  {% if export_url %}<a class="console-button console-button--quiet" data-no-loader href="{{ export_url }}">Export record</a>{% endif %}
 {% endif %}{% endblock %}
 {% block patient_workspace_heading_details %}{% if record_overview %}
   <dl class="record-quickfacts">
     <div><dt>Title</dt>{% include 'portal/includes/patient_title_editor.html' %}</div>
-    <div><dt>Date of birth</dt><dd>{{ patient.date_of_birth|date:'j M Y'|default:'Not recorded' }}</dd></div>
+    <div><dt>Age</dt><dd>{% if patient_age is not None %}{{ patient_age }}{% else %}Not recorded{% endif %}</dd></div>
     <div><dt>Location</dt><dd>{{ patient.city|default:'Not recorded' }}</dd></div>
-    <div><dt>Assigned clinician</dt>{% include 'portal/includes/patient_assigned_clinician.html' %}</div>
+    <div><dt>Prescribing doctor</dt>{% include 'portal/includes/patient_assigned_clinician.html' %}</div>
+    <div><dt>ID number</dt><dd>{{ patient.id_number|default:'Not recorded' }}</dd></div>
   </dl>
 {% endif %}{% endblock %}
 {% block patient_workspace_content %}
@@ -31,13 +32,15 @@
       <div><dt>Date of birth</dt><dd>{{ patient.date_of_birth|date:'j M Y'|default:'Not recorded' }}</dd></div>
       <div><dt>Contact number</dt><dd>{{ patient.phone|default:'Not recorded' }}</dd></div>
       <div><dt>Location</dt><dd>{{ patient.city|default:'Not recorded' }}</dd></div>
-      <div><dt>Assigned clinician</dt>{% include 'portal/includes/patient_assigned_clinician.html' %}</div>
+      <div><dt>Prescribing doctor</dt>{% include 'portal/includes/patient_assigned_clinician.html' %}</div>
       <div><dt>Practice</dt><dd>{{ company.name }}</dd></div>
     </dl></div><p class="patient-workspace-empty">Choose a patient section above. Each section shows only this patient’s records at this practice; clinical History can include other permitted practices when a care purpose is selected.</p></section>
   {% elif workspace_tab == 'weights' %}
     {% include 'portal/includes/record_weight_tab.html' %}
   {% elif workspace_tab == 'messages' %}
     {% include 'portal/patient_workspace_messages.html' %}
+  {% elif workspace_tab == 'blood-tests' %}
+    {% include 'portal/includes/record_blood_results.html' %}
   {% else %}
     <div class="patient-workspace-toolbar"><h2>{{ page_title }}</h2><div class="patient-workspace-actions">
       {% if filter_menu %}{% include 'portal/includes/filter_menu.html' %}{% endif %}
@@ -45,7 +48,6 @@
       {% if workspace_tab == 'notes' and can_add_clinical_note %}<a class="console-button console-button--primary" href="{{ workspace_url }}&amp;update=note" data-modal-open="add-note" aria-haspopup="dialog">Add note</a>{% endif %}
       {% if workspace_tab == 'tasks' and can_change_record %}<a class="console-button console-button--primary" href="{{ workspace_url }}&amp;update=task" data-modal-open="create-task" aria-haspopup="dialog">Create task</a>{% endif %}
       {% if workspace_tab == 'consultations' and is_clinician and can_write_notes %}<a class="console-button console-button--primary" href="{% url 'portal:clinical-consultation-create' patient.pk %}">New consultation note</a>{% endif %}
-      {% if workspace_tab == 'blood-tests' and is_doctor and can_change_record %}<a class="console-button console-button--primary" href="{% url 'portal:clinical-lab-create' patient.pk %}">Request blood tests</a>{% endif %}
       {% if workspace_tab == 'treatment' and is_doctor and can_change_record %}<a class="console-button console-button--primary" href="{% url 'portal:treatment-authorisation-create' patient.pk %}?workspace=patient">Authorise treatment</a>{% endif %}
     </div></div>
     {% if workspace_tab == 'payments' %}<p class="patient-workspace-notice">Read-only local payment records. Live payment processing is not enabled: no charges, refunds or payment-provider checks happen here. Imported or demo statuses are not proof that funds were received.</p>{% endif %}
@@ -64,7 +66,6 @@
         <thead><tr>
           {% if workspace_tab == 'appointments' %}<th scope="col">Date and time</th><th scope="col">Appointment type</th><th scope="col">Join window</th><th scope="col">Doctor</th><th scope="col">Status</th><th scope="col">Actions</th>
           {% elif workspace_tab == 'consultations' %}<th scope="col">Date</th><th scope="col">Doctor</th><th scope="col">Status</th><th scope="col">Action</th>
-          {% elif workspace_tab == 'blood-tests' %}<th scope="col">Requested</th><th scope="col">Panel</th><th scope="col">Doctor</th><th scope="col">Status</th><th scope="col">Action</th>
           {% elif workspace_tab == 'tasks' %}<th scope="col">Task</th><th scope="col">Assigned to</th><th scope="col">Due</th><th scope="col">Status</th><th scope="col">Action</th>
           {% elif workspace_tab == 'payments' %}<th scope="col">Due date</th><th scope="col">Amount</th><th scope="col">Stored status</th><th scope="col">Recorded paid date</th>
           {% elif workspace_tab == 'treatment' %}<th scope="col">Medication</th><th scope="col">Doctor</th><th scope="col">Valid dates</th><th scope="col">Status</th><th scope="col">Action</th>
@@ -74,7 +75,6 @@
           {% for row in rows %}<tr>
             {% if workspace_tab == 'appointments' %}<td>{{ row.starts_at|date:'j M Y, H:i' }}<small>SAST</small></td><td>{{ row.get_appointment_type_display }}<small>{{ row.duration_minutes }} minutes</small></td><td>{% if row.join_window %}{{ row.join_window.0|date:'H:i' }}–{{ row.join_window.1|date:'H:i' }}<small>SAST</small>{% else %}&mdash;{% endif %}</td><td>{{ row.clinician.full_name }}</td><td>{{ row.get_status_display }}</td><td><a class="console-button console-button--quiet" href="{% url 'portal:appointment-detail' row.pk %}">Open appointment</a>{% include 'portal/includes/video_join_link.html' with appointment=row join_tip=True window_shown=True %}</td>
             {% elif workspace_tab == 'consultations' %}<td>{{ row.occurred_at|date:'j M Y, H:i' }}</td><td>{{ row.clinician.full_name }}</td><td>{{ row.get_status_display }}</td><td><a class="console-button console-button--quiet" href="{% url 'portal:clinical-consultation-detail' row.pk %}">Open consultation</a></td>
-            {% elif workspace_tab == 'blood-tests' %}<td>{{ row.requested_on|date:'j M Y' }}</td><td>{{ row.panel_name }}</td><td>{{ row.requested_by.full_name }}</td><td>{{ row.get_status_display }}</td><td><a class="console-button console-button--quiet" href="{% url 'portal:clinical-lab-detail' row.pk %}">Open request</a></td>
             {% elif workspace_tab == 'tasks' %}<td><strong>{{ row.title }}</strong>{% if not row.is_clinical_workflow %}<small>{{ row.description|truncatechars:140 }}</small>{% endif %}<div class="record-tags">{% for tag in row.tags.all %}<span class="record-tag">{{ tag.name }}</span>{% endfor %}</div></td><td>{{ row.assigned_to.full_name|default:'Unassigned' }}</td><td>{{ row.due_at|date:'j M Y, H:i'|default:'No due date' }}</td><td>{{ row.get_status_display }}</td><td>{% if row.workflow_url %}<a class="console-button console-button--quiet" href="{{ row.workspace_workflow_url }}">{{ row.workflow_label }}</a>{% elif not row.is_clinical_workflow and row.workspace_can_edit %}<a class="console-button console-button--quiet" href="{% url 'portal:task-edit' row.pk %}?workspace=patient">Open task</a>{% else %}Read-only{% endif %}</td>
             {% elif workspace_tab == 'payments' %}<td>{{ row.due_on|date:'j M Y' }}</td><td>R{{ row.amount }}</td><td>{{ row.get_status_display }}</td><td>{{ row.paid_at|date:'j M Y, H:i'|default:'Not recorded' }}</td>
             {% elif workspace_tab == 'treatment' %}<td>{{ row.product.name }}</td><td>{{ row.prescribed_by.full_name }}</td><td>{{ row.starts_on|date:'j M Y' }} – {{ row.expires_on|date:'j M Y' }}</td><td>{{ row.get_status_display }}</td><td><a class="console-button console-button--quiet" href="{% url 'portal:treatment-authorisation-detail' row.pk %}?workspace=patient">Open authorisation</a></td>

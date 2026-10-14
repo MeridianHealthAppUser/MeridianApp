@@ -20,12 +20,11 @@ def patient_action_context(view, patient, tab, *, content_template, stylesheets=
         return {}
     if patient.company_id != view.company.pk or not patient.is_active:
         raise Http404
-    from .patient_workspace import TABS, patient_workspace_context, workspace_url
+    from .patient_workspace import patient_workspace_context
 
+    # Back to the tab it came from (workspace_return_url), or the Overview for a doctor who doesn't see that tab.
     context = patient_workspace_context(view.request, view.company, view.membership, patient, tab)
     context.update(action_content_template=content_template, action_stylesheets=stylesheets,
-                   workspace_return_url=workspace_url(patient, tab),
-                   workspace_return_label=f'Back to {dict(TABS)[tab].lower()}',
                    workspace_action_title=title or view.page_title, workspace_query='?workspace=patient')
     return context
 

@@ -178,7 +178,7 @@
               {% for listed_patient in patients %}
                 <li class="console-list__item console-list__item--action">
                   <span class="console-patient-avatar" aria-hidden="true">{{ listed_patient.first_name|slice:":1"|upper }}{{ listed_patient.last_name|slice:":1"|upper }}</span>
-                  <div class="console-list__copy"><strong>{{ listed_patient }}</strong><span>{% if listed_patient.assigned_doctor %}{{ listed_patient.assigned_doctor.full_name }}{% else %}Unassigned clinician{% endif %}</span></div>
+                  <div class="console-list__copy"><strong>{{ listed_patient }}</strong><span>{% if listed_patient.assigned_doctor %}{{ listed_patient.assigned_doctor.full_name }}{% else %}No prescribing doctor{% endif %}</span></div>
                   <a class="console-button console-button--secondary" href="{% url 'portal:patient-detail' listed_patient.pk %}">Open record<span class="sr-only"> for {{ listed_patient }}</span></a>
                 </li>
               {% empty %}

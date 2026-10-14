@@ -1,0 +1,56 @@
+{% comment %}
+  The record's Blood results tab: results a clinician recorded by hand (most are read on the PathCare portal),
+  then the blood test requests. Context from portal/blood_result_views.py and the requests' paginated().
+{% endcomment %}
+<div class="patient-workspace-toolbar"><h2>Blood results</h2><div class="patient-workspace-actions">
+  {% if can_record_blood_result %}<a class="console-button console-button--primary" href="{{ workspace_url }}&amp;update=blood-result" data-modal-open="record-blood-result" aria-haspopup="dialog">Record blood result</a>{% endif %}
+</div></div>
+<p class="patient-workspace-notice">Most blood results are read on the PathCare portal. When the blood was done at another lab, record the result here.</p>
+<section class="patient-workspace-panel" aria-labelledby="blood-results-heading">
+  <h3 class="sr-only" id="blood-results-heading">Recorded results</h3>
+  <div class="patient-workspace-table-wrap"><table class="patient-workspace-table">
+    <caption class="sr-only">Blood results recorded for {{ patient }}</caption>
+    <thead><tr><th scope="col">Date taken</th><th scope="col">Lab</th><th scope="col">Results</th><th scope="col">Recorded by</th><th scope="col">Report</th></tr></thead>
+    <tbody>
+      {% for result in blood_results %}<tr>
+        <td>{{ result.taken_on|date:'j M Y' }}<small>Recorded {{ result.created_at|date:'j M Y' }}</small></td>
+        <td>{{ result.lab_name }}</td>
+        <td class="blood-result__text">{{ result.results|linebreaksbr }}</td>
+        <td>{{ result.recorded_by.full_name|default:'Former staff member' }}</td>
+        <td>{% if result.file_id %}<a class="console-button console-button--quiet" href="{% url 'portal:patient-blood-result-report' patient.pk result.pk %}" target="_blank" rel="noopener" data-no-loader>View PDF</a>{% else %}&mdash;{% endif %}</td>
+      </tr>{% empty %}<tr><td colspan="5" class="patient-workspace-empty">No blood results recorded yet.</td></tr>{% endfor %}
+    </tbody>
+  </table></div>
+</section>
+
+<div class="patient-workspace-toolbar"><h2>Blood test requests</h2><div class="patient-workspace-actions">
+  {% if filter_menu %}{% include 'portal/includes/filter_menu.html' %}{% endif %}
+  {% if is_doctor and can_change_record %}<a class="console-button console-button--secondary" href="{% url 'portal:clinical-lab-create' patient.pk %}">Request blood tests</a>{% endif %}
+</div></div>
+<section class="patient-workspace-panel">
+  <div class="patient-workspace-table-wrap"><table class="patient-workspace-table">
+    <caption class="sr-only">Blood test requests for {{ patient }}</caption>
+    <thead><tr><th scope="col">Requested</th><th scope="col">Panel</th><th scope="col">Doctor</th><th scope="col">Status</th><th scope="col">Action</th></tr></thead>
+    <tbody>
+      {% for row in rows %}<tr><td>{{ row.requested_on|date:'j M Y' }}</td><td>{{ row.panel_name }}</td><td>{{ row.requested_by.full_name }}</td><td>{{ row.get_status_display }}</td><td><a class="console-button console-button--quiet" href="{% url 'portal:clinical-lab-detail' row.pk %}">Open request</a></td></tr>
+      {% empty %}<tr><td colspan="5" class="patient-workspace-empty">No blood test requests match.</td></tr>{% endfor %}
+    </tbody>
+  </table></div>
+  {% include 'portal/patient_workspace_pagination.html' %}
+</section>
+
+{% if blood_result_form %}
+  {# Opened by Record blood result above, or by its link without scripts. It opens by itself after a form error. #}
+  <dialog class="app-dialog" id="record-blood-result" aria-labelledby="record-blood-result-title"{% if blood_result_dialog_open %} open{% endif %}>
+    <div class="app-dialog__body">
+      <h2 id="record-blood-result-title">Record blood result</h2>
+      <p class="app-dialog__sub">For {{ patient }}. Added to the clinical log.</p>
+      <form class="console-form" method="post" action="{% url 'portal:patient-blood-result-create' patient.pk %}" enctype="multipart/form-data">
+        {% csrf_token %}
+        {% if blood_result_form.non_field_errors %}<div role="alert">{{ blood_result_form.non_field_errors }}</div>{% endif %}
+        {% for field in blood_result_form %}{% include 'portal/includes/form_field.html' %}{% endfor %}
+        <div class="app-dialog__actions"><a class="console-button console-button--secondary" href="{{ workspace_url }}" data-dialog-close>Back</a><button class="console-button console-button--primary" type="submit">Record result</button></div>
+      </form>
+    </div>
+  </dialog>
+{% endif %}

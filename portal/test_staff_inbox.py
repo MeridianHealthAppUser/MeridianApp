@@ -1,4 +1,5 @@
-"""The staff inbox lists only the selected practice's conversations that the staff member takes part in."""
+"""The staff inbox lists only the selected practice's conversations that the staff member takes part in, or for a
+Super Admin every one in the practice."""
 
 from django.test import override_settings
 from datetime import timedelta
@@ -129,22 +130,78 @@ class StaffInboxTests(TestCase):
         self.login(self.patient_user)
         self.assertEqual(self.client.get(self.inbox_url()).status_code, 403)
 
-    def test_staff_see_only_conversations_they_take_part_in(self):
+    def test_staff_see_only_conversations_they_take_part_in_and_super_admins_see_every_one(self):
         self.login(self.doctor)
         response = self.client.get(self.inbox_url())
         self.assertEqual({thread.pk for thread in response.context['threads']}, {self.recent_thread.pk, self.older_thread.pk})
-        # Administrators and Super Admins have no practice-wide view of patient conversations.
-        for user in (self.administrator, self.super_admin):
-            with self.subTest(user=user.email):
-                self.login(user)
-                response = self.client.get(self.inbox_url())
-                self.assertEqual(response.status_code, 200)
-                self.assertEqual(list(response.context['threads']), [])
-                self.assertNotContains(response, self.recent_thread.subject)
-                self.assertEqual(self.client.get(self.inbox_url(), {'thread': self.recent_thread.pk}).status_code, 404)
-                self.assertEqual(self.client.post(reverse('portal:staff-message-create', args=[self.recent_thread.pk]),
-                                                  {'body': 'Not my conversation', 'return_to': 'inbox'}).status_code, 404)
+        # Practice administrators have no practice-wide view of patient conversations.
+        self.login(self.administrator)
+        response = self.client.get(self.inbox_url())
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(list(response.context['threads']), [])
+        self.assertNotContains(response, self.recent_thread.subject)
+        self.assertEqual(self.client.get(self.inbox_url(), {'thread': self.recent_thread.pk}).status_code, 404)
+        self.assertEqual(self.client.post(reverse('portal:staff-message-create', args=[self.recent_thread.pk]),
+                                          {'body': 'Not my conversation', 'return_to': 'inbox'}).status_code, 404)
         self.assertFalse(PatientMessage.objects.filter(body='Not my conversation').exists())
+        # A Super Admin lists every conversation with this practice's active patients, without being in them.
+        self.login(self.super_admin)
+        response = self.client.get(self.inbox_url())
+        self.assertEqual({thread.pk for thread in response.context['threads']}, {self.recent_thread.pk, self.older_thread.pk})
+        self.assertContains(response, self.recent_thread.subject)
+        self.assertNotContains(response, self.other_practice_thread.subject)
+        self.assertNotContains(response, self.inactive_patient_thread.subject)
+        for selection in (self.other_practice_thread.pk, self.inactive_patient_thread.pk):
+            self.assertEqual(self.client.get(self.inbox_url(), {'thread': selection}).status_code, 404)
+
+    def test_a_super_admin_reads_a_conversation_they_are_not_in_without_marking_it_and_joins_by_replying(self):
+        message = self.add_message()
+        doctor_position = MessageThreadParticipant.objects.get(thread=self.recent_thread, user=self.doctor).last_read_at
+        self.login(self.super_admin)
+        # Conversations they aren't in are never unread for them.
+        listed = self.client.get(self.inbox_url())
+        self.assertEqual({thread.pk: thread.unread_count for thread in listed.context['threads']},
+                         {self.recent_thread.pk: 0, self.older_thread.pk: 0})
+        self.assertEqual(listed.context['patient_unread_total'], 0)
+        self.assertNotContains(listed, 'is-unread')
+        # Opened in Patient messages or on the record, it reads like any other, with no Mark as unread or Message action.
+        manage = reverse('portal:conversation-manage', args=[self.recent_thread.pk])
+        read_state = reverse('portal:staff-thread-read-state', args=[self.recent_thread.pk])
+        record = reverse('portal:patient-detail', args=[self.patient.pk])
+        for opened, thread in ((self.client.get(self.inbox_url(), {'thread': self.recent_thread.pk}), 'inbox_thread'),
+                               (self.client.get(record, {'tab': 'messages', 'thread': self.recent_thread.pk}), 'record_thread')):
+            with self.subTest(thread=thread):
+                self.assertEqual(opened.status_code, 200)
+                self.assertEqual(opened.context[thread].pk, self.recent_thread.pk)
+                self.assertFalse(opened.context[thread].is_member)
+                self.assertContains(opened, 'Secure inbox test message')
+                self.assertContains(opened, 'You’re not in this conversation. Replying adds you to it.')
+                self.assertContains(opened, 'action="' + reverse('portal:staff-message-create', args=[self.recent_thread.pk]) + '"')
+                self.assertNotContains(opened, f'action="{read_state}"')
+                self.assertNotContains(opened, f'href="{manage}')
+                self.assertNotContains(opened, 'id="conversation-manage"')
+        # Nothing was marked read: no read position for them, no receipt on the patient's message, nobody else's changed.
+        self.assertFalse(MessageThreadParticipant.objects.filter(thread=self.recent_thread, user=self.super_admin).exists())
+        message.refresh_from_db()
+        self.assertIsNone(message.staff_read_at)
+        self.assertIsNone(message.read_at)
+        self.assertEqual(MessageThreadParticipant.objects.get(thread=self.recent_thread, user=self.doctor).last_read_at, doctor_position)
+        # Replying adds them, which is recorded; from then on it is theirs like any other conversation they're in.
+        reply = self.client.post(reverse('portal:staff-message-create', args=[self.recent_thread.pk]),
+                                 {'body': 'Joining to help.', 'return_to': 'patient_messages'})
+        self.assertRedirects(reply, self.thread_url(self.recent_thread), fetch_redirect_response=False)
+        self.assertTrue(self.recent_thread.messages.filter(sender=self.super_admin, body='Joining to help.').exists())
+        self.assertEqual(set(self.recent_thread.participants.all()), {self.doctor, self.super_admin})
+        joined = AuditEvent.objects.get(action='message.participant_added', actor=self.super_admin)
+        self.assertEqual(joined.metadata, {'user_id': self.super_admin.pk, 'joined_by_reply': True})
+        opened = self.client.get(self.inbox_url(), {'thread': self.recent_thread.pk})
+        self.assertTrue(opened.context['inbox_thread'].is_member)
+        self.assertNotContains(opened, 'You’re not in this conversation.')
+        self.assertContains(opened, f'action="{read_state}"')
+        self.assertContains(opened, f'href="{manage}"')
+        self.add_message()
+        counts = {thread.pk: thread.unread_count for thread in self.client.get(self.inbox_url()).context['threads']}
+        self.assertEqual(counts, {self.recent_thread.pk: 1, self.older_thread.pk: 0})
 
     def test_revoked_membership_does_not_keep_session_access(self):
         self.login(self.administrator)
@@ -519,6 +576,9 @@ class StaffInboxTests(TestCase):
         self.login(self.administrator)
         url = reverse('portal:staff-thread-read-state', args=[self.recent_thread.pk])
         self.assertEqual(self.client.post(url, {'state': 'read'}).status_code, 404)
+        # A Super Admin can read it, but has no read state in a conversation they aren't in.
+        self.login(self.super_admin)
+        self.assertEqual(self.client.post(url, {'state': 'read'}).status_code, 403)
         self.login()
         self.assertEqual(self.client.post(url, {'state': 'maybe'}).status_code, 400)
         self.assertEqual(self.client.get(url).status_code, 405)

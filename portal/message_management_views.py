@@ -9,7 +9,7 @@ from django.views import View
 from django.views.decorators.cache import never_cache
 
 from care.message_management import manage_conversation
-from care.messaging import staff_threads
+from care.messaging import member_threads
 from care.patient_assignment import active_doctors
 from .navigation import messages_title
 from .views import StaffCompanyRequiredMixin
@@ -39,7 +39,8 @@ class ConversationManagementView(LoginRequiredMixin, StaffCompanyRequiredMixin, 
     http_method_names = ('get', 'post', 'head', 'options')
 
     def thread(self, pk):
-        return get_object_or_404(staff_threads(self.company, self.request.user).select_related('patient'), pk=pk)
+        # Only people in the conversation manage it; a Super Admin who only reads it joins by replying first.
+        return get_object_or_404(member_threads(self.company, self.request.user).select_related('patient'), pk=pk)
 
     def came_from_record(self):
         return self.request.GET.get('from') == 'record'

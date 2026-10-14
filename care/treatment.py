@@ -32,6 +32,21 @@ def authorization_is_current(authorization, on_date=None):
     )
 
 
+def step_in_effect(authorization, on_date=None):
+    """For a step of a starting plan (care.starting_plans), the plan's step in effect that day, so a care plan
+    moves on to each month's strength by itself. Any other authorisation is itself."""
+    if authorization is None or not authorization.plan_key:
+        return authorization
+    day = on_date or timezone.localdate()
+    step = TreatmentAuthorization.objects.filter(
+        company_id=authorization.company_id, patient_id=authorization.patient_id, plan_key=authorization.plan_key,
+        starts_on__lte=day, expires_on__gte=day,
+    ).exclude(status=TreatmentAuthorization.Status.CANCELLED).select_related(
+        'company', 'patient', 'product', 'prescribed_by',
+    ).order_by('-plan_step', '-pk').first()
+    return step or authorization
+
+
 def subscription_hold_reason(subscription, on_date=None):
     if subscription is None:
         return 'A local care plan is required.'
@@ -39,7 +54,7 @@ def subscription_hold_reason(subscription, on_date=None):
         return 'The patient or practice is inactive.'
     if subscription.status != PatientSubscription.Status.ACTIVE:
         return 'The local care plan is not active.'
-    authorization = subscription.authorization
+    authorization = step_in_effect(subscription.authorization, on_date)
     if authorization is None or authorization.company_id != subscription.company_id or authorization.patient_id != subscription.patient_id:
         return 'A matching treatment authorisation is required.'
     if not authorization_is_current(authorization, on_date=on_date):
@@ -51,7 +66,7 @@ def ensure_subscription_eligible(subscription, on_date=None):
     reason = subscription_hold_reason(subscription, on_date=on_date)
     if reason:
         raise ValidationError(reason)
-    return subscription.authorization
+    return step_in_effect(subscription.authorization, on_date)
 
 
 def _key(value):

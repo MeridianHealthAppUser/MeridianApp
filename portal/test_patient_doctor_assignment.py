@@ -1,15 +1,17 @@
-"""The care team assigns a patient's clinician from the workspace Overview without losing history."""
+"""Practice administrators and Super Admins set a patient's Prescribing doctor from the workspace Overview without
+losing history; doctors can't change it."""
 
 from datetime import timedelta
 
 from django.contrib.auth import get_user_model
-from django.test import TestCase, override_settings
+from django.test import RequestFactory, TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
 from care.models import Appointment, AuditEvent, ClinicalEncounter, ClinicalNote, ClinicalTask, LabRequest
 from practices.models import Company, CompanyMembership, Patient
 from practices.services import ACTIVE_COMPANY_SESSION_KEY
+from .workflow_context import make_workflow_context
 
 
 @override_settings(MULTI_PRACTICE_ENABLED=True)
@@ -49,30 +51,46 @@ class PatientDoctorAssignmentTests(TestCase):
         return self.client.post(reverse('portal:patient-doctor-assign', args=[patient.pk]),
                                 {'doctor': doctor.pk if doctor else '', 'workflow_context': token})
 
-    def test_care_team_sees_only_active_clinicians_in_this_practice(self):
+    def test_administrators_choose_only_active_clinicians_in_this_practice(self):
         for actor in (self.admin, self.super_admin):
             with self.subTest(actor=actor.email):
                 self.login(actor)
                 response = self.overview()
-                self.assertContains(response, '<dt>Assigned clinician</dt>')
-                self.assertContains(response, 'Assign a clinician')
+                self.assertContains(response, '<dt>Prescribing doctor</dt>')
+                self.assertContains(response, 'Choose a Prescribing doctor')
                 self.assertEqual(list(response.context['doctor_form'].fields['doctor'].queryset), [self.doctor, self.second_doctor])
-        # A clinician opens only their own patients' records, so they change the clinician of those only.
+        # A clinician opens only their own patients' records, and even there sees the Prescribing doctor without the pen.
         self.login(self.doctor)
         self.assertRedirects(self.overview(), reverse('portal:patient-list'), fetch_redirect_response=False)
         Patient.objects.filter(pk=self.patient.pk).update(assigned_doctor=self.doctor)
         response = self.overview()
-        self.assertContains(response, 'Change assigned clinician')
-        self.assertEqual(list(response.context['doctor_form'].fields['doctor'].queryset), [self.doctor, self.second_doctor])
+        self.assertContains(response, '<dt>Prescribing doctor</dt>')
+        self.assertNotContains(response, 'Change Prescribing doctor')
+        self.assertNotIn('doctor_form', response.context)
+        self.assertNotIn('doctor_assignment_context', response.context)
+        # They still keep the patient's title.
+        self.assertIn('title_context_token', response.context)
 
-    def test_doctor_can_hand_a_patient_to_a_colleague(self):
+    def test_a_doctor_cannot_change_the_prescribing_doctor(self):
         Patient.objects.filter(pk=self.patient.pk).update(assigned_doctor=self.doctor)
+        self.patient.refresh_from_db()
+        # Even as the patient's current clinician, with an otherwise valid form, the change is refused.
+        request = RequestFactory().get('/')
+        request.user = self.doctor
         self.login(self.doctor)
+        response = self.assign(self.second_doctor, token=make_workflow_context(
+            request, self.company, 'patient-doctor-assignment', self.patient))
+        self.assertEqual(response.status_code, 403)
+        self.patient.refresh_from_db()
+        self.assertEqual(self.patient.assigned_doctor, self.doctor)
+        self.assertFalse(AuditEvent.objects.filter(action='patient.doctor_assigned').exists())
+        # An administrator hands the patient to a colleague. The record is then read-only to the doctor: a change
+        # is refused before the role is even checked.
+        self.login(self.admin)
         self.assign(self.second_doctor)
         self.patient.refresh_from_db()
         self.assertEqual(self.patient.assigned_doctor, self.second_doctor)
-        self.assertEqual(AuditEvent.objects.filter(action='patient.doctor_assigned', actor=self.doctor).count(), 1)
-        # Once handed over, the record is read-only to them: no clinician editor, and a change is refused.
+        self.login(self.doctor)
         self.assertNotIn('doctor_form', self.overview().context)
         refused = self.client.post(reverse('portal:patient-doctor-assign', args=[self.patient.pk]),
                                    {'doctor': self.doctor.pk, 'workflow_context': 'unused'})
@@ -100,7 +118,7 @@ class PatientDoctorAssignmentTests(TestCase):
             (self.admin, {'previous_doctor_id': self.second_doctor.pk, 'doctor_id': None}),
         ])
         history = self.client.get(reverse('portal:patient-detail', args=[self.patient.pk]), {'tab': 'history'})
-        self.assertContains(history, 'Assigned clinician changed', count=3)
+        self.assertContains(history, 'Prescribing doctor changed', count=3)
 
     def test_saving_the_same_doctor_records_nothing(self):
         self.login(self.admin)
@@ -110,9 +128,9 @@ class PatientDoctorAssignmentTests(TestCase):
 
     def test_a_deactivated_team_member_cannot_assign_with_an_open_form(self):
         Patient.objects.filter(pk=self.patient.pk).update(assigned_doctor=self.doctor)
-        self.login(self.doctor)
+        self.login(self.super_admin)
         token = self.overview().context['doctor_assignment_context']
-        CompanyMembership.objects.filter(company=self.company, user=self.doctor).update(is_active=False)
+        CompanyMembership.objects.filter(company=self.company, user=self.super_admin).update(is_active=False)
         response = self.assign(self.second_doctor, token=token)
         self.assertEqual(response.status_code, 403)
         self.patient.refresh_from_db()
@@ -135,6 +153,15 @@ class PatientDoctorAssignmentTests(TestCase):
         self.assign(self.second_doctor)
         self.login(self.second_doctor)
         detail = reverse('portal:patient-detail', args=[self.patient.pk])
+        # A doctor works from the Overview: the previous clinician's consult note, note and blood form are in its
+        # log, and the blood test request is on Blood results.
+        overview = self.client.get(detail, {'tab': 'overview'})
+        self.assertLessEqual({f'consult-{consultation.pk}', f'note-{note.pk}', f'blood-{lab.pk}'},
+                             {entry['id'] for entry in overview.context['clinical_log']})
+        self.assertContains(overview, 'PREVIOUS_CLINICIAN_NOTE')
+        self.assertIn(lab.pk, [row.pk for row in self.client.get(detail, {'tab': 'blood-tests'}).context['rows']])
+        # Every tab still lists them for a Super Admin.
+        self.login(self.super_admin)
         for tab, record in (('consultations', consultation), ('notes', note), ('appointments', appointment),
                             ('blood-tests', lab), ('tasks', task)):
             with self.subTest(tab=tab):

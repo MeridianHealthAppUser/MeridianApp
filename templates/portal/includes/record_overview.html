@@ -2,21 +2,27 @@
 {# The clinical Overview: the log and summary data on the left; weight, the prescription and blood tests on the right. #}
 <div class="record-overview" data-record-overview data-patient-name="{{ patient }}">
   <div class="record-overview__main">
-    <section class="staff-page-card record-log" aria-label="Log">
+    <section class="staff-page-card record-log" id="record-log" aria-label="Log">
       <header class="record-log__header">
         <nav class="record-chips" aria-label="Log filter">
           <a href="{{ workspace_url }}&amp;log=clinical" data-log-filter="clinical"{% if log_filter == 'clinical' %} class="is-active" aria-current="true"{% endif %}>Clinical</a>
           <a href="{{ workspace_url }}&amp;log=dispensed" data-log-filter="dispensed"{% if log_filter == 'dispensed' %} class="is-active" aria-current="true"{% endif %}>Dispensed</a>
         </nav>
-        <span class="record-log__count" data-log-count="clinical"{% if log_filter != 'clinical' %} hidden{% endif %}>{% if clinical_log %}{{ clinical_log|length }} entr{{ clinical_log|length|pluralize:'y,ies' }}{% endif %}</span>
-        <span class="record-log__count" data-log-count="dispensed"{% if log_filter != 'dispensed' %} hidden{% endif %}>{% if dispensed_log %}{{ dispensed_log|length }} shipment{{ dispensed_log|length|pluralize }}{% endif %}</span>
+        <span class="record-log__header-side">
+          <span class="record-log__count" data-log-count="clinical"{% if log_filter != 'clinical' %} hidden{% endif %}>{% if clinical_log %}{{ clinical_log|length }} entr{{ clinical_log|length|pluralize:'y,ies' }}{% endif %}</span>
+          <span class="record-log__count" data-log-count="dispensed"{% if log_filter != 'dispensed' %} hidden{% endif %}>{% if dispensed_log %}{{ dispensed_log|length }} shipment{{ dispensed_log|length|pluralize }}{% endif %}</span>
+          {# A note straight into the clinical log; without scripts the link opens the dialog with the page. #}
+          {% if log_note_form %}<a class="console-button console-button--primary record-log__new" href="{{ workspace_url }}&amp;note=new#record-note" data-dialog-open="record-note" aria-haspopup="dialog">Create note</a>{% endif %}
+        </span>
       </header>
       <ol class="record-log__list" data-log-list="clinical"{% if log_filter != 'clinical' %} hidden{% endif %}>
+        {# Consult notes and notes lead; blood forms, blood results and prescriptions are smaller grey lines. #}
         {% for entry in clinical_log %}
-          <li class="record-log__entry record-log__entry--{{ entry.kind }}{% if entry.automatic %} is-automatic{% endif %}" id="log-{{ entry.id }}">
+          <li class="record-log__entry record-log__entry--{{ entry.kind }}{% if not entry.lead %} record-log__entry--minor{% endif %}{% if entry.automatic %} is-automatic{% endif %}" id="log-{{ entry.id }}">
             <time datetime="{{ entry.at|date:'Y-m-d' }}">{{ entry.at|date:'j M Y' }}</time>
-            <p class="record-log__by">{% if entry.automatic %}Sent automatically{% else %}{{ entry.by }}{% endif %}{% if entry.tag %}<span class="record-log__tag record-log__tag--{{ entry.kind }}">{{ entry.tag }}</span>{% endif %}</p>
+            <p class="record-log__by">{% if entry.automatic %}Sent automatically{% else %}{{ entry.by|default:'Former staff member' }}{% endif %}{% if entry.tag %}<span class="record-log__tag record-log__tag--{{ entry.kind }}">{{ entry.tag }}</span>{% endif %}{% if entry.private %}<span class="record-log__tag record-log__tag--private" title="Only visible to you">Private</span>{% endif %}</p>
             {% if entry.text %}<p class="record-log__text">{{ entry.text|linebreaksbr }}</p>{% endif %}
+            {% if entry.result.file_id %}<div class="record-log__form"><a href="{% url 'portal:patient-blood-result-report' patient.pk entry.result.pk %}" target="_blank" rel="noopener" data-no-loader>View report</a></div>{% endif %}
             {% if entry.form %}
               <div class="record-log__form">
                 <a href="{% url 'portal:patient-blood-test-form' patient.pk entry.form.pk %}" target="_blank" rel="noopener" data-no-loader>View form</a>
@@ -101,8 +107,10 @@
         <dl class="record-rows">
           <div><dt>Medicine</dt><dd>{{ prescription.product.name }}</dd></div>
           <div><dt>Dose</dt><dd>{{ prescription.max_dose }}</dd></div>
+          {# A starting plan: each strength with its dates, the one in effect in bold. #}
+          {% if prescription.plan_steps|length > 1 %}<div><dt>Starting plan</dt><dd><ol class="record-plan">{% for step in prescription.plan_steps %}<li{% if step.pk == prescription.pk %} class="is-current" aria-current="step"{% endif %}>{{ step.max_dose }} <span>{{ step.starts_on|date:'j M' }} – {{ step.expires_on|date:'j M Y' }}</span></li>{% endfor %}</ol></dd></div>{% endif %}
           <div><dt>Authorised</dt><dd>{{ prescription.starts_on|date:'j M Y' }}</dd></div>
-          <div><dt>Expires</dt><dd{% if prescription_state == 'expired' %} class="is-rose"{% elif prescription_state == 'due' %} class="is-amber"{% endif %}>{{ prescription.expires_on|date:'j M Y' }}{% if prescription_state == 'expired' %} &middot; expired{% endif %}</dd></div>
+          <div><dt>Expires</dt><dd{% if prescription_state == 'expired' %} class="is-rose"{% elif prescription_state == 'due' %} class="is-amber"{% endif %}>{{ prescription.ends_on|date:'j M Y' }}{% if prescription_state == 'expired' %} &middot; expired{% endif %}</dd></div>
           <div><dt>By</dt><dd>{{ prescription.prescribed_by.full_name }}</dd></div>
         </dl>
         {% if prescription_state == 'paused' %}<p class="record-card__note">This prescription is paused. Undispatched parcels are on hold.</p>{% endif %}
@@ -111,8 +119,9 @@
       {% endif %}
       {% if can_prescribe %}
         <div class="record-card__actions">
+          <a class="console-button console-button--primary" href="{{ workspace_url }}&amp;prescription=initiate#record-initiate" data-dialog-open="record-initiate">Initiate prescription</a>
           {% if prescription %}<a class="console-button console-button--primary" href="{{ workspace_url }}&amp;prescription=renew#record-renew" data-dialog-open="record-renew">Renew prescription</a>{% endif %}
-          <a class="console-button {% if prescription %}console-button--secondary{% else %}console-button--primary{% endif %}" href="{{ workspace_url }}&amp;prescription=change#record-change" data-dialog-open="record-change">{% if prescription %}Change prescription{% else %}Create prescription{% endif %}</a>
+          <a class="console-button console-button--secondary" href="{{ workspace_url }}&amp;prescription=change#record-change" data-dialog-open="record-change">{% if prescription %}Change prescription{% else %}Create prescription{% endif %}</a>
         </div>
       {% endif %}
     </section>
@@ -135,6 +144,27 @@
 </div>
 
 {% include 'portal/includes/record_consult_dialog.html' with consult_notes=clinical_log %}
+
+{% if log_note_form %}
+  {# Create note: one text box, saved as a note in the clinical log. Opens by itself after an error. #}
+  <dialog class="record-dialog" id="record-note" aria-labelledby="record-note-title"{% if open_dialog == 'note' %} open{% endif %}>
+    <form method="post" action="{% url 'portal:patient-note-create' patient.pk %}">
+      {% csrf_token %}
+      <input type="hidden" name="return_to" value="overview">
+      <h2 id="record-note-title">Create note</h2>
+      <p class="record-dialog__sub">{{ patient }} &middot; added to the clinical log</p>
+      {% if log_note_form.errors %}<div class="record-error" role="alert">{% for errors in log_note_form.errors.values %}{{ errors|join:' ' }} {% endfor %}</div>{% endif %}
+      <div class="console-form__field">
+        <label for="{{ log_note_form.body.id_for_label }}">{{ log_note_form.body.label }}</label>
+        {{ log_note_form.body }}
+      </div>
+      <div class="record-dialog__actions">
+        <a class="console-button console-button--secondary" href="{{ workspace_url }}" data-dialog-close>Back</a>
+        <button class="console-button console-button--primary" type="submit">Create</button>
+      </div>
+    </form>
+  </dialog>
+{% endif %}
 
 {% if can_request_bloods and not pathcare_blocked %}
   <dialog class="record-dialog record-dialog--wide" id="record-bloods-dialog" aria-labelledby="record-bloods-title"{% if open_dialog == 'bloods' %} open{% endif %}>
@@ -173,6 +203,55 @@
 {% endif %}
 
 {% if can_prescribe %}
+  {# Initiate prescription: a medicine, one of its starting plans from the Pharmacy catalogue, and how long it runs. #}
+  <dialog class="record-dialog" id="record-initiate" aria-labelledby="record-initiate-title"{% if open_dialog == 'initiate' %} open{% endif %}>
+    <form method="post" action="{% url 'portal:patient-prescription-initiate' patient.pk %}" data-initiate-form>
+      {% csrf_token %}
+      <input type="hidden" name="workflow_context" value="{{ prescription_context_token }}">
+      <input type="hidden" name="current" value="{{ prescription.pk|default:'' }}">
+      <h2 id="record-initiate-title">Initiate prescription</h2>
+      <p class="record-dialog__sub">{{ patient }}{% if prescription %} &middot; replaces {{ prescription_label }} from today{% endif %}</p>
+      {% if initiate_form.errors %}<div class="record-error" role="alert">{% for errors in initiate_form.errors.values %}{{ errors|join:' ' }} {% endfor %}</div>{% endif %}
+      {% if starting_plans %}
+        <div class="console-form__field">
+          <label for="record-initiate-medicine">Medicine</label>
+          <select id="record-initiate-medicine" name="medicine" data-initiate-medicine>
+            {% for medicine in starting_plan_medicines %}<option value="{{ medicine }}"{% if medicine == initiate_form.medicine.value %} selected{% endif %}>{{ medicine }}</option>{% endfor %}
+          </select>
+        </div>
+        <fieldset class="record-dialog__plans">
+          <legend>Dosage plan</legend>
+          {% for plan in starting_plans %}
+            <label class="record-plan-option" data-medicine="{{ plan.medicine }}">
+              <input type="radio" name="plan" value="{{ plan.pk }}" required data-months="{{ plan.month_choices|join:',' }}" data-default="{{ plan.default }}" data-previews="{{ plan.previews }}"{% if plan.pk|stringformat:'s' == initiate_form.plan.value|stringformat:'s' %} checked{% endif %}>
+              <span>{% if plan.name %}<strong>{{ plan.name }}</strong>{% endif %}{{ plan.medicine }} {{ plan.summary }}</span>
+            </label>
+          {% endfor %}
+        </fieldset>
+        <fieldset class="record-dialog__months">
+          <legend>Valid for</legend>
+          {% for option in initiate_months %}
+            <label class="record-chip"><input type="radio" name="months" value="{{ option.months }}"{% if option.months|stringformat:'s' == initiate_form.months.value|stringformat:'s' %} checked{% endif %}><span>{{ option.months }} month{{ option.months|pluralize }}</span></label>
+          {% endfor %}
+        </fieldset>
+        <div class="console-form__field">
+          <label for="record-initiate-reason">Reason <span class="record-dialog__optional">(optional, goes in the clinical log)</span></label>
+          <input id="record-initiate-reason" name="reason" type="text" maxlength="500" value="{{ initiate_form.reason.value|default:'' }}">
+        </div>
+        <dl class="record-rows">
+          <div><dt>Will be prescribed</dt><dd class="is-teal" data-initiate-preview></dd></div>
+        </dl>
+        {% include 'portal/includes/record_safety_flags.html' with prefix='initiate' %}
+        <div class="record-dialog__actions">
+          <a class="console-button console-button--secondary" href="{{ workspace_url }}#record-prescription" data-dialog-close>Back</a>
+          <button class="console-button console-button--primary" type="submit">Save prescription</button>
+        </div>
+      {% else %}
+        <p class="record-card__empty">There are no starting plans yet. A Super Admin adds them in the Pharmacy catalogue.</p>
+        <div class="record-dialog__actions"><a class="console-button console-button--secondary" href="{{ workspace_url }}#record-prescription" data-dialog-close>Close</a></div>
+      {% endif %}
+    </form>
+  </dialog>
   {% if prescription %}
     <dialog class="record-dialog" id="record-renew" aria-labelledby="record-renew-title"{% if open_dialog == 'renew' %} open{% endif %}>
       <form method="post" action="{% url 'portal:patient-prescription-renew' patient.pk %}" data-renew-form>
@@ -189,7 +268,7 @@
           {% endfor %}
         </fieldset>
         <dl class="record-rows">
-          <div><dt>Current expiry</dt><dd>{{ prescription.expires_on|date:'j M Y' }}</dd></div>
+          <div><dt>Current expiry</dt><dd>{{ prescription.ends_on|date:'j M Y' }}</dd></div>
           <div><dt>New expiry</dt><dd class="is-teal" data-renew-expiry>{% for option in renew_months %}{% if option.months|stringformat:'s' == renew_form.months.value|stringformat:'s' %}{{ option.expires_on|date:'j M Y' }}{% endif %}{% endfor %}</dd></div>
         </dl>
         {% include 'portal/includes/record_safety_flags.html' with prefix='renew' %}
@@ -237,7 +316,6 @@
         <dl class="record-rows">
           <div><dt>New prescription</dt><dd class="is-teal" data-change-preview></dd></div>
         </dl>
-        <p class="record-dialog__help">Listed from the main treatments in the practice catalogue.{% if prescription %} The current prescription is replaced from today.{% endif %}</p>
         {% include 'portal/includes/record_safety_flags.html' with prefix='change' %}
         <div class="record-dialog__actions">
           <a class="console-button console-button--secondary" href="{{ workspace_url }}#record-prescription" data-dialog-close>Cancel</a>

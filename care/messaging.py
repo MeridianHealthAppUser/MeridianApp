@@ -1,9 +1,10 @@
 """Who can see and write in patient conversations.
 
 A conversation is private to the patient and the staff members taking part in
-it. Nobody else in the practice, including administrators and Super Admins,
-can list, read or reply to it. Clinicians join only when a participant adds them.
-Each staff member keeps their own read position, so a group shows unread per person.
+it, except that Super Admins can read every conversation in their practice. A Super
+Admin joins a conversation by replying in it; other clinicians join only when a
+participant adds them. Each staff member keeps their own read position, so a group
+shows unread per person, and only conversations someone is in count as unread for them.
 """
 
 from datetime import timedelta
@@ -20,11 +21,26 @@ from .patient_assignment import active_doctors
 from .services import post_patient_message, record_audit
 
 
-def staff_threads(company, user):
+def sees_every_conversation(company, user):
+    """Super Admins read every patient conversation in their practice."""
+    return CompanyMembership.objects.filter(
+        company=company, user_id=user.pk, is_active=True, role=CompanyMembership.Role.SUPER_ADMIN,
+    ).exists()
+
+
+def member_threads(company, user):
     """Conversations in this practice that the staff member takes part in."""
     return MessageThread.objects.for_company(company).filter(
         participants=user, patient__company=company, patient__is_active=True,
     )
+
+
+def staff_threads(company, user):
+    """The conversations a staff member can list and read: the ones they take part in, or for a Super Admin
+    every one in the practice."""
+    if sees_every_conversation(company, user):
+        return MessageThread.objects.for_company(company).filter(patient__company=company, patient__is_active=True)
+    return member_threads(company, user)
 
 
 def unread_for_staff(company, user):
@@ -35,7 +51,7 @@ def unread_for_staff(company, user):
     """
     last_read = MessageThreadParticipant.objects.filter(thread_id=OuterRef('thread_id'), user_id=user.pk).values('last_read_at')[:1]
     return PatientMessage.objects.for_company(company).filter(
-        thread__in=staff_threads(company, user),
+        thread__in=member_threads(company, user),
     ).exclude(sender_id=user.pk).annotate(reader_last_read=Subquery(last_read)).filter(
         Q(reader_last_read__isnull=True) | Q(created_at__gt=F('reader_last_read')),
     )
@@ -183,6 +199,16 @@ def hand_over(*, thread, actor, clinician, request=None):
     record_audit(company=thread.company, actor=actor, patient=thread.patient, action='message.participant_added',
                  target=thread, request=request, metadata={'user_id': clinician.pk})
     return link
+
+
+@transaction.atomic
+def post_staff_reply(*, thread, sender, body, request=None):
+    """A staff member's reply. A Super Admin who isn't in the conversation joins it by replying."""
+    if not is_participant(thread, sender) and sees_every_conversation(thread.company_id, sender):
+        add_participant(thread, sender)
+        record_audit(company=thread.company, actor=sender, patient=thread.patient, action='message.participant_added',
+                     target=thread, request=request, metadata={'user_id': sender.pk, 'joined_by_reply': True})
+    return post_patient_message(thread=thread, sender=sender, body=body, request=request)
 
 
 def adopt_unattended_threads(patient, clinician):

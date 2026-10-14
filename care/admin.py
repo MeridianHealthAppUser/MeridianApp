@@ -266,6 +266,16 @@ class LabResultAdmin(ClinicalWorkflowReadOnlyAdmin):
     )
 
 
+@admin.register(models.BloodResult)
+class BloodResultAdmin(ClinicalWorkflowReadOnlyAdmin):
+    """Metadata only: the attached PDF stays behind portal access checks."""
+
+    list_display = ('patient', 'lab_name', 'taken_on', 'company', 'recorded_by', 'created_at')
+    search_fields = ('lab_name', 'patient__first_name', 'patient__last_name')
+    autocomplete_fields = ()
+    fields = readonly_fields = ('id', 'company', 'patient', 'taken_on', 'lab_name', 'recorded_by', 'file', 'created_at', 'updated_at')
+
+
 @admin.register(models.WeightEntry)
 class WeightEntryAdmin(CompanyScopedAdmin):
     list_display = ('patient', 'company', 'weight_kg', 'recorded_on', 'recorded_by')

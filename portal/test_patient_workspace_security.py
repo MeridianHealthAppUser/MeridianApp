@@ -11,6 +11,9 @@ from care.models import (AuditEvent, ClinicalEncounter,
 from practices.models import CompanyMembership, Patient
 from . import test_records
 
+# The tabs a doctor in the Clinician role sees on their own patient's record.
+DOCTOR_TABS = ('overview', 'blood-tests', 'messages')
+
 
 @override_settings(MULTI_PRACTICE_ENABLED=True)
 class PatientWorkspaceSecurityTests(TestCase):
@@ -31,6 +34,10 @@ class PatientWorkspaceSecurityTests(TestCase):
     def get(self, tab='overview', **query):
         return self.client.get(self.path, {'tab': tab, **query})
 
+    def promote_doctor(self):
+        # As a Super Admin who is also a doctor they keep every tab, with a clinician's view of their own notes and drafts.
+        CompanyMembership.objects.filter(company=self.alpha, user=self.doctor).update(role='super_admin', clinician_type='doctor')
+
     def test_unknown_tabs_are_404_without_patient_content_or_new_read_audit(self):
         before = AuditEvent.objects.count()
         for tab in ('../history', '<script>', 'all', 'private', '', 'Notes'):
@@ -40,23 +47,34 @@ class PatientWorkspaceSecurityTests(TestCase):
         self.assertEqual(AuditEvent.objects.count(), before)
 
     def test_query_patient_and_company_ids_cannot_replace_the_url_record(self):
-        for tab in ('overview', 'appointments', 'consultations', 'blood-tests', 'notes', 'messages', 'tasks', 'payments', 'treatment', 'deliveries'):
-            with self.subTest(tab=tab):
-                response = self.get(tab, patient=self.beta_patient.pk, patient_id=self.beta_patient.pk,
-                                    company=self.beta.pk, company_id=self.beta.pk, scope='all')
-                self.assertEqual(response.status_code, 200)
-                self.assertEqual(response.context['patient'].pk, self.patient.pk)
-                self.assertEqual(response.context['company'].pk, self.alpha.pk)
-                self.assertNotContains(response, 'FOREIGN_THREAD_SECRET')
-                self.assertNotContains(response, 'FOREIGN_MESSAGE_SECRET')
+        for promoted in (False, True):
+            if promoted:
+                self.promote_doctor()
+            for tab in ('overview', 'appointments', 'consultations', 'blood-tests', 'notes', 'messages', 'tasks', 'payments', 'treatment', 'deliveries'):
+                with self.subTest(promoted=promoted, tab=tab):
+                    response = self.get(tab, patient=self.beta_patient.pk, patient_id=self.beta_patient.pk,
+                                        company=self.beta.pk, company_id=self.beta.pk, scope='all')
+                    if not promoted and tab not in DOCTOR_TABS:
+                        # A tab the doctor doesn't see sends them to the Overview of the record in the URL.
+                        self.assertRedirects(response, f'{self.path}?tab=overview', fetch_redirect_response=False)
+                        continue
+                    self.assertEqual(response.status_code, 200)
+                    self.assertEqual(response.context['patient'].pk, self.patient.pk)
+                    self.assertEqual(response.context['company'].pk, self.alpha.pk)
+                    self.assertNotContains(response, 'FOREIGN_THREAD_SECRET')
+                    self.assertNotContains(response, 'FOREIGN_MESSAGE_SECRET')
         wrong = reverse('portal:patient-detail', args=[self.beta_patient.pk])
         self.assertEqual(self.client.get(wrong, {'tab': 'messages'}).status_code, 404)
 
     def test_doctor_own_private_notes_are_visible_but_other_private_notes_are_not(self):
-        response = self.get('notes')
-        self.assertContains(response, 'OWN_PRIVATE_NOTE_SECRET')
-        self.assertNotContains(response, 'OTHER_PRIVATE_NOTE_SECRET')
-        self.assertContains(response, 'Shared clinician note')
+        # A doctor reads notes in the Overview's log; as a Super Admin they also have the Notes tab.
+        pages = [self.get()]
+        self.promote_doctor()
+        pages += [self.get(), self.get('notes')]
+        for response in pages:
+            self.assertContains(response, 'OWN_PRIVATE_NOTE_SECRET')
+            self.assertNotContains(response, 'OTHER_PRIVATE_NOTE_SECRET')
+            self.assertContains(response, 'Shared clinician note')
 
     def test_super_admin_cannot_view_own_private_note_from_a_previous_doctor_role(self):
         CompanyMembership.objects.filter(company=self.alpha, user=self.doctor).update(role='super_admin', clinician_type='')
@@ -79,6 +97,9 @@ class PatientWorkspaceSecurityTests(TestCase):
     def test_consultations_only_include_current_doctor_drafts_or_signed_entries(self):
         own = ClinicalEncounter.objects.get(company=self.alpha, clinical_summary='OWN_DRAFT_SECRET')
         other = ClinicalEncounter.objects.get(company=self.alpha, clinical_summary='OTHER_DRAFT_SECRET')
+        # The Consultations tab isn't a doctor's; as a Super Admin who is a doctor they see their own drafts there.
+        self.assertRedirects(self.get('consultations'), f'{self.path}?tab=overview', fetch_redirect_response=False)
+        self.promote_doctor()
         response = self.get('consultations')
         self.assertIn(own.pk, {row.pk for row in response.context['rows']})
         self.assertNotIn(other.pk, {row.pk for row in response.context['rows']})
@@ -92,9 +113,13 @@ class PatientWorkspaceSecurityTests(TestCase):
                                            body='MALFORMED_UNSIGNED_SNAPSHOT_SECRET')
         draft = ClinicalEncounter.objects.get(company=self.alpha, clinical_summary='OTHER_DRAFT_SECRET')
         ClinicalEncounter.objects.filter(pk=draft.pk).update(signed_note=note)
+        # The doctor's Overview log lists general notes too; the Notes tab isn't theirs, so it's checked as a Super Admin.
+        pages = [self.get()]
+        self.promote_doctor()
         for actor in (self.doctor, self.super_admin):
             self.login(actor)
-            response = self.get('notes')
+            pages += [self.get(), self.get('notes')]
+        for response in pages:
             self.assertNotContains(response, note.body)
             self.assertNotContains(response, 'Signed duplicate must not appear twice')
 
@@ -115,8 +140,9 @@ class PatientWorkspaceSecurityTests(TestCase):
                 self.assertEqual(self.get('messages', thread=value).status_code, 404)
 
     def test_other_tabs_head_and_a_plain_overview_do_not_mark_messages_read_but_opening_the_conversation_does(self):
-        for tab in ('appointments', 'notes', 'tasks', 'weights'):
-            self.assertEqual(self.get(tab).status_code, 200)
+        # A doctor sees Blood results; the other tabs send them to the Overview.
+        for tab in ('appointments', 'blood-tests', 'notes', 'tasks', 'weights'):
+            self.assertEqual(self.get(tab).status_code, 200 if tab == 'blood-tests' else 302)
         self.assertEqual(self.client.head(self.path, {'tab': 'messages'}).status_code, 200)
         before = AuditEvent.objects.count()
         self.assertEqual(self.client.head(self.path, {'tab': 'overview'}).status_code, 200)
@@ -172,6 +198,7 @@ class PatientWorkspaceSecurityTests(TestCase):
         self.assertEqual(response.context['active_membership'].role, 'doctor')
 
     def test_bad_status_filter_never_broadens_an_existing_tab(self):
+        self.promote_doctor()
         for tab in ('appointments', 'consultations', 'blood-tests', 'tasks', 'payments', 'treatment', 'deliveries'):
             response = self.get(tab, status='PRIVATE_INVALID_STATUS')
             self.assertEqual(response.status_code, 200)
@@ -183,10 +210,14 @@ class PatientWorkspaceSecurityTests(TestCase):
         ClinicalNoteTagAssignment.objects.create(company=self.alpha, note=self.shared_note, tag=tag)
         task = ClinicalTask.objects.create(company=self.alpha, patient=self.patient, title='Local task', assigned_to=self.doctor, created_by=self.doctor)
         TaskTagAssignment.objects.create(company=self.alpha, task=task, tag=tag)
+        # The doctor's Overview log lists notes; the Notes and Tasks tabs aren't theirs, so they're checked as a Super Admin.
+        self.assertNotContains(self.get(), tag.name)
+        self.promote_doctor()
         self.assertNotContains(self.get('notes'), tag.name)
         self.assertNotContains(self.get('tasks'), tag.name)
 
     def test_invalid_tags_for_an_older_note_keep_the_target_and_bound_draft_visible(self):
+        self.promote_doctor()
         note = ClinicalNote.objects.create(company=self.alpha, patient=self.patient, author=self.doctor, body='Older edited note')
         for number in range(25):
             ClinicalNote.objects.create(company=self.alpha, patient=self.patient, author=self.doctor, body=f'Newer note {number}')

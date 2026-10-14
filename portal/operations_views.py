@@ -105,6 +105,13 @@ class CatalogueView(OperationsView):
         context = self.context(filter_form=form, **_paginate(request, queryset))
         context['can_edit'] = self.membership.role == CompanyMembership.Role.SUPER_ADMIN
         context['products'] = list(context['page_obj'].object_list)
+        # The standard ways to start a main medicine, offered by Initiate prescription on the patient record.
+        from care.models import StartingPlan
+        from care.starting_plans import plan_summary
+
+        context['starting_plans'] = list(StartingPlan.objects.for_company(self.company).select_related('then_product').prefetch_related('steps__product'))
+        for plan in context['starting_plans']:
+            plan.summary = plan_summary(plan)
         return render(request, 'portal/operations_catalogue.html', context)
 
 

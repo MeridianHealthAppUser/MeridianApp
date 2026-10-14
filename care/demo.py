@@ -32,6 +32,8 @@ from .models import (
     ScreeningQuestionnaire,
     Shipment,
     ShipmentItem,
+    StartingPlan,
+    StartingPlanStep,
     StockMovement,
     SubscriptionCycle,
     TreatmentAuthorization,
@@ -117,8 +119,26 @@ def seed_demo_care(*, meridian, orion, users, nadia):
                 'allowance': 'One four-week supply',
                 'requires_authorisation': True,
                 'is_active': True,
+                'dose_frequency': MedicationProduct.DoseFrequency.WEEKLY,
             },
         )
+        # The other strengths of the main medicines, and the standard ways to start them (Initiate prescription).
+        strengths = {}
+        for name, strength, price in (('Semaglutide', '0.5 mg', '1995.00'), ('Semaglutide', '1.0 mg', '1995.00'),
+                                      ('Tirzepatide', '2.5 mg', '2995.00'), ('Tirzepatide', '5 mg', '2995.00')):
+            strengths[name, strength], _ = MedicationProduct.objects.update_or_create(
+                company=company, name=name, strength=strength, defaults={
+                    'description': 'Demo weight-management medicine catalogue item.',
+                    'category': MedicationProduct.Category.WEIGHT_MANAGEMENT, 'price': Decimal(price),
+                    'allowance': 'One four-week supply', 'requires_authorisation': True, 'is_active': True,
+                    'dose_frequency': MedicationProduct.DoseFrequency.WEEKLY,
+                })
+        for medicine, steps, then in (('Semaglutide', [(product, 1), (strengths['Semaglutide', '0.5 mg'], 1)], strengths['Semaglutide', '1.0 mg']),
+                                      ('Tirzepatide', [(strengths['Tirzepatide', '2.5 mg'], 1)], strengths['Tirzepatide', '5 mg'])):
+            if not StartingPlan.objects.filter(company=company, medicine=medicine).exists():
+                plan = StartingPlan.objects.create(company=company, medicine=medicine, then_product=then, default_months=6)
+                for position, (step_product, months) in enumerate(steps, start=1):
+                    StartingPlanStep.objects.create(company=company, plan=plan, position=position, product=step_product, months=months)
         batch, _ = MedicationBatch.objects.update_or_create(
             company=company,
             batch_number=f'{company.slug.upper()[:6]}-DEMO-01',

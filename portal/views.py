@@ -23,7 +23,7 @@ from care.forms import (
     PatientThreadForm,
     WeightEntryForm,
 )
-from care.messaging import staff_threads, start_conversation, unread_for_staff
+from care.messaging import post_staff_reply, staff_threads, start_conversation, unread_for_staff
 from care.models import (
     Appointment,
     ClinicalNote,
@@ -500,6 +500,8 @@ class PatientNoteCreateView(StaffPatientActionMixin, View):
         patient = self.get_patient()
         if not self.membership.is_clinician:
             raise PermissionDenied('Only a clinician in this practice can add a clinical note.')
+        if request.POST.get('return_to') == 'overview':
+            return self.log_note(request, patient)
         form = ClinicalNoteForm(request.POST, company=self.company, patient=patient, author=request.user)
         if not form.is_valid():
             return self.invalid_form(patient, 'note_form', form)
@@ -511,6 +513,24 @@ class PatientNoteCreateView(StaffPatientActionMixin, View):
             record_audit(company=self.company, actor=request.user, patient=patient, action='clinical_note.created', target=note, request=request)
         messages.success(request, 'Clinical note added.')
         return self.patient_detail_redirect(patient)
+
+    def log_note(self, request, patient):
+        """Create note on the Overview's log: one text box, then back to the log with the note in it."""
+        from care.forms import LogNoteForm
+
+        from .patient_workspace import workspace_tab_context, workspace_url
+
+        form = LogNoteForm(request.POST, company=self.company, patient=patient, author=request.user, auto_id='log_note_%s')
+        if not form.is_valid():
+            context = workspace_tab_context(request, self.company, self.membership, patient, 'overview',
+                                            log_note_form=form, open_dialog='note')
+            return render(request, 'portal/patient_workspace.html', context, status=400)
+        with transaction.atomic():
+            Company.objects.select_for_update().get(pk=self.company.pk)
+            note = form.save()
+            record_audit(company=self.company, actor=request.user, patient=patient, action='clinical_note.created', target=note, request=request)
+        messages.success(request, 'Note added.')
+        return redirect(f'{workspace_url(patient)}#log-note-{note.pk}')
 
 
 class TaskCompleteView(LoginRequiredMixin, StaffCompanyRequiredMixin, View):
@@ -546,7 +566,7 @@ class StaffMessageCreateView(LoginRequiredMixin, StaffCompanyRequiredMixin, View
         form = PatientMessageForm(request.POST, auto_id='record_message_%s' if from_record or from_inbox else 'id_%s')
         if form.is_valid():
             try:
-                post_patient_message(thread=thread, sender=request.user, body=form.cleaned_data['body'], request=request)
+                post_staff_reply(thread=thread, sender=request.user, body=form.cleaned_data['body'], request=request)
             except ValidationError as error:
                 form.add_error(None, error)
             else:

@@ -250,7 +250,13 @@ class RecordsAndMessagesTests(TestCase):
             with self.subTest(user=user.email):
                 self.login(user)
                 page = self.client.get(record, {'tab': 'messages', 'thread': self.awaiting.pk})
-                self.assertContains(page, line)
+                if user == self.doctor:
+                    self.assertContains(page, line)
+                else:
+                    # Not Nadia's Prescribing doctor, the dietitian has no Messages tab on her record: the link opens
+                    # the conversation in Patient messages.
+                    self.assertRedirects(page, f'{reverse("portal:staff-inbox")}?thread={self.awaiting.pk}',
+                                         fetch_redirect_response=False)
                 inbox = self.client.get(reverse('portal:staff-inbox'), {'thread': self.awaiting.pk})
                 self.assertContains(inbox, line)
 

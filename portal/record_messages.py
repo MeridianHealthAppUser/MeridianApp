@@ -99,8 +99,9 @@ def clinicians(thread, user):
 
 
 def read_state_url(thread):
-    """Mark as read or unread, for a conversation with a message from someone else: the patient or a colleague."""
-    return reverse('portal:staff-thread-read-state', args=[thread.pk]) if thread.has_others_message else ''
+    """Mark as read or unread, for a conversation you're in with a message from someone else: the patient or a
+    colleague. A Super Admin reading one they aren't in has no read position to mark."""
+    return reverse('portal:staff-thread-read-state', args=[thread.pk]) if thread.has_others_message and thread.is_member else ''
 
 
 NOTES_LIMIT = 100
@@ -113,11 +114,17 @@ def patient_notes(company, membership, patient, viewer):
     if not membership.has_clinical_access or not can_view_record(membership, viewer, patient):
         return None
     from .patient_notes import PatientNotes
-    from .patient_workspace import workspace_url
+    from .patient_workspace import shows_tab, workspace_url
 
     entries = PatientNotes(company, membership, patient, viewer)[:NOTES_LIMIT + 1]
+
+    def tab_url(tab):
+        return workspace_url(patient, tab) if shows_tab(membership, viewer, patient, tab) else ''
+
+    # The Overview's log for everyone; Notes and Consultations for those who see those tabs (not doctors).
     return {'entries': entries[:NOTES_LIMIT], 'more': len(entries) > NOTES_LIMIT,
-            'notes_url': workspace_url(patient, 'notes'), 'consultations_url': workspace_url(patient, 'consultations')}
+            'log_url': f'{workspace_url(patient)}#record-log',
+            'notes_url': tab_url('notes'), 'consultations_url': tab_url('consultations')}
 
 
 def open_conversation(request, company, membership, thread, context):
@@ -136,6 +143,8 @@ def open_conversation(request, company, membership, thread, context):
         # Mark as unread is offered once the patient or a colleague has written; lists annotate this already.
         thread.has_others_message = any(message.sender_id != request.user.pk for message in thread.conversation_messages)
     thread.participant_rows = list(thread.participant_links.select_related('user', 'added_by'))
+    if not hasattr(thread, 'is_member'):
+        thread.is_member = any(row.user_id == request.user.pk for row in thread.participant_rows)
     # "Dr Marchant added Ms Botha", as the patient and Team messages show it.
     thread.added_rows = [row for row in thread.participant_rows if row.added_by_id]
     # Message action opens in a modal over the conversation and posts to its own page, as that page's form does.
@@ -143,8 +152,9 @@ def open_conversation(request, company, membership, thread, context):
     thread.manage_context = make_workflow_context(request, company, 'conversation-management', thread)
     context['conversation_notes'] = patient_notes(company, membership, patient, request.user)
     if request.method == 'GET':
-        # Read up to the latest message shown, for this staff member only.
-        if mark_read_by_staff(thread, request.user, [message.pk for message in thread.conversation_messages]):
+        # Read up to the latest message shown, for this staff member only. A Super Admin reading a conversation
+        # they aren't in leaves it as it was: no read position, and no receipt on the patient's messages.
+        if thread.is_member and mark_read_by_staff(thread, request.user, [message.pk for message in thread.conversation_messages]):
             # The sidebar and tab counts were not worked out yet on this request; make sure they aren't stale.
             request.__dict__.pop('_staff_message_counts', None)
         thread.unread_count = 0

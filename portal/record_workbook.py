@@ -1,12 +1,13 @@
 """Export record: a patient's record at this practice as an Excel workbook, one sheet per record tab.
 
-Each sheet holds what its tab shows, with the same limits as the record's other exports: signed
-consultations only, no private notes, only conversations the person exporting takes part in, and
-no attachment bytes, payment-provider details or audit metadata.
+Super Admins only. Each sheet holds what its tab shows, with the same limits as the record's other
+exports: signed consultations only, no private notes, and no attachment bytes, payment-provider details
+or audit metadata. Super Admins read every conversation, so all of the patient's conversations are in it.
 """
 
 from itertools import islice
 
+from django.core.exceptions import PermissionDenied
 from django.db.models import Prefetch
 from django.http import HttpResponse, JsonResponse
 from django.utils import timezone
@@ -15,8 +16,9 @@ from django.views import View
 from django.views.decorators.cache import never_cache
 
 from care.clinical_summary import get_summary
+from care.messaging import staff_threads
 from care.models import (
-    Appointment, ClinicalEncounter, ClinicalNote, ClinicalTask, LabRequest, MessageThread, Payment, PatientMessage,
+    Appointment, BloodResult, ClinicalEncounter, ClinicalNote, ClinicalTask, LabRequest, Payment, PatientMessage,
     RecordTag, Shipment, TreatmentAuthorization, WeightEntry,
 )
 from care.prescriptions import current_prescription
@@ -27,9 +29,10 @@ from .record_views import RECORD_TIMEZONE, ClinicalRecordAccessMixin
 from .record_xlsx import build_workbook
 
 
-EXCLUDED = ('Private notes; unsigned consultations; conversations you are not part of; attachment bytes; '
+EXCLUDED = ('Private notes; unsigned consultations; attachment bytes; '
             'payment-provider details; internal events, audit metadata and IP addresses.')
-LOG_TYPES = {'consult': 'Consult note', 'blood': 'Blood form', 'prescription': 'Prescription'}
+LOG_TYPES = {'consult': 'Consult note', 'note': 'Note', 'blood': 'Blood form', 'result': 'Blood results',
+             'prescription': 'Prescription'}
 
 
 def _when(value):
@@ -83,6 +86,16 @@ def overview_rows(company, patient):
     ), '')
 
 
+def blood_rows(results, labs):
+    """The Blood results tab: results recorded by hand, then the blood test requests."""
+    yield from _table('Recorded results', ('Date taken', 'Lab', 'Results', 'Recorded by', 'Lab report'), (
+        (_day(row.taken_on), row.lab_name, row.results, _person(row.recorded_by), 'Attached' if row.file_id else 'None')
+        for row in results), 'No blood results recorded.')
+    yield from _table('Blood test requests', ('Requested', 'Panel', 'Doctor', 'Status'), (
+        (_day(row.requested_on), row.panel_name, _person(row.requested_by, 'Automatic'), row.get_status_display())
+        for row in labs), 'No blood test requests.')
+
+
 def history_rows(timeline):
     def entries():
         index = timeline.index().iterator(chunk_size=200)
@@ -109,7 +122,8 @@ def workbook_sheets(request, company, patient, timeline):
     notes = scoped(ClinicalNote, company, patient).filter(is_private=False, signed_encounter__isnull=True).select_related(
         'author').prefetch_related(tags).order_by('-created_at', '-pk')
     weights = scoped(WeightEntry, company, patient).select_related('recorded_by').order_by('-recorded_on', '-pk')
-    threads = scoped(MessageThread, company, patient).filter(participants=request.user).distinct()
+    threads = staff_threads(company, request.user).filter(patient=patient)
+    results = scoped(BloodResult, company, patient).select_related('recorded_by').order_by('-taken_on', '-created_at', '-pk')
     messages = PatientMessage.objects.filter(company=company, thread__in=threads).select_related('thread', 'sender').order_by(
         '-thread__last_message_at', 'thread_id', 'created_at', 'pk')
     tasks = scoped(ClinicalTask, company, patient).select_related('assigned_to').prefetch_related(tags).order_by('-created_at', '-pk')
@@ -132,9 +146,7 @@ def workbook_sheets(request, company, patient, timeline):
         ('Consultations', _sheet(('Date (SAST)', 'Doctor', 'Status', 'Signed by', 'Consult note'), (
             (_when(row.occurred_at), _person(row.clinician), row.get_status_display(), _person(row.signed_by), row.clinical_summary)
             for row in consultations)), (18, 24, 12, 24, 80), True),
-        ('Blood tests', _sheet(('Requested', 'Panel', 'Doctor', 'Status'), (
-            (_day(row.requested_on), row.panel_name, _person(row.requested_by, 'Automatic'), row.get_status_display())
-            for row in labs)), (14, 40, 24, 16), True),
+        ('Blood results', blood_rows(results, labs), (16, 40, 60, 24, 16), False),
         ('Notes', _sheet(('Date (SAST)', 'Type', 'Author', 'Note', 'Tags'), (
             (_when(row.created_at), row.get_note_type_display(), _person(row.author), row.body, ', '.join(tag.name for tag in row.tags.all()))
             for row in notes)), (18, 16, 24, 80, 24), True),
@@ -168,6 +180,8 @@ class ClinicalRecordWorkbookView(ClinicalRecordAccessMixin, View):
     """The Export record button: this practice's record for the patient, as an Excel workbook."""
 
     def get(self, request, *args, **kwargs):
+        if self.membership.role != self.membership.Role.SUPER_ADMIN:
+            raise PermissionDenied('Only a Super Admin can export a patient record.')
         self.resolve_record({'scope': 'current', 'category': 'all'})
         if not self.valid_filters:
             return JsonResponse({'errors': self.filter_form.errors.get_json_data()}, status=400)

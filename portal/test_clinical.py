@@ -258,8 +258,10 @@ class ClinicalPortalTests(TestCase):
         record = self.client.get(reverse('portal:patient-detail', args=[self.patient.pk]))
         self.assertContains(record, 'You looked after Alice before, so you can read this record but not change it.')
         self.assertContains(self.client.get(reverse('portal:clinical-consultation-detail', args=[signed.pk])), signed.clinical_summary)
-        self.assertNotContains(self.client.get(reverse('portal:patient-detail', args=[self.patient.pk]), {'tab': 'consultations'}),
-                               'New consultation note')
+        # Doctors work from the Overview, where a past clinician can't add to the log.
+        self.assertRedirects(self.client.get(reverse('portal:patient-detail', args=[self.patient.pk]), {'tab': 'consultations'}),
+                             workspace_url(self.patient), fetch_redirect_response=False)
+        self.assertNotContains(record, 'Create note')
         created = self.client.post(reverse('portal:patient-note-create', args=[self.patient.pk]),
                                    {'note_type': 'general', 'body': 'Not mine to add'}, follow=True)
         self.assertRedirects(created, workspace_url(self.patient))
@@ -275,12 +277,14 @@ class ClinicalPortalTests(TestCase):
         page = self.client.get(record)
         self.assertContains(page, f'You’re covering Alice’s appointment on {timezone.localtime(appointment.starts_at):%-d %b}')
         self.assertNotContains(page, 'Click an underlined value to edit')
-        self.assertContains(self.client.get(record, {'tab': 'consultations'}), 'New consultation note')
+        # Notes are written from the Overview's log (doctors don't see the Consultations tab) or a consultation's own page.
+        self.assertContains(page, 'Create note')
+        self.assertRedirects(self.client.get(record, {'tab': 'consultations'}), workspace_url(self.patient), fetch_redirect_response=False)
         self.assertEqual(self.client.get(reverse('portal:clinical-consultation-create', args=[self.patient.pk])).status_code, 200)
         saved = self.client.post(reverse('portal:patient-note-create', args=[self.patient.pk]),
-                                 {'note_type': 'phone', 'body': 'Covered the review call.'})
-        self.assertEqual(saved.status_code, 302)
-        self.assertTrue(ClinicalNote.objects.filter(author=cover, patient=self.patient, body='Covered the review call.').exists())
+                                 {'return_to': 'overview', 'body': 'Covered the review call.'})
+        note = ClinicalNote.objects.get(author=cover, patient=self.patient, body='Covered the review call.')
+        self.assertRedirects(saved, f'{workspace_url(self.patient)}#log-note-{note.pk}', fetch_redirect_response=False)
         # Nothing else: a task, for example, is the patient's own clinician's to add.
         refused = self.client.post(reverse('portal:patient-task-create', args=[self.patient.pk]), {'title': 'Not mine'}, follow=True)
         self.assertRedirects(refused, workspace_url(self.patient))
@@ -475,8 +479,18 @@ class ClinicalPortalTests(TestCase):
 
     def test_other_doctors_patient_record_does_not_reveal_private_draft_task_links(self):
         encounter = self.encounter(summary='Private unsaved assessment details.')
+        record = reverse('portal:patient-detail', args=[self.patient.pk])
+        # Another doctor in the Clinician role has no Tasks tab, and their Overview doesn't show the draft either.
         self.login(self.colleague)
-        response = self.client.get(reverse('portal:patient-detail', args=[self.patient.pk]), {'tab': 'tasks'})
+        overview = self.client.get(record, {'tab': 'tasks'}, follow=True)
+        self.assertRedirects(overview, workspace_url(self.patient))
+        self.assertNotContains(overview, 'Private unsaved assessment details.')
+        self.assertNotContains(overview, f'href="{reverse("portal:clinical-consultation-detail", args=[encounter.pk])}"')
+        # A Super Admin who is also a doctor, but not the draft's author, has the Tasks tab.
+        super_doctor = get_user_model().objects.create_user(email='clinical-pages-super-doctor@example.test')
+        CompanyMembership.objects.create(company=self.company, user=super_doctor, role='super_admin', clinician_type='doctor')
+        self.login(super_doctor)
+        response = self.client.get(record, {'tab': 'tasks'})
         self.assertEqual(response.status_code, 200)
         self.assertNotContains(response, 'Private unsaved assessment details.')
         self.assertNotContains(response, f'href="{reverse("portal:clinical-consultation-detail", args=[encounter.pk])}"')

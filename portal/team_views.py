@@ -18,6 +18,7 @@ from django.views import View
 from django.views.decorators.cache import never_cache
 
 from care.models import TeamMessage
+from care.services import record_audit
 from care.team_messaging import (
     colleagues, manage_team_conversation, mark_team_thread_read, post_team_message, set_team_read_state,
     start_team_conversation, team_threads,
@@ -27,6 +28,7 @@ from .filter_menus import choice_section, filter_menu, one_ticked
 from .inbox import latest_from, message_tab_counts, search_text
 from .people_tags import in_join_order, people_tags, person_tag, staff_kinds
 from .navigation import messages_title
+from .record_messages import patient_notes
 from .views import StaffCompanyRequiredMixin
 from .workflow_context import make_workflow_context, validate_workflow_context
 
@@ -184,7 +186,15 @@ def team_inbox_context(request, company, membership, *, selected_id=None, **over
         # Message action opens in a modal over the conversation and posts to its own page, as that page's form does.
         selected.manage_form = TeamConversationForm(company=company, thread=selected, auto_id='team_manage_%s')
         selected.manage_context = make_workflow_context(request, company, 'team-conversation-management', selected)
+        # About a patient: their notes under the reply box, as in a patient conversation. Clinical staff only, so a
+        # practice admin in the same conversation never sees them.
+        context['conversation_notes'] = patient_notes(company, membership, selected.patient, request.user) if selected.patient_id else None
         if request.method == 'GET':
+            if selected.patient_id:
+                notes = context['conversation_notes']
+                record_audit(company=company, actor=request.user, patient=selected.patient, action='team_thread.viewed',
+                             target=selected, request=request,
+                             metadata={'patient_notes': len(notes['entries'])} if notes else None)
             mark_team_thread_read(selected, request.user)
             for thread in context['threads']:
                 if thread.pk == selected.pk:

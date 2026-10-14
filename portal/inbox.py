@@ -46,10 +46,13 @@ def staff_inbox_redirect(thread):
 
 
 def _inbox_threads(company, user):
-    # Only conversations this staff member takes part in; there is no practice-wide inbox.
+    # The conversations this staff member takes part in; a Super Admin also lists every other one in the practice.
     latest = PatientMessage.objects.for_company(company).filter(thread_id=OuterRef('pk')).order_by('-created_at', '-pk')
-    last_read = MessageThreadParticipant.objects.filter(thread_id=OuterRef('pk'), user_id=user.pk).values('last_read_at')[:1]
+    membership = MessageThreadParticipant.objects.filter(thread_id=OuterRef('pk'), user_id=user.pk)
+    last_read = membership.values('last_read_at')[:1]
     return staff_threads(company, user).select_related('patient__user', 'patient__assigned_doctor').annotate(
+        # In it: they have a read position, can mark it read or unread, and manage it.
+        is_member=Exists(membership),
         latest_sender_id=Subquery(latest.values('sender_id')[:1]),
         latest_body=Subquery(latest.values('body')[:1]),
         latest_sender_first_name=Subquery(latest.values('sender__first_name')[:1]),
@@ -59,8 +62,9 @@ def _inbox_threads(company, user):
         last_activity=Coalesce('last_message_at', 'created_at'),
         my_last_read=Subquery(last_read),
     ).annotate(
-        # Unread for this member only, as for unread_for_staff: what others sent since they last read it.
-        unread_count=Count('messages', filter=Q(messages__company=company) & (
+        # Unread for this member only, as for unread_for_staff: what others sent since they last read it. A
+        # conversation a Super Admin only reads is never unread for them.
+        unread_count=Count('messages', filter=Q(is_member=True) & Q(messages__company=company) & (
             Q(messages__sender__isnull=True) | ~Q(messages__sender_id=user.pk)
         ) & (Q(my_last_read__isnull=True) | Q(messages__created_at__gt=F('my_last_read'))), distinct=True),
     ).order_by('-last_activity', '-pk')

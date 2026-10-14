@@ -8,12 +8,12 @@
     <path class="record-chart__band" d="{{ chart.band }}" clip-path="url(#record-chart-clip)"/>
     {% if chart.goal_y %}<line class="record-chart__goal" x1="{{ chart.left }}" y1="{{ chart.goal_y }}" x2="{{ chart.right_edge }}" y2="{{ chart.goal_y }}"/>{% endif %}
     <line class="record-chart__baseline" x1="{{ chart.left }}" y1="{{ chart.base }}" x2="{{ chart.right_edge }}" y2="{{ chart.base }}"/>
-    {% for bar in chart.bars %}<rect class="record-chart__dose" x="{{ bar.x }}" y="{{ bar.y }}" width="14" height="{{ bar.height }}" rx="3"><title>{{ bar.title }}</title></rect>{% if bar.label %}<text class="record-chart__dose-label" x="{{ bar.label_x }}" y="{{ bar.label_y }}" text-anchor="middle">{{ bar.label }}</text>{% endif %}{% endfor %}
-    {% if chart.dose_axis %}
+    {% for bar in chart.bars %}<rect class="record-chart__dose record-chart__dose--{{ bar.tone }}" x="{{ bar.x }}" y="{{ bar.y }}" width="14" height="{{ bar.height }}" rx="3"><title>{{ bar.title }}</title></rect>{% if bar.label %}<text class="record-chart__dose-label record-chart__dose-label--{{ bar.tone }}" x="{{ bar.label_x }}" y="{{ bar.label_y }}" text-anchor="middle">{{ bar.label }}</text>{% endif %}{% endfor %}
+    {% if chart.dose_axis %}<g class="record-chart__dose-scale--{{ chart.dose_tone }}">
       <text class="record-chart__dose-axis" x="{{ chart.dose_axis_x }}" y="{{ chart.dose_axis_label_y }}">mg</text>
       <line class="record-chart__dose-line" x1="{{ chart.right_edge }}" y1="{{ chart.dose_axis_top }}" x2="{{ chart.right_edge }}" y2="{{ chart.base }}"/>
       {% for tick in chart.dose_axis %}<line class="record-chart__dose-tick" x1="{{ chart.right_edge }}" y1="{{ tick.y }}" x2="{{ chart.dose_tick_end }}" y2="{{ tick.y }}"/><text class="record-chart__dose-axis" x="{{ chart.dose_label_x }}" y="{{ tick.label_y }}">{{ tick.label }}</text>{% endfor %}
-    {% endif %}
+    </g>{% endif %}
     {% if chart.goal_y %}<text class="record-chart__goal-label" x="{{ chart.goal_label_x }}" y="{{ chart.goal_label_y }}" text-anchor="end">{{ chart.goal_label }}</text>{% endif %}
     {% if chart.projection_path %}<path class="record-chart__projection" d="{{ chart.projection_path }}"/>{% endif %}
     <path class="record-chart__line" d="{{ chart.line }}"/>
@@ -27,6 +27,7 @@
   <li><i class="record-legend__weight"></i>Weight</li>
   <li><i class="record-legend__range"></i>Expected range, assuming 0.5 to 1 kg a week</li>
   {% if chart.projection %}<li><i class="record-legend__projection"></i>Projected to goal</li>{% endif %}
-  {% if chart.bars %}<li><i class="record-legend__dose"></i>Dose shipped (mg, right scale)</li>{% endif %}
+  {# One per medicine shipped, in its colour. With one medicine the doses are on the right-hand scale. #}
+  {% for medicine in chart.medicines %}<li><i class="record-legend__dose record-legend__dose--{{ medicine.tone }}"></i>Dose shipped: {{ medicine.name }} (mg{% if chart.dose_axis %}, right scale{% endif %})</li>{% endfor %}
   {% if chart.consults %}<li><i class="record-legend__consult"></i>Consultation &mdash; click to open the note</li>{% endif %}
 </ul>

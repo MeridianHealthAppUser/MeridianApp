@@ -1,4 +1,4 @@
-"""Patients write to their clinicians; conversations stay private to the people in them."""
+"""Patients write to their clinicians; conversations stay private to the people in them and the practice's Super Admins."""
 
 from datetime import timedelta
 from importlib import import_module
@@ -163,11 +163,13 @@ class PrivateConversationTests(TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertEqual(list(MessageThread.objects.get().participants.all()), [practice_admin])
 
-    def test_only_participants_see_the_conversation_and_patient_sees_who_joined(self):
+    def test_only_participants_and_super_admins_see_the_conversation_and_patient_sees_who_joined(self):
+        practice_admin = get_user_model().objects.create_user(email='paula@private.test', first_name='Paula', last_name='Practice')
+        CompanyMembership.objects.create(company=self.company, user=practice_admin, role='practice_admin')
         self.login_patient()
         self.start()
         thread = MessageThread.objects.get()
-        for user in (self.admin, self.past, self.stranger):
+        for user in (practice_admin, self.past, self.stranger):
             self.login_staff(user)
             self.assertEqual(self.client.get(reverse('portal:staff-inbox'), {'thread': thread.pk}).status_code, 404)
             overview = self.client.get(reverse('portal:patient-detail', args=[self.patient.pk]))
@@ -180,6 +182,13 @@ class PrivateConversationTests(TestCase):
                 self.assertEqual([card['count'] for card in overview.context['overview_cards'] if card['label'] == 'Conversations'], [0])
             else:
                 self.assertNotContains(overview, thread.subject)
+        # A Super Admin (self.admin) reads it, in Patient messages and on Nadia's record, without joining it.
+        self.login_staff(self.admin)
+        self.assertEqual(self.client.get(reverse('portal:staff-inbox'), {'thread': thread.pk}).context['inbox_thread'].pk, thread.pk)
+        record = self.client.get(reverse('portal:patient-detail', args=[self.patient.pk]), {'tab': 'messages', 'thread': thread.pk})
+        self.assertEqual(record.context['record_thread'].pk, thread.pk)
+        self.assertContains(record, 'You’re not in this conversation. Replying adds you to it.')
+        self.assertEqual(list(thread.participants.all()), [self.current])
         hand_over(thread=thread, actor=self.current, clinician=self.stranger)
         self.login_staff(self.stranger)
         # A conversation link opens it in Patient messages, now that the stranger takes part.

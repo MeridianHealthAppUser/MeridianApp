@@ -34,7 +34,7 @@
               <th scope="col">Patient</th>
               <th scope="col">Practice</th>
               <th scope="col">ID and record</th>
-              <th scope="col">Assigned clinician</th>
+              <th scope="col">Prescribing doctor</th>
               <th scope="col">Authorized for</th>
               <th scope="col">Subscription</th>
               <th scope="col">Cycle</th>
@@ -55,7 +55,7 @@
                 </td>
                 <td data-label="Practice"><span class="console-status">{{ listed_patient.company.name }}</span></td>
                 <td data-label="ID and record">{{ listed_patient.id_number|default:"ID not recorded" }}<small>{{ listed_patient.medical_record_number|default:"Record number pending" }}</small></td>
-                <td data-label="Assigned clinician">{% if listed_patient.assigned_doctor %}{{ listed_patient.assigned_doctor.full_name }}{% else %}Unassigned{% endif %}</td>
+                <td data-label="Prescribing doctor">{% if listed_patient.assigned_doctor %}{{ listed_patient.assigned_doctor.full_name }}{% else %}Unassigned{% endif %}</td>
                 <td data-label="Authorized for">{% if listed_patient.record_authorization %}{{ listed_patient.record_authorization.product }}<small>{{ listed_patient.record_authorization.max_dose }} · {{ listed_patient.record_authorization.get_status_display }}</small>{% else %}Not recorded{% endif %}</td>
                 <td data-label="Subscription">{% if listed_patient.record_subscription %}{{ listed_patient.record_subscription.get_status_display }}{% else %}Not enrolled{% endif %}</td>
                 <td data-label="Cycle">{{ listed_patient.record_subscription.cycle_number|default:"—" }}</td>

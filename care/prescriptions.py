@@ -2,8 +2,13 @@
 
 A prescription is a treatment authorisation for a main weight-management medicine. Every renewal
 or change writes a new authorisation that replaces the current one, so the history is kept, and
-writes a line to the clinical log in the same transaction. Any doctor at the practice may do this.
+writes a line to the clinical log in the same transaction. Any doctor at the practice may do this, and
+the doctor who writes it becomes the patient's Prescribing doctor.
 A safety flag in the patient's summary data must be acknowledged first.
+
+A prescription started from a starting plan (care.starting_plans) is a chain of steps sharing a plan_key. The
+current prescription is the step in effect; the prescription ends when its last step does. Renewing mid-plan
+extends the last step; changing replaces the rest of the plan from today.
 """
 
 import calendar
@@ -19,6 +24,7 @@ from django.utils.formats import date_format
 
 from .clinical import _lock_context, _require_doctor
 from .models import MedicationProduct, PatientSubscription, Shipment, TreatmentAuthorization
+from .patient_assignment import make_prescribing_doctor
 from .services import record_audit
 from .treatment import _event
 
@@ -75,13 +81,31 @@ def prescription_options(company, current=None):
 
 
 def current_prescription(company, patient):
-    """The latest main prescription that hasn't been replaced or revoked."""
-    return TreatmentAuthorization.objects.for_company(company).filter(
+    """The latest main prescription that hasn't been replaced or revoked. In a starting plan, the step in effect
+    (a later step counts once it starts), with plan_steps (all its steps, in order) and ends_on (the last step's end)."""
+    today = timezone.localdate()
+    current = TreatmentAuthorization.objects.for_company(company).filter(
         patient=patient, product__company=company,
         product__category=MedicationProduct.Category.WEIGHT_MANAGEMENT, product__requires_authorisation=True,
-    ).exclude(status=TreatmentAuthorization.Status.CANCELLED).select_related('product', 'prescribed_by').order_by(
-        '-starts_on', '-created_at', '-pk',
-    ).first()
+    ).exclude(status=TreatmentAuthorization.Status.CANCELLED).exclude(plan_step__gt=1, starts_on__gt=today).select_related(
+        'product', 'prescribed_by',
+    ).order_by('-starts_on', '-created_at', '-pk').first()
+    if current is not None:
+        current.plan_steps = list(plan_steps(current).select_related('product')) if current.plan_key else []
+        current.ends_on = max((step.expires_on for step in current.plan_steps), default=current.expires_on)
+    return current
+
+
+def plan_steps(authorization):
+    """The steps of a starting plan that are still part of it, in order."""
+    return TreatmentAuthorization.objects.filter(
+        company_id=authorization.company_id, patient_id=authorization.patient_id, plan_key=authorization.plan_key,
+    ).exclude(status=TreatmentAuthorization.Status.CANCELLED).order_by('plan_step', 'pk')
+
+
+def ends_on(authorization):
+    """When the prescription ends: a starting plan's last step, otherwise its own expiry."""
+    return getattr(authorization, 'ends_on', None) or authorization.expires_on
 
 
 def prescription_state(authorization, today=None):
@@ -91,9 +115,9 @@ def prescription_state(authorization, today=None):
         return 'none'
     if authorization.status == TreatmentAuthorization.Status.PAUSED:
         return 'paused'
-    if authorization.status == TreatmentAuthorization.Status.EXPIRED or authorization.expires_on < today:
+    if authorization.status == TreatmentAuthorization.Status.EXPIRED or ends_on(authorization) < today:
         return 'expired'
-    if (authorization.expires_on - today).days <= RENEWAL_DUE_DAYS:
+    if (ends_on(authorization) - today).days <= RENEWAL_DUE_DAYS:
         return 'due'
     return 'valid'
 
@@ -122,7 +146,25 @@ def _locked_current(company, patient, expected):
     return TreatmentAuthorization.objects.select_for_update().select_related('product', 'prescribed_by').get(pk=current.pk)
 
 
-def _supersede(company, patient, previous, replacement, *, hold):
+def _cancel_later_steps(company, patient, previous):
+    """Replacing a step of a starting plan replaces the rest of it too: its later steps are cancelled and any
+    parcel already planned for them is held for dispensing review."""
+    if not previous.plan_key:
+        return
+    later = list(TreatmentAuthorization.objects.select_for_update().filter(
+        company=company, patient=patient, plan_key=previous.plan_key, plan_step__gt=previous.plan_step or 0,
+    ).exclude(status=TreatmentAuthorization.Status.CANCELLED))
+    if not later:
+        return
+    TreatmentAuthorization.objects.filter(pk__in=[step.pk for step in later]).update(
+        status=TreatmentAuthorization.Status.CANCELLED, updated_at=timezone.now())
+    Shipment.objects.select_for_update().for_company(company).filter(
+        patient=patient, authorization__in=later, status__in=UNDISPATCHED,
+    ).update(status=Shipment.Status.HELD, updated_at=timezone.now(),
+             hold_reason='Prescription changed. Dispensing review is required before dispatch.')
+
+
+def _supersede(company, patient, previous, replacement, *, hold, review_due_on=None):
     """Move care plans to the new prescription. A changed medicine or dose holds undispatched parcels."""
     previous.status = TreatmentAuthorization.Status.CANCELLED
     previous.save(update_fields=('status', 'updated_at'))
@@ -131,7 +173,7 @@ def _supersede(company, patient, previous, replacement, *, hold):
     ).exclude(status=PatientSubscription.Status.CANCELLED))
     for plan in plans:
         plan.authorization = replacement
-        plan.review_due_on = replacement.expires_on
+        plan.review_due_on = review_due_on or replacement.expires_on
         plan.full_clean()
         plan.save(update_fields=('authorization', 'review_due_on', 'updated_at'))
     parcels = Shipment.objects.select_for_update().for_company(company).filter(
@@ -158,21 +200,33 @@ def renew_prescription(*, company, patient, actor, current, months, acknowledge_
     previous = _locked_current(company, patient, current)
     if previous is None:
         raise ValidationError('There is no prescription to renew. Create one instead.')
+    today = timezone.localdate()
+    # Mid-way through a starting plan, the renewal extends its last step (the strength it settles on).
+    last = plan_steps(previous).select_for_update().last() if previous.plan_key else None
+    midway = last is not None and last.pk != previous.pk
+    if midway:
+        previous = TreatmentAuthorization.objects.select_related('product', 'prescribed_by').get(pk=last.pk)
     if not previous.product.is_active:
         raise ValidationError('This medicine is no longer in the catalogue. Change the prescription instead.')
     flags = _check_flags(company, patient, acknowledge_flags)
-    today = timezone.localdate()
     expires_on = add_months(max(previous.expires_on, today), months)
     renewal = TreatmentAuthorization(
         company=company, patient=patient, prescribed_by=actor, product=previous.product, max_dose=previous.max_dose,
-        quantity_per_cycle=previous.quantity_per_cycle, starts_on=today, expires_on=expires_on,
-        review_interval_days=previous.review_interval_days, instructions=previous.instructions, replaces=previous,
+        quantity_per_cycle=previous.quantity_per_cycle, starts_on=previous.starts_on if midway else today,
+        expires_on=expires_on, review_interval_days=previous.review_interval_days, instructions=previous.instructions,
+        replaces=previous, plan_key=previous.plan_key if midway else None, plan_step=previous.plan_step if midway else None,
     )
     renewal.log_text = (f'Prescription renewed for {_months_text(months)}: {prescription_label(renewal)}, '
                         f'valid to {date_format(expires_on, "j M Y")}.')
     renewal.full_clean()
     renewal.save()
     _supersede(company, patient, previous, renewal, hold=False)
+    if midway:
+        # Care plans stay on the step in effect; their review moves to the plan's new end.
+        PatientSubscription.objects.for_company(company).filter(
+            patient=patient, authorization__plan_key=renewal.plan_key,
+        ).exclude(status=PatientSubscription.Status.CANCELLED).update(review_due_on=expires_on, updated_at=timezone.now())
+    make_prescribing_doctor(company=company, patient=patient, doctor=actor, request=request)
     record_audit(company=company, actor=actor, patient=patient, action='prescription.renewed', target=renewal,
                  request=request, metadata={'previous_authorization_id': previous.pk, 'months': months,
                                             'safety_flags_acknowledged': bool(flags)})
@@ -216,7 +270,9 @@ def change_prescription(*, company, patient, actor, current, product, months, re
     prescription.full_clean()
     prescription.save()
     if previous is not None:
+        _cancel_later_steps(company, patient, previous)
         _supersede(company, patient, previous, prescription, hold=True)
+    make_prescribing_doctor(company=company, patient=patient, doctor=actor, request=request)
     record_audit(company=company, actor=actor, patient=patient,
                  action='prescription.changed' if previous else 'prescription.created', target=prescription,
                  request=request, metadata={'previous_authorization_id': previous.pk if previous else None,
@@ -227,7 +283,7 @@ def change_prescription(*, company, patient, actor, current, product, months, re
 
 def renewal_expiry(authorization, months, today=None):
     today = today or timezone.localdate()
-    return add_months(max(authorization.expires_on, today), months)
+    return add_months(max(ends_on(authorization), today), months)
 
 
 def expiry_preview(months, today=None):

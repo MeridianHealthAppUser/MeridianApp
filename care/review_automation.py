@@ -4,7 +4,7 @@ from datetime import datetime, time, timedelta
 
 from django.core.exceptions import ValidationError
 from django.db import transaction
-from django.db.models import DateField, DurationField, ExpressionWrapper, F, IntegerField, Min, Q
+from django.db.models import DateField, DurationField, Exists, ExpressionWrapper, F, IntegerField, Min, OuterRef, Q
 from django.db.models.functions import Cast, Coalesce, Least
 from django.utils import timezone
 
@@ -13,7 +13,7 @@ from practices.models import CompanyMembership
 from .models import AuthorizationReviewReminder, ClinicalTask, Shipment, TreatmentAuthorization
 from .review_rules import _lock_practice
 from .services import record_audit
-from .treatment import authorization_is_current
+from .treatment import authorization_is_current, step_in_effect
 
 
 def due_authorizations(*, company, on_date=None, within_days=30):
@@ -22,9 +22,13 @@ def due_authorizations(*, company, on_date=None, within_days=30):
     today = on_date or timezone.localdate()
     interval = ExpressionWrapper(Cast('review_interval_days', output_field=IntegerField()) * timedelta(days=1), output_field=DurationField())
     doctor_due = Cast(F('starts_on') + interval, output_field=DateField())
+    # A step of a starting plan that another step follows ends by moving on, not by needing a review.
+    followed = TreatmentAuthorization.objects.filter(
+        plan_key=OuterRef('plan_key'), plan_step__gt=OuterRef('plan_step'),
+    ).exclude(status=TreatmentAuthorization.Status.CANCELLED)
     return TreatmentAuthorization.objects.for_company(company).filter(
         patient__company=company, patient__is_active=True, status__in=('active', 'expired'),
-    ).select_related('patient', 'company', 'prescribed_by', 'product').annotate(
+    ).exclude(Exists(followed)).select_related('patient', 'company', 'prescribed_by', 'product').annotate(
         subscription_due=Min('subscriptions__review_due_on', filter=~Q(subscriptions__status='cancelled')),
     ).annotate(
         review_due_date=Least('expires_on', doctor_due, Coalesce('subscription_due', 'expires_on')),
@@ -71,7 +75,10 @@ def refresh_review_tasks(*, company, actor, within_days=30, request=None):
         authorization = shipment.authorization or (shipment.subscription.authorization if shipment.subscription else None)
         if authorization is None:
             continue
-        if authorization.company_id == company.pk and authorization.patient_id == shipment.patient_id and authorization_is_current(authorization, on_date=today):
+        # A parcel planned for a later step of a starting plan is checked against that step on its own date.
+        day = max(today, shipment.scheduled_for) if authorization.plan_key else today
+        authorization = step_in_effect(authorization, day)
+        if authorization.company_id == company.pk and authorization.patient_id == shipment.patient_id and authorization_is_current(authorization, on_date=day):
             continue
         reason = 'Treatment authorisation is not currently valid. A doctor must review it before dispatch.'
         if shipment.status == Shipment.Status.HELD and shipment.hold_reason == reason:

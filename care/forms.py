@@ -202,6 +202,22 @@ class ClinicalNoteForm(TagFieldsMixin, CompanyBoundModelForm):
         self.setup_tag_fields(company, self.instance)
 
 
+class LogNoteForm(CompanyBoundModelForm):
+    """Create note on the record's log: one text box. It is a general note ("Note") that clinical staff read."""
+
+    body = forms.CharField(label='Note', max_length=10000, widget=forms.Textarea(attrs={'rows': 6, 'placeholder': 'Write a note…'}))
+
+    class Meta:
+        model = ClinicalNote
+        fields = ('body',)
+
+    def __init__(self, *args, company, patient, author, **kwargs):
+        self.patient = patient
+        self.author = author
+        super().__init__(*args, company=company, **kwargs)
+        self._bind_instance(patient=patient, author=author, note_type=ClinicalNote.NoteType.GENERAL)
+
+
 class WeightEntryForm(CompanyBoundModelForm):
     weight_kg = forms.DecimalField(
         label='Weight (kg)',

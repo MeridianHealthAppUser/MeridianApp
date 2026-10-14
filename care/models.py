@@ -223,6 +223,10 @@ class TreatmentAuthorization(PatientCompanyScopedModel):
     replaces = models.ForeignKey('self', null=True, blank=True, on_delete=models.PROTECT, related_name='replacements')
     change_reason = models.CharField(max_length=500, blank=True)
     log_text = models.TextField(blank=True, help_text='The line written to the clinical log when this prescription was made.')
+    # Initiate prescription saves a starting plan as one authorisation per step, each with its own strength and
+    # dates, so dispensing only allows each month's strength while its step is current. The steps share plan_key.
+    plan_key = models.UUIDField(null=True, blank=True, db_index=True)
+    plan_step = models.PositiveSmallIntegerField(null=True, blank=True)
 
     class Meta:
         indexes = [models.Index(fields=('company', 'patient', 'status', 'expires_on'))]
@@ -241,6 +245,32 @@ class TreatmentAuthorization(PatientCompanyScopedModel):
             is_active=True,
         ).exists():
             raise ValidationError({'prescribed_by': 'Only an active doctor in this practice can prescribe treatment.'})
+
+
+class StartingPlan(CompanyScopedModel):
+    """A standard way to start a main medicine, offered by Initiate prescription and kept in the Pharmacy catalogue
+    by Super Admins: steps of one strength for whole months each, then a last strength until the prescription ends."""
+
+    medicine = models.CharField(max_length=255)
+    name = models.CharField(max_length=80, blank=True)
+    then_product = models.ForeignKey(MedicationProduct, on_delete=models.PROTECT, related_name='starting_plans_ending')
+    # The doctor picks the prescription's total months; this is the choice the dialog starts on.
+    default_months = models.PositiveSmallIntegerField(default=6)
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ('medicine', 'name', 'pk')
+
+
+class StartingPlanStep(CompanyScopedModel):
+    plan = models.ForeignKey(StartingPlan, on_delete=models.CASCADE, related_name='steps')
+    position = models.PositiveSmallIntegerField()
+    product = models.ForeignKey(MedicationProduct, on_delete=models.PROTECT, related_name='starting_plan_steps')
+    months = models.PositiveSmallIntegerField()
+
+    class Meta:
+        ordering = ('position',)
+        constraints = [models.UniqueConstraint(fields=('plan', 'position'), name='unique_starting_plan_step')]
 
 
 class PatientSubscription(PatientCompanyScopedModel):
@@ -726,6 +756,8 @@ class ClinicalNote(PatientCompanyScopedModel):
         REVIEW = 'review', 'Review note'
         PHONE = 'phone', 'Phone call'
         SYSTEM = 'system', 'System note'
+        # Written from the record's log with Create note: just "Note".
+        GENERAL = 'general', 'Note'
 
     author = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name='clinical_notes')
     note_type = models.CharField(max_length=16, choices=NoteType.choices, default=NoteType.CONSULT)
@@ -788,6 +820,7 @@ class PatientFile(PatientCompanyScopedModel):
     class Kind(models.TextChoices):
         PATHCARE_FORM = 'pathcare_form', 'PathCare request form'
         LAB_RESULT = 'lab_result', 'Lab result report'
+        BLOOD_RESULT = 'blood_result', 'Blood result report'
 
     kind = models.CharField(max_length=32, choices=Kind.choices)
     filename = models.CharField(max_length=160)
@@ -877,6 +910,26 @@ class LabResult(PatientCompanyScopedModel):
         _check_patient_file(self)
 
 
+class BloodResult(PatientCompanyScopedModel):
+    """A blood result a clinician recorded by hand on the Blood results tab, usually from a lab other than
+    PathCare (PathCare results are mostly read on the PathCare portal). The lab's PDF may be attached."""
+
+    taken_on = models.DateField()
+    lab_name = models.CharField(max_length=120)
+    results = models.TextField()
+    recorded_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL,
+                                    related_name='recorded_blood_results')
+    file = models.OneToOneField(PatientFile, null=True, blank=True, on_delete=models.PROTECT, related_name='blood_result')
+
+    class Meta:
+        ordering = ('-taken_on', '-created_at', '-pk')
+        indexes = [models.Index(fields=('company', 'patient', 'taken_on'), name='blood_result_lookup_idx')]
+
+    def clean(self):
+        super().clean()
+        _check_patient_file(self)
+
+
 class WeightEntry(PatientCompanyScopedModel):
     recorded_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name='recorded_weights')
     recorded_on = models.DateField(default=timezone.localdate)
@@ -891,8 +944,8 @@ class WeightEntry(PatientCompanyScopedModel):
 class MessageThread(PatientCompanyScopedModel):
     """A conversation between one patient and the staff members taking part in it.
 
-    Staff see a conversation only when they are a participant; there is no
-    practice-wide view, for administrators or Super Admins alike.
+    Staff see a conversation only when they are a participant, except Super Admins,
+    who read every conversation in their practice and join one by replying (care.messaging).
     """
 
     subject = models.CharField(max_length=255)

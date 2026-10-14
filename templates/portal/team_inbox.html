@@ -129,6 +129,8 @@
                 </form>
                 <p class="record-messages__note">Only the people in this conversation see replies. The patient never does.</p>
                 {% endif %}
+                {# About a patient: their notes, for clinical staff who may open the record. Practice admins in it never see them. #}
+                {% include 'portal/includes/conversation_notes.html' with patient=selected_thread.patient %}
               {% else %}
                 <div class="record-inbox-empty">
                   <h3>Choose a team conversation</h3>

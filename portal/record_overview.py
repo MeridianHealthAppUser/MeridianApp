@@ -1,20 +1,24 @@
 """The clinical Overview of a patient record: the log, the prescription, the weight chart and summary data.
 
 Shown to clinicians and Super Admins. Practice administrators keep the administrative Overview.
-The log shows clinical entries only (signed consult notes, blood forms and prescriptions) and what
-was dispensed. Everything else stays in the audit trail and the History tab.
+The log shows clinical entries only (signed consult notes, notes, blood forms, blood results and
+prescriptions) and what was dispensed. Consult notes and notes lead; the rest are smaller lines.
+Everything else stays in the audit trail and the History tab.
 """
 
 from decimal import Decimal
 
+from django.db.models import Q
 from django.urls import reverse
 from django.utils import timezone
+from django.utils.formats import date_format
 
 from care.clinical_summary import (
     ANSWER_LABELS, FIELDS, FLAG_CHOICES, flag_level, get_summary, screening, summary_safety_flags,
 )
 from care.models import (
-    ClinicalEncounter, LabRequest, MedicationProduct, PatientSummaryEdit, Shipment, TreatmentAuthorization, WeightEntry,
+    BloodResult, ClinicalEncounter, ClinicalNote, LabRequest, MedicationProduct, PatientSummaryEdit, Shipment,
+    TreatmentAuthorization, WeightEntry,
 )
 from care.prescriptions import (
     MONTH_CHOICES, current_prescription, expiry_preview, prescription_label, prescription_options, prescription_state,
@@ -26,6 +30,8 @@ from .workflow_context import make_workflow_context
 
 
 LOG_LIMIT = 200
+# The log's main entries: what clinicians wrote. Blood forms, blood results and prescriptions are smaller lines.
+LEAD_KINDS = {'consult', 'note'}
 
 
 def signed_consults(company, patient):
@@ -38,8 +44,26 @@ def signed_consults(company, patient):
             ).select_related('clinician', 'signed_by').order_by('-occurred_at', '-pk')[:LOG_LIMIT]]
 
 
-def clinical_log(company, patient):
+def clinical_log(company, patient, membership=None, viewer=None):
+    """Newest first. A clinician's private note is in their own log only; without a viewer, no private notes."""
     entries = signed_consults(company, patient)
+    visible = Q(is_private=False)
+    if membership is not None and membership.is_clinician:
+        visible |= Q(author=viewer)
+    for note in ClinicalNote.objects.for_company(company).filter(
+        visible, patient=patient, signed_encounter__isnull=True,
+    ).select_related('author').order_by('-created_at', '-pk')[:LOG_LIMIT]:
+        entries.append({'id': f'note-{note.pk}', 'kind': 'note', 'at': note.created_at,
+                        'by': note.author.full_name if note.author_id else '', 'private': note.is_private,
+                        'tag': '' if note.note_type == ClinicalNote.NoteType.GENERAL else note.get_note_type_display(),
+                        'text': note.body})
+    for result in BloodResult.objects.for_company(company).filter(patient=patient).select_related(
+        'recorded_by', 'file',
+    ).defer('file__content').order_by('-created_at', '-pk')[:LOG_LIMIT]:
+        entries.append({'id': f'result-{result.pk}', 'kind': 'result', 'at': result.created_at,
+                        'by': result.recorded_by.full_name if result.recorded_by_id else '', 'tag': 'Blood results',
+                        'result': result,
+                        'text': f'{result.lab_name}, taken {date_format(result.taken_on, "j M Y")}: {result.results}'})
     for lab in LabRequest.objects.for_company(company).filter(patient=patient).select_related(
         'requested_by', 'pathcare_form',
     ).defer('result_summary').order_by('-created_at', '-pk')[:LOG_LIMIT]:
@@ -48,14 +72,17 @@ def clinical_log(company, patient):
                         'by': lab.requested_by.full_name if lab.requested_by_id else '', 'automatic': not lab.requested_by_id,
                         'tag': 'Blood form', 'form': form,
                         'text': f'PathCare form for {form.tests} sent.' if form else f'Blood form for {lab.panel_name} sent.'})
+    # A starting plan is one line, on its first step.
     for authorization in TreatmentAuthorization.objects.for_company(company).filter(
         patient=patient, product__company=company,
-    ).select_related('product', 'prescribed_by').order_by('-created_at', '-pk')[:LOG_LIMIT]:
+    ).exclude(plan_step__gt=1, replaces__isnull=True).select_related('product', 'prescribed_by').order_by('-created_at', '-pk')[:LOG_LIMIT]:
         text = authorization.log_text or (
             f'Prescription recorded: {prescription_label(authorization)}, valid to {authorization.expires_on:%-d %b %Y}.')
         entries.append({'id': f'prescription-{authorization.pk}', 'kind': 'prescription', 'at': authorization.created_at,
                         'by': authorization.prescribed_by.full_name, 'tag': 'Prescription', 'text': text})
     entries.sort(key=lambda entry: entry['at'], reverse=True)
+    for entry in entries:
+        entry['lead'] = entry['kind'] in LEAD_KINDS
     return entries
 
 
@@ -85,17 +112,22 @@ def record_chart(company, patient, summary, log, shipments):
     weights = [(entry.recorded_on, entry.weight_kg) for entry in WeightEntry.objects.for_company(company).filter(
         patient=patient,
     ).order_by('recorded_on', 'pk')]
-    main = [row for row in shipments if row['product'].category == MedicationProduct.Category.WEIGHT_MANAGEMENT
+    # Oldest first. Each main medicine shipped gets its own bars and colour, scaled to its own top dose.
+    main = [row for row in reversed(shipments) if row['product'].category == MedicationProduct.Category.WEIGHT_MANAGEMENT
             and strength_mg(row['product']) is not None]
-    medicine = main[0]['product'].name if main else None
-    ladder = [strength_mg(product) for product in MedicationProduct.objects.for_company(company).filter(name=medicine)] if medicine else []
-    doses = [{'date': row['date'], 'dose': strength_mg(row['product']),
+    names = list(dict.fromkeys(row['product'].name for row in main))
+    ladders = {}
+    for product in MedicationProduct.objects.for_company(company).filter(name__in=names):
+        if strength_mg(product) is not None:
+            ladders[product.name] = max(ladders.get(product.name, 0), strength_mg(product))
+    medicines = [{'name': name, 'dose_max': ladders.get(name)} for name in names]
+    doses = [{'date': row['date'], 'dose': strength_mg(row['product']), 'medicine': row['product'].name,
               'title': f'{row["date"]:%-d %b %Y} · {row["product"].name} {row["product"].strength} shipped'}
-             for row in reversed(main) if row['product'].name == medicine]
+             for row in main]
     consults = [{'date': timezone.localdate(entry['at']), 'id': entry['consult_id'], 'by': entry['by']}
                 for entry in log if entry['kind'] == 'consult']
     return doctor_weight_chart(weights=weights, goal=summary.goal_weight_kg, shipments=doses, consults=consults,
-                               dose_max=max([value for value in ladder if value is not None], default=None))
+                               medicines=medicines)
 
 
 def _bmi(weight, height):
@@ -140,7 +172,7 @@ def record_overview_context(request, company, membership, patient, *, log_filter
     prescription = current_prescription(company, patient)
     today = timezone.localdate()
     summary = get_summary(company, patient)
-    log = clinical_log(company, patient)
+    log = clinical_log(company, patient, membership, request.user)
     shipped = dispensed(company, patient)
     from .record_access import can_change_record
 
@@ -160,12 +192,13 @@ def record_overview_context(request, company, membership, patient, *, log_filter
         'weight_chart': record_chart(company, patient, summary, log, shipped),
         'safety_flags': summary_safety_flags(company, patient, summary),
         'open_dialog': open_dialog,
-        # Export record downloads the record as an Excel workbook, one sheet per tab.
-        'export_url': reverse('portal:staff-patient-record-workbook', args=[patient.pk]),
+        # Export record downloads the record as an Excel workbook, one sheet per tab. Super Admins only.
+        'export_url': reverse('portal:staff-patient-record-workbook', args=[patient.pk])
+        if membership.role == membership.Role.SUPER_ADMIN else '',
     }
     context.update(summary_context(company, patient, summary))
     if prescriber:
-        from .prescription_views import ChangePrescriptionForm, RenewPrescriptionForm
+        from .prescription_views import ChangePrescriptionForm, InitiatePrescriptionForm, RenewPrescriptionForm
 
         first = next(iter(options.values()), [None])[0]
         context.update(
@@ -183,11 +216,36 @@ def record_overview_context(request, company, membership, patient, *, log_filter
             change_months=[{'months': months, 'expires_on': expiry_preview(months, today)} for months in MONTH_CHOICES],
             prescription_choices=[{'name': name, 'doses': doses} for name, doses in options.items()],
         )
+        context.update(initiate_context(company, prescription, today, InitiatePrescriptionForm))
     if context['can_edit_summary']:
         context['summary_context_token'] = make_workflow_context(request, company, 'patient-summary', patient=patient)
     if prescriber:
         context.update(bloods_context(request, company, patient))
     return context
+
+
+def initiate_context(company, prescription, today, form_class):
+    """Initiate prescription: the starting plans by medicine, each with the lengths it allows and, for each, its
+    steps with their dates, so the dialog can show what will be prescribed before it is saved."""
+    import json
+
+    from care.starting_plans import offered_plans, plan_month_choices, plan_schedule, plan_summary, schedule_text
+
+    plans = offered_plans(company)
+    for plan in plans:
+        plan.summary = plan_summary(plan)
+        plan.month_choices = plan_month_choices(plan)
+        plan.default = plan.default_months if plan.default_months in plan.month_choices else plan.month_choices[-1]
+        plan.previews = json.dumps({str(months): schedule_text(plan_schedule(plan, months, today)) for months in plan.month_choices})
+    medicines = list(dict.fromkeys(plan.medicine for plan in plans))
+    first = plans[0] if plans else None
+    return {
+        'starting_plans': plans, 'starting_plan_medicines': medicines,
+        'initiate_form': form_class(plans=plans, initial={
+            'current': prescription.pk if prescription else None, 'medicine': first.medicine if first else '',
+            'plan': first.pk if first else None, 'months': str(first.default) if first else '6'}),
+        'initiate_months': [{'months': months, 'expires_on': expiry_preview(months, today)} for months in MONTH_CHOICES],
+    }
 
 
 def bloods_context(request, company, patient):

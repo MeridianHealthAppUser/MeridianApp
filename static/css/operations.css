@@ -77,3 +77,10 @@
   .ops-facts dd { text-align: left; }
   .ops-actions > .console-button { flex: 1 1 auto; justify-content: center; }
 }
+
+/* Starting plan editor: each step is a strength and how many months it lasts, side by side. */
+.starting-plan-steps { border: 0; margin: 0; padding: 0; }
+.starting-plan-steps legend { color: #34565f; font-size: .875rem; font-weight: 650; margin-bottom: .4rem; padding: 0; }
+.starting-plan-step { align-items: center; display: grid; gap: .3rem .6rem; grid-template-columns: 4rem minmax(0, 1fr) 8rem; margin-bottom: .5rem; }
+.starting-plan-step .errorlist { grid-column: 2 / -1; }
+@media (max-width: 36rem) { .starting-plan-step { grid-template-columns: minmax(0, 1fr) 7rem; } .starting-plan-step > label:first-child { grid-column: 1 / -1; } }
