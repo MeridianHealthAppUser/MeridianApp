@@ -47,7 +47,7 @@ EVENT_LOG_SECTIONS = (
         ('Clinicians and colleagues added to conversations', False),
     )),
     ('Operations', (
-        ('Stock received, adjusted, quarantined, released or written off', False), ('Catalogue changes', False),
+        ('Catalogue changes', False),
         ('Review rules changed', False),
     )),
     ('Administration', (
@@ -65,8 +65,16 @@ class PracticeSettingsForm(forms.ModelForm):
         fields = ('store_view_log',)
 
 
+class ShippingSettingsForm(forms.ModelForm):
+    class Meta:
+        model = PracticeSettings
+        fields = ('shipping_weekday',)
+
+
 @method_decorator(never_cache, name='dispatch')
 class PracticeSettingsView(LoginRequiredMixin, StaffCompanyRequiredMixin, View):
+    """Each section of the page saves its own settings: Shipping, or the optional event log."""
+
     http_method_names = ('get', 'post', 'head', 'options')
 
     def settings_row(self):
@@ -74,24 +82,28 @@ class PracticeSettingsView(LoginRequiredMixin, StaffCompanyRequiredMixin, View):
             raise PermissionDenied('Only a Super Admin can change practice settings.')
         return PracticeSettings.objects.get_or_create(company=self.company)[0]
 
-    def display(self, request, form, status=200):
+    def display(self, request, row, form=None, shipping_form=None, status=200):
         return render(request, 'portal/practice_settings.html', dict(
             company=self.company, active_membership=self.membership, nav_section='practice_settings',
-            page_title='Practice settings', form=form, event_log_sections=EVENT_LOG_SECTIONS), status=status)
+            page_title='Practice settings', form=form or PracticeSettingsForm(instance=row),
+            shipping_form=shipping_form or ShippingSettingsForm(instance=row), event_log_sections=EVENT_LOG_SECTIONS),
+            status=status)
 
     def get(self, request):
-        return self.display(request, PracticeSettingsForm(instance=self.settings_row()))
+        return self.display(request, self.settings_row())
 
     def post(self, request):
         row = self.settings_row()
-        before = row.store_view_log
-        form = PracticeSettingsForm(request.POST, instance=row)
+        shipping = request.POST.get('section') == 'shipping'
+        form = (ShippingSettingsForm if shipping else PracticeSettingsForm)(request.POST, instance=row)
         if not form.is_valid():
-            return self.display(request, form, status=400)
+            row.refresh_from_db()
+            return self.display(request, row, status=400, **{'shipping_form' if shipping else 'form': form})
         with transaction.atomic():
+            changed = list(form.changed_data)
             saved = form.save()
-            if saved.store_view_log != before:
+            if changed:
                 record_audit(company=self.company, actor=request.user, action='practice.settings_updated', target=saved,
-                             request=request, metadata={'store_view_log': saved.store_view_log})
+                             request=request, metadata={field: getattr(saved, field) for field in changed})
         messages.success(request, 'Practice settings saved.')
         return redirect('portal:practice-settings')

@@ -72,7 +72,6 @@ def build_staff_menu(membership, *, multi_practice=False, nav_section='', unread
             _item('orders', 'Supply requests', 'portal:ops-orders'),
             _item('shipping', 'Weekly shipping list', 'portal:ops-shipping'),
             _item('history', 'Dispatch history', 'portal:ops-history'),
-            _item('stock', 'Batches and stock', 'portal:ops-stock'),
             _item('catalogue', 'Catalogue', 'portal:ops-catalogue'),
         ] if admin else []),
         ('administration', 'Administration', 'Admin', [

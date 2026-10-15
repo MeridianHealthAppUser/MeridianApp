@@ -29,7 +29,7 @@ ACCESS_ACTIONS = frozenset({
     'patient.record_viewed', 'patient.clinical_record_viewed', 'patient.clinical_record_exported',
     'message.thread_viewed', 'team_thread.viewed', 'lab_result.downloaded', 'compounding.summary_viewed', 'follow_up.viewed',
     'lead.viewed', 'privacy.request_viewed', 'activity_statement.exported', 'dispatch.history_exported',
-    'metrics.exported', 'stock.exported', 'pathcare_form.viewed', 'blood_result.report_viewed',
+    'metrics.exported', 'pathcare_form.viewed', 'blood_result.report_viewed',
 })
 
 

@@ -63,6 +63,11 @@ class EnrollmentForm(forms.Form):
     confirm = forms.BooleanField(label='I want to enroll in this local care plan. No payment is collected and no parcel is automatically dispatched.')
 
     def __init__(self, *args, authorizations, **kwargs):
+        from care.prescriptions import with_plan_ends
+
         super().__init__(*args, **kwargs)
         self.fields['authorization'].queryset = authorizations
-        self.fields['authorization'].label_from_instance = lambda row: f'{row.product.name} · authorised until {row.expires_on:%d %b %Y}'
+        # A starting plan's step is authorised until the plan ends.
+        ends = {row.pk: row.ends_on for row in with_plan_ends(list(authorizations))}
+        self.fields['authorization'].label_from_instance = (
+            lambda row: f'{row.product.name} {row.max_dose} · authorised until {ends.get(row.pk, row.expires_on):%d %b %Y}')

@@ -75,7 +75,7 @@ class ClinicalRecordTests(TestCase):
         cls.authorization = TreatmentAuthorization.objects.create(company=cls.alpha, patient=cls.patient,
             product=cls.product, prescribed_by=cls.doctor, max_dose='Recorded dose', expires_on=timezone.localdate() + timedelta(days=30))
         cls.subscription = PatientSubscription.objects.create(company=cls.alpha, patient=cls.patient, authorization=cls.authorization,
-            plan_name='Local subscription', monthly_amount=1995, cycle_number=3, next_debit_on=timezone.localdate() + timedelta(days=5))
+            plan_name='Local subscription', cycle_number=3, next_debit_on=timezone.localdate() + timedelta(days=5))
         AuditEvent.objects.create(company=cls.alpha, patient=cls.patient, actor=cls.doctor,
             action='patient.record_viewed', metadata={'note': 'RAW_AUDIT_METADATA_SECRET'}, ip_address='192.0.2.100')
         AuditEvent.objects.create(company=cls.alpha, patient=cls.patient, actor=cls.colleague,

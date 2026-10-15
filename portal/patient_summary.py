@@ -1,7 +1,8 @@
 """Read-only summaries for the patient pages: what is current, what is next and what needs doing.
 
 Every value comes from a stored record. Nothing here predicts a result, sets a
-target, invents a price or implies that a payment is taken.
+target, invents a price or implies that a payment is taken: the payments a treatment
+timeline shows are the catalogue dose's reference prices, labelled as such.
 """
 
 from datetime import timedelta
@@ -44,6 +45,207 @@ def current_authorization(company, patient, plan=None):
         patient=patient, status=TreatmentAuthorization.Status.ACTIVE, starts_on__lte=today, expires_on__gte=today,
     ).select_related('product', 'prescribed_by', 'company', 'patient').order_by('-expires_on', '-pk')
     return next((item for item in candidates[:10] if authorization_is_current(item)), None)
+
+
+HOW_OFTEN = {'weekly': 'once a week', 'daily': 'once a day'}
+PARCEL_STATUS = {Shipment.Status.DISPATCHED: 'shipped', Shipment.Status.DELIVERED: 'delivered'}
+
+
+def _pens(quantity, product):
+    return f'{quantity} × {product} pen{"" if quantity == 1 else "s"}'
+
+
+def _parcel_line(item, medicine):
+    """'1 × 1.0 mg pen' for the prescribed medicine's pens; anything else by its full name."""
+    if item.product.name == medicine and item.product.strength:
+        return _pens(item.quantity, item.product.strength)
+    return f'{item.quantity} × {item.product}'
+
+
+def treatment_course(authorization, today=None):
+    """The treatment a prescription belongs to, for the patient's timeline: the prescriptions it has been on, oldest
+    first, each with the dates it was in effect. That is a starting plan's steps and the renewals and changes before
+    and after it, back through the prescriptions each one replaced. A prescription replaced early ends the day before
+    its replacement starts; one cancelled before it took effect (a plan's later steps after a change) is left out."""
+    from care.parcels import shipping_day_from, shipping_weekday
+    from care.treatment import step_in_effect
+
+    today = today or timezone.localdate()
+    current = step_in_effect(authorization, today)
+    members, seen, queue = [], set(), [current]
+    while queue:
+        prescription = queue.pop()
+        if prescription.pk in seen:
+            continue
+        seen.add(prescription.pk)
+        members.append(prescription)
+        if prescription.plan_key:
+            queue.extend(TreatmentAuthorization.objects.filter(
+                company_id=prescription.company_id, patient_id=prescription.patient_id, plan_key=prescription.plan_key,
+            ).select_related('dose__pen', 'product', 'prescribed_by'))
+        if prescription.replaces_id:
+            queue.append(TreatmentAuthorization.objects.select_related('dose__pen', 'product', 'prescribed_by').get(
+                pk=prescription.replaces_id))
+    replaced_from = {}
+    for prescription in members:
+        if prescription.replaces_id:
+            replaced_from[prescription.replaces_id] = min(replaced_from.get(prescription.replaces_id, prescription.starts_on),
+                                                          prescription.starts_on)
+    segments = []
+    for prescription in members:
+        if prescription.status == TreatmentAuthorization.Status.CANCELLED and prescription.pk not in replaced_from:
+            continue
+        end = prescription.expires_on
+        if prescription.pk in replaced_from:
+            end = min(end, replaced_from[prescription.pk] - timedelta(days=1))
+        if end >= prescription.starts_on:
+            segments.append({'prescription': prescription, 'starts_on': prescription.starts_on, 'ends_on': end})
+    segments.sort(key=lambda segment: (segment['starts_on'], segment['prescription'].pk))
+    started, ends = segments[0]['starts_on'], max(segment['ends_on'] for segment in segments)
+    # The patient's weeks start with their pens: week 1 is the calendar week of the first parcel, and each week after
+    # has its parcel day, a week apart.
+    first_parcel = shipping_day_from(started, shipping_weekday(current.company))
+    first_week = first_parcel - timedelta(days=first_parcel.weekday())
+    total = max(1, round((ends - started).days / 7))
+    return {'current': current, 'segments': segments, 'started_on': started, 'ends_on': ends, 'total': total,
+            'first_week': first_week, 'first_parcel': first_parcel, 'before_start': today < first_week,
+            'week': min(total, max(1, (today - first_week).days // 7 + 1)),
+            'progress': min(100, max(0, round(100 * (today - first_week).days / max(1, (ends - first_week).days))))}
+
+
+def _starts_with_pens(course, day):
+    """The week a dose starting on day begins for the patient: the first week whose parcel day is on or after it."""
+    weeks = max(0, -(-(day - course['first_parcel']).days // 7))
+    return {'week': weeks + 1, 'week_starts_on': course['first_week'] + timedelta(weeks=weeks)}
+
+
+def treatment_overview(company, patient, authorization, today=None):
+    """What the patient sees about the prescription they are on: the dose and how often it is taken, the pens each
+    parcel brings, the week of treatment, the next dose step and the next parcel. Every value is the prescription's
+    or the catalogue dose's. None when the prescription isn't for a catalogue dose."""
+    if authorization is None or not authorization.dose_id:
+        return None
+    today = today or timezone.localdate()
+    course = treatment_course(authorization, today)
+    current = course['current']
+    dose = current.dose
+    later = next((segment for segment in course['segments'] if segment['starts_on'] > today), None)
+    parcels = Shipment.objects.for_company(company).filter(patient=patient).prefetch_related('items__product')
+    upcoming = parcels.filter(status__in=(Shipment.Status.DRAFT, Shipment.Status.READY, Shipment.Status.HELD),
+                              scheduled_for__gte=today).order_by('scheduled_for', 'pk').first()
+    on_its_way = parcels.filter(status=Shipment.Status.DISPATCHED).order_by('-dispatched_at', '-pk').first()
+    return {
+        'medicine': current.product.name, 'dose': current.max_dose, 'amount': f'{dose.amount_text} mg',
+        'how_often': HOW_OFTEN.get(dose.frequency, 'as your doctor directed'), 'supply': dose.dispatch_text,
+        'week': course['week'], 'weeks': course['total'], 'progress': course['progress'],
+        'first_week': course['first_week'], 'before_start': course['before_start'], 'ends_on': course['ends_on'],
+        'next_step': later and _starts_with_pens(course, later['starts_on']) | {'dose': later['prescription'].max_dose},
+        'next_parcel': upcoming and {'date': upcoming.scheduled_for, 'held': upcoming.status == Shipment.Status.HELD,
+                                     'contents': [_pens(item.quantity, item.product) for item in upcoming.items.all()]},
+        'on_its_way': on_its_way and {'date': timezone.localdate(on_its_way.dispatched_at) if on_its_way.dispatched_at else on_its_way.scheduled_for,
+                                      'tracking': on_its_way.tracking_number},
+        'prescribed_by': current.prescribed_by,
+    }
+
+
+def _dose_of(prescription, with_medicine):
+    amount = f'{prescription.dose.amount_text} mg' if prescription.dose_id else prescription.max_dose
+    return f'{prescription.product.name} {amount}' if with_medicine else amount
+
+
+def week_range(start):
+    """'19–25 Oct 2026', '26 Oct–1 Nov 2026' or '28 Dec 2026–3 Jan 2027': a week's first and last day."""
+    end = start + timedelta(days=6)
+    if start.year != end.year:
+        return f'{start:%-d %b %Y}–{end:%-d %b %Y}'
+    if start.month != end.month:
+        return f'{start:%-d %b}–{end:%-d %b %Y}'
+    return f'{start:%-d}–{end:%-d %b %Y}'
+
+
+def _segment_on(segments, day):
+    return next((segment for segment in segments if segment['starts_on'] <= day <= segment['ends_on']), None)
+
+
+def treatment_timeline(company, patient, authorization, today=None):
+    """The treatment week by week, for a catalogue dose, with where the patient is now. Week 1 is the week of the
+    first parcel. Each week has the doctor's decisions made in it (starting, renewing or changing the prescription;
+    one made before week 1 is in week 1), the pens planned or sent, the dose in effect on its parcel day (so a new
+    dose starts with its pens) with any change from the week before, and the payments due: each dose's reference
+    price in the first of its weeks and every billing period after."""
+    if authorization is None or not authorization.dose_id:
+        return None
+    today = today or timezone.localdate()
+    course = treatment_course(authorization, today)
+    segments, total = course['segments'], course['total']
+    first_week, first_parcel = course['first_week'], course['first_parcel']
+    week_of = lambda day: min(total, max(1, (day - first_week).days // 7 + 1))
+    with_medicine = len({segment['prescription'].product.name for segment in segments}) > 1
+    medicine = course['current'].product.name
+
+    weeks, previous = [], None
+    for number in range(1, total + 1):
+        day = first_week + timedelta(weeks=number - 1)
+        segment = _segment_on(segments, first_parcel + timedelta(weeks=number - 1)) or next(
+            (segment for segment in segments if segment['starts_on'] <= day + timedelta(days=6) and segment['ends_on'] >= day), None)
+        prescription = segment['prescription'] if segment else None
+        dose = _dose_of(prescription, with_medicine) if prescription else None
+        change = ''
+        if dose and previous and dose != previous[0]:
+            before = previous[1]
+            # The same medicine in a different pen is still a step up or down.
+            if before.product.name == prescription.product.name and before.dose_id and prescription.dose_id:
+                change = f'{"up" if prescription.dose.amount_mg > before.dose.amount_mg else "down"} from {_dose_of(before, False)}'
+            else:
+                change = f'was {_dose_of(before, True)}'
+        weeks.append({'number': number, 'date': day, 'range': week_range(day), 'dose': dose, 'change': change,
+                      'segment': segment, 'events': [], 'parcels': [], 'payments': [],
+                      'current': day <= today < day + timedelta(days=7), 'past': day + timedelta(days=7) <= today,
+                      # Before week 1, it is next: the patient is waiting for their first pens.
+                      'next': number == 1 and course['before_start']})
+        if prescription:
+            previous = (dose, prescription)
+
+    for segment in segments:
+        prescription = segment['prescription']
+        if prescription.dose_id and prescription.dose.price is not None:
+            own = [week for week in weeks if week['segment'] is segment]
+            for week in own[::prescription.dose.billing_weeks]:
+                week['payments'].append(prescription.dose.price)
+
+    for parcel in Shipment.objects.for_company(company).filter(
+        patient=patient, scheduled_for__range=(course['started_on'], course['ends_on']),
+    ).exclude(status=Shipment.Status.CANCELLED).prefetch_related('items__product').order_by('scheduled_for', 'pk'):
+        day = timezone.localdate(parcel.dispatched_at) if parcel.dispatched_at else parcel.scheduled_for
+        if parcel.status == Shipment.Status.HELD:
+            when = 'on hold'
+        elif parcel.status in PARCEL_STATUS:
+            when = f'{PARCEL_STATUS[parcel.status]} {day:%-d %b}'
+        else:
+            when = f'ships {day:%a %-d %b}'
+        weeks[week_of(day) - 1]['parcels'].append({
+            'contents': ', '.join(_parcel_line(item, medicine) for item in parcel.items.all()), 'when': when})
+
+    # The doctor's decisions, in a word: the first prescription, a new dose plan over one, a renewal or a change.
+    # What changed shows in the Dosage column.
+    # Nothing in effect before it, it starts the treatment, even if it replaced one that never took effect.
+    for segment in segments:
+        prescription = segment['prescription']
+        replaced = prescription.replaces if prescription.replaces_id else None
+        if prescription.plan_key and prescription.plan_step and prescription.plan_step > 1 and replaced is None:
+            continue  # A plan's later step is the plan, not a new decision.
+        if replaced is not None and replaced.dose_id == prescription.dose_id and replaced.product_id == prescription.product_id \
+                and not (prescription.plan_key and prescription.plan_step == 1):
+            text = 'Prescription renewed'
+        elif not any(other['starts_on'] < segment['starts_on'] for other in segments):
+            text = 'Prescription started'
+        elif prescription.plan_key and prescription.plan_step == 1:
+            text = 'Prescription reinitiated'
+        else:
+            text = 'Prescription adjusted'
+        written = timezone.localdate(prescription.created_at)
+        weeks[week_of(written) - 1]['events'].append({'text': text, 'date': written, 'by': prescription.prescribed_by.full_name})
+    return {'weeks': weeks, 'total': total, 'first_week': first_week, 'ends_on': course['ends_on']}
 
 
 def latest_authorization(company, patient):

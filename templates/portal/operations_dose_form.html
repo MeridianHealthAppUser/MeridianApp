@@ -1,0 +1,27 @@
+{% extends 'portal/operations_base.html' %}
+{% load workspace_ui %}
+{% block title %}{% if dose %}{{ dose }}{% else %}New dose{% endif %} | Meridian{% endblock %}
+{% block breadcrumbs %}{% if dose %}{% breadcrumbs 'Catalogue' 'portal:ops-catalogue' 'Dose' %}{% else %}{% breadcrumbs 'Catalogue' 'portal:ops-catalogue' 'Add a dose' %}{% endif %}{% endblock %}
+{% block page_heading %}<header class="staff-page-header"><div><h1>{% if dose %}{{ dose }}{% else %}Add a dose{% endif %}</h1><p>{{ company.name }}</p></div></header>{% endblock %}
+{% block operations_content %}
+  <div class="ops-notice">A dose is what a doctor prescribes in Change prescription and starting plans: how much is taken how often, the pen it comes in, how many pens are sent how often, and what the patient pays how often. {% if in_use %}This dose has been prescribed or is in a starting plan, so its pen, amount and supply stay as they are; add a new dose for those changes. Price, billing, tier and whether it is offered may be updated.{% else %}A dose without a price can’t be prescribed until it has one.{% endif %}</div>
+  <section class="staff-page-card ops-panel">
+    {% if can_edit %}
+      <form method="post" action="{{ request.path }}" class="ops-form">
+        {% csrf_token %}<input type="hidden" name="workflow_context" value="{{ workflow_context }}">
+        {% include 'portal/operations_fields.html' %}
+        <div><button class="console-button console-button--primary" type="submit">Save dose</button></div>
+      </form>
+    {% else %}
+      <p>Read-only catalogue record.</p>
+      <dl class="ops-facts">
+        <div><dt>Medicine</dt><dd>{{ dose.medicine }}</dd></div>
+        <div><dt>Dose</dt><dd>{{ dose.label }}</dd></div>
+        <div><dt>Sent</dt><dd>{{ dose.dispatch_text }}</dd></div>
+        <div><dt>Price</dt><dd>{% if dose.price is not None %}R{{ dose.price }} {{ dose.billing_text }}{% else %}Not set{% endif %}</dd></div>
+        <div><dt>Tier</dt><dd>{{ dose.get_tier_display }}</dd></div>
+        <div><dt>Offered to doctors</dt><dd>{{ dose.is_active|yesno:'Yes,No' }}</dd></div>
+      </dl>
+    {% endif %}
+  </section>
+{% endblock %}

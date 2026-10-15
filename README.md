@@ -151,7 +151,7 @@ The current appointment stays unchanged until acceptance. Availability is checke
 
 To try it: sign in as Sam, open Nadia's record and its secure conversation, and send a time suggestion. In a separate browser session, sign in as Nadia and accept it in Messages. Check the new time in both appointment lists. This is an in-app workflow; it does not send email or change external calendars.
 
-To verify the application: `.venv/bin/python manage.py test`. In-app stock, dispatch and delivery records are implemented; payment collection, external courier APIs and outbound email remain disconnected by design.
+To verify the application: `.venv/bin/python manage.py test`. In-app parcel planning, weekly ordering, dispatch and delivery records are implemented; payment collection, external courier APIs and outbound email remain disconnected by design.
 
 ## Tenancy and identity model
 

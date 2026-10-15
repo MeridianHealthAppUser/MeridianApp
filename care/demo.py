@@ -21,7 +21,7 @@ from .models import (
     InvoiceLine,
     LabRequest,
     Lead,
-    MedicationBatch,
+    MedicationDose,
     MedicationProduct,
     MessageThread,
     PatientEvent,
@@ -34,11 +34,11 @@ from .models import (
     ShipmentItem,
     StartingPlan,
     StartingPlanStep,
-    StockMovement,
     SubscriptionCycle,
     TreatmentAuthorization,
     WeightEntry,
 )
+from .parcels import schedule_parcels
 from .services import post_patient_message
 
 
@@ -64,6 +64,74 @@ def _message(*, thread, sender, body):
         post_patient_message(thread=thread, sender=sender, body=body)
 
 
+# (medicine, pen) the dispensary sends, and what the patient pharmacy lists each at.
+# (medicine, pen, its reference price, description). A Semaglutide pen is named by its dose and holds four of them.
+DEMO_PENS = (
+    ('Semaglutide', '0.25 mg', '1995.00', 'Four weekly doses of 0.25 mg.'),
+    ('Semaglutide', '0.5 mg', '1995.00', 'Semagard. Four weekly doses of 0.5 mg.'),
+    ('Semaglutide', '1.0 mg', '3295.00', 'Four weekly doses of 1 mg.'),
+    ('Semaglutide', '1.7 mg', '4295.00', 'Four weekly doses of 1.7 mg.'),
+    ('Semaglutide', '2.4 mg', '4685.00', 'Four weekly doses of 2.4 mg.'),
+    ('Tirzepatide', '5 mg', '2995.00', ''), ('Tirzepatide', '10 mg', '0.00', ''), ('Tirzepatide', '15 mg', '0.00', ''),
+)
+# (medicine, pen, weekly mg, pens per parcel, sent every N weeks, price, billed every N weeks, tier). Each Semaglutide
+# dose has its own pen, one sent and billed every 4 weeks. Prices the practice hasn't confirmed are blank, so those
+# doses can't be prescribed yet.
+DEMO_DOSES = (
+    ('Semaglutide', '0.25 mg', '0.25', 1, 4, '1995.00', 4, 'standard'),
+    ('Semaglutide', '0.5 mg', '0.5', 1, 4, '1995.00', 4, 'standard'),
+    ('Semaglutide', '1.0 mg', '1', 1, 4, '3295.00', 4, 'standard'),
+    ('Semaglutide', '1.7 mg', '1.7', 1, 4, '4295.00', 4, 'if_necessary'),
+    ('Semaglutide', '2.4 mg', '2.4', 1, 4, '4685.00', 4, 'if_necessary'),
+    ('Tirzepatide', '5 mg', '2.5', 1, 2, '2995.00', 2, 'standard'),
+    ('Tirzepatide', '5 mg', '5', 1, 1, '2995.00', 4, 'standard'),
+    ('Tirzepatide', '10 mg', '7.5', 1, 5, None, 5, 'step_up'),
+    ('Tirzepatide', '10 mg', '10', 1, 4, None, 4, 'step_up'),
+    ('Tirzepatide', '15 mg', '12.5', 1, 5, None, 5, 'step_up'),
+    ('Tirzepatide', '15 mg', '15', 1, 4, None, 4, 'step_up'),
+)
+# (medicine, [(weekly mg, weeks)], then weekly mg): Semaglutide's 24-week cycle and Tirzepatide's start.
+DEMO_PLANS = (
+    ('Semaglutide', [('0.25', 4), ('0.5', 4)], '1'),
+    ('Tirzepatide', [('2.5', 2)], '5'),
+)
+# Products earlier demos made that aren't pens: hidden, with their doses.
+OLD_DEMO_PRODUCTS = (('Semaglutide', '1 mg'), ('Semaglutide', '2 mg'), ('Semaglutide', '4 mg'), ('Tirzepatide', '2.5 mg'))
+
+
+def seed_demo_catalogue(company):
+    for name, strength in OLD_DEMO_PRODUCTS:
+        for product in MedicationProduct.objects.filter(company=company, name=name, strength=strength):
+            product.is_active = False
+            product.save(update_fields=('is_active', 'updated_at'))
+            product.doses.update(is_active=False)
+    pens = {}
+    for name, strength, price, description in DEMO_PENS:
+        pens[name, strength], _ = MedicationProduct.objects.update_or_create(
+            company=company, name=name, strength=strength, defaults={
+                'description': description or 'Demo weight-management pen.',
+                'category': MedicationProduct.Category.WEIGHT_MANAGEMENT, 'price': Decimal(price),
+                'allowance': 'As prescribed', 'requires_authorisation': True, 'is_active': True,
+            })
+    doses = {}
+    for name, strength, mg, pens_per_dispatch, dispatch_weeks, price, billing_weeks, tier in DEMO_DOSES:
+        doses[name, Decimal(mg)], _ = MedicationDose.objects.update_or_create(
+            company=company, pen=pens[name, strength], amount_mg=Decimal(mg), frequency=MedicationDose.Frequency.WEEKLY,
+            defaults={'pens_per_dispatch': pens_per_dispatch, 'dispatch_weeks': dispatch_weeks,
+                      'price': Decimal(price) if price else None, 'billing_weeks': billing_weeks, 'tier': tier,
+                      'is_active': True})
+    for medicine, steps, then in DEMO_PLANS:
+        plan = StartingPlan.objects.filter(company=company, medicine=medicine).order_by('pk').first() or StartingPlan(
+            company=company, medicine=medicine)
+        plan.name, plan.then_dose, plan.default_weeks, plan.is_active = 'Standard start', doses[medicine, Decimal(then)], 24, True
+        plan.save()
+        plan.steps.all().delete()
+        for position, (mg, weeks) in enumerate(steps, start=1):
+            StartingPlanStep.objects.create(company=company, plan=plan, position=position, dose=doses[medicine, Decimal(mg)],
+                                            weeks=weeks)
+    return pens, doses
+
+
 def seed_demo_care(*, meridian, orion, users, nadia):
     """Populate the explicitly supplied demo practices, without external integrations."""
     today = timezone.localdate()
@@ -79,10 +147,7 @@ def seed_demo_care(*, meridian, orion, users, nadia):
             company=company,
             defaults={
                 'initial_consult_fee': Decimal('630.00'),
-                'standard_subscription_amount': Decimal('1995.00'),
-                'ongoing_subscription_amount': Decimal('3295.00'),
                 'review_interval_days': 180,
-                'delivery_interval_days': 28,
                 'support_email': 'support@meridianhealth.co.za',
             },
         )
@@ -108,50 +173,9 @@ def seed_demo_care(*, meridian, orion, users, nadia):
                 'is_active': True,
             },
         )
-        product, _ = MedicationProduct.objects.update_or_create(
-            company=company,
-            name='Semaglutide',
-            strength='0.25 mg',
-            defaults={
-                'description': 'Demo weight-management medicine catalogue item.',
-                'category': MedicationProduct.Category.WEIGHT_MANAGEMENT,
-                'price': Decimal('1995.00'),
-                'allowance': 'One four-week supply',
-                'requires_authorisation': True,
-                'is_active': True,
-                'dose_frequency': MedicationProduct.DoseFrequency.WEEKLY,
-            },
-        )
-        # The other strengths of the main medicines, and the standard ways to start them (Initiate prescription).
-        strengths = {}
-        for name, strength, price in (('Semaglutide', '0.5 mg', '1995.00'), ('Semaglutide', '1.0 mg', '1995.00'),
-                                      ('Tirzepatide', '2.5 mg', '2995.00'), ('Tirzepatide', '5 mg', '2995.00')):
-            strengths[name, strength], _ = MedicationProduct.objects.update_or_create(
-                company=company, name=name, strength=strength, defaults={
-                    'description': 'Demo weight-management medicine catalogue item.',
-                    'category': MedicationProduct.Category.WEIGHT_MANAGEMENT, 'price': Decimal(price),
-                    'allowance': 'One four-week supply', 'requires_authorisation': True, 'is_active': True,
-                    'dose_frequency': MedicationProduct.DoseFrequency.WEEKLY,
-                })
-        for medicine, steps, then in (('Semaglutide', [(product, 1), (strengths['Semaglutide', '0.5 mg'], 1)], strengths['Semaglutide', '1.0 mg']),
-                                      ('Tirzepatide', [(strengths['Tirzepatide', '2.5 mg'], 1)], strengths['Tirzepatide', '5 mg'])):
-            if not StartingPlan.objects.filter(company=company, medicine=medicine).exists():
-                plan = StartingPlan.objects.create(company=company, medicine=medicine, then_product=then, default_months=6)
-                for position, (step_product, months) in enumerate(steps, start=1):
-                    StartingPlanStep.objects.create(company=company, plan=plan, position=position, product=step_product, months=months)
-        batch, _ = MedicationBatch.objects.update_or_create(
-            company=company,
-            batch_number=f'{company.slug.upper()[:6]}-DEMO-01',
-            defaults={
-                'product': product,
-                'received_on': today - timedelta(days=14),
-                'expires_on': today + timedelta(days=300),
-                'quantity_received': 100,
-                'quantity_on_hand': 88,
-                'cold_chain_confirmed': True,
-                'status': MedicationBatch.Status.AVAILABLE,
-            },
-        )
+        # Dr Czech's catalogue: the pens the dispensary sends, the doses doctors prescribe and the standard starts.
+        pens, doses = seed_demo_catalogue(company)
+        product, dose = pens['Semaglutide', '0.25 mg'], doses['Semaglutide', Decimal('0.25')]
         ReviewRule.objects.update_or_create(
             company=company,
             name='Six-month GLP-1 review',
@@ -220,6 +244,7 @@ def seed_demo_care(*, meridian, orion, users, nadia):
             patient=patient,
             product=product,
             defaults={
+                'dose': dose,
                 'prescribed_by': sam,
                 'max_dose': '0.25 mg weekly',
                 'quantity_per_cycle': 1,
@@ -238,7 +263,6 @@ def seed_demo_care(*, meridian, orion, users, nadia):
                 'authorization': authorization,
                 'status': PatientSubscription.Status.ACTIVE,
                 'cycle_number': 2,
-                'monthly_amount': Decimal('1995.00'),
                 'starts_on': today - timedelta(days=28),
                 'next_debit_on': today + timedelta(days=8),
                 'review_due_on': today + timedelta(days=150),
@@ -354,6 +378,7 @@ def seed_demo_care(*, meridian, orion, users, nadia):
             cycle_number=2,
             defaults={
                 'subscription': subscription,
+                'authorization': authorization,
                 'scheduled_for': today + timedelta(days=9),
                 'status': Shipment.Status.READY,
             },
@@ -362,20 +387,10 @@ def seed_demo_care(*, meridian, orion, users, nadia):
             company=company,
             shipment=shipment,
             product=product,
-            defaults={'batch': batch, 'dose': '0.25 mg weekly', 'quantity': 1},
+            defaults={'dose': '0.25 mg weekly', 'quantity': 1},
         )
-        StockMovement.objects.update_or_create(
-            company=company,
-            idempotency_key=f'{company.slug}-demo-stock-allocation-2',
-            defaults={
-                'batch': batch,
-                'direction': StockMovement.Direction.OUT,
-                'quantity': -1,
-                'reason': 'Demo shipment allocation',
-                'shipment': shipment,
-                'recorded_by': sam,
-            },
-        )
+        # The rest of Nadia's prescription, drafted on the Weekly shipping list after this parcel.
+        schedule_parcels(authorization)
         EmailDelivery.objects.get_or_create(
             company=company,
             journey=journey,

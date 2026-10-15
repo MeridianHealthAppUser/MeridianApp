@@ -60,16 +60,13 @@ class OperationsTemplateTests(OperationsFixture):
         return response
 
     def test_all_staff_supply_pages_render_as_separate_pages(self):
-        batch = self.receive()
         shipment = self.shipment(quantity=1)
         order = self.submitted_order()
         self.login(self.super_admin)
         for route, heading, args in (
             ('ops-catalogue', 'Product catalogue', ()), ('ops-product-create', 'Add a product', ()),
             ('ops-product-detail', 'Explicit prescribed product', (self.product.pk,)),
-            ('ops-stock', 'Batches and stock', ()), ('ops-stock-receive', 'Receive stock', ()),
-            ('ops-batch-detail', 'Stock movement ledger', (batch.pk,)),
-            ('ops-shipping', 'Weekly shipping list', ()), ('ops-shipping-create', 'Create a shipment record', ()),
+            ('ops-shipping', 'id="create-shipment"', ()),
             ('ops-shipment-detail', 'Shipment record', (shipment.pk,)),
             ('ops-history', 'Dispatch history', ()), ('ops-orders', '<h1>Supply requests</h1>', ()),
             ('ops-order-detail', 'Review this request', (order.pk,)),
@@ -78,12 +75,10 @@ class OperationsTemplateTests(OperationsFixture):
                 self.assert_page(route, heading, args)
 
     def test_doctors_cannot_open_operations_detail_pages(self):
-        batch = self.receive()
         shipment = self.shipment(quantity=1)
         order = self.submitted_order()
         self.login(self.doctor)
-        for route, pk in (('ops-product-detail', self.product.pk), ('ops-batch-detail', batch.pk),
-                          ('ops-shipment-detail', shipment.pk), ('ops-order-detail', order.pk)):
+        for route, pk in (('ops-product-detail', self.product.pk), ('ops-shipment-detail', shipment.pk), ('ops-order-detail', order.pk)):
             self.assertEqual(self.client.get(reverse(f'portal:{route}', args=[pk])).status_code, 403)
 
     def test_patient_catalogue_and_basket_show_no_payment_flow(self):
@@ -110,7 +105,6 @@ class OperationsTemplateTests(OperationsFixture):
         self.assertNotContains(detail, 'Cancel supply request')
 
     def test_dispatch_page_uses_original_snapshot_product_and_patient_names(self):
-        self.receive()
         dispatched = dispatch_shipment(shipment=self.locked(), actor=self.admin, tracking_number='TRACK-SNAPSHOT', confirm=True)
         MedicationProduct.objects.filter(pk=self.product.pk).update(name='Changed live name')
         self.login(self.admin)
@@ -120,14 +114,12 @@ class OperationsTemplateTests(OperationsFixture):
 
     @skipUnless(os.environ.get('MERIDIAN_PLAYWRIGHT_PATH'), 'Optional local browser runner is not configured')
     def test_responsive_supply_layout_with_synthetic_test_data(self):
-        batch = self.receive()
         shipment = self.shipment(quantity=1)
         order = self.submitted_order()
         pages = []
         self.login(self.super_admin)
         for route, args in (
-            ('ops-catalogue', ()), ('ops-product-create', ()), ('ops-stock', ()),
-            ('ops-stock-receive', ()), ('ops-batch-detail', (batch.pk,)), ('ops-shipping', ()),
+            ('ops-catalogue', ()), ('ops-product-create', ()), ('ops-shipping', ()),
             ('ops-shipment-detail', (shipment.pk,)), ('ops-orders', ()), ('ops-order-detail', (order.pk,)),
         ):
             response = self.client.get(reverse(f'portal:{route}', args=args))
@@ -143,4 +135,4 @@ class OperationsTemplateTests(OperationsFixture):
                                 input=json.dumps(pages), text=True, capture_output=True, timeout=90, cwd=settings.BASE_DIR)
         self.assertEqual(result.returncode, 0, result.stderr)
         data = json.loads(result.stdout)
-        self.assertEqual(data['checked'], 39)
+        self.assertEqual(data['checked'], 30)

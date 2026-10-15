@@ -32,3 +32,48 @@
 .treatment-workspace details > summary { padding: 1rem 1.5rem; cursor: pointer; font-weight: 600; }
 @media (max-width: 58rem) { .treatment-grid { grid-template-columns: 1fr; } .treatment-table { min-width: 42rem; } }
 @media (max-width: 38rem) { .treatment-panel { padding: 1rem; } .treatment-fields { grid-template-columns: 1fr; } .treatment-facts > div { flex-direction: column; gap: .3rem; } .treatment-facts dd { text-align: left; } .treatment-actions .console-button { flex: 1 1 auto; justify-content: center; } }
+
+/* My Treatment: the week of treatment, how the dose works and a starting plan's steps. */
+.patient-course { margin-top: .9rem; }
+.patient-course__head { align-items: baseline; display: flex; flex-wrap: wrap; gap: .2rem .8rem; justify-content: space-between; }
+.patient-course__head strong { color: var(--console-ink); font-size: .9rem; font-weight: 600; }
+.patient-course__head span { color: var(--console-muted); font-size: .78rem; }
+.patient-course__track { background: var(--console-soft-line); border-radius: 999px; height: .4rem; margin-top: .45rem; overflow: hidden; }
+.patient-course__track span { background: var(--console-teal); border-radius: inherit; display: block; height: 100%; min-width: .4rem; }
+/* Your treatment timeline, in a dialog: a row a week, each with its dose, pens, payments and prescription changes. */
+.patient-timeline__key { display: flex; flex-wrap: wrap; gap: .35rem; list-style: none; margin: 0; padding: 0; }
+.patient-timeline__weeks { display: grid; gap: .35rem; list-style: none; margin: .9rem 0 1rem; padding: 0; }
+/* Five equal columns: the week, then Prescription, Shipment, Dosage and Payment, each centred in the row. */
+.patient-timeline.app-dialog { max-width: min(62rem, calc(100vw - 2rem)); }
+.patient-timeline__week { align-items: center; background: #fff; border: 1px solid var(--console-soft-line); border-radius: .75rem; display: grid; gap: .45rem .7rem; grid-template-columns: repeat(5, minmax(0, 1fr)); padding: .6rem .8rem; position: relative; }
+.patient-timeline__week.is-past { opacity: .6; }
+/* Where the patient is (or, before week 1, what is next): a teal border, with a small label above it. */
+.patient-timeline__week.is-current, .patient-timeline__week.is-next { border-color: var(--console-teal); box-shadow: 0 0 0 1px var(--console-teal); margin-top: 1.1rem; }
+.patient-timeline__here { color: var(--console-teal-dark); font-size: .66rem; font-weight: 700; left: .85rem; letter-spacing: .07em; position: absolute; text-transform: uppercase; top: -1.15rem; }
+.patient-timeline__when { display: grid; gap: .1rem; justify-items: start; }
+.patient-timeline__when strong { color: var(--console-ink); font-size: .86rem; font-weight: 600; }
+.patient-timeline__when span { color: var(--console-muted); font-size: .76rem; }
+.patient-timeline__cell { display: grid; gap: .3rem; min-width: 0; }
+.patient-timeline__cell .patient-timeline__chip { display: grid; }
+.patient-timeline__chip { border: 1px solid transparent; border-radius: .55rem; color: var(--console-ink); display: inline-grid; font-size: .8rem; font-weight: 500; line-height: 1.35; padding: .3rem .55rem; }
+.patient-timeline__chip small { color: var(--console-muted); font-size: .72rem; font-weight: 400; }
+.patient-timeline__chip--dose { background: #e9f6f3; border-color: #cfe9e3; }
+.patient-timeline__chip--dose.is-empty { background: transparent; border-style: dashed; color: var(--console-muted); }
+.patient-timeline__chip--parcel { background: #ecf3fb; border-color: #d3e3f5; }
+.patient-timeline__chip--payment { background: #fbf4e6; border-color: #f0e1bf; }
+.patient-timeline__chip--event { background: #f4eefb; border-color: #e2d6f3; }
+@media (max-width: 480px) {
+  .patient-timeline__when { align-items: baseline; grid-auto-flow: column; justify-content: start; gap: .5rem; }
+}
+/* On a phone, the week sits above its three columns. */
+@media (max-width: 600px) {
+  .patient-timeline__week { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .patient-timeline__week .patient-timeline__when { grid-column: 1 / -1; }
+  .patient-timeline__week { gap: .45rem .4rem; }
+  .patient-timeline__week .patient-timeline__chip { font-size: .74rem; padding: .25rem .4rem; }
+  /* The key names each column, so the chips drop the words it repeats. */
+  .patient-timeline__word { display: none; }
+  /* A decision spans the row above the three columns; a week without one doesn't leave a gap. */
+  .patient-timeline__cell--decision { grid-column: 1 / -1; }
+  .patient-timeline__cell--decision:empty { display: none; }
+}

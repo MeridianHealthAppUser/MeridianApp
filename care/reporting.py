@@ -6,13 +6,13 @@ from zoneinfo import ZoneInfo
 
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
-from django.db.models import Avg, Count, ExpressionWrapper, F, FloatField, OuterRef, Q, Subquery, Sum
+from django.db.models import Avg, Count, ExpressionWrapper, F, FloatField, OuterRef, Q, Subquery
 from django.db.models.functions import Cast, TruncDate, TruncMonth
 from django.utils import timezone
 
 from practices.models import Company, CompanyMembership, Patient
 from practices.tenancy import require_enabled_company, require_multi_practice, scope_queryset
-from .models import (Appointment, DoctorActivityStatement, LabRequest, Lead, MedicationBatch,
+from .models import (Appointment, DoctorActivityStatement, LabRequest, Lead,
                      PatientMessage, PatientSubscription, Shipment, WeightEntry)
 from .operations import require_operations_actor
 from .services import record_audit
@@ -102,9 +102,6 @@ def operational_metrics(*, actor, company, scope, start, end):
     shipments = Shipment.objects.filter(company_id__in=company_ids, patient__company_id=F('company_id'), dispatched_at__gte=lower, dispatched_at__lt=upper, status__in=('dispatched', 'delivered'))
     plans = PatientSubscription.objects.filter(company_id__in=company_ids, patient__company_id=F('company_id'))
     labs = LabRequest.objects.filter(company_id__in=company_ids, patient__company_id=F('company_id'), created_at__gte=lower, created_at__lt=upper)
-    quantities = MedicationBatch.objects.filter(company_id__in=company_ids, product__company_id=F('company_id'),
-        status__in=('available', 'low'), expires_on__gt=reporting_today(), quantity_on_hand__gt=0).filter(
-        Q(product__requires_cold_chain=False) | Q(cold_chain_confirmed=True)).aggregate(value=Sum('quantity_on_hand'))['value'] or 0
     rows = [
         ('Active patient records now', patients.count()),
         ('New patient records in period', new_patients.count()),
@@ -117,7 +114,6 @@ def operational_metrics(*, actor, company, scope, start, end):
         ('Cancelled appointments in period', appointments.filter(status='cancelled').count()),
         ('Dispatches recorded in period', shipments.count()),
         ('Delivered from those dispatches', shipments.filter(status='delivered').count()),
-        ('Unexpired available stock units now', quantities),
         ('Lab requests created in period', labs.count()),
         ('Those lab requests reviewed', labs.filter(status='reviewed').count()),
     ]

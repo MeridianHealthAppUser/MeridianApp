@@ -3,6 +3,18 @@
 {% block breadcrumbs %}{% breadcrumbs 'Practice settings' %}{% endblock %}
 {% block page_heading %}<header class="staff-page-header"><div><h1>Practice settings</h1><p>Settings for {{ company.name }}. Only Super Admins can change these.</p></div></header>{% endblock %}
 {% block page_content %}
+<section class="staff-page-card practice-shipping-settings" aria-labelledby="shipping-heading">
+  <div class="staff-page-card__header"><div>
+    <h2 id="shipping-heading">Shipping</h2>
+    <p>Parcels are drafted from prescriptions for this day each week. Pens are ordered for the week’s parcels before it.</p>
+  </div></div>
+  <form class="console-form practice-settings-form" method="post">
+    {% csrf_token %}<input type="hidden" name="section" value="shipping">
+    {{ shipping_form.non_field_errors }}
+    {% include 'portal/includes/form_field.html' with field=shipping_form.shipping_weekday %}
+    <button class="console-button console-button--primary" type="submit">Save settings</button>
+  </form>
+</section>
 <section class="staff-page-card event-log-settings" aria-labelledby="event-log-heading">
   <div class="staff-page-card__header"><div>
     <h2 id="event-log-heading">Event log settings</h2>

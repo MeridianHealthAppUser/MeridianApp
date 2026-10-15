@@ -236,7 +236,7 @@ class ActivateCompanyView(LoginRequiredMixin, View):
                     return redirect(destination)
         # Admin, Operations and Insights pages; the Clinician role is sent to the overview instead.
         for destination in ('portal:staff-leads', 'portal:dropouts', 'portal:staff-data-requests',
-                            'portal:ops-catalogue', 'portal:ops-stock', 'portal:ops-shipping', 'portal:ops-history', 'portal:ops-orders',
+                            'portal:ops-catalogue', 'portal:ops-shipping', 'portal:ops-history', 'portal:ops-orders',
                             'portal:treatment-subscriptions', 'portal:metrics'):
             if next_path.startswith(reverse(destination)):
                 membership = active_membership_for(request, company)

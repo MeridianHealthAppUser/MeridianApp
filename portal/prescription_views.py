@@ -10,9 +10,10 @@ from django.views import View
 from django.views.decorators.cache import never_cache
 
 from care.clinical_summary import FIELDS, edit_summary
-from care.models import MedicationProduct, StartingPlan, TreatmentAuthorization
+from care.models import MedicationDose, StartingPlan, TreatmentAuthorization
 from care.prescriptions import (
-    MONTH_CHOICES, change_prescription, current_prescription, plan_steps, prescription_options, renew_prescription,
+    DEFAULT_WEEKS, WEEK_CHOICES, change_prescription, current_prescription, plan_steps, prescription_options,
+    renew_prescription, weeks_text,
 )
 from care.starting_plans import initiate_prescription, offered_plans
 from practices.models import Patient
@@ -22,32 +23,32 @@ from .views import StaffCompanyRequiredMixin
 from .workflow_context import validate_workflow_context
 
 
-MONTHS = [(str(months), f'{months} month{"" if months == 1 else "s"}') for months in MONTH_CHOICES]
+WEEKS = [(str(weeks), weeks_text(weeks)) for weeks in WEEK_CHOICES]
 
 
 class RenewPrescriptionForm(forms.Form):
     current = forms.IntegerField(widget=forms.HiddenInput)
-    months = forms.TypedChoiceField(choices=MONTHS, coerce=int, initial='6', widget=forms.RadioSelect)
+    weeks = forms.TypedChoiceField(choices=WEEKS, coerce=int, initial=str(DEFAULT_WEEKS), widget=forms.RadioSelect)
     acknowledge_flags = forms.BooleanField(required=False)
 
 
 class ChangePrescriptionForm(forms.Form):
     current = forms.IntegerField(required=False, widget=forms.HiddenInput)
     medicine = forms.CharField(max_length=255)
-    product = forms.ModelChoiceField(queryset=MedicationProduct.objects.none(), label='Dose')
-    months = forms.TypedChoiceField(choices=MONTHS, coerce=int, initial='6', widget=forms.RadioSelect)
+    dose = forms.ModelChoiceField(queryset=MedicationDose.objects.none(), label='Dose')
+    weeks = forms.TypedChoiceField(choices=WEEKS, coerce=int, initial=str(DEFAULT_WEEKS), widget=forms.RadioSelect)
     reason = forms.CharField(required=False, max_length=500, label='Reason')
     acknowledge_flags = forms.BooleanField(required=False)
 
     def __init__(self, *args, options, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields['product'].queryset = MedicationProduct.objects.filter(
-            pk__in=[product.pk for doses in options.values() for product in doses])
+        self.fields['dose'].queryset = MedicationDose.objects.filter(
+            pk__in=[dose.pk for doses in options.values() for dose in doses]).select_related('pen')
 
     def clean(self):
         data = super().clean()
-        if data.get('product') and data.get('medicine') and data['product'].name != data['medicine']:
-            self.add_error('product', 'Choose a dose of the selected medicine.')
+        if data.get('dose') and data.get('medicine') and data['dose'].medicine != data['medicine']:
+            self.add_error('dose', 'Choose a dose of the selected medicine.')
         return data
 
 
@@ -58,7 +59,7 @@ class InitiatePrescriptionForm(forms.Form):
     medicine = forms.CharField(max_length=255)
     plan = forms.ModelChoiceField(queryset=StartingPlan.objects.none(), label='Starting plan',
                                   error_messages={'required': 'Choose a starting plan.'})
-    months = forms.TypedChoiceField(choices=MONTHS, coerce=int, widget=forms.RadioSelect)
+    weeks = forms.TypedChoiceField(choices=WEEKS, coerce=int, widget=forms.RadioSelect)
     reason = forms.CharField(required=False, max_length=500, label='Reason')
     acknowledge_flags = forms.BooleanField(required=False)
 
@@ -117,7 +118,7 @@ class PrescriptionRenewView(RecordActionMixin, View):
                 validate_workflow_context(request, self.company, 'patient-prescription', patient=patient)
                 renewal = renew_prescription(
                     company=self.company, patient=patient, actor=request.user,
-                    current=self.current(patient, form.cleaned_data['current']), months=form.cleaned_data['months'],
+                    current=self.current(patient, form.cleaned_data['current']), weeks=form.cleaned_data['weeks'],
                     acknowledge_flags=form.cleaned_data['acknowledge_flags'], request=request,
                 )
                 messages.success(request, f'Prescription renewed to {renewal.expires_on:%-d %b %Y}. It is written to the clinical log under your name.')
@@ -140,8 +141,8 @@ class PrescriptionChangeView(RecordActionMixin, View):
                 validate_workflow_context(request, self.company, 'patient-prescription', patient=patient)
                 prescription = change_prescription(
                     company=self.company, patient=patient, actor=request.user,
-                    current=self.current(patient, form.cleaned_data['current']), product=form.cleaned_data['product'],
-                    months=form.cleaned_data['months'], reason=form.cleaned_data['reason'],
+                    current=self.current(patient, form.cleaned_data['current']), dose=form.cleaned_data['dose'],
+                    weeks=form.cleaned_data['weeks'], reason=form.cleaned_data['reason'],
                     acknowledge_flags=form.cleaned_data['acknowledge_flags'], request=request,
                 )
                 messages.success(request, f'Prescription saved: {prescription.product.name} {prescription.max_dose} to '
@@ -165,7 +166,7 @@ class PrescriptionInitiateView(RecordActionMixin, View):
                 first = initiate_prescription(
                     company=self.company, patient=patient, actor=request.user,
                     current=self.current(patient, form.cleaned_data['current']), plan=form.cleaned_data['plan'],
-                    months=form.cleaned_data['months'], reason=form.cleaned_data['reason'],
+                    weeks=form.cleaned_data['weeks'], reason=form.cleaned_data['reason'],
                     acknowledge_flags=form.cleaned_data['acknowledge_flags'], request=request,
                 )
                 messages.success(request, f'Prescription initiated to {plan_steps(first).last().expires_on:%-d %b %Y}, starting on '

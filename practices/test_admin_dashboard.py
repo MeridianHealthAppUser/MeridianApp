@@ -71,8 +71,7 @@ class AdminDashboardTests(TestCase):
         for company in (self.company, self.other, self.archived):
             patient = self.patient(company)
             self.appointment(patient)
-            PatientSubscription.objects.create(company=company, patient=patient, plan_name='PRIVATE_PLAN',
-                                               monthly_amount=Decimal('399.99'))
+            PatientSubscription.objects.create(company=company, patient=patient, plan_name='PRIVATE_PLAN')
             self.invoice(patient, Decimal('100.01'))
             ClinicalTask.objects.create(company=company, patient=patient, title='PRIVATE_TASK',
                                         due_at=self.now - timedelta(hours=1))

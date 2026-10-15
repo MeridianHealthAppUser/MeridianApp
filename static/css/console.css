@@ -1387,6 +1387,7 @@
 .event-log-optional { border-top: 1px solid var(--console-soft-line); padding-top: 1rem; }
 .event-log-optional h3 { color: var(--console-ink); font-size: .85rem; margin: 0; }
 .practice-settings-form { max-width: 46rem; padding: 0 1.2rem 1.2rem; }
+.practice-shipping-settings .practice-settings-form { padding-top: 1rem; }
 .practice-settings-form .helptext { color: var(--console-muted); font-size: .76rem; line-height: 1.5; }
 .practice-settings-form > .console-button { justify-self: start; }
 

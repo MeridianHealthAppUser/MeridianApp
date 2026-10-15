@@ -56,6 +56,16 @@ class ViewLogSettingTests(TestCase):
         self.client.get(reverse('portal:patient-detail', args=[self.patient.pk]))
         self.assertTrue(AuditEvent.objects.filter(action='patient.record_viewed', actor=self.super_admin).exists())
 
+    def test_the_shipping_day_is_saved_on_its_own(self):
+        url = reverse('portal:practice-settings')
+        self.login(self.super_admin)
+        self.assertContains(self.client.get(url), 'Parcels go out on')
+        self.assertEqual(self.client.post(url, {'section': 'shipping', 'shipping_weekday': '9'}).status_code, 400)
+        self.assertRedirects(self.client.post(url, {'section': 'shipping', 'shipping_weekday': '4'}), url, fetch_redirect_response=False)
+        settings_row = PracticeSettings.objects.get(company=self.company)
+        self.assertEqual((settings_row.shipping_weekday, settings_row.store_view_log), (4, False))
+        self.assertEqual(AuditEvent.objects.get(action='practice.settings_updated').metadata, {'shipping_weekday': 4})
+
     def test_stored_view_events_are_never_shown_in_the_app(self):
         PracticeSettings.objects.create(company=self.company, store_view_log=True)
         self.login(self.doctor)

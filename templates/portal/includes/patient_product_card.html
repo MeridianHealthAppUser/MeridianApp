@@ -11,7 +11,7 @@
     {% else %}
       {% if product.plan %}
         <div class="patient-product__plan">
-          <span>Subscription {% if product.plan.status == 'active' %}active{% else %}{{ product.plan.get_status_display|lower }}{% endif %}: <strong>R{{ product.plan.monthly_amount|floatformat:"-2" }} / month</strong></span>
+          <span>Subscription {% if product.plan.status == 'active' %}active{% else %}{{ product.plan.get_status_display|lower }}{% endif %}{% if product.plan_dose.price is not None %}: <strong>R{{ product.plan_dose.price|floatformat:"-2" }} {{ product.plan_dose.billing_text }}</strong>{% endif %}</span>
           <a class="console-button console-button--secondary" href="{% url 'portal:patient-treatment' %}#treatment-plan">Manage subscription</a>
         </div>
       {% endif %}

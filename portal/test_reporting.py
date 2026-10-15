@@ -337,7 +337,7 @@ class FollowUpImportSafetyTests(ReportingPortalFixture):
 
     def test_foreign_patient_import_cannot_appear_in_dropouts_or_accept_followup(self):
         malformed = PatientSubscription.objects.create(company=self.company, patient=self.beta_patient,
-            status='cancelled', plan_name='Foreign patient plan', monthly_amount=1)
+            status='cancelled', plan_name='Foreign patient plan')
         response = self.get('dropouts')
         self.assertNotContains(response, 'Foreign patient plan')
         self.assertNotContains(response, f'{self.beta_patient.first_name} {self.beta_patient.last_name}')

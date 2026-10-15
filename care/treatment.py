@@ -5,12 +5,13 @@ from uuid import UUID
 
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
+from django.db.models import Q
 from django.utils import timezone
 
 from practices.models import CompanyMembership
 
 from .clinical import _active_actor, _lock_context, _require_doctor
-from .models import AuditEvent, MedicationProduct, PatientEvent, PatientSubscription, PracticeSettings, Shipment, TreatmentAuthorization
+from .models import AuditEvent, MedicationProduct, PatientEvent, PatientSubscription, Shipment, TreatmentAuthorization
 from .services import record_audit
 
 
@@ -42,9 +43,18 @@ def step_in_effect(authorization, on_date=None):
         company_id=authorization.company_id, patient_id=authorization.patient_id, plan_key=authorization.plan_key,
         starts_on__lte=day, expires_on__gte=day,
     ).exclude(status=TreatmentAuthorization.Status.CANCELLED).select_related(
-        'company', 'patient', 'product', 'prescribed_by',
+        'company', 'patient', 'product', 'dose__pen', 'prescribed_by',
     ).order_by('-plan_step', '-pk').first()
     return step or authorization
+
+
+def dose_in_effect(subscription, on_date=None):
+    """The catalogue dose a care plan supplies that day, whose price and billing interval are the plan's, or None
+    when its prescription isn't for a catalogue dose."""
+    if subscription is None or not subscription.authorization_id:
+        return None
+    authorization = step_in_effect(subscription.authorization, on_date)
+    return authorization.dose if authorization.dose_id else None
 
 
 def subscription_hold_reason(subscription, on_date=None):
@@ -96,11 +106,11 @@ def _event(record, title, detail):
     )
 
 
-def _hold_shipments(company, patient, subscriptions, reason):
+def _hold_shipments(company, patient, subscriptions, reason, authorizations=()):
     # A dispatched parcel is history. Only unfulfilled parcels for the affected
-    # plans are held; another treatment's shipments are not changed.
+    # plans or prescriptions are held; another treatment's shipments are not changed.
     shipments = Shipment.objects.select_for_update().for_company(company).filter(
-        patient=patient, subscription_id__in=subscriptions,
+        Q(subscription_id__in=subscriptions) | Q(authorization__in=authorizations), patient=patient,
         status__in=(Shipment.Status.DRAFT, Shipment.Status.READY, Shipment.Status.HELD),
     )
     return shipments.update(status=Shipment.Status.HELD, hold_reason=reason, updated_at=timezone.now())
@@ -186,7 +196,8 @@ def change_authorization_status(*, authorization, actor, action, request=None):
     plans = PatientSubscription.objects.select_for_update().for_company(company).filter(patient=patient, authorization=record).exclude(status=PatientSubscription.Status.CANCELLED)
     plan_ids = list(plans.values_list('pk', flat=True))
     plans.update(status=PatientSubscription.Status.PAUSED, next_debit_on=None, updated_at=timezone.now())
-    _hold_shipments(company, patient, plan_ids, 'Treatment authorisation paused or revoked. Doctor review is required.')
+    _hold_shipments(company, patient, plan_ids, 'Treatment authorisation paused or revoked. Doctor review is required.',
+                    authorizations=[record])
     record_audit(company=company, actor=actor, patient=patient, action=f'treatment.{action}', target=record, request=request)
     _event(record, 'Treatment paused' if action == 'pause' else 'Treatment authorisation revoked', 'Contact your care team about the next steps. Undispatched parcels for this treatment are on hold.')
     return record
@@ -216,16 +227,18 @@ def enroll_local_subscription(*, company, patient, actor, authorization, confirm
         if existing.status == PatientSubscription.Status.ACTIVE and existing.authorization_id == authorization.pk:
             return existing
         raise ValidationError('A local plan already exists. Manage that plan before enrolling again.')
-    settings = PracticeSettings.objects.for_company(company).first()
-    if settings is None:
-        raise ValidationError('Your practice must configure its local plan details before enrollment.')
     plan = PatientSubscription(
         company=company, patient=patient, authorization=authorization,
-        plan_name=f'{company.name[:210]} local care plan', monthly_amount=settings.standard_subscription_amount,
+        plan_name=f'{company.name[:210]} local care plan',
         starts_on=timezone.localdate(), review_due_on=authorization.expires_on, next_debit_on=None,
     )
     plan.full_clean()
     plan.save()
+    # Parcels already planned from the patient's prescription go out under the plan, so pausing it holds them.
+    Shipment.objects.for_company(company).filter(
+        patient=patient, subscription__isnull=True, authorization__isnull=False,
+        status__in=(Shipment.Status.DRAFT, Shipment.Status.READY, Shipment.Status.HELD),
+    ).update(subscription=plan, updated_at=timezone.now())
     record_audit(
         company=company, actor=actor, patient=patient, action='subscription.enrolled_local', target=plan, request=request,
         metadata={'submission_key': key, 'authorization_id': authorization.pk},

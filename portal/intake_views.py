@@ -128,6 +128,21 @@ class QuestionnaireView(PrivateIntakeView):
         return self.render_form(form, editing=editing, notices=notices)
 
 
+def treatment_pricing(company):
+    """Each medicine's starting plan with its doses' prices, and how often parcels go out across those doses."""
+    from care.starting_plans import published_prices
+
+    prices = published_prices(company)
+    weeks = sorted({row['dose'].dispatch_weeks for medicine in prices for row in medicine['rows']})
+    if not weeks:
+        ships = ''
+    elif len(weeks) == 1:
+        ships = 'Every week' if weeks[0] == 1 else f'Every {weeks[0]} weeks'
+    else:
+        ships = f'Every {weeks[0]} to {weeks[-1]} weeks, by dose'
+    return {'treatment_prices': prices, 'treatment_ships': ships}
+
+
 class QuestionnaireResultView(PrivateIntakeView):
     http_method_names = ('get', 'head', 'options')
     template_name = 'portal/questionnaire_result.html'
@@ -139,6 +154,7 @@ class QuestionnaireResultView(PrivateIntakeView):
             'lead': lead, 'company': lead.company, 'questionnaire': questionnaire,
             'screening_reasons': questionnaire.answers.get('screening_reasons', []) if questionnaire else [],
             'pricing': PracticeSettings.objects.for_company(lead.company).first(),
+            **treatment_pricing(lead.company),
             'demo_screening': settings.DEBUG,
             'can_continue': can_check_out(lead, questionnaire),
         }

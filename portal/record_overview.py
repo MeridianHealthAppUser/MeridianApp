@@ -17,12 +17,12 @@ from care.clinical_summary import (
     ANSWER_LABELS, FIELDS, FLAG_CHOICES, flag_level, get_summary, screening, summary_safety_flags,
 )
 from care.models import (
-    BloodResult, ClinicalEncounter, ClinicalNote, LabRequest, MedicationProduct, PatientSummaryEdit, Shipment,
-    TreatmentAuthorization, WeightEntry,
+    BloodResult, ClinicalEncounter, ClinicalNote, LabRequest, MedicationDose, MedicationProduct, PatientSummaryEdit,
+    Shipment, TreatmentAuthorization, WeightEntry,
 )
 from care.prescriptions import (
-    MONTH_CHOICES, current_prescription, expiry_preview, prescription_label, prescription_options, prescription_state,
-    renewal_expiry, strength_mg,
+    DEFAULT_WEEKS, WEEK_CHOICES, current_prescription, dose_mg, expiry_preview, prescription_label, prescription_options,
+    prescription_state, renewal_expiry,
 )
 
 from .record_chart import doctor_weight_chart
@@ -87,23 +87,24 @@ def clinical_log(company, patient, membership=None, viewer=None):
 
 
 def dispensed(company, patient):
-    """Shipments that left the dispensary, newest first, one line per medicine."""
+    """Shipments that left the dispensary, newest first, one line per medicine: the dose it was sent for, then the
+    pens (Semaglutide 0.25 mg weekly, 1 × 1 mg pen)."""
     rows = []
     for shipment in Shipment.objects.for_company(company).filter(
         patient=patient, status__in=(Shipment.Status.DISPATCHED, Shipment.Status.DELIVERED),
-    ).prefetch_related('items__product', 'items__batch').defer('dispatch_snapshot').order_by(
+    ).prefetch_related('items__product').defer('dispatch_snapshot').order_by(
         '-dispatched_at', '-scheduled_for', '-pk',
     )[:LOG_LIMIT]:
         day = timezone.localdate(shipment.dispatched_at) if shipment.dispatched_at else shipment.scheduled_for
         for item in shipment.items.all():
             unit = 'pen' if item.quantity == 1 else 'pens'
-            detail = []
-            if item.batch_id:
-                detail.append(f'Batch {item.batch.batch_number}, expiry {item.batch.expires_on:%m/%Y}')
+            detail = [f'{item.quantity} × {item.product.strength} {unit}'.replace('  ', ' ')]
+            if item.batch_note:
+                detail.append(f'Batch {item.batch_note}')
             if shipment.tracking_number:
                 detail.append(f'courier {shipment.tracking_number}')
-            rows.append({'id': f'shipment-{shipment.pk}-{item.pk}', 'date': day, 'product': item.product,
-                         'title': f'{item.product.name} {item.product.strength} × {item.quantity} {unit}'.replace('  ', ' '),
+            rows.append({'id': f'shipment-{shipment.pk}-{item.pk}', 'date': day, 'product': item.product, 'dose': item.dose,
+                         'title': f'{item.product.name} {item.dose or item.product.strength}'.strip(),
                          'tag': f'Month {shipment.cycle_number}', 'detail': ' · '.join(detail)})
     return rows
 
@@ -114,15 +115,16 @@ def record_chart(company, patient, summary, log, shipments):
     ).order_by('recorded_on', 'pk')]
     # Oldest first. Each main medicine shipped gets its own bars and colour, scaled to its own top dose.
     main = [row for row in reversed(shipments) if row['product'].category == MedicationProduct.Category.WEIGHT_MANAGEMENT
-            and strength_mg(row['product']) is not None]
+            and dose_mg(row['dose']) is not None]
     names = list(dict.fromkeys(row['product'].name for row in main))
     ladders = {}
-    for product in MedicationProduct.objects.for_company(company).filter(name__in=names):
-        if strength_mg(product) is not None:
-            ladders[product.name] = max(ladders.get(product.name, 0), strength_mg(product))
+    for row in main:
+        ladders[row['product'].name] = max(ladders.get(row['product'].name, 0), dose_mg(row['dose']))
+    for dose in MedicationDose.objects.for_company(company).filter(pen__name__in=names).select_related('pen'):
+        ladders[dose.medicine] = max(ladders.get(dose.medicine, 0), dose.amount_mg)
     medicines = [{'name': name, 'dose_max': ladders.get(name)} for name in names]
-    doses = [{'date': row['date'], 'dose': strength_mg(row['product']), 'medicine': row['product'].name,
-              'title': f'{row["date"]:%-d %b %Y} · {row["product"].name} {row["product"].strength} shipped'}
+    doses = [{'date': row['date'], 'dose': dose_mg(row['dose']), 'medicine': row['product'].name,
+              'title': f'{row["date"]:%-d %b %Y} · {row["title"]} shipped'}
              for row in main]
     consults = [{'date': timezone.localdate(entry['at']), 'id': entry['consult_id'], 'by': entry['by']}
                 for entry in log if entry['kind'] == 'consult']
@@ -202,18 +204,18 @@ def record_overview_context(request, company, membership, patient, *, log_filter
 
         first = next(iter(options.values()), [None])[0]
         context.update(
-            renew_form=RenewPrescriptionForm(initial={'months': '6', 'current': prescription.pk if prescription else None}),
+            renew_form=RenewPrescriptionForm(initial={'weeks': str(DEFAULT_WEEKS), 'current': prescription.pk if prescription else None}),
             change_form=ChangePrescriptionForm(options=options, initial={
-                'months': '6', 'current': prescription.pk if prescription else None,
-                'medicine': prescription.product.name if prescription else (first.name if first else ''),
-                'product': prescription.product_id if prescription else (first.pk if first else None),
+                'weeks': str(DEFAULT_WEEKS), 'current': prescription.pk if prescription else None,
+                'medicine': prescription.product.name if prescription else (first.medicine if first else ''),
+                'dose': prescription.dose_id if prescription else (first.pk if first else None),
             }),
         )
         context.update(
             prescription_context_token=make_workflow_context(request, company, 'patient-prescription', patient=patient),
-            renew_months=[{'months': months, 'expires_on': renewal_expiry(prescription, months, today)} for months in MONTH_CHOICES]
+            renew_weeks=[{'weeks': weeks, 'expires_on': renewal_expiry(prescription, weeks, today)} for weeks in WEEK_CHOICES]
             if prescription else [],
-            change_months=[{'months': months, 'expires_on': expiry_preview(months, today)} for months in MONTH_CHOICES],
+            change_weeks=[{'weeks': weeks, 'expires_on': expiry_preview(weeks, today)} for weeks in WEEK_CHOICES],
             prescription_choices=[{'name': name, 'doses': doses} for name, doses in options.items()],
         )
         context.update(initiate_context(company, prescription, today, InitiatePrescriptionForm))
@@ -229,22 +231,22 @@ def initiate_context(company, prescription, today, form_class):
     steps with their dates, so the dialog can show what will be prescribed before it is saved."""
     import json
 
-    from care.starting_plans import offered_plans, plan_month_choices, plan_schedule, plan_summary, schedule_text
+    from care.starting_plans import offered_plans, plan_schedule, plan_summary, plan_week_choices, schedule_text
 
     plans = offered_plans(company)
     for plan in plans:
         plan.summary = plan_summary(plan)
-        plan.month_choices = plan_month_choices(plan)
-        plan.default = plan.default_months if plan.default_months in plan.month_choices else plan.month_choices[-1]
-        plan.previews = json.dumps({str(months): schedule_text(plan_schedule(plan, months, today)) for months in plan.month_choices})
+        plan.week_choices = plan_week_choices(plan)
+        plan.default = plan.default_weeks if plan.default_weeks in plan.week_choices else plan.week_choices[-1]
+        plan.previews = json.dumps({str(weeks): schedule_text(plan_schedule(plan, weeks, today)) for weeks in plan.week_choices})
     medicines = list(dict.fromkeys(plan.medicine for plan in plans))
     first = plans[0] if plans else None
     return {
         'starting_plans': plans, 'starting_plan_medicines': medicines,
         'initiate_form': form_class(plans=plans, initial={
             'current': prescription.pk if prescription else None, 'medicine': first.medicine if first else '',
-            'plan': first.pk if first else None, 'months': str(first.default) if first else '6'}),
-        'initiate_months': [{'months': months, 'expires_on': expiry_preview(months, today)} for months in MONTH_CHOICES],
+            'plan': first.pk if first else None, 'weeks': str(first.default) if first else str(DEFAULT_WEEKS)}),
+        'initiate_weeks': [{'weeks': weeks, 'expires_on': expiry_preview(weeks, today)} for weeks in WEEK_CHOICES],
     }
 
 

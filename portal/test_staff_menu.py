@@ -66,7 +66,7 @@ class StaffMenuTests(TestCase):
 
     def test_doctors_see_no_operations_insights_or_settings_links_and_cannot_open_them(self):
         self.login('doctor')
-        pages = ('treatment-subscriptions', 'ops-orders', 'ops-shipping', 'ops-history', 'ops-stock', 'ops-catalogue',
+        pages = ('treatment-subscriptions', 'ops-orders', 'ops-shipping', 'ops-history', 'ops-catalogue',
                  'metrics', 'activity-statements', 'treatment-review-rules')
         overview = self.client.get(reverse('portal:desktop-dashboard'))
         self.assertNotIn('shipments_due', overview.context['metrics'])

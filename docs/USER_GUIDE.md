@@ -76,16 +76,17 @@ History links expire and recheck practice/role access. If the practice or your a
 
 No payment, email, external prescribing, Zoom or courier integration is connected.
 
-1. A Super Admin publishes a product in `/catalogue/`. Products with clinical/stock history retain their identity, strength and safety settings.
-2. A doctor records an explicit authorisation for that patient and product. The application does not choose medication or calculate a dose.
-3. The patient opens `/patient/pharmacy/`, updates their basket and submits a supply request with delivery details. A basket does not reserve physical stock; submitted requests count against the supply allowance.
-4. An administrator reviews `/supply-requests/` and accepts a request for a planned date. This creates a draft shipment only.
-5. Receive stock in `/stock/`. Batch identity, expiry, cold-chain confirmation and quantity changes have a ledger. Quarantine, release, adjustment and write-off require explicit actions; write-off is terminal.
-6. Prepare the shipment from `/shipping/`. Eligible batches are allocated by expiry order. Authorisation, allowance, treatment horizon, cold chain and stock sufficiency are checked atomically.
-7. Check and lock the prepared weekly list. Download the manifest if needed. Locking does not send anything.
-8. After actual dispatch, record a tracking reference and confirm dispatch. A fixed snapshot retains products, dose, quantity, batch, expiry and address. Record delivery separately. `/dispatch-history/` preserves that history.
+1. A Super Admin publishes a product in `/catalogue/`. For a main medicine the product is the pen the dispensary orders and sends (Semaglutide 0.25 mg). Products with clinical or supply history retain their identity, strength and safety settings.
+   - **Doses** are what doctors prescribe: the weekly mg, the pen it comes in, how many pens go out how often, and the price and how often it is billed (Tirzepatide 7.5 mg weekly, 1 × 10 mg pen every 5 weeks). Several doses can share a pen. Supply is entered as the practice dispenses it, never worked out from the mg in a pen. A dose without a price can't be prescribed. Once prescribed or in a starting plan, its pen, amount and supply are fixed; add a new dose for those changes. A step-up or only-if-necessary tier is shown when a doctor chooses it.
+   - **Starting plans** are steps of one dose for some weeks, then a last dose until the prescription ends (Semaglutide 0.25 mg weekly for 4 weeks, 0.5 mg weekly for 4 weeks, then 1 mg weekly). The questionnaire result shows each medicine's first plan with its prices.
+2. A doctor prescribes from the patient record: Initiate (a starting plan), Renew or Change, for 4 to 24 weeks. A care plan costs what the dose in effect costs. A doctor can also record an explicit authorisation for any product in `/authorisations/`. The application does not choose medication or calculate a dose.
+3. Saving a prescription drafts its parcels on the Weekly shipping list (`/shipping/`): on the practice's shipping day (Practice settings, Tuesday by default), the first on or after the prescription starts, then one every dispatch interval with the dose's pens. A renewal carries on the same rhythm. A change cancels the old prescription's drafts and holds any parcel already marked ready for review. Each parcel goes out within its own supply period: the dispensary can send a dose's pens once in each period, counted from when the patient started that dose.
+4. Ad-hoc parcels: **Create shipment** on the Weekly shipping list opens a dialog for the patient, product, pens and date. Patients can also request supplies from `/patient/pharmacy/`; an administrator accepts a request in `/supply-requests/`, which adds a draft parcel. Submitted requests count against the supply allowance.
+5. Each week, on `/shipping/`: change any draft that needs it (another day, other pens) from its page, then **Mark drafts ready**. Each draft is checked against its prescription, care plan and supply allowance; any that can't go stay drafts with the reason beside them.
+6. **Check and lock week** confirms the ready parcels, checking each again. **Pens to order** lists the week's pens by product, with a CSV for the supplier order. Pens aren't kept in stock: just enough is ordered for the week's parcels.
+7. After actual dispatch, record a tracking reference, and optionally each line's batch and expiry, and confirm dispatch. A fixed snapshot retains products, dose, quantity, batch note and address. Record delivery separately. `/dispatch-history/` preserves that history, and the manifest CSV includes the batch notes for tracing a recall.
 
-Preparation reserves inventory; recording dispatch does not deduct it twice. Cancelled, unshipped allocations are released. Invalid authorisations hold unshipped supply, never rewrite dispatched history. Shared allowance groups combine quantities but do not imply authorisation for other products or doses.
+Invalid authorisations hold unshipped parcels, never rewrite dispatched history. Shared allowance groups combine quantities but do not imply authorisation for other products or doses.
 
 ## Administration and insight
 

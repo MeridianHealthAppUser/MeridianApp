@@ -29,6 +29,7 @@ from care.models import (
     PatientEvent, PatientMedicalProfile, PatientMedicalProfileRevision,
     PatientSubscription, TreatmentAuthorization, WeightEntry,
 )
+from care.prescriptions import started, with_plan_ends
 from care.services import record_audit
 from practices.models import CompanyMembership, Patient
 from practices.tenancy import multi_practice_enabled, scope_queryset
@@ -134,10 +135,12 @@ def patient_directory_context(view):
     context = view.paginate(queryset, **filters)
     patients = list(context['page_obj'].object_list)
     authorizations, subscriptions = {}, {}
-    for authorization in scoped_source(TreatmentAuthorization, patients).filter(
+    # The prescription in effect, not a starting plan's later step saved ahead; it expires when its plan ends.
+    for authorization in started(scoped_source(TreatmentAuthorization, patients).filter(
         product__company_id=F('company_id'),
-    ).select_related('product').order_by('-starts_on', '-created_at', '-pk'):
+    )).select_related('product').order_by('-starts_on', '-created_at', '-pk'):
         authorizations.setdefault(authorization.patient_id, authorization)
+    with_plan_ends(list(authorizations.values()))
     for subscription in scoped_source(PatientSubscription, patients).order_by('-created_at', '-pk'):
         subscriptions.setdefault(subscription.patient_id, subscription)
     for patient in patients:
@@ -386,9 +389,9 @@ class ClinicalRecordAccessMixin(LoginRequiredMixin, StaffCompanyRequiredMixin):
 
     def sidebar(self):
         patient = self.patient
-        authorization = scoped_source(TreatmentAuthorization, [patient]).filter(
+        authorization = started(scoped_source(TreatmentAuthorization, [patient]).filter(
             product__company_id=F('company_id'),
-        ).select_related('product', 'prescribed_by').order_by('-starts_on', '-created_at', '-pk').first()
+        )).select_related('product', 'prescribed_by').order_by('-starts_on', '-created_at', '-pk').first()
         if authorization:
             authorization.is_current = (authorization.status == TreatmentAuthorization.Status.ACTIVE
                                         and authorization.starts_on <= timezone.localdate() <= authorization.expires_on)

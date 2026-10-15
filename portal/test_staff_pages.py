@@ -446,7 +446,7 @@ class StaffPagesTests(TestCase):
             self.assertNotContains(response, label)
 
     def test_practice_switch_sends_a_doctor_from_admin_only_pages_to_the_overview(self):
-        for name in ('ops-stock', 'treatment-subscriptions', 'metrics', 'treatment-review-rules', 'activity-statements'):
+        for name in ('ops-shipping', 'treatment-subscriptions', 'metrics', 'treatment-review-rules', 'activity-statements'):
             with self.subTest(section=name):
                 self.login()
                 response = self.client.post(reverse('portal:activate-company', args=[self.other_company.slug]),

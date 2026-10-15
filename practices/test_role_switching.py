@@ -302,7 +302,7 @@ class DoctorRoleContinuityTests(TestCase):
         authorization = self.authorization()
         plan = PatientSubscription.objects.create(
             company=self.company, patient=self.patient, authorization=authorization,
-            plan_name='Test care plan', monthly_amount=100,
+            plan_name='Test care plan',
         )
         self.assertTrue(authorization_is_current(authorization))
         self.assert_departure_blocked('active treatment authorisations')

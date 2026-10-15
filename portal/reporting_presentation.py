@@ -44,8 +44,7 @@ def metrics_dashboard(results):
     weight_rows = [dict(label=label, count=distribution[key], width=share(distribution[key], distribution['count']), tone=tone)
                    for key, label, tone in (('decrease', 'Lower recorded weight', 'teal'),
                                             ('unchanged', 'Unchanged', 'muted'), ('increase', 'Higher recorded weight', 'blue'))]
-    operations = [('Available stock', values['Unexpired available stock units now'], 'Unexpired units now'),
-                  ('Lab requests', values['Lab requests created in period'], 'Created in period'),
+    operations = [('Lab requests', values['Lab requests created in period'], 'Created in period'),
                   ('Labs reviewed', values['Those lab requests reviewed'], 'From those requests')]
     if 'New enquiries in practices you administer' in values:
         operations.append(('New enquiries', values['New enquiries in practices you administer'],

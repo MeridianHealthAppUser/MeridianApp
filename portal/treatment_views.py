@@ -13,10 +13,10 @@ from django.utils.decorators import method_decorator
 from django.views import View
 from django.views.decorators.cache import never_cache
 
-from care.models import AuditEvent, PatientSubscription, PracticeSettings, Shipment, TreatmentAuthorization
+from care.models import AuditEvent, PatientSubscription, Shipment, TreatmentAuthorization
 from care.treatment import (
     authorization_is_current, change_authorization_status, change_subscription_status,
-    create_authorization, enroll_local_subscription, subscription_hold_reason,
+    create_authorization, dose_in_effect, enroll_local_subscription, subscription_hold_reason,
 )
 from practices.models import CompanyMembership
 
@@ -36,7 +36,8 @@ def _authorizations(company, patient=None):
 
 def _plans(company, patient=None):
     records = PatientSubscription.objects.for_company(company).filter(patient__company=company, patient__is_active=True).select_related(
-        'company', 'patient', 'authorization__product', 'authorization__prescribed_by', 'authorization__company', 'authorization__patient',
+        'company', 'patient', 'authorization__product', 'authorization__dose__pen', 'authorization__prescribed_by',
+        'authorization__company', 'authorization__patient',
     ).order_by('-created_at', '-pk')
     return records.filter(patient=patient) if patient else records
 
@@ -159,10 +160,19 @@ class SubscriptionListView(LoginRequiredMixin, StaffCompanyRequiredMixin, View):
 
     def get(self, request):
         listing = _listing(request, self.company, _plans(self.company), PatientSubscription.Status.choices)
+        for plan in listing['page_obj']:
+            plan.dose = dose_in_effect(plan)
         return render(request, 'portal/treatment_subscriptions.html', dict(
             company=self.company, active_membership=self.membership, nav_section='subscriptions',
             can_read_clinical=self.membership.has_clinical_access, **listing,
         ))
+
+
+def _enrollment_form(company, patient):
+    """Start your subscription. With one current authorisation, it starts chosen."""
+    eligible = _eligible_authorizations(company, patient)
+    only = list(eligible[:2])
+    return EnrollmentForm(authorizations=eligible, initial={'authorization': only[0].pk} if len(only) == 1 else None)
 
 
 def _eligible_authorizations(company, patient):
@@ -194,7 +204,7 @@ def patient_treatment_context(request, company, patient, *, enrollment_form=None
     """My Treatment: tasks, the record the doctor has on file, and the care plan."""
     from .patient_summary import (
         current_authorization, intake_answers, latest_weight, medical_information, medical_profile,
-        next_consult, open_lab_requests, patient_tasks,
+        next_consult, open_lab_requests, patient_tasks, treatment_overview, treatment_timeline,
     )
 
     context = patient_page_context(request, company, patient, 'treatment', 'My Treatment')
@@ -204,6 +214,7 @@ def patient_treatment_context(request, company, patient, *, enrollment_form=None
     profile = medical_profile(company, patient)
     weight = latest_weight(company, patient)
     authorizations = Paginator(_authorizations(company, patient), 20).get_page(request.GET.get('page'))
+    treatment_authorization = current.authorization if current and current.authorization_id else authorization
     for item in authorizations.object_list:
         item.is_current = authorization_is_current(item)
     context.update(
@@ -225,12 +236,19 @@ def patient_treatment_context(request, company, patient, *, enrollment_form=None
         page_obj=authorizations,
         plans_page=Paginator(_plans(company, patient), 20).get_page(request.GET.get('plans_page')),
         shipments_page=Paginator(Shipment.objects.for_company(company).filter(patient=patient).order_by('-scheduled_for', '-pk'), 20).get_page(request.GET.get('shipments_page')),
-        enrollment_form=enrollment_form if enrollment_form is not None else EnrollmentForm(authorizations=_eligible_authorizations(company, patient)),
+        enrollment_form=enrollment_form if enrollment_form is not None else _enrollment_form(company, patient),
         action_form=action_form if action_form is not None else ConfirmTreatmentForm(),
         action_plan=action_plan or current,
         enrollment_context=_token(request, company, patient, 'subscription-enroll') if enrollment_form is not None else make_treatment_context(request, company, patient, 'subscription-enroll'),
         action_context=_token(request, company, patient, 'subscription-status', action_plan or current) if action_form is not None else make_treatment_context(request, company, patient, 'subscription-status', current),
-        plan_settings=PracticeSettings.objects.for_company(company).first(),
+        # The plan costs what the dose in effect costs; before enrolling, what the current prescription's dose costs.
+        plan_dose=dose_in_effect(current) if current else None,
+        enroll_dose=authorization.dose if authorization is not None and authorization.dose_id else None,
+        # The prescription in detail: dose, pens, week of treatment, a starting plan's steps and the next parcel.
+        treatment=treatment_overview(company, patient, treatment_authorization),
+        # Week by week: the dose, the pens sent and the payments due.
+        timeline=treatment_timeline(company, patient, treatment_authorization),
+        timeline_open=request.GET.get('timeline') == '1',
     )
     return context
 

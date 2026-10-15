@@ -10,7 +10,7 @@ from django.test import RequestFactory
 
 from practices.models import CompanyMembership, Patient
 from . import models
-from .models import AuditEvent, MedicationProduct, Payment, Shipment, StockMovement
+from .models import AuditEvent, MedicationProduct, Payment, Shipment
 from .shipment_intake import create_manual_shipment
 from .test_operations import OperationsFixture
 
@@ -29,8 +29,6 @@ class ShipmentIntakeTests(OperationsFixture):
         self.assertEqual(shipment.patient, self.patient)
         self.assertEqual(shipment.company, self.company)
         self.assertEqual(shipment.items.get().dose, self.auth.max_dose)
-        self.assertIsNone(shipment.items.get().batch_id)
-        self.assertFalse(StockMovement.objects.exists())
         self.assertFalse(Payment.objects.exists())
         self.assertEqual(get_user_model().objects.count(), before)
         self.assertEqual(AuditEvent.objects.filter(action='shipment.created').count(), 1)
@@ -98,7 +96,7 @@ class ShipmentIntakeTests(OperationsFixture):
 class OperationsAdminGuardTests(OperationsFixture):
     guarded_models = (
         models.MedicationProduct, models.TreatmentAuthorization, models.PatientSubscription,
-        models.MedicationBatch, models.StockMovement, models.Shipment, models.ShipmentItem,
+        models.Shipment, models.ShipmentItem,
         models.PharmacyOrder, models.PharmacyOrderItem, models.AuditEvent,
         models.AdministrativeFollowUp, models.PatientCommunicationPreference, models.PatientDataRequest,
         models.PatientDataRequestReply, models.DoctorActivityStatement,
@@ -157,17 +155,18 @@ class OperationsAdminGuardTests(OperationsFixture):
             model_admin.delete_queryset(self.request, models.ClinicalTask.objects.filter(pk=task.pk))
         self.assertTrue(models.ClinicalTask.objects.filter(pk=task.pk).exists())
 
-    def test_real_admin_post_cannot_edit_stock_or_delete_audit_records(self):
-        batch = self.receive()
+    def test_real_admin_post_cannot_edit_shipments_or_delete_audit_records(self):
+        shipment = self.locked()
         self.client.force_login(self.request.user)
         from django.urls import reverse
-        edit = reverse('admin:care_medicationbatch_change', args=[batch.pk])
+        edit = reverse('admin:care_shipment_change', args=[shipment.pk])
         self.assertEqual(self.client.get(edit).status_code, 200)
-        self.assertEqual(self.client.post(edit, {'quantity_on_hand': 999}).status_code, 403)
-        event = AuditEvent.objects.get(action='stock.received')
+        self.assertEqual(self.client.post(edit, {'status': 'dispatched'}).status_code, 403)
+        event = AuditEvent.objects.get(action='shipment.locked')
         delete = reverse('admin:care_auditevent_delete', args=[event.pk])
         self.assertEqual(self.client.post(delete, {'post': 'yes'}).status_code, 403)
         self.assertEqual(self.client.post(reverse('admin:care_auditevent_changelist'),
             {'action': 'delete_selected', '_selected_action': event.pk, 'post': 'yes'}).status_code, 200)
         self.assertTrue(AuditEvent.objects.filter(pk=event.pk).exists())
-        self.assert_stock(batch, 10)
+        shipment.refresh_from_db()
+        self.assertEqual(shipment.status, 'ready')

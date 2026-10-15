@@ -14,7 +14,7 @@ from django.test.utils import CaptureQueriesContext
 from django.utils import timezone
 
 from practices.models import Company, CompanyMembership, Patient
-from .models import (Appointment, AuditEvent, DoctorActivityStatement, LabRequest, Lead, MedicationBatch,
+from .models import (Appointment, AuditEvent, DoctorActivityStatement, LabRequest, Lead,
                      MessageThread, PatientMessage, PatientSubscription, Payment, Shipment, WeightEntry)
 from .reporting import (approve_activity_statement, create_activity_statement, doctor_activity,
                         operational_metrics, period_bounds, refresh_activity_statement, report_companies)
@@ -135,22 +135,11 @@ class ReportCalculationTests(ReportingFixture):
         self.appointment(starts_at=upper)
         self.assertEqual(dict(self.metrics()['metrics'])['Completed appointments in period'], 2)
 
-    def test_available_stock_includes_low_batches_but_not_expired_or_unsafe_batches(self):
-        self.receive(quantity=2)
-        low = self.receive(quantity=3)
-        MedicationBatch.objects.filter(pk=low.pk).update(status='low')
-        expired = self.receive(quantity=7)
-        MedicationBatch.objects.filter(pk=expired.pk).update(expires_on=self.today)
-        unsafe = self.receive(quantity=11)
-        MedicationBatch.objects.filter(pk=unsafe.pk).update(cold_chain_confirmed=False)
-        self.receive(quantity=13, cold_chain_confirmed=False)
-        self.assertEqual(dict(self.metrics()['metrics'])['Unexpired available stock units now'], 5)
-
     def test_malformed_cross_practice_imports_do_not_enter_counts_or_activity(self):
         self.appointment(patient=self.beta_patient)
         LabRequest.objects.create(company=self.company, patient=self.beta_patient, requested_by=self.doctor, panel_name='Foreign lab')
         LabRequest.objects.filter(patient=self.beta_patient).update(created_at=self.at(self.start))
-        PatientSubscription.objects.create(company=self.company, patient=self.beta_patient, plan_name='Wrong tenant', monthly_amount=1)
+        PatientSubscription.objects.create(company=self.company, patient=self.beta_patient, plan_name='Wrong tenant')
         self.message(patient=self.beta_patient)
         report = dict(self.metrics()['metrics'])
         self.assertEqual(report['Completed appointments in period'], 0)
@@ -252,7 +241,7 @@ class ReportAnalyticsTests(ReportingFixture):
             self.appointment(status=status)
         for status in PatientSubscription.Status.values:
             PatientSubscription.objects.create(company=self.company, patient=self.other_patient,
-                plan_name='Recorded local plan', monthly_amount=0, status=status, starts_on=self.end + timedelta(days=50))
+                plan_name='Recorded local plan', status=status, starts_on=self.end + timedelta(days=50))
         report = self.metrics()
         self.assertEqual(self.status_counts(report, 'appointment_status'), dict.fromkeys(Appointment.Status.values, 1))
         self.assertEqual(self.status_counts(report, 'plan_status'), {'active': 2, 'payment_retry': 1, 'paused': 1, 'cancelled': 1})
@@ -293,7 +282,7 @@ class ReportAnalyticsTests(ReportingFixture):
     def test_cross_practice_imports_are_excluded_from_every_analytic_group(self):
         self.appointment(patient=self.beta_patient)
         self.dispatch(self.at(self.start), patient=self.beta_patient)
-        PatientSubscription.objects.create(company=self.company, patient=self.beta_patient, plan_name='Wrong tenant', monthly_amount=0)
+        PatientSubscription.objects.create(company=self.company, patient=self.beta_patient, plan_name='Wrong tenant')
         for day, weight in ((self.start, 100), (self.end, 90)):
             WeightEntry.objects.create(company=self.beta, patient=self.patient, recorded_on=day, weight_kg=weight)
         report = self.metrics()
@@ -309,7 +298,7 @@ class ReportAnalyticsTests(ReportingFixture):
         self.dispatch(self.at(self.start))
         self.dispatch(self.at(self.start), company=self.beta, patient=self.beta_patient)
         Patient.objects.all().update(created_at=self.at(self.start))
-        PatientSubscription.objects.create(company=self.beta, patient=self.beta_patient, plan_name='Beta local plan', monthly_amount=0)
+        PatientSubscription.objects.create(company=self.beta, patient=self.beta_patient, plan_name='Beta local plan')
         current = self.metrics(actor=self.doctor)
         combined = self.metrics(actor=self.doctor, scope='all')
         for key in ('appointments', 'dispatches'):

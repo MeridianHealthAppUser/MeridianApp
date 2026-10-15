@@ -33,8 +33,7 @@ class RecordEditsTests(TestCase):
             CompanyMembership.objects.create(company=cls.company, user=user, role=role, clinician_type=kind)
         cls.patient = Patient.objects.create(company=cls.company, first_name='Nadia', last_name='Mokoena', assigned_doctor=cls.doctor)
         cls.product = MedicationProduct.objects.create(company=cls.company, name='Semaglutide', strength='0.5 mg', price='100.00',
-                                                       category=MedicationProduct.Category.WEIGHT_MANAGEMENT,
-                                                       dose_frequency=MedicationProduct.DoseFrequency.WEEKLY)
+                                                       category=MedicationProduct.Category.WEIGHT_MANAGEMENT)
         today = timezone.localdate()
         cls.prescription = TreatmentAuthorization.objects.create(
             company=cls.company, patient=cls.patient, prescribed_by=cls.doctor, product=cls.product, max_dose='0.5 mg weekly',
@@ -110,7 +109,7 @@ class RecordEditsTests(TestCase):
         self.login(self.owner)
         response = self.client.post(reverse('portal:patient-prescription-renew', args=[self.patient.pk]), {
             'workflow_context': make_workflow_context(request, self.company, 'patient-prescription', patient=self.patient),
-            'current': self.prescription.pk, 'months': '3'})
+            'current': self.prescription.pk, 'weeks': '12'})
         self.assertEqual(response.status_code, 302)
         self.patient.refresh_from_db()
         self.assertEqual(self.patient.assigned_doctor, self.owner)

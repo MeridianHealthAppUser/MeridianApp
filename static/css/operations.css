@@ -47,6 +47,8 @@
 .ops-table td small { color: #6b858e; display: block; font-size: .75rem; }
 .ops-table td > a:not(.console-button) { color: #087e75; font-weight: 650; text-underline-offset: .18em; }
 .ops-table .console-button { white-space: nowrap; }
+.ops-row-actions { align-items: center; display: flex; flex-wrap: wrap; gap: .45rem; }
+.ops-row-actions form { margin: 0; }
 .ops-empty { color: #607c87; line-height: 1.6; padding: 1.4rem; }
 .ops-empty p { margin: 0 0 1rem; }
 .ops-pagination { align-items: center; display: flex; flex-wrap: wrap; gap: .85rem; justify-content: center; margin-top: .5rem; }

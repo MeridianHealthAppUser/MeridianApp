@@ -56,11 +56,11 @@
                 <td data-label="Practice"><span class="console-status">{{ listed_patient.company.name }}</span></td>
                 <td data-label="ID and record">{{ listed_patient.id_number|default:"ID not recorded" }}<small>{{ listed_patient.medical_record_number|default:"Record number pending" }}</small></td>
                 <td data-label="Prescribing doctor">{% if listed_patient.assigned_doctor %}{{ listed_patient.assigned_doctor.full_name }}{% else %}Unassigned{% endif %}</td>
-                <td data-label="Authorized for">{% if listed_patient.record_authorization %}{{ listed_patient.record_authorization.product }}<small>{{ listed_patient.record_authorization.max_dose }} · {{ listed_patient.record_authorization.get_status_display }}</small>{% else %}Not recorded{% endif %}</td>
+                <td data-label="Authorized for">{% if listed_patient.record_authorization %}{{ listed_patient.record_authorization.product.name }}<small>{{ listed_patient.record_authorization.max_dose }} · {{ listed_patient.record_authorization.get_status_display }}</small>{% else %}Not recorded{% endif %}</td>
                 <td data-label="Subscription">{% if listed_patient.record_subscription %}{{ listed_patient.record_subscription.get_status_display }}{% else %}Not enrolled{% endif %}</td>
                 <td data-label="Cycle">{{ listed_patient.record_subscription.cycle_number|default:"—" }}</td>
                 <td data-label="Next debit">{{ listed_patient.record_subscription.next_debit_on|date:"j M Y"|default:"—" }}</td>
-                <td data-label="Auth expires">{{ listed_patient.record_authorization.expires_on|date:"j M Y"|default:"—" }}</td>
+                <td data-label="Auth expires">{{ listed_patient.record_authorization.ends_on|date:"j M Y"|default:"—" }}</td>
                 <td data-label="Status">{% if listed_patient.is_active %}<span class="console-status console-status--active">Active</span>{% else %}<span class="console-status">Inactive</span>{% endif %}</td>
                 <td class="staff-patient-table__action-cell" data-label="Action">
                   {% if listed_patient.in_current_practice %}<div class="record-directory-actions">

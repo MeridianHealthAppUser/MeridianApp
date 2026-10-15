@@ -10,7 +10,7 @@ from django.core.exceptions import PermissionDenied, ValidationError
 from django.core.paginator import Paginator
 from django.db import transaction
 from django.db.models import Q, Sum
-from django.http import HttpResponse
+from django.http import HttpResponse, QueryDict
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
@@ -18,20 +18,22 @@ from django.utils.decorators import method_decorator
 from django.views import View
 from django.views.decorators.cache import never_cache
 
-from care.models import MedicationBatch, MedicationProduct, PharmacyOrder, Shipment, StockMovement, TreatmentAuthorization
+from care.models import MedicationDose, MedicationProduct, PharmacyOrder, Shipment, TreatmentAuthorization
 from care.operations import (
-    UNDISPATCHED, change_batch, dispatch_shipment, hold_or_cancel_shipment, lock_shipping_week,
-    mark_delivered, prepare_shipment, product_allowance, receive_stock, require_operations_actor, shipment_hold_reason,
+    UNDISPATCHED, change_parcel, dispatch_shipment, hold_or_cancel_shipment, lock_shipping_week, mark_delivered,
+    prepare_shipment, prepare_week, product_allowance, require_operations_actor, shipment_hold_reason, week_order,
 )
 from care.pharmacy import accept_order, cancel_order, set_basket_quantity, submit_basket
 from care.services import record_audit
+from care.treatment import dose_in_effect
 from care.shipment_intake import create_manual_shipment
 from practices.models import Company, CompanyMembership
 
 from .clinical_forms import ClinicalFilterForm
 from .operations_forms import (
-    BasketQuantityForm, BatchActionForm, BatchReceiptForm, CatalogueFilterForm, ConfirmForm, HistoryFilterForm,
-    OrderReviewForm, ProductForm, ShipmentActionForm, ShipmentCreateForm, ShippingFilterForm, StockFilterForm, SupplyRequestForm,
+    BasketQuantityForm, CatalogueFilterForm, ConfirmForm, DoseForm, HistoryFilterForm,
+    OrderReviewForm, ProductForm, ShipmentActionForm, ShipmentChangeForm, ShipmentCreateForm, ShippingFilterForm,
+    SupplyRequestForm,
 )
 from .patient_views import patient_page_context
 from .views import PatientPortalRequiredMixin, StaffCompanyRequiredMixin
@@ -82,7 +84,7 @@ class OperationsView(LoginRequiredMixin, StaffCompanyRequiredMixin, View):
     def shipments(self):
         return Shipment.objects.for_company(self.company).filter(patient__company=self.company).select_related(
             'patient', 'company', 'subscription',
-        ).prefetch_related('items__product', 'items__batch')
+        ).prefetch_related('items__product')
 
     def orders(self):
         return PharmacyOrder.objects.for_company(self.company).filter(patient__company=self.company).exclude(status='draft').select_related('patient', 'shipment')
@@ -105,11 +107,14 @@ class CatalogueView(OperationsView):
         context = self.context(filter_form=form, **_paginate(request, queryset))
         context['can_edit'] = self.membership.role == CompanyMembership.Role.SUPER_ADMIN
         context['products'] = list(context['page_obj'].object_list)
+        # What doctors prescribe: each dose, its pen, how often it is sent and what it costs.
+        context['doses'] = list(MedicationDose.objects.for_company(self.company).select_related('pen').order_by(
+            'pen__name', 'amount_mg', 'frequency', 'pk'))
         # The standard ways to start a main medicine, offered by Initiate prescription on the patient record.
         from care.models import StartingPlan
         from care.starting_plans import plan_summary
 
-        context['starting_plans'] = list(StartingPlan.objects.for_company(self.company).select_related('then_product').prefetch_related('steps__product'))
+        context['starting_plans'] = list(StartingPlan.objects.for_company(self.company).select_related('then_dose__pen').prefetch_related('steps__dose__pen'))
         for plan in context['starting_plans']:
             plan.summary = plan_summary(plan)
         return render(request, 'portal/operations_catalogue.html', context)
@@ -151,96 +156,47 @@ class ProductEditorView(OperationsView):
         return self.display(request, product, form, status=400)
 
 
-class StockListView(OperationsView):
-    nav_section, page_title = 'stock', 'Batches and stock'
-    http_method_names = ('get', 'head', 'options')
+class DoseEditorView(OperationsView):
+    """Add or change a dose doctors can prescribe. Super Admins change doses; practice administrators read them."""
 
-    def get(self, request):
-        form = StockFilterForm(_form_data(request, status='all', expiry='all'))
-        all_batches = MedicationBatch.objects.for_company(self.company)
-        today = timezone.localdate()
-        queryset = all_batches.select_related('product').order_by('expires_on', 'pk')
-        if form.is_valid():
-            if form.cleaned_data['status'] != 'all':
-                queryset = queryset.filter(status=form.cleaned_data['status'])
-            if form.cleaned_data['expiry'] == 'soon':
-                queryset = queryset.filter(expires_on__range=(today, today + timedelta(days=60)))
-            elif form.cleaned_data['expiry'] == 'expired':
-                queryset = queryset.filter(expires_on__lt=today)
-        else:
-            queryset = queryset.none()
-        context = self.context(filter_form=form, **_paginate(request, queryset), metrics={
-            'on_hand': all_batches.aggregate(total=Sum('quantity_on_hand'))['total'] or 0,
-            'near_expiry': all_batches.filter(expires_on__range=(today, today + timedelta(days=60))).aggregate(total=Sum('quantity_on_hand'))['total'] or 0,
-            'quarantined': all_batches.filter(status='quarantined').aggregate(total=Sum('quantity_on_hand'))['total'] or 0,
-        })
-        context['batches'] = list(context['page_obj'].object_list)
-        for batch in context['batches']:
-            batch.expiring = batch.expires_on <= today + timedelta(days=60)
-        return render(request, 'portal/operations_stock.html', context)
+    nav_section, page_title = 'catalogue', 'Dose'
 
+    def display(self, request, dose, form, status=200):
+        context = self.context(dose=dose, form=form, workflow_context=self.token('catalogue-dose', dose))
+        context['can_edit'] = self.membership.role == CompanyMembership.Role.SUPER_ADMIN
+        context['in_use'] = bool(dose and (dose.authorizations.exists() or dose.starting_plan_steps.exists()
+                                           or dose.starting_plans_ending.exists()))
+        return render(request, 'portal/operations_dose_form.html', context, status=status)
 
-class StockReceiveView(OperationsView):
-    nav_section, page_title = 'stock', 'Receive stock'
+    def dose(self, pk):
+        return get_object_or_404(MedicationDose.objects.for_company(self.company).select_related('pen'), pk=pk) if pk else None
 
-    def display(self, request, form, status=200):
-        return render(request, 'portal/operations_batch_form.html', self.context(form=form,
-                      workflow_context=self.token('stock-receipt')), status=status)
-
-    def get(self, request):
-        require_operations_actor(self.company, request.user)
-        return self.display(request, BatchReceiptForm(company=self.company))
-
-    def post(self, request):
-        require_operations_actor(self.company, request.user)
-        form = BatchReceiptForm(request.POST, company=self.company)
-        valid = form.is_valid()
-        try:
-            intent = validate_workflow_context(request, self.company, 'stock-receipt')
-            if valid:
-                batch = receive_stock(company=self.company, actor=request.user, submission_key=intent['key'], request=request, **form.cleaned_data)
-                messages.success(request, 'Stock receipt recorded.')
-                return redirect('portal:ops-batch-detail', pk=batch.pk)
-        except ValidationError as error:
-            _errors(request, form, error)
-        return self.display(request, form, status=400)
-
-
-class BatchDetailView(OperationsView):
-    nav_section, page_title = 'stock', 'Stock batch'
-
-    def batch(self, pk):
-        return get_object_or_404(MedicationBatch.objects.for_company(self.company).select_related('product'), pk=pk)
-
-    def display(self, request, batch, form=None, status=200):
-        movements = StockMovement.objects.for_company(self.company).filter(batch=batch).select_related('recorded_by', 'shipment').order_by('-created_at', '-pk')
-        context = self.context(batch=batch, form=form if form is not None else BatchActionForm(),
-                               workflow_context=self.token('stock-batch', batch), **_paginate(request, movements))
-        context['movements'] = list(context['page_obj'].object_list)
-        if batch.status == MedicationBatch.Status.WRITTEN_OFF:
-            context['can_edit'] = False
-        return render(request, 'portal/operations_batch_detail.html', context, status=status)
-
-    def get(self, request, pk):
-        return self.display(request, self.batch(pk))
+    def get(self, request, pk=None):
+        dose = self.dose(pk)
+        if not dose:
+            require_operations_actor(self.company, request.user, catalogue=True)
+        return self.display(request, dose, DoseForm(company=self.company, instance=dose))
 
     @transaction.atomic
-    def post(self, request, pk):
+    def post(self, request, pk=None):
         self.company = Company.objects.select_for_update().get(pk=self.company.pk)
-        require_operations_actor(self.company, request.user)
-        batch, form = self.batch(pk), BatchActionForm(request.POST)
-        valid = form.is_valid()
+        require_operations_actor(self.company, request.user, catalogue=True)
+        dose = self.dose(pk)
+        form = DoseForm(request.POST, company=self.company, instance=dose)
         try:
-            validate_workflow_context(request, self.company, 'stock-batch', batch)
-            if valid:
-                data = dict(form.cleaned_data)
-                data.pop('confirm')
-                change_batch(batch=batch, actor=request.user, request=request, **data)
-                messages.success(request, 'Stock action recorded. Held shipments are not automatically dispatched.')
-                return redirect('portal:ops-batch-detail', pk=pk)
+            validate_workflow_context(request, self.company, 'catalogue-dose', dose)
+            if form.is_valid():
+                saved = form.save()
+                record_audit(company=self.company, actor=request.user,
+                             action='catalogue.dose_updated' if pk else 'catalogue.dose_created',
+                             target=saved, request=request, metadata={'changed_fields': form.changed_data})
+                messages.success(request, 'Dose saved. Prescriptions already written keep their own dose and dates.')
+                return redirect('portal:ops-dose-detail', pk=saved.pk)
         except ValidationError as error:
+            if not form.is_bound or not hasattr(form, 'cleaned_data'):
+                form.is_valid()
             _errors(request, form, error)
-        return self.display(request, batch, form, status=400)
+        return self.display(request, dose, form, status=400)
 
 
 def _shipping_filter(request, queryset):
@@ -257,32 +213,114 @@ def _shipping_filter(request, queryset):
 
 
 class ShippingListView(OperationsView):
+    """The week's parcels: drafted from prescriptions or added by hand, marked ready, locked, ordered and dispatched.
+    Create shipment opens a dialog here for an ad-hoc parcel."""
+
     nav_section, page_title = 'shipping', 'Weekly shipping list'
     http_method_names = ('get', 'head', 'options')
 
-    def get(self, request):
+    def display(self, request, create_form=None, status=200):
         form, queryset = _shipping_filter(request, self.shipments())
         queryset = queryset.order_by('scheduled_for', 'patient__last_name', 'pk')
-        context = self.context(filter_form=form, lock_context=self.token('shipping-week'), **_paginate(request, queryset), metrics={
+        fresh = lambda kind: make_workflow_context(request, self.company, kind)
+        context = self.context(filter_form=form, lock_context=fresh('shipping-week'), **_paginate(request, queryset), metrics={
             'ready': queryset.filter(status=Shipment.Status.READY).count(), 'held': queryset.filter(status=Shipment.Status.HELD).count(),
             'units': queryset.aggregate(total=Sum('items__quantity'))['total'] or 0,
         })
         context['shipments'] = list(context['page_obj'].object_list)
         for shipment in context['shipments']:
             shipment.current_hold_reason = shipment_hold_reason(shipment) if shipment.status in UNDISPATCHED else ''
-        return render(request, 'portal/operations_shipping.html', context)
+            # Mark ready on its line, for a draft or held parcel.
+            if self.can_edit and shipment.status in (Shipment.Status.DRAFT, Shipment.Status.HELD):
+                shipment.ready_context = make_workflow_context(request, self.company, 'shipment-ready', shipment)
+        context['list_query'] = request.GET.urlencode()
+        # What to order for the week: the pens in its ready parcels.
+        context['week_order'] = week_order(self.company, form.cleaned_data['week']) if form.is_valid() else None
+        if self.can_edit:
+            # A dialog reopened after a mistake keeps the token it was sent with.
+            context.update(create_form=create_form or ShipmentCreateForm(company=self.company),
+                           create_context=self.token('shipment-create') if create_form else fresh('shipment-create'),
+                           prepare_context=fresh('shipping-prepare'),
+                           create_open=create_form is not None or request.GET.get('create') == '1')
+        return render(request, 'portal/operations_shipping.html', context, status=status)
+
+    def get(self, request):
+        return self.display(request)
 
 
-class ShipmentCreateView(OperationsView):
-    nav_section, page_title = 'shipping', 'Create shipment'
+def _shipping_list_url(query):
+    """Back to the Weekly shipping list as it was: its week, status and page only."""
+    kept = {key: value for key, value in QueryDict(query or '').items() if key in ('week', 'status', 'page')}
+    return f'{reverse("portal:ops-shipping")}?{urlencode(kept)}' if kept else reverse('portal:ops-shipping')
 
-    def display(self, request, form, status=200):
-        return render(request, 'portal/operations_shipment_form.html', self.context(form=form,
-                      workflow_context=self.token('shipment-create')), status=status)
+
+class ShipmentReadyView(OperationsView):
+    """Mark ready from a parcel's line on the Weekly shipping list, with the checks Mark ready makes on its page."""
+
+    http_method_names = ('post',)
+
+    @transaction.atomic
+    def post(self, request, pk):
+        self.company = Company.objects.select_for_update().get(pk=self.company.pk)
+        require_operations_actor(self.company, request.user)
+        shipment = get_object_or_404(self.shipments(), pk=pk)
+        try:
+            validate_workflow_context(request, self.company, 'shipment-ready', shipment)
+            prepare_shipment(shipment=shipment, actor=request.user, request=request)
+            messages.success(request, f'Parcel for {shipment.patient} on {shipment.scheduled_for:%-d %b} marked ready.')
+        except ValidationError as error:
+            messages.error(request, f'Parcel for {shipment.patient} not marked ready: {" ".join(error.messages)}')
+        return redirect(_shipping_list_url(request.POST.get('list_query')))
+
+
+class ShippingPrepareView(OperationsView):
+    """Mark drafts ready: every draft parcel of the week that passes its checks."""
+
+    http_method_names = ('post',)
+
+    def post(self, request):
+        require_operations_actor(self.company, request.user)
+        form = ShippingFilterForm({'week': request.POST.get('week'), 'status': 'all'})
+        try:
+            validate_workflow_context(request, self.company, 'shipping-prepare')
+            if not form.is_valid():
+                raise ValidationError('Choose a valid shipping week.')
+            ready, left = prepare_week(company=self.company, actor=request.user, week_start=form.cleaned_data['week'], request=request)
+            message = f'{len(ready)} draft parcel{"" if len(ready) == 1 else "s"} marked ready.'
+            if left:
+                message += f' {len(left)} could not be: see the hold reason beside {"it" if len(left) == 1 else "them"}.'
+            (messages.warning if left else messages.success)(request, message)
+        except ValidationError as error:
+            messages.error(request, ' '.join(error.messages))
+        return redirect(f'{reverse("portal:ops-shipping")}?{urlencode({"week": request.POST.get("week", "")})}')
+
+
+class WeekOrderDownloadView(OperationsView):
+    """The week's pens to order, as a CSV for the supplier order."""
+
+    http_method_names = ('get', 'head', 'options')
+
+    def get(self, request):
+        form, _ = _shipping_filter(request, self.shipments())
+        if not form.is_valid():
+            return HttpResponse('Choose a valid shipping week.', status=400)
+        week = form.cleaned_data['week']
+        order = week_order(self.company, week)
+        rows = [(line['product'].name, line['product'].strength, line['pens']) for line in order['lines']]
+        if request.method != 'HEAD':
+            record_audit(company=self.company, actor=request.user, action='shipping.order_exported', request=request,
+                         metadata={'week': week.isoformat(), 'rows': len(rows)})
+        return _csv_response(f'pens-to-order-{week.isoformat()}.csv', ('Medicine', 'Pen', 'Pens'), rows)
+
+
+class ShipmentCreateView(ShippingListView):
+    """An ad-hoc parcel, from the Create shipment dialog on the Weekly shipping list. A mistake reopens the dialog."""
+
+    http_method_names = ('get', 'post')
 
     def get(self, request):
         require_operations_actor(self.company, request.user)
-        return self.display(request, ShipmentCreateForm(company=self.company))
+        return redirect(f'{reverse("portal:ops-shipping")}?create=1')
 
     def post(self, request):
         require_operations_actor(self.company, request.user)
@@ -294,29 +332,45 @@ class ShipmentCreateView(OperationsView):
                 data = dict(form.cleaned_data)
                 data.pop('confirm')
                 shipment = create_manual_shipment(company=self.company, actor=request.user, submission_key=intent['key'], request=request, **data)
-                messages.success(request, 'Draft shipment created. Stock has not yet been allocated.')
-                return redirect('portal:ops-shipment-detail', pk=shipment.pk)
+                day = shipment.scheduled_for
+                messages.success(request, f'Draft parcel added for {shipment.patient} on {day:%-d %b %Y}. Mark it ready to include it in the week’s order.')
+                return redirect(f'{reverse("portal:ops-shipping")}?{urlencode({"week": (day - timedelta(days=day.weekday())).isoformat()})}')
         except ValidationError as error:
-            _errors(request, form, error)
-        return self.display(request, form, status=400)
+            for message in error.messages:
+                form.add_error(None, message)
+        return self.display(request, create_form=form, status=400)
 
 
 class ShipmentDetailView(OperationsView):
     nav_section, page_title = 'shipping', 'Shipment'
 
-    def display(self, request, shipment, form=None, status=200):
+    def display(self, request, shipment, form=None, status=200, change_form=None):
         from .patient_action_context import patient_action_context
 
-        context = self.context(shipment=shipment, items=list(shipment.items.select_related('product', 'batch')),
-                               form=form if form is not None else ShipmentActionForm(),
-                               workflow_context=self.token('shipment', shipment),
+        items = list(shipment.items.select_related('product'))
+        # Each form keeps the token it was sent with after a mistake; the other gets a current one.
+        changing = change_form is not None
+        context = self.context(shipment=shipment, items=items, change_form=None,
+                               form=form if form is not None else ShipmentActionForm(items=self.batch_items(shipment, items)),
+                               workflow_context=make_workflow_context(request, self.company, 'shipment', shipment) if changing
+                               else self.token('shipment', shipment),
                                current_hold_reason=shipment_hold_reason(shipment) if shipment.status in UNDISPATCHED else '')
         if shipment.status in (Shipment.Status.CANCELLED, Shipment.Status.DELIVERED):
             context['can_edit'] = False
+        # A parcel that isn't locked can be moved to another day or given other pens.
+        if context['can_edit'] and shipment.status in UNDISPATCHED and not shipment.locked_at:
+            context.update(change_form=change_form or ShipmentChangeForm(items=items, initial={'scheduled_for': shipment.scheduled_for}),
+                           change_context=self.token('shipment-change', shipment) if changing
+                           else make_workflow_context(request, self.company, 'shipment-change', shipment))
         context.update(patient_action_context(self, shipment.patient, 'deliveries',
             content_template='portal/includes/shipment_detail_content.html', stylesheets=('css/operations.css',),
             title=f'Shipment {shipment.pk}'))
         return render(request, 'portal/patient_workspace_action.html' if context.get('patient_workspace') else 'portal/operations_shipment_detail.html', context, status=status)
+
+    @staticmethod
+    def batch_items(shipment, items):
+        """The lines whose batch can still be noted: until the parcel is dispatched."""
+        return items if shipment.status in UNDISPATCHED else []
 
     def get(self, request, pk):
         return self.display(request, get_object_or_404(self.shipments(), pk=pk))
@@ -326,7 +380,7 @@ class ShipmentDetailView(OperationsView):
         self.company = Company.objects.select_for_update().get(pk=self.company.pk)
         require_operations_actor(self.company, request.user)
         shipment = get_object_or_404(self.shipments(), pk=pk)
-        form = ShipmentActionForm(request.POST)
+        form = ShipmentActionForm(request.POST, items=self.batch_items(shipment, list(shipment.items.select_related('product'))))
         valid = form.is_valid()
         try:
             validate_workflow_context(request, self.company, 'shipment', shipment)
@@ -337,7 +391,8 @@ class ShipmentDetailView(OperationsView):
                 elif action in ('hold', 'cancel'):
                     hold_or_cancel_shipment(shipment=shipment, actor=request.user, cancel=action == 'cancel', reason=form.cleaned_data['reason'], request=request)
                 elif action == 'dispatch':
-                    dispatch_shipment(shipment=shipment, actor=request.user, tracking_number=form.cleaned_data['tracking_number'], confirm=True, request=request)
+                    dispatch_shipment(shipment=shipment, actor=request.user, tracking_number=form.cleaned_data['tracking_number'],
+                                      confirm=True, batch_notes=form.batch_notes(), request=request)
                 elif action == 'deliver':
                     mark_delivered(shipment=shipment, actor=request.user, confirm=True, request=request)
                 messages.success(request, 'Shipment action recorded. No courier API was called.')
@@ -346,6 +401,29 @@ class ShipmentDetailView(OperationsView):
         except ValidationError as error:
             _errors(request, form, error)
         return self.display(request, shipment, form, status=400)
+
+
+class ShipmentChangeView(ShipmentDetailView):
+    """Change this parcel: its planned dispatch date and pens, until its week is locked."""
+
+    http_method_names = ('post',)
+
+    @transaction.atomic
+    def post(self, request, pk):
+        self.company = Company.objects.select_for_update().get(pk=self.company.pk)
+        require_operations_actor(self.company, request.user)
+        shipment = get_object_or_404(self.shipments(), pk=pk)
+        form = ShipmentChangeForm(request.POST, items=list(shipment.items.select_related('product')))
+        try:
+            validate_workflow_context(request, self.company, 'shipment-change', shipment)
+            if form.is_valid():
+                change_parcel(shipment=shipment, actor=request.user, scheduled_for=form.cleaned_data['scheduled_for'],
+                              quantities=form.quantities(), request=request)
+                messages.success(request, 'Parcel changed. Mark it ready again to include it in the week’s order.')
+                return redirect('portal:ops-shipment-detail', pk=pk)
+        except ValidationError as error:
+            _errors(request, form, error)
+        return self.display(request, shipment, status=400, change_form=form)
 
 
 class ShippingLockView(OperationsView):
@@ -406,6 +484,13 @@ def _csv_response(filename, headings, rows):
     return response
 
 
+def batch_text(item):
+    """A dispatched item's batch note. Parcels dispatched from stock saved the batch and its expiry instead."""
+    if item.get('batch_note'):
+        return item['batch_note']
+    return ', expiry '.join(str(part) for part in (item.get('batch'), item.get('expires_on')) if part)
+
+
 class ManifestDownloadView(OperationsView):
     http_method_names = ('get', 'head', 'options')
     history = False
@@ -426,32 +511,16 @@ class ManifestDownloadView(OperationsView):
             patient_name = snapshot.get('patient_name', str(shipment.patient))
             id_number = snapshot.get('patient_id_number', shipment.patient.id_number)
             items = snapshot.get('items') or [dict(product=str(item.product), dose=item.dose, quantity=item.quantity,
-                                                       batch=item.batch.batch_number if item.batch else '',
-                                                       expires_on=item.batch.expires_on if item.batch else '')
-                                               for item in shipment.items.all()]
+                                                       batch_note=item.batch_note) for item in shipment.items.all()]
             for item in items:
                 rows.append((shipment.pk, shipment.scheduled_for, snapshot.get('company_name', self.company.name), patient_name,
-                             id_number, item['product'], item['dose'], item['quantity'], item['batch'], item['expires_on'],
+                             id_number, item['product'], item['dose'], item['quantity'], batch_text(item),
                              shipment.get_status_display(), shipment.tracking_number, shipment.hold_reason))
         if request.method != 'HEAD':
             record_audit(company=self.company, actor=request.user, action='dispatch.history_exported' if self.history else 'shipping.manifest_exported',
                          request=request, metadata={'rows': len(rows)})
         return _csv_response('dispatch-history.csv' if self.history else 'shipping-manifest.csv',
-                             ('Shipment', 'Planned date', 'Practice', 'Patient', 'ID / passport', 'Product', 'Dose', 'Quantity', 'Batch', 'Expiry', 'Status', 'Tracking', 'Hold reason'), rows)
-
-
-class StockExportView(OperationsView):
-    http_method_names = ('get', 'head', 'options')
-
-    def get(self, request):
-        batches = MedicationBatch.objects.for_company(self.company).select_related('product').order_by('batch_number')
-        if batches.count() > 10000:
-            return HttpResponse('This export exceeds the 10,000-batch limit.', status=400)
-        rows = [(batch.batch_number, str(batch.product), batch.received_on, batch.expires_on, batch.quantity_received,
-                 batch.quantity_on_hand, batch.cold_chain_confirmed, batch.get_status_display()) for batch in batches]
-        if request.method != 'HEAD':
-            record_audit(company=self.company, actor=request.user, action='stock.exported', request=request, metadata={'rows': len(rows)})
-        return _csv_response('stock-and-cold-chain.csv', ('Batch', 'Product', 'Received', 'Expiry', 'Units received', 'On hand', 'Cold chain confirmed', 'Status'), rows)
+                             ('Shipment', 'Planned date', 'Practice', 'Patient', 'ID / passport', 'Product', 'Dose', 'Quantity', 'Batch and expiry', 'Status', 'Tracking', 'Hold reason'), rows)
 
 
 class StaffOrderListView(OperationsView):
@@ -557,6 +626,7 @@ class PatientPharmacyView(PatientPharmacyBase):
             )
             product.in_basket = existing.get(product.pk, 0)
             product.plan = plan if plan and plan.authorization_id and plan.authorization.product_id == product.pk else None
+            product.plan_dose = dose_in_effect(product.plan) if product.plan else None
             if not product.requires_authorisation:
                 groups['open'].append(product)
             elif product.authorization is not None:

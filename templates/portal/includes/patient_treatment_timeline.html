@@ -1,0 +1,27 @@
+{# The treatment week by week, opened from How your dose works: portal.patient_summary.treatment_timeline. #}
+<dialog class="app-dialog app-dialog--wide patient-timeline" id="treatment-timeline" aria-labelledby="treatment-timeline-heading"{% if timeline_open %} open{% endif %}>
+  <div class="app-dialog__body">
+    <h2 id="treatment-timeline-heading">Your treatment timeline</h2>
+    <p class="app-dialog__sub">Week by week: any change your doctor makes, when your pens are sent, your dose and payments. Payments are reference amounts; none is taken in this app.</p>
+    <ul class="patient-timeline__key" aria-label="Key">
+      <li class="patient-timeline__chip patient-timeline__chip--event">Prescription</li>
+      <li class="patient-timeline__chip patient-timeline__chip--parcel">Shipment</li>
+      <li class="patient-timeline__chip patient-timeline__chip--dose">Dosage</li>
+      <li class="patient-timeline__chip patient-timeline__chip--payment">Payment</li>
+    </ul>
+    <ol class="patient-timeline__weeks">
+      {% for week in timeline.weeks %}
+        <li class="patient-timeline__week{% if week.current %} is-current{% elif week.next %} is-next{% elif week.past %} is-past{% endif %}"{% if week.current %} aria-current="step" data-dialog-scroll{% elif week.next %} data-dialog-scroll{% endif %}>
+          {% if week.current %}<span class="patient-timeline__here">You are here</span>{% elif week.next %}<span class="patient-timeline__here">Up next</span>{% endif %}
+          <div class="patient-timeline__when"><strong>Week {{ week.number }}</strong><span>{{ week.range }}</span></div>
+          {# Prescription, Shipment, Dosage and Payment, each in its own column so they line up week after week. #}
+          <div class="patient-timeline__cell patient-timeline__cell--decision">{% for event in week.events %}<span class="patient-timeline__chip patient-timeline__chip--event"><span>{{ event.text }}</span><small>{{ event.date|date:"j M" }} · {{ event.by }}</small></span>{% endfor %}</div>
+          <div class="patient-timeline__cell">{% for parcel in week.parcels %}<span class="patient-timeline__chip patient-timeline__chip--parcel"><span>{{ parcel.contents }}</span><small>{{ parcel.when }}</small></span>{% endfor %}</div>
+          <div class="patient-timeline__cell"><span class="patient-timeline__chip patient-timeline__chip--dose{% if not week.dose %} is-empty{% endif %}">{% if week.dose %}<span><span class="patient-timeline__word">Dose </span>{{ week.dose }}</span>{% if week.change %}<small>{{ week.change }}</small>{% endif %}{% else %}<span>No prescription this week</span>{% endif %}</span></div>
+          <div class="patient-timeline__cell">{% for amount in week.payments %}<span class="patient-timeline__chip patient-timeline__chip--payment"><span>R{{ amount|floatformat:"-2" }}<span class="patient-timeline__word"> payment</span></span></span>{% endfor %}</div>
+        </li>
+      {% endfor %}
+    </ol>
+    <div class="app-dialog__actions"><a class="console-button console-button--secondary" href="{% url 'portal:patient-treatment' %}" data-dialog-close>Close</a></div>
+  </div>
+</dialog>

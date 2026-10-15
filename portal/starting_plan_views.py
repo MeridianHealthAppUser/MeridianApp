@@ -7,65 +7,58 @@ from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.shortcuts import get_object_or_404, redirect, render
 
-from care.models import MedicationProduct, StartingPlan
+from care.models import StartingPlan
 from care.operations import require_operations_actor
-from care.prescriptions import MONTH_CHOICES, dose_label, strength_mg
-from care.starting_plans import MAX_STEPS, STEP_MONTHS, plan_summary, save_starting_plan
+from care.prescriptions import WEEK_CHOICES, main_doses, weeks_text
+from care.starting_plans import MAX_STEPS, STEP_WEEKS, plan_summary, save_starting_plan
 from practices.models import Company, CompanyMembership
 
 from .operations_views import OperationsView
 from .workflow_context import validate_workflow_context
 
 
-def main_products(company):
-    """Strengths of the main medicines (weight management, needing a prescription), lowest first."""
-    products = list(MedicationProduct.objects.for_company(company).filter(
-        category=MedicationProduct.Category.WEIGHT_MANAGEMENT, requires_authorisation=True, is_active=True,
-    ))
-    products.sort(key=lambda product: (product.name, strength_mg(product) is None, strength_mg(product) or 0, product.strength))
-    return products
-
-
 class StartingPlanForm(forms.Form):
     medicine = forms.ChoiceField(label='Medicine')
     name = forms.CharField(label='Name (optional)', max_length=80, required=False,
                            help_text='Shown above the plan in Initiate prescription, e.g. “Standard start”.')
-    then_product = forms.ChoiceField(label='Then', help_text='The strength the plan settles on, until the prescription ends.')
-    default_months = forms.TypedChoiceField(label='Usual length of the prescription', coerce=int,
-                                            choices=[(months, f'{months} month{"" if months == 1 else "s"}') for months in MONTH_CHOICES],
-                                            help_text='Initiate prescription starts on this; the doctor can choose another.')
+    then_dose = forms.ChoiceField(label='Then', help_text='The dose the plan settles on, until the prescription ends.')
+    default_weeks = forms.TypedChoiceField(label='Usual length of the prescription', coerce=int,
+                                           choices=[(weeks, weeks_text(weeks)) for weeks in WEEK_CHOICES],
+                                           help_text='Initiate prescription starts on this; the doctor can choose another.')
     is_active = forms.BooleanField(label='Offer this plan in Initiate prescription', required=False, initial=True)
 
     def __init__(self, *args, company, **kwargs):
         super().__init__(*args, **kwargs)
-        self.products = {str(product.pk): product for product in main_products(company)}
+        # The doses a doctor can prescribe, lowest first by medicine.
+        doses = sorted(main_doses(company), key=lambda dose: (dose.medicine, dose.amount_mg, dose.frequency, dose.pk))
+        self.doses = {str(dose.pk): dose for dose in doses}
         grouped = {}
-        for product in self.products.values():
-            grouped.setdefault(product.name, []).append((str(product.pk), f'{product.name} {dose_label(product)}'))
-        doses = [(name, choices) for name, choices in grouped.items()]
+        for dose in doses:
+            grouped.setdefault(dose.medicine, []).append((str(dose.pk), str(dose)))
+        choices = list(grouped.items())
         self.fields['medicine'].choices = [(name, name) for name in grouped]
-        self.fields['then_product'].choices = [('', 'Choose a strength'), *doses]
-        months = [('', 'Months'), *((months, f'{months} month{"" if months == 1 else "s"}') for months in STEP_MONTHS)]
+        self.fields['then_dose'].choices = [('', 'Choose a dose'), *choices]
+        weeks = [('', 'Weeks'), *((weeks, weeks_text(weeks)) for weeks in STEP_WEEKS)]
         for position in range(1, MAX_STEPS + 1):
-            self.fields[f'step_{position}_product'] = forms.ChoiceField(
-                label=f'Step {position}', required=False, choices=[('', 'No step' if position > 1 else 'Choose a strength'), *doses])
-            self.fields[f'step_{position}_months'] = forms.TypedChoiceField(
-                label=f'Step {position} lasts', required=False, coerce=int, empty_value=None, choices=months)
+            self.fields[f'step_{position}_dose'] = forms.ChoiceField(
+                label=f'Step {position}', required=False, choices=[('', 'No step' if position > 1 else 'Choose a dose'), *choices])
+            self.fields[f'step_{position}_weeks'] = forms.TypedChoiceField(
+                label=f'Step {position} lasts', required=False, coerce=int, empty_value=None, choices=weeks)
 
     def step_rows(self):
-        return [(self[f'step_{position}_product'], self[f'step_{position}_months']) for position in range(1, MAX_STEPS + 1)]
+        return [(self[f'step_{position}_dose'], self[f'step_{position}_weeks']) for position in range(1, MAX_STEPS + 1)]
 
     def clean(self):
         data = super().clean()
         steps = []
         for position in range(1, MAX_STEPS + 1):
-            product, months = data.get(f'step_{position}_product'), data.get(f'step_{position}_months')
-            if product and not months:
-                self.add_error(f'step_{position}_months', 'Choose how many months this step lasts.')
-            elif product:
-                steps.append((self.products[product], months))
+            dose, weeks = data.get(f'step_{position}_dose'), data.get(f'step_{position}_weeks')
+            if dose and not weeks:
+                self.add_error(f'step_{position}_weeks', 'Choose how many weeks this step lasts.')
+            elif dose:
+                steps.append((self.doses[dose], weeks))
         data['steps'] = steps
-        data['then'] = self.products.get(data.get('then_product') or '')
+        data['then'] = self.doses.get(data.get('then_dose') or '')
         return data
 
 
@@ -79,18 +72,18 @@ class StartingPlanEditorView(OperationsView):
         return render(request, 'portal/operations_starting_plan_form.html', context, status=status)
 
     def plan(self, pk):
-        return get_object_or_404(StartingPlan.objects.for_company(self.company).select_related('then_product').prefetch_related(
-            'steps__product'), pk=pk) if pk else None
+        return get_object_or_404(StartingPlan.objects.for_company(self.company).select_related('then_dose__pen').prefetch_related(
+            'steps__dose__pen'), pk=pk) if pk else None
 
     def get(self, request, pk=None):
         plan = self.plan(pk)
-        initial = {'default_months': 6, 'is_active': True}
+        initial = {'default_weeks': 24, 'is_active': True}
         if plan:
-            initial = {'medicine': plan.medicine, 'name': plan.name, 'then_product': str(plan.then_product_id),
-                       'default_months': plan.default_months, 'is_active': plan.is_active}
+            initial = {'medicine': plan.medicine, 'name': plan.name, 'then_dose': str(plan.then_dose_id),
+                       'default_weeks': plan.default_weeks, 'is_active': plan.is_active}
             for step in plan.steps.all():
-                initial[f'step_{step.position}_product'] = str(step.product_id)
-                initial[f'step_{step.position}_months'] = step.months
+                initial[f'step_{step.position}_dose'] = str(step.dose_id)
+                initial[f'step_{step.position}_weeks'] = step.weeks
         return self.display(request, plan, StartingPlanForm(company=self.company, initial=initial))
 
     @transaction.atomic
@@ -104,8 +97,8 @@ class StartingPlanEditorView(OperationsView):
             if form.is_valid():
                 data = form.cleaned_data
                 saved = save_starting_plan(company=self.company, actor=request.user, plan=plan, medicine=data['medicine'],
-                                           name=data['name'], steps=data['steps'], then_product=data['then'],
-                                           default_months=data['default_months'], is_active=data['is_active'], request=request)
+                                           name=data['name'], steps=data['steps'], then_dose=data['then'],
+                                           default_weeks=data['default_weeks'], is_active=data['is_active'], request=request)
                 messages.success(request, 'Starting plan saved. Prescriptions already written from it keep their own steps.')
                 return redirect('portal:ops-starting-plan-detail', pk=saved.pk)
         except ValidationError as error:

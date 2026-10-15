@@ -80,6 +80,8 @@
 .questionnaire-price-row dd { color: #153a43; flex-shrink: 0; font-size: 1.2rem; font-weight: 700; margin: 0; text-align: right; }
 .questionnaire-price-row dd small { color: #7f98a3; font-size: .83rem; font-weight: 400; }
 .questionnaire-price-divider { border-top: 1px solid #e5edef; margin-top: .5rem; padding-top: 1.4rem; }
+.questionnaire-price-medicine { color: #1b3d46; font-size: 1rem; font-weight: 700; margin: 1.4rem 0 .9rem; }
+.questionnaire-price-divider .questionnaire-kicker + .questionnaire-price-medicine { margin-top: 0; }
 .questionnaire-pricing-included { margin: 1rem 0 0; padding: 1rem; }
 .questionnaire-pricing-included p { font-size: .86rem; margin: 0; }
 .questionnaire-next-step { display: grid; gap: .7rem; }

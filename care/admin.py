@@ -92,7 +92,7 @@ class ProtectedClinicalRecordAdmin(CompanyScopedAdmin):
 
 @admin.register(models.PracticeSettings)
 class PracticeSettingsAdmin(CompanyScopedAdmin):
-    list_display = ('company', 'initial_consult_fee', 'standard_subscription_amount', 'review_interval_days')
+    list_display = ('company', 'initial_consult_fee', 'review_interval_days')
 
 
 @admin.register(models.ConsentDocument)
@@ -125,6 +125,12 @@ class MedicationProductAdmin(OperationalWorkflowReadOnlyAdmin):
     search_fields = ('name', 'strength')
 
 
+@admin.register(models.MedicationDose)
+class MedicationDoseAdmin(OperationalWorkflowReadOnlyAdmin):
+    list_display = ('__str__', 'pen', 'company', 'dispatch_weeks', 'price', 'billing_weeks', 'tier', 'is_active')
+    search_fields = ('pen__name', 'pen__strength')
+
+
 @admin.register(models.TreatmentAuthorization)
 class TreatmentAuthorizationAdmin(OperationalWorkflowReadOnlyAdmin):
     list_display = ('patient', 'product', 'company', 'prescribed_by', 'expires_on', 'status')
@@ -133,7 +139,7 @@ class TreatmentAuthorizationAdmin(OperationalWorkflowReadOnlyAdmin):
 
 @admin.register(models.PatientSubscription)
 class PatientSubscriptionAdmin(OperationalWorkflowReadOnlyAdmin):
-    list_display = ('patient', 'company', 'plan_name', 'cycle_number', 'monthly_amount', 'status')
+    list_display = ('patient', 'company', 'plan_name', 'cycle_number', 'status')
     autocomplete_fields = ('company', 'patient', 'authorization')
 
 
@@ -301,18 +307,6 @@ class PatientEventAdmin(CompanyScopedAdmin):
     autocomplete_fields = ('company', 'patient')
 
 
-@admin.register(models.MedicationBatch)
-class MedicationBatchAdmin(OperationalWorkflowReadOnlyAdmin):
-    list_display = ('batch_number', 'product', 'company', 'quantity_on_hand', 'expires_on', 'status')
-    autocomplete_fields = ('company', 'product')
-
-
-@admin.register(models.StockMovement)
-class StockMovementAdmin(OperationalWorkflowReadOnlyAdmin):
-    list_display = ('batch', 'company', 'direction', 'quantity', 'reason', 'created_at')
-    autocomplete_fields = ('company', 'batch', 'shipment', 'recorded_by')
-
-
 @admin.register(models.Shipment)
 class ShipmentAdmin(OperationalWorkflowReadOnlyAdmin):
     list_display = ('patient', 'company', 'cycle_number', 'scheduled_for', 'status', 'tracking_number')
@@ -321,8 +315,8 @@ class ShipmentAdmin(OperationalWorkflowReadOnlyAdmin):
 
 @admin.register(models.ShipmentItem)
 class ShipmentItemAdmin(OperationalWorkflowReadOnlyAdmin):
-    list_display = ('shipment', 'product', 'batch', 'company', 'dose', 'quantity')
-    autocomplete_fields = ('company', 'shipment', 'product', 'batch')
+    list_display = ('shipment', 'product', 'company', 'dose', 'quantity', 'batch_note')
+    autocomplete_fields = ('company', 'shipment', 'product')
 
 
 @admin.register(models.Payment)

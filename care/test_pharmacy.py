@@ -1,4 +1,4 @@
-"""Local baskets reserve allowances, not money or physical inventory."""
+"""Local baskets reserve allowances, not money."""
 
 from datetime import timedelta
 from decimal import Decimal
@@ -9,7 +9,7 @@ from django.utils import timezone
 from practices.models import Patient
 
 from .models import (AuditEvent, MedicationProduct, PatientSubscription, Payment, PharmacyOrder,
-                     PharmacyOrderItem, Shipment, ShipmentItem, StockMovement, TreatmentAuthorization)
+                     PharmacyOrderItem, Shipment, ShipmentItem, TreatmentAuthorization)
 from .operations import product_allowance
 from .pharmacy import accept_order, cancel_order, set_basket_quantity, submit_basket
 from .test_operations import OperationsFixture
@@ -47,7 +47,6 @@ class PharmacyRequestTests(OperationsFixture):
         self.assertEqual(PharmacyOrder.objects.count(), 1)
         self.assertEqual(PharmacyOrderItem.objects.count(), 1)
         self.assertEqual(repeated.subtotal, Decimal('200.00'))
-        self.assertFalse(StockMovement.objects.exists())
         self.assertFalse(Payment.objects.exists())
 
     def test_only_patient_owner_can_modify_basket_and_inactive_database_identity_is_rechecked(self):
@@ -104,15 +103,13 @@ class PharmacyRequestTests(OperationsFixture):
         self.assertFalse(Payment.objects.exists())
 
     def test_submit_is_idempotent_reserves_allowance_only_and_preserves_submitted_lines(self):
-        batch = self.receive()
         order = self.submit(self.basket(quantity=3))
         lines = list(order.items.values())
-        counts = (AuditEvent.objects.count(), PharmacyOrder.objects.count(), StockMovement.objects.count())
+        counts = (AuditEvent.objects.count(), PharmacyOrder.objects.count())
         replay = self.submit(order)
         self.assertEqual(replay.pk, order.pk)
-        self.assertEqual((AuditEvent.objects.count(), PharmacyOrder.objects.count(), StockMovement.objects.count()), counts)
+        self.assertEqual((AuditEvent.objects.count(), PharmacyOrder.objects.count()), counts)
         self.assertEqual(product_allowance(self.patient, self.product)[1], 1)
-        self.assert_stock(batch, 10)
         self.assertFalse(Shipment.objects.exists())
         self.assertFalse(Payment.objects.exists())
         self.product.price = 500
@@ -142,8 +139,7 @@ class PharmacyRequestTests(OperationsFixture):
         order.refresh_from_db()
         self.assertEqual(order.status, 'draft')
 
-    def test_acceptance_is_operations_only_idempotent_and_stock_remains_unallocated(self):
-        batch = self.receive()
+    def test_acceptance_is_operations_only_and_idempotent(self):
         order = self.submit()
         for actor in (self.patient_user, self.doctor, self.beta_admin):
             with self.subTest(actor=actor), self.assertRaises(PermissionDenied):
@@ -155,8 +151,6 @@ class PharmacyRequestTests(OperationsFixture):
         self.assertEqual(AuditEvent.objects.count(), audit_count)
         self.assertEqual(Shipment.objects.count(), 1)
         self.assertEqual(shipment.status, 'draft')
-        self.assertIsNone(shipment.items.get().batch_id)
-        self.assert_stock(batch, 10)
         self.assertFalse(Payment.objects.exists())
 
     def test_acceptance_validates_allowance_in_scheduled_cycle_before_creating_any_shipment(self):

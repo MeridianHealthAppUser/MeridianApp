@@ -5,6 +5,7 @@ one practice cannot accidentally return data from another practice.
 """
 
 from datetime import datetime, time, timedelta
+from decimal import Decimal
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
@@ -36,11 +37,20 @@ class PatientCompanyScopedModel(CompanyScopedModel):
 class PracticeSettings(CompanyScopedModel):
     """Operational defaults that belong to one practice, never to a user."""
 
+    class Weekday(models.IntegerChoices):
+        MONDAY = 0, 'Monday'
+        TUESDAY = 1, 'Tuesday'
+        WEDNESDAY = 2, 'Wednesday'
+        THURSDAY = 3, 'Thursday'
+        FRIDAY = 4, 'Friday'
+        SATURDAY = 5, 'Saturday'
+        SUNDAY = 6, 'Sunday'
+
     initial_consult_fee = models.DecimalField(max_digits=10, decimal_places=2, default=630)
-    standard_subscription_amount = models.DecimalField(max_digits=10, decimal_places=2, default=1995)
-    ongoing_subscription_amount = models.DecimalField(max_digits=10, decimal_places=2, default=3295)
+    # Treatment prices and how often parcels go out belong to each dose in the catalogue (MedicationDose).
     review_interval_days = models.PositiveSmallIntegerField(default=180)
-    delivery_interval_days = models.PositiveSmallIntegerField(default=28)
+    # The day of the week parcels go out. Pens are ordered for the week's parcels before it.
+    shipping_weekday = models.PositiveSmallIntegerField('Parcels go out on', choices=Weekday.choices, default=Weekday.TUESDAY)
     payment_grace_days = models.PositiveSmallIntegerField(default=7)
     support_email = models.EmailField(blank=True)
     timezone_name = models.CharField(max_length=64, default='Africa/Johannesburg')
@@ -170,15 +180,13 @@ class ConsentRecord(CompanyScopedModel):
 
 
 class MedicationProduct(CompanyScopedModel):
+    """What the dispensary orders and sends: for a main medicine, a pen (Semaglutide 0.25 mg). What a doctor prescribes
+    is a dose (MedicationDose), and several doses can come in the same pen."""
+
     class Category(models.TextChoices):
         WEIGHT_MANAGEMENT = 'weight_management', 'Weight management'
         HORMONE = 'hormone', 'Hormone therapy'
         OTHER = 'other', 'Other'
-
-    class DoseFrequency(models.TextChoices):
-        WEEKLY = 'weekly', 'Weekly'
-        DAILY = 'daily', 'Daily'
-        AS_DIRECTED = 'as_directed', 'As directed'
 
     name = models.CharField(max_length=255)
     description = models.TextField(blank=True)
@@ -191,9 +199,6 @@ class MedicationProduct(CompanyScopedModel):
     requires_cold_chain = models.BooleanField(default=True)
     is_compounded = models.BooleanField(default=False)
     allowance_group = models.CharField(max_length=80, blank=True)
-    # How often a dose is taken. Each strength is its own product, so a medicine's
-    # active strengths are its dose ladder when a doctor changes a prescription.
-    dose_frequency = models.CharField(max_length=16, choices=DoseFrequency.choices, default=DoseFrequency.AS_DIRECTED)
 
     class Meta:
         constraints = [models.UniqueConstraint(fields=('company', 'name', 'strength'), name='unique_product_strength_per_company')]
@@ -201,6 +206,80 @@ class MedicationProduct(CompanyScopedModel):
 
     def __str__(self):
         return ' '.join(part for part in (self.name, self.strength) if part)
+
+
+class MedicationDose(CompanyScopedModel):
+    """A dose a doctor can prescribe, kept in the Pharmacy catalogue by Super Admins: how much of a medicine is taken
+    how often, the pen it comes in, how many pens go out how often, and what the patient pays how often. The medicine
+    is the pen's name. A medicine's doses are its dose ladder when a doctor changes a prescription.
+
+    Supply is stored as the practice dispenses it, never worked out from the mg in a pen: pens hold more than their
+    label (Tirzepatide 7.5 mg weekly comes as a 10 mg pen every 5 weeks)."""
+
+    class Frequency(models.TextChoices):
+        WEEKLY = 'weekly', 'Weekly'
+        DAILY = 'daily', 'Daily'
+        AS_DIRECTED = 'as_directed', 'As directed'
+
+    class Tier(models.TextChoices):
+        STANDARD = 'standard', 'Standard'
+        STEP_UP = 'step_up', 'Step-up'
+        IF_NECESSARY = 'if_necessary', 'Only if necessary'
+
+    pen = models.ForeignKey(MedicationProduct, on_delete=models.PROTECT, related_name='doses')
+    amount_mg = models.DecimalField(max_digits=7, decimal_places=3)
+    frequency = models.CharField(max_length=16, choices=Frequency.choices, default=Frequency.WEEKLY)
+    pens_per_dispatch = models.PositiveSmallIntegerField(default=1)
+    dispatch_weeks = models.PositiveSmallIntegerField(default=4)
+    # Charged every billing_weeks. Left blank until the practice knows it; a dose without a price can't be prescribed.
+    price = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    billing_weeks = models.PositiveSmallIntegerField(default=4)
+    tier = models.CharField(max_length=16, choices=Tier.choices, default=Tier.STANDARD)
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ('pen__name', 'amount_mg', 'pk')
+
+    def __str__(self):
+        return f'{self.medicine} {self.label}'
+
+    @property
+    def medicine(self):
+        return self.pen.name
+
+    @property
+    def amount_text(self):
+        """'0.25', '1', '12.5': the amount as a doctor writes it."""
+        return f'{Decimal(str(self.amount_mg)).normalize():f}'
+
+    @property
+    def label(self):
+        """'0.25 mg weekly': the dose and how often it is taken."""
+        return f'{self.amount_text} mg {self.get_frequency_display().lower()}'
+
+    @property
+    def dispatch_text(self):
+        """'1 × 4 mg pen every 4 weeks'."""
+        pens = 'pen' if self.pens_per_dispatch == 1 else 'pens'
+        return f'{self.pens_per_dispatch} × {self.pen.strength} {pens} {weeks_phrase(self.dispatch_weeks)}'.replace('  ', ' ')
+
+    @property
+    def billing_text(self):
+        """'every 4 weeks', for after the price."""
+        return weeks_phrase(self.billing_weeks)
+
+    @property
+    def is_prescribable(self):
+        return self.is_active and self.price is not None and self.pen.is_active
+
+    def clean(self):
+        super().clean()
+        if self.pen_id and self.company_id and self.pen.company_id != self.company_id:
+            raise ValidationError({'pen': 'The pen must belong to the same company as the dose.'})
+
+
+def weeks_phrase(weeks):
+    return 'every week' if weeks == 1 else f'every {weeks} weeks'
 
 
 class TreatmentAuthorization(PatientCompanyScopedModel):
@@ -211,6 +290,9 @@ class TreatmentAuthorization(PatientCompanyScopedModel):
         CANCELLED = 'cancelled', 'Cancelled'
 
     product = models.ForeignKey(MedicationProduct, on_delete=models.PROTECT, related_name='authorizations')
+    # The catalogue dose a prescription was written for: product is its pen, max_dose its label and
+    # quantity_per_cycle its pens per dispatch. Its interval sets the supply cycle. Blank on other authorisations.
+    dose = models.ForeignKey(MedicationDose, null=True, blank=True, on_delete=models.PROTECT, related_name='authorizations')
     prescribed_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='treatment_authorizations')
     max_dose = models.CharField(max_length=80)
     quantity_per_cycle = models.PositiveSmallIntegerField(default=1)
@@ -236,6 +318,8 @@ class TreatmentAuthorization(PatientCompanyScopedModel):
         super().clean()
         if self.product_id and self.company_id and self.product.company_id != self.company_id:
             raise ValidationError({'product': 'The product must belong to the same company as the authorization.'})
+        if self.dose_id and self.product_id and self.dose.pen_id != self.product_id:
+            raise ValidationError({'dose': 'The dose must come in the authorised product.'})
         if self.expires_on and self.starts_on and self.expires_on < self.starts_on:
             raise ValidationError({'expires_on': 'The authorization cannot expire before it starts.'})
         if self.prescribed_by_id and self.company_id and not CompanyMembership.objects.filter(
@@ -249,13 +333,13 @@ class TreatmentAuthorization(PatientCompanyScopedModel):
 
 class StartingPlan(CompanyScopedModel):
     """A standard way to start a main medicine, offered by Initiate prescription and kept in the Pharmacy catalogue
-    by Super Admins: steps of one strength for whole months each, then a last strength until the prescription ends."""
+    by Super Admins: steps of one dose for some weeks each, then a last dose until the prescription ends."""
 
     medicine = models.CharField(max_length=255)
     name = models.CharField(max_length=80, blank=True)
-    then_product = models.ForeignKey(MedicationProduct, on_delete=models.PROTECT, related_name='starting_plans_ending')
-    # The doctor picks the prescription's total months; this is the choice the dialog starts on.
-    default_months = models.PositiveSmallIntegerField(default=6)
+    then_dose = models.ForeignKey(MedicationDose, on_delete=models.PROTECT, related_name='starting_plans_ending')
+    # The doctor picks the prescription's total weeks; this is the choice the dialog starts on.
+    default_weeks = models.PositiveSmallIntegerField(default=24)
     is_active = models.BooleanField(default=True)
 
     class Meta:
@@ -265,8 +349,8 @@ class StartingPlan(CompanyScopedModel):
 class StartingPlanStep(CompanyScopedModel):
     plan = models.ForeignKey(StartingPlan, on_delete=models.CASCADE, related_name='steps')
     position = models.PositiveSmallIntegerField()
-    product = models.ForeignKey(MedicationProduct, on_delete=models.PROTECT, related_name='starting_plan_steps')
-    months = models.PositiveSmallIntegerField()
+    dose = models.ForeignKey(MedicationDose, on_delete=models.PROTECT, related_name='starting_plan_steps')
+    weeks = models.PositiveSmallIntegerField()
 
     class Meta:
         ordering = ('position',)
@@ -284,7 +368,8 @@ class PatientSubscription(PatientCompanyScopedModel):
     plan_name = models.CharField(max_length=255)
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.ACTIVE)
     cycle_number = models.PositiveIntegerField(default=1)
-    monthly_amount = models.DecimalField(max_digits=10, decimal_places=2)
+    # What the plan costs is the price of the dose in effect (care.treatment.dose_in_effect), so it follows the
+    # prescription through a starting plan and any change.
     starts_on = models.DateField(default=timezone.localdate)
     next_debit_on = models.DateField(null=True, blank=True)
     review_due_on = models.DateField(null=True, blank=True)
@@ -1095,71 +1180,6 @@ class PatientEvent(PatientCompanyScopedModel):
         ordering = ('-occurred_at', '-created_at')
 
 
-class MedicationBatch(CompanyScopedModel):
-    class Status(models.TextChoices):
-        AVAILABLE = 'available', 'Available'
-        LOW = 'low', 'Low stock'
-        QUARANTINED = 'quarantined', 'Quarantined'
-        EXPIRED = 'expired', 'Expired'
-        WRITTEN_OFF = 'written_off', 'Written off'
-
-    product = models.ForeignKey(MedicationProduct, on_delete=models.PROTECT, related_name='batches')
-    batch_number = models.CharField(max_length=80)
-    received_on = models.DateField()
-    expires_on = models.DateField()
-    quantity_received = models.PositiveIntegerField()
-    quantity_on_hand = models.PositiveIntegerField()
-    cold_chain_confirmed = models.BooleanField(default=False)
-    status = models.CharField(max_length=16, choices=Status.choices, default=Status.AVAILABLE)
-
-    class Meta:
-        constraints = [models.UniqueConstraint(fields=('company', 'batch_number'), name='unique_batch_number_per_company')]
-        indexes = [models.Index(fields=('company', 'status', 'expires_on'))]
-        ordering = ('expires_on',)
-
-    def clean(self):
-        super().clean()
-        if self.product_id and self.company_id and self.product.company_id != self.company_id:
-            raise ValidationError({'product': 'The product must belong to the same company.'})
-        if self.quantity_on_hand > self.quantity_received:
-            raise ValidationError({'quantity_on_hand': 'On-hand quantity cannot exceed received quantity.'})
-
-
-class StockMovement(CompanyScopedModel):
-    """Append-only stock ledger; batch quantity is the cached operational balance."""
-
-    class Direction(models.TextChoices):
-        IN = 'in', 'Received'
-        OUT = 'out', 'Allocated or dispatched'
-        ADJUSTMENT = 'adjustment', 'Stock adjustment'
-
-    batch = models.ForeignKey(MedicationBatch, on_delete=models.PROTECT, related_name='movements')
-    direction = models.CharField(max_length=16, choices=Direction.choices)
-    quantity = models.IntegerField()
-    reason = models.CharField(max_length=255, blank=True)
-    shipment = models.ForeignKey('Shipment', null=True, blank=True, on_delete=models.SET_NULL, related_name='stock_movements')
-    recorded_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name='stock_movements')
-    idempotency_key = models.CharField(max_length=128, blank=True)
-
-    class Meta:
-        constraints = [models.UniqueConstraint(
-            fields=('company', 'idempotency_key'),
-            condition=~models.Q(idempotency_key=''),
-            name='unique_stock_movement_idempotency_key',
-        )]
-        indexes = [models.Index(fields=('company', 'batch', '-created_at'))]
-        ordering = ('-created_at',)
-
-    def clean(self):
-        super().clean()
-        if not self.quantity:
-            raise ValidationError({'quantity': 'A stock movement cannot have a zero quantity.'})
-        for field in ('batch', 'shipment'):
-            related = getattr(self, field, None)
-            if related and self.company_id and related.company_id != self.company_id:
-                raise ValidationError({field: f'The {field} must belong to the same company.'})
-
-
 class Shipment(PatientCompanyScopedModel):
     class Status(models.TextChoices):
         DRAFT = 'draft', 'Draft'
@@ -1196,16 +1216,18 @@ class Shipment(PatientCompanyScopedModel):
 class ShipmentItem(CompanyScopedModel):
     shipment = models.ForeignKey(Shipment, on_delete=models.CASCADE, related_name='items')
     product = models.ForeignKey(MedicationProduct, on_delete=models.PROTECT, related_name='shipment_items')
-    batch = models.ForeignKey(MedicationBatch, null=True, blank=True, on_delete=models.PROTECT, related_name='shipment_items')
     dose = models.CharField(max_length=80)
     quantity = models.PositiveIntegerField()
+    # Pens are ordered for each week's parcels, not kept in stock. The batch and expiry that went into a parcel are
+    # noted when it is dispatched, so a recall can be traced to the patients who received it.
+    batch_note = models.CharField(max_length=120, blank=True)
 
     class Meta:
         indexes = [models.Index(fields=('company', 'shipment'))]
 
     def clean(self):
         super().clean()
-        for field in ('shipment', 'product', 'batch'):
+        for field in ('shipment', 'product'):
             related = getattr(self, field, None)
             if related and self.company_id and related.company_id != self.company_id:
                 raise ValidationError({field: f'The {field} must belong to the same company.'})

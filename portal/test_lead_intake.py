@@ -10,8 +10,8 @@ from django.urls import reverse
 from django.utils import timezone
 
 from care.models import (
-    Appointment, ConsentDocument, ConsentRecord, Lead, Payment,
-    PracticeSettings, ScreeningQuestionnaire,
+    Appointment, ConsentDocument, ConsentRecord, Lead, MedicationDose, MedicationProduct, Payment,
+    PracticeSettings, ScreeningQuestionnaire, StartingPlan, StartingPlanStep,
 )
 from practices.models import Company, CompanyMembership, Patient
 from practices.services import ACTIVE_COMPANY_SESSION_KEY
@@ -221,6 +221,24 @@ class PublicLeadIntakeTests(TestCase):
         self.assertEqual(Lead.objects.get().pk, original.pk)
         self.assertEqual(ScreeningQuestionnaire.objects.count(), 1)
         self.assertEqual(ConsentRecord.objects.count(), 2)
+
+    def test_the_result_shows_each_medicines_starting_plan_and_its_prices(self):
+        pen = dict(company=self.company, price='100.00', category=MedicationProduct.Category.WEIGHT_MANAGEMENT)
+        small = MedicationProduct.objects.create(name='Semaglutide', strength='1 mg', **pen)
+        large = MedicationProduct.objects.create(name='Semaglutide', strength='4 mg', **pen)
+        start = MedicationDose.objects.create(company=self.company, pen=small, amount_mg='0.25', price='1995')
+        then = MedicationDose.objects.create(company=self.company, pen=large, amount_mg='1', price='3295')
+        plan = StartingPlan.objects.create(company=self.company, medicine='Semaglutide', then_dose=then)
+        StartingPlanStep.objects.create(company=self.company, plan=plan, position=1, dose=start, weeks=4)
+        response, _ = self.submit()
+        self.assert_successful_submission(response)
+        page = self.client.get(reverse('portal:questionnaire-result'))
+        self.assertContains(page, '<h3 class="questionnaire-price-medicine">Semaglutide</h3>', html=True)
+        self.assertContains(page, '<dt>Weeks 1–4<span>0.25 mg weekly</span></dt><dd>R1995 <small>every 4 weeks</small></dd>', html=True)
+        self.assertContains(page, '<dt>Thereafter<span>1 mg weekly, cancel any time</span></dt><dd>R3295 <small>every 4 weeks</small></dd>',
+                            html=True)
+        self.assertContains(page, '<dt>Medication ships</dt><dd>Every 4 weeks</dd>', html=True)
+        self.assertNotContains(page, 'Price not configured')
 
     def test_notice_changed_after_form_load_requires_fresh_acceptance(self):
         data = self.intake_data()

@@ -39,7 +39,7 @@ class PatientDashboardPresentationTests(TestCase):
 
     def populate(self):
         PatientSubscription.objects.create(
-            company=self.company, patient=self.patient, monthly_amount='1995',
+            company=self.company, patient=self.patient,
             plan_name='Comprehensive ongoing care and follow-up support plan',
         )
         Appointment.objects.create(

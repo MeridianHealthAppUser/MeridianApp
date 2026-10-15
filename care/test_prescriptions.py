@@ -1,6 +1,6 @@
 """Prescriptions renewed or changed from the patient record, and the editable summary data."""
 
-from datetime import date, timedelta
+from datetime import timedelta
 
 from django.contrib.auth import get_user_model
 from django.core.exceptions import PermissionDenied, ValidationError
@@ -11,11 +11,11 @@ from practices.models import Company, CompanyMembership, Patient
 
 from .clinical_summary import edit_summary, get_summary, summary_safety_flags
 from .models import (
-    AuditEvent, Lead, MedicationProduct, PatientClinicalSummary, PatientMedicalProfile, PatientSubscription,
+    AuditEvent, Lead, MedicationDose, MedicationProduct, PatientClinicalSummary, PatientMedicalProfile, PatientSubscription,
     PatientSummaryEdit, ScreeningQuestionnaire, Shipment, TreatmentAuthorization,
 )
 from .prescriptions import (
-    add_months, change_prescription, current_prescription, prescription_options, prescription_state, renew_prescription,
+    add_weeks, change_prescription, current_prescription, prescription_options, prescription_state, renew_prescription,
 )
 
 
@@ -38,19 +38,28 @@ class PrescriptionTestData:
             CompanyMembership.objects.create(company=cls.company, user=user, role=role, clinician_type=kind)
         CompanyMembership.objects.create(company=cls.other, user=cls.outsider, role='doctor')
         cls.patient = Patient.objects.create(company=cls.company, first_name='Nadia', last_name='Mokoena')
-        product = dict(company=cls.company, price='100.00', category=MedicationProduct.Category.WEIGHT_MANAGEMENT,
-                       dose_frequency=MedicationProduct.DoseFrequency.WEEKLY)
-        cls.sema_low = MedicationProduct.objects.create(name='Semaglutide', strength='0.25 mg', **product)
-        cls.sema_high = MedicationProduct.objects.create(name='Semaglutide', strength='1.0 mg', **product)
-        cls.tirz = MedicationProduct.objects.create(name='Tirzepatide', strength='5 mg', **product)
-        cls.add_on = MedicationProduct.objects.create(name='Ondansetron', strength='4 mg', company=cls.company, price='50.00',
-                                                      category=MedicationProduct.Category.OTHER)
-        cls.hidden = MedicationProduct.objects.create(name='Liraglutide', strength='3 mg', is_active=False, **product)
+        pen = dict(company=cls.company, price='100.00', category=MedicationProduct.Category.WEIGHT_MANAGEMENT)
+        sema_small = MedicationProduct.objects.create(name='Semaglutide', strength='1 mg', **pen)
+        sema_large = MedicationProduct.objects.create(name='Semaglutide', strength='4 mg', **pen)
+        tirz_pen = MedicationProduct.objects.create(name='Tirzepatide', strength='5 mg', **pen)
+        add_on = MedicationProduct.objects.create(name='Ondansetron', strength='4 mg', company=cls.company, price='50.00',
+                                                  category=MedicationProduct.Category.OTHER)
+        hidden_pen = MedicationProduct.objects.create(name='Liraglutide', strength='3 mg', is_active=False, **pen)
+        dose = dict(company=cls.company, price='1995.00')
+        cls.sema_low = MedicationDose.objects.create(pen=sema_small, amount_mg='0.25', **dose)
+        cls.sema_high = MedicationDose.objects.create(pen=sema_large, amount_mg='1.0', **dose)
+        cls.tirz = MedicationDose.objects.create(pen=tirz_pen, amount_mg='5', pens_per_dispatch=1, dispatch_weeks=1, **dose)
+        cls.add_on = MedicationDose.objects.create(pen=add_on, amount_mg='4', **dose)
+        cls.hidden = MedicationDose.objects.create(pen=hidden_pen, amount_mg='3', **dose)
+        # Not prescribable until the practice sets its price.
+        cls.unpriced = MedicationDose.objects.create(company=cls.company, pen=tirz_pen, amount_mg='7.5',
+                                                     tier=MedicationDose.Tier.STEP_UP)
 
-    def prescribe(self, product=None, **values):
+    def prescribe(self, dose=None, **values):
         today = timezone.localdate()
-        defaults = dict(company=self.company, patient=self.patient, prescribed_by=self.doctor, product=product or self.sema_low,
-                        max_dose='0.25 mg weekly', quantity_per_cycle=2, starts_on=today - timedelta(days=60),
+        dose = dose or self.sema_low
+        defaults = dict(company=self.company, patient=self.patient, prescribed_by=self.doctor, product=dose.pen, dose=dose,
+                        max_dose=dose.label, quantity_per_cycle=2, starts_on=today - timedelta(days=60),
                         expires_on=today + timedelta(days=90))
         defaults.update(values)
         return TreatmentAuthorization.objects.create(**defaults)
@@ -58,28 +67,23 @@ class PrescriptionTestData:
 
 @override_settings(MULTI_PRACTICE_ENABLED=True)
 class PrescriptionTests(PrescriptionTestData, TestCase):
-    def test_months_are_added_to_the_same_day_or_the_last_day_of_a_short_month(self):
-        self.assertEqual(add_months(date(2026, 8, 31), 6), date(2027, 2, 28))
-        self.assertEqual(add_months(date(2027, 8, 31), 6), date(2028, 2, 29))
-        self.assertEqual(add_months(date(2026, 4, 24), 6), date(2026, 10, 24))
-        self.assertEqual(add_months(date(2026, 10, 24), 3), date(2027, 1, 24))
-
     def test_any_doctor_here_can_renew_and_the_old_prescription_is_kept_as_history(self):
         today = timezone.localdate()
         previous = self.prescribe()
         plan = PatientSubscription.objects.create(company=self.company, patient=self.patient, authorization=previous,
-                                                  plan_name='Semaglutide plan', monthly_amount='1995.00',
+                                                  plan_name='Semaglutide plan',
                                                   status=PatientSubscription.Status.ACTIVE, starts_on=today)
         parcel = Shipment.objects.create(company=self.company, patient=self.patient, authorization=previous,
                                          scheduled_for=today + timedelta(days=3), status=Shipment.Status.READY)
-        renewal = renew_prescription(company=self.company, patient=self.patient, actor=self.colleague, current=previous, months=6)
+        renewal = renew_prescription(company=self.company, patient=self.patient, actor=self.colleague, current=previous, weeks=24)
         previous.refresh_from_db()
         self.assertEqual(previous.status, TreatmentAuthorization.Status.CANCELLED)
-        self.assertEqual((renewal.replaces_id, renewal.prescribed_by_id, renewal.product_id, renewal.max_dose),
-                         (previous.pk, self.colleague.pk, self.sema_low.pk, '0.25 mg weekly'))
-        self.assertEqual((renewal.starts_on, renewal.expires_on), (today, add_months(previous.expires_on, 6)))
+        self.assertEqual((renewal.replaces_id, renewal.prescribed_by_id, renewal.product_id, renewal.dose, renewal.max_dose),
+                         (previous.pk, self.colleague.pk, self.sema_low.pen_id, self.sema_low, '0.25 mg weekly'))
+        # 24 weeks on from the current expiry.
+        self.assertEqual((renewal.starts_on, renewal.expires_on), (today, previous.expires_on + timedelta(days=168)))
         self.assertEqual(renewal.quantity_per_cycle, 2)
-        self.assertEqual(renewal.log_text, f'Prescription renewed for 6 months: Semaglutide 0.25 mg weekly, '
+        self.assertEqual(renewal.log_text, f'Prescription renewed for 24 weeks: Semaglutide 0.25 mg weekly, '
                                            f'valid to {renewal.expires_on.day} {renewal.expires_on:%b %Y}.')
         plan.refresh_from_db()
         parcel.refresh_from_db()
@@ -93,8 +97,14 @@ class PrescriptionTests(PrescriptionTestData, TestCase):
         today = timezone.localdate()
         previous = self.prescribe(starts_on=today - timedelta(days=200), expires_on=today - timedelta(days=10))
         self.assertEqual(prescription_state(previous), 'expired')
-        renewal = renew_prescription(company=self.company, patient=self.patient, actor=self.doctor, current=previous, months=1)
-        self.assertEqual(renewal.expires_on, add_months(today, 1))
+        renewal = renew_prescription(company=self.company, patient=self.patient, actor=self.doctor, current=previous, weeks=4)
+        self.assertEqual(renewal.expires_on, add_weeks(today, 4))
+
+    def test_a_dose_no_longer_offered_is_changed_not_renewed(self):
+        previous = self.prescribe()
+        MedicationDose.objects.filter(pk=self.sema_low.pk).update(is_active=False)
+        with self.assertRaisesMessage(ValidationError, 'no longer offered'):
+            renew_prescription(company=self.company, patient=self.patient, actor=self.doctor, current=previous, weeks=24)
 
     def test_prescription_state_follows_the_expiry_date(self):
         today = timezone.localdate()
@@ -107,22 +117,22 @@ class PrescriptionTests(PrescriptionTestData, TestCase):
         for actor in (self.dietitian, self.admin, self.super_admin, self.outsider):
             with self.subTest(actor=actor.email):
                 with self.assertRaises(PermissionDenied):
-                    renew_prescription(company=self.company, patient=self.patient, actor=actor, current=previous, months=6)
+                    renew_prescription(company=self.company, patient=self.patient, actor=actor, current=previous, weeks=24)
                 with self.assertRaises(PermissionDenied):
                     change_prescription(company=self.company, patient=self.patient, actor=actor, current=previous,
-                                        product=self.tirz, months=6)
+                                        dose=self.tirz, weeks=24)
         self.assertEqual(TreatmentAuthorization.objects.count(), 1)
 
-    def test_a_stale_form_and_out_of_range_months_change_nothing(self):
+    def test_a_stale_form_and_out_of_range_weeks_change_nothing(self):
         previous = self.prescribe()
-        renew_prescription(company=self.company, patient=self.patient, actor=self.doctor, current=previous, months=6)
+        renew_prescription(company=self.company, patient=self.patient, actor=self.doctor, current=previous, weeks=24)
         with self.assertRaisesMessage(ValidationError, 'changed in another tab'):
-            renew_prescription(company=self.company, patient=self.patient, actor=self.doctor, current=previous, months=6)
+            renew_prescription(company=self.company, patient=self.patient, actor=self.doctor, current=previous, weeks=24)
         current = current_prescription(self.company, self.patient)
-        for months in (0, 7, '6'):
-            with self.subTest(months=months):
+        for weeks in (0, 6, 26, '24'):
+            with self.subTest(weeks=weeks):
                 with self.assertRaises(ValidationError):
-                    renew_prescription(company=self.company, patient=self.patient, actor=self.doctor, current=current, months=months)
+                    renew_prescription(company=self.company, patient=self.patient, actor=self.doctor, current=current, weeks=weeks)
         self.assertEqual(TreatmentAuthorization.objects.count(), 2)
 
     def test_change_replaces_from_today_holds_parcels_and_logs_the_reason(self):
@@ -131,49 +141,56 @@ class PrescriptionTests(PrescriptionTestData, TestCase):
         parcel = Shipment.objects.create(company=self.company, patient=self.patient, authorization=previous,
                                          scheduled_for=today + timedelta(days=3), status=Shipment.Status.READY)
         changed = change_prescription(company=self.company, patient=self.patient, actor=self.doctor, current=previous,
-                                      product=self.tirz, months=6, reason='Side effects – nausea, vomiting')
-        self.assertEqual((changed.product_id, changed.max_dose, changed.starts_on, changed.expires_on, changed.replaces_id),
-                         (self.tirz.pk, '5 mg weekly', today, add_months(today, 6), previous.pk))
+                                      dose=self.tirz, weeks=24, reason='Side effects – nausea, vomiting')
+        self.assertEqual((changed.product_id, changed.dose, changed.max_dose, changed.starts_on, changed.expires_on, changed.replaces_id),
+                         (self.tirz.pen_id, self.tirz, '5 mg weekly', today, add_weeks(today, 24), previous.pk))
+        # What is sent per parcel comes from the dose.
+        self.assertEqual(changed.quantity_per_cycle, self.tirz.pens_per_dispatch)
         self.assertEqual(changed.log_text, 'Side effects – nausea, vomiting. Prescription changed from Semaglutide 0.25 mg weekly '
-                                           f'to Tirzepatide 5 mg weekly, 6 months, valid to {changed.expires_on.day} {changed.expires_on:%b %Y}.')
+                                           f'to Tirzepatide 5 mg weekly, 24 weeks, valid to {changed.expires_on.day} {changed.expires_on:%b %Y}.')
         parcel.refresh_from_db()
         self.assertEqual(parcel.status, Shipment.Status.HELD)
         self.assertTrue(AuditEvent.objects.filter(action='prescription.changed').exists())
 
-    def test_change_rejects_the_same_dose_and_medicines_outside_the_main_treatments(self):
+    def test_change_rejects_the_same_dose_and_doses_outside_the_main_treatments(self):
         previous = self.prescribe()
         with self.assertRaisesMessage(ValidationError, 'Use Renew to extend it'):
             change_prescription(company=self.company, patient=self.patient, actor=self.doctor, current=previous,
-                                product=self.sema_low, months=6)
-        for product in (self.add_on, self.hidden):
-            with self.subTest(product=str(product)):
+                                dose=self.sema_low, weeks=24)
+        for dose in (self.add_on, self.hidden, self.unpriced):
+            with self.subTest(dose=str(dose)):
                 with self.assertRaises(ValidationError):
                     change_prescription(company=self.company, patient=self.patient, actor=self.doctor, current=previous,
-                                        product=product, months=6)
+                                        dose=dose, weeks=24)
         options = prescription_options(self.company, previous)
+        # Lowest first, and a dose without a price isn't offered until it has one.
         self.assertEqual({name: [str(item) for item in doses] for name, doses in options.items()},
-                         {'Semaglutide': ['Semaglutide 0.25 mg', 'Semaglutide 1.0 mg'], 'Tirzepatide': ['Tirzepatide 5 mg']})
+                         {'Semaglutide': ['Semaglutide 0.25 mg weekly', 'Semaglutide 1 mg weekly'],
+                          'Tirzepatide': ['Tirzepatide 5 mg weekly']})
+        MedicationDose.objects.filter(pk=self.unpriced.pk).update(price='4500.00')
+        self.assertEqual([str(item) for item in prescription_options(self.company, previous)['Tirzepatide']],
+                         ['Tirzepatide 5 mg weekly', 'Tirzepatide 7.5 mg weekly'])
 
     def test_a_first_prescription_is_created(self):
         created = change_prescription(company=self.company, patient=self.patient, actor=self.doctor, current=None,
-                                      product=self.sema_high, months=3)
+                                      dose=self.sema_high, weeks=12)
         self.assertIsNone(created.replaces_id)
-        self.assertTrue(created.log_text.startswith('Prescription created: Semaglutide 1.0 mg weekly, 3 months, valid to '))
-        self.assertEqual(created.quantity_per_cycle, 1)
+        self.assertTrue(created.log_text.startswith('Prescription created: Semaglutide 1 mg weekly, 12 weeks, valid to '))
+        self.assertEqual((created.product_id, created.quantity_per_cycle), (self.sema_high.pen_id, 1))
 
     def test_a_safety_flag_must_be_acknowledged_before_prescribing(self):
         previous = self.prescribe()
         edit_summary(company=self.company, patient=self.patient, actor=self.doctor, field='pancreatitis', value='yes')
         with self.assertRaisesMessage(ValidationError, 'safety flag'):
-            renew_prescription(company=self.company, patient=self.patient, actor=self.doctor, current=previous, months=6)
+            renew_prescription(company=self.company, patient=self.patient, actor=self.doctor, current=previous, weeks=24)
         renewal = renew_prescription(company=self.company, patient=self.patient, actor=self.doctor, current=previous,
-                                     months=6, acknowledge_flags=True)
+                                     weeks=24, acknowledge_flags=True)
         audit = AuditEvent.objects.get(action='prescription.renewed')
         self.assertTrue(audit.metadata['safety_flags_acknowledged'])
         self.assertEqual(current_prescription(self.company, self.patient), renewal)
 
     def test_cancelled_and_add_on_authorisations_are_not_the_current_prescription(self):
-        self.prescribe(product=self.add_on, max_dose='4 mg as needed')
+        self.prescribe(dose=self.add_on, max_dose='4 mg as needed')
         self.assertIsNone(current_prescription(self.company, self.patient))
         self.prescribe(status=TreatmentAuthorization.Status.CANCELLED)
         self.assertIsNone(current_prescription(self.company, self.patient))

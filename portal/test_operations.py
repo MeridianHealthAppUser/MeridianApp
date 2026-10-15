@@ -9,8 +9,7 @@ from django.contrib.auth import get_user_model
 from django.test import Client
 from django.urls import reverse
 
-from care.models import (AuditEvent, MedicationBatch, MedicationProduct, Payment, PharmacyOrder, PracticeSettings, Shipment,
-                         StockMovement)
+from care.models import AuditEvent, MedicationProduct, Payment, PharmacyOrder, PracticeSettings, Shipment, ShipmentItem
 from care.operations import dispatch_shipment
 from care.pharmacy import set_basket_quantity, submit_basket
 from care.test_operations import OperationsFixture
@@ -43,12 +42,16 @@ class OperationsPortalFixture(OperationsFixture):
     def token(self, name, args=None, **params):
         return self.page(name, args, **params).context['workflow_context']
 
-    def receipt_data(self, **extra):
-        return {'product': self.product.pk, 'batch_number': 'PORTAL-BATCH', 'received_on': self.today,
-                'expires_on': self.today + timedelta(days=90), 'quantity': 10, 'cold_chain_confirmed': 'on', **extra}
+    def create_token(self, client=None):
+        """The Create shipment dialog's, on the Weekly shipping list."""
+        return self.page('ops-shipping', client=client).context['create_context']
+
+    def shipment_data(self, **extra):
+        return {'patient': self.patient.pk, 'product': self.product.pk, 'quantity': 2, 'scheduled_for': self.today,
+                'confirm': 'on', **extra}
 
     def product_data(self, **extra):
-        return {'name': 'New catalogue product', 'strength': 'Product variant', 'category': 'other', 'dose_frequency': 'as_directed',
+        return {'name': 'New catalogue product', 'strength': 'Product variant', 'category': 'other',
                 'price': '120.00', 'description': '', 'allowance': '', 'allowance_group': '',
                 'requires_authorisation': 'on', 'requires_cold_chain': 'on', 'is_active': 'on', **extra}
 
@@ -64,10 +67,9 @@ class OperationsPortalFixture(OperationsFixture):
 
 class OperationsPortalTests(OperationsPortalFixture):
     def test_lists_are_separate_scoped_pages_and_doctors_cannot_open_them(self):
-        batch = self.receive()
         shipment = self.shipment(quantity=2)
         order = self.submitted()
-        for name, template in (('ops-catalogue', 'operations_catalogue'), ('ops-stock', 'operations_stock'),
+        for name, template in (('ops-catalogue', 'operations_catalogue'),
             ('ops-shipping', 'operations_shipping'), ('ops-history', 'operations_history'), ('ops-orders', 'operations_orders')):
             response = self.page(name)
             self.assertTemplateUsed(response, f'portal/{template}.html')
@@ -75,38 +77,34 @@ class OperationsPortalTests(OperationsPortalFixture):
             self.assertNotContains(response, self.beta_product.name)
         # Operations is for practice admins and Super Admins; the Clinician role can't read it either.
         self.login(self.doctor)
-        for name, args in (('ops-catalogue', []), ('ops-stock', []), ('ops-shipping', []), ('ops-history', []), ('ops-orders', []),
-            ('ops-product-detail', [self.product.pk]), ('ops-batch-detail', [batch.pk]), ('ops-shipment-detail', [shipment.pk]),
-            ('ops-order-detail', [order.pk]), ('ops-stock-export', []), ('ops-history-export', [])):
+        for name, args in (('ops-catalogue', []), ('ops-shipping', []), ('ops-history', []), ('ops-orders', []),
+            ('ops-product-detail', [self.product.pk]), ('ops-shipment-detail', [shipment.pk]),
+            ('ops-order-detail', [order.pk]), ('ops-week-order', []), ('ops-history-export', [])):
             with self.subTest(name=name):
                 self.assertEqual(self.client.get(reverse(f'portal:{name}', args=args)).status_code, 403)
 
     def test_anonymous_patient_and_revoked_staff_cannot_open_operations(self):
         self.client.logout()
-        self.assertEqual(self.client.get(reverse('portal:ops-stock')).status_code, 302)
+        self.assertEqual(self.client.get(reverse('portal:ops-shipping')).status_code, 302)
         self.login(self.patient_user)
-        self.assertEqual(self.client.get(reverse('portal:ops-stock')).status_code, 403)
+        self.assertEqual(self.client.get(reverse('portal:ops-shipping')).status_code, 403)
         self.login()
         CompanyMembership.objects.filter(company=self.company, user=self.admin).update(is_active=False)
-        self.assertEqual(self.client.get(reverse('portal:ops-stock')).status_code, 403)
+        self.assertEqual(self.client.get(reverse('portal:ops-shipping')).status_code, 403)
 
     def test_doctors_cannot_write_any_operational_endpoint(self):
-        batch = self.receive()
         shipment = self.shipment(quantity=2)
         order = self.submitted()
         self.login(self.doctor)
-        for name, args in (('ops-product-create', []), ('ops-product-detail', [self.product.pk]),
-            ('ops-stock-receive', []), ('ops-batch-detail', [batch.pk]), ('ops-shipping-create', []),
+        for name, args in (('ops-product-create', []), ('ops-product-detail', [self.product.pk]), ('ops-shipping-create', []),
             ('ops-shipment-detail', [shipment.pk]), ('ops-shipping-lock', []), ('ops-order-detail', [order.pk])):
             with self.subTest(name=name):
                 self.assertEqual(self.client.post(reverse(f'portal:{name}', args=args), {}).status_code, 403)
 
-    def test_foreign_product_batch_shipment_and_order_urls_are_404(self):
-        batch = self.receive(company=self.beta, actor=self.beta_admin, product=self.beta_product)
+    def test_foreign_product_shipment_and_order_urls_are_404(self):
         shipment = self.shipment(company=self.beta, patient=self.beta_patient, product=self.beta_product, subscription=None)
         order = PharmacyOrder.objects.create(company=self.beta, patient=self.beta_patient, status='submitted')
-        for name, pk in (('ops-product-detail', self.beta_product.pk), ('ops-batch-detail', batch.pk),
-                         ('ops-shipment-detail', shipment.pk), ('ops-order-detail', order.pk)):
+        for name, pk in (('ops-product-detail', self.beta_product.pk), ('ops-shipment-detail', shipment.pk), ('ops-order-detail', order.pk)):
             with self.subTest(name=name):
                 self.assertEqual(self.client.get(reverse(f'portal:{name}', args=[pk])).status_code, 404)
 
@@ -127,9 +125,9 @@ class OperationsPortalTests(OperationsPortalFixture):
         self.assertTrue(response.context['form'].non_field_errors())
         self.assertEqual(MedicationProduct.objects.filter(company=self.company, name=self.product.name).count(), 1)
 
-    def test_stock_receipt_history_locks_product_identity_and_safety_rules(self):
+    def test_shipment_history_locks_product_identity_and_safety_rules(self):
         product = MedicationProduct.objects.create(company=self.company, name='Received original product', strength='Original', price=1)
-        self.receive(product=product)
+        self.shipment(product=product, quantity=1)
         self.login(self.super_admin)
         response = self.client.post(reverse('portal:ops-product-detail', args=[product.pk]), self.product_data(
             workflow_context=self.token('ops-product-detail', [product.pk]), name='Different medicine', strength='Different'))
@@ -138,90 +136,85 @@ class OperationsPortalTests(OperationsPortalFixture):
         self.assertEqual(product.name, 'Received original product')
         self.assertEqual(product.strength, 'Original')
 
-    def test_receipt_creates_once_and_requires_valid_expiring_signed_context(self):
-        name = 'portal:ops-stock-receive'
-        token = self.token('ops-stock-receive')
+    def test_shipment_creation_requires_a_valid_expiring_signed_context(self):
+        url = reverse('portal:ops-shipping-create')
         for invalid in ('', 'tampered'):
-            response = self.client.post(reverse(name), self.receipt_data(workflow_context=invalid))
-            self.assertEqual(response.status_code, 400)
+            self.assertEqual(self.client.post(url, self.shipment_data(workflow_context=invalid)).status_code, 400)
         with patch('django.core.signing.time.time', return_value=1):
-            expired = self.token('ops-stock-receive')
-        response = self.client.post(reverse(name), self.receipt_data(workflow_context=expired))
-        self.assertEqual(response.status_code, 400)
-        self.assertEqual(MedicationBatch.objects.count(), 0)
-        first = self.client.post(reverse(name), self.receipt_data(workflow_context=token))
-        second = self.client.post(reverse(name), self.receipt_data(workflow_context=token))
-        self.assertEqual(first.status_code, 302)
-        self.assertEqual(second.url, first.url)
-        self.assertEqual(MedicationBatch.objects.count(), 1)
-        self.assertEqual(StockMovement.objects.count(), 1)
+            expired = self.create_token()
+        self.assertEqual(self.client.post(url, self.shipment_data(workflow_context=expired)).status_code, 400)
+        self.assertFalse(Shipment.objects.exists())
 
-    def test_stale_practice_context_never_saves_stock_in_newly_selected_practice(self):
+    def test_stale_practice_context_never_creates_a_shipment_in_newly_selected_practice(self):
         CompanyMembership.objects.create(company=self.beta, user=self.admin, role='practice_admin')
-        token = self.token('ops-stock-receive')
+        token = self.create_token()
         self.select(self.beta)
-        response = self.client.post(reverse('portal:ops-stock-receive'), self.receipt_data(
-            workflow_context=token, product=self.beta_product.pk))
+        response = self.client.post(reverse('portal:ops-shipping-create'), self.shipment_data(
+            workflow_context=token, patient=self.beta_patient.pk, product=self.beta_product.pk))
         self.assertEqual(response.status_code, 400)
-        self.assertEqual(response.context['workflow_context'], token)
-        self.assertFalse(MedicationBatch.objects.exists())
+        self.assertFalse(Shipment.objects.exists())
         self.assertFalse(AuditEvent.objects.exists())
 
-    def test_batch_action_needs_confirmation_and_rejects_stale_version_without_upgrading_token(self):
-        batch = self.receive()
-        url = reverse('portal:ops-batch-detail', args=[batch.pk])
-        token = self.token('ops-batch-detail', [batch.pk])
-        response = self.client.post(url, {'workflow_context': token, 'action': 'quarantine', 'reason': 'Check'})
+    def test_shipment_action_rejects_a_stale_version_without_upgrading_token(self):
+        shipment = self.shipment()
+        url = reverse('portal:ops-shipment-detail', args=[shipment.pk])
+        token = self.token('ops-shipment-detail', [shipment.pk])
+        response = self.client.post(url, {'workflow_context': token, 'action': 'hold', 'reason': 'Check'})
         self.assertEqual(response.status_code, 400)
-        batch.refresh_from_db()
-        self.assertEqual(batch.status, 'available')
-        response = self.client.post(url, {'workflow_context': token, 'action': 'quarantine', 'reason': 'Check', 'confirm': 'on'})
+        response = self.client.post(url, {'workflow_context': token, 'action': 'hold', 'reason': 'Check', 'confirm': 'on'})
         self.assertEqual(response.status_code, 302)
-        response = self.client.post(url, {'workflow_context': token, 'action': 'write_off', 'reason': 'Stale', 'confirm': 'on'})
+        response = self.client.post(url, {'workflow_context': token, 'action': 'cancel', 'reason': 'Stale', 'confirm': 'on'})
         self.assertEqual(response.status_code, 400)
         self.assertEqual(response.context['workflow_context'], token)
-        batch.refresh_from_db()
-        self.assertEqual(batch.status, 'quarantined')
+        shipment.refresh_from_db()
+        self.assertEqual(shipment.status, 'held')
 
     def test_manual_shipment_requires_confirmation_creates_only_draft_and_deduplicates(self):
         before_users = get_user_model().objects.count()
-        data = {'workflow_context': self.token('ops-shipping-create'), 'patient': self.patient.pk,
+        data = {'workflow_context': self.create_token(), 'patient': self.patient.pk,
                 'product': self.product.pk, 'quantity': 2, 'scheduled_for': self.today}
         url = reverse('portal:ops-shipping-create')
-        self.assertEqual(self.client.post(url, data).status_code, 400)
+        # Create shipment is a dialog on the Weekly shipping list; a mistake reopens it there.
+        self.assertRedirects(self.client.get(url), f"{reverse('portal:ops-shipping')}?create=1", fetch_redirect_response=False)
+        mistake = self.client.post(url, data)
+        self.assertEqual(mistake.status_code, 400)
+        self.assertTemplateUsed(mistake, 'portal/operations_shipping.html')
+        self.assertContains(mistake, '<dialog class="app-dialog" id="create-shipment" aria-labelledby="create-shipment-title" open>', status_code=400)
         first = self.client.post(url, {**data, 'confirm': 'on'})
         second = self.client.post(url, {**data, 'confirm': 'on'})
         self.assertEqual(first.status_code, 302)
         self.assertEqual(first.url, second.url)
         self.assertEqual(Shipment.objects.get().status, 'draft')
-        self.assertFalse(StockMovement.objects.exists())
         self.assertFalse(Payment.objects.exists())
         self.assertEqual(get_user_model().objects.count(), before_users)
 
     def test_manual_shipment_rejects_foreign_form_choices(self):
         response = self.client.post(reverse('portal:ops-shipping-create'), {
-            'workflow_context': self.token('ops-shipping-create'), 'patient': self.beta_patient.pk,
+            'workflow_context': self.create_token(), 'patient': self.beta_patient.pk,
             'product': self.beta_product.pk, 'quantity': 2, 'scheduled_for': self.today, 'confirm': 'on'})
         self.assertEqual(response.status_code, 400)
         self.assertFalse(Shipment.objects.exists())
 
     def test_prepare_lock_dispatch_and_delivery_are_explicit_separate_actions(self):
-        batch = self.receive()
         shipment = self.shipment()
+        item = shipment.items.get()
         url = reverse('portal:ops-shipment-detail', args=[shipment.pk])
         def post_action(action, **extra):
             return self.client.post(url, {'workflow_context': self.token('ops-shipment-detail', [shipment.pk]),
                 'action': action, 'confirm': 'on', **extra})
         self.assertEqual(post_action('prepare').status_code, 302)
-        self.assert_stock(batch, 6)
         self.assertEqual(post_action('dispatch', tracking_number='TRACK-1').status_code, 400)
         shipping = self.page('ops-shipping', week=self.today)
         self.assertEqual(self.client.post(reverse('portal:ops-shipping-lock'), {
             'workflow_context': shipping.context['lock_context'], 'week': self.today}).status_code, 302)
         token = self.token('ops-shipment-detail', [shipment.pk])
         self.assertEqual(self.client.post(url, {'workflow_context': token, 'action': 'dispatch', 'tracking_number': 'TRACK-1'}).status_code, 400)
-        self.assertEqual(post_action('dispatch', tracking_number='TRACK-1').status_code, 302)
-        self.assert_stock(batch, 6)
+        # The parcel's batch and expiry are noted with the dispatch.
+        self.assertContains(self.page('ops-shipment-detail', [shipment.pk]), f'name="batch_{item.pk}"')
+        self.assertEqual(post_action('dispatch', tracking_number='TRACK-1', **{f'batch_{item.pk}': 'SG-2604, expiry 04/2027'}).status_code, 302)
+        item.refresh_from_db()
+        self.assertEqual(item.batch_note, 'SG-2604, expiry 04/2027')
+        self.assertContains(self.page('ops-shipment-detail', [shipment.pk]), 'SG-2604, expiry 04/2027')
         self.assertEqual(post_action('deliver').status_code, 302)
         shipment.refresh_from_db()
         self.assertEqual(shipment.status, 'delivered')
@@ -239,29 +232,97 @@ class OperationsPortalTests(OperationsPortalFixture):
         self.assertEqual(order.status, 'accepted')
         self.assertEqual(order.shipment.status, 'draft')
         self.assertFalse(Payment.objects.exists())
-        self.assertFalse(StockMovement.objects.exists())
 
-    def test_stock_csv_is_private_scoped_formula_safe_and_head_does_not_audit(self):
-        self.receive(batch_number='  =1+1')
-        self.receive(company=self.beta, actor=self.beta_admin, product=self.beta_product, batch_number='FOREIGN-SECRET')
-        url = reverse('portal:ops-stock-export')
+    def test_the_list_shows_each_parcel_and_marks_the_weeks_drafts_ready(self):
+        week = self.today - timedelta(days=self.today.weekday())
+        draft = self.shipment(quantity=2, scheduled_for=week)
+        page = self.page('ops-shipping', week=week)
+        self.assertContains(page, f'{self.product} × 2<small>{self.auth.max_dose}</small>', html=False)
+        response = self.client.post(reverse('portal:ops-shipping-prepare'), {
+            'workflow_context': page.context['prepare_context'], 'week': week})
+        self.assertRedirects(response, f"{reverse('portal:ops-shipping')}?week={week}", fetch_redirect_response=False)
+        draft.refresh_from_db()
+        self.assertEqual(draft.status, 'ready')
+        self.assertContains(self.page('ops-shipping', week=week), '1 draft parcel marked ready.')
+        self.login(self.doctor)
+        self.assertEqual(self.client.post(reverse('portal:ops-shipping-prepare'), {'week': week}).status_code, 403)
+
+    def test_each_draft_line_has_its_own_mark_ready_button(self):
+        week = self.today - timedelta(days=self.today.weekday())
+        draft = self.shipment(quantity=1, scheduled_for=week)
+        failing = self.shipment(quantity=1, scheduled_for=week)
+        failing.items.update(dose='Not the authorised dose')
+        ready = self.ready(self.shipment(quantity=1, scheduled_for=week))
+        page = self.page('ops-shipping', week=week, status='all')
+        rows = {shipment.pk: shipment for shipment in page.context['shipments']}
+        self.assertTrue(rows[draft.pk].ready_context)
+        self.assertFalse(hasattr(rows[ready.pk], 'ready_context'))
+        self.assertContains(page, reverse('portal:ops-shipment-ready', args=[draft.pk]))
+        self.assertNotContains(page, reverse('portal:ops-shipment-ready', args=[ready.pk]))
+        url = reverse('portal:ops-shipment-ready', args=[draft.pk])
+        data = {'workflow_context': rows[draft.pk].ready_context, 'list_query': f'week={week}&status=all&next=https://evil.test'}
+        response = self.client.post(url, data)
+        # Back to the same week and status; nothing else from the query is followed.
+        self.assertRedirects(response, f"{reverse('portal:ops-shipping')}?week={week}&status=all", fetch_redirect_response=False)
+        draft.refresh_from_db()
+        self.assertEqual(draft.status, 'ready')
+        # The same click again is stale: the parcel has changed since the page was shown.
+        self.client.post(url, data)
+        self.assertEqual(AuditEvent.objects.filter(action='shipment.prepared', target_id=str(draft.pk)).count(), 1)
+        self.client.post(reverse('portal:ops-shipment-ready', args=[failing.pk]), {'workflow_context': rows[failing.pk].ready_context})
+        failing.refresh_from_db()
+        self.assertEqual(failing.status, 'draft')
+        self.assertContains(self.page('ops-shipping', week=week), 'not marked ready: The recorded dose does not match')
+        self.login(self.doctor)
+        self.assertEqual(self.client.post(url, data).status_code, 403)
+
+    def test_a_parcel_is_changed_from_its_page_until_locked(self):
+        shipment = self.shipment(quantity=2)
+        item = shipment.items.get()
+        page = self.page('ops-shipment-detail', [shipment.pk])
+        self.assertContains(page, 'Change this parcel')
+        url = reverse('portal:ops-shipment-change', args=[shipment.pk])
+        data = {'workflow_context': page.context['change_context'], 'scheduled_for': self.today + timedelta(days=2), f'pens_{item.pk}': 1}
+        self.assertEqual(self.client.post(url, {**data, f'pens_{item.pk}': 0}).status_code, 400)
+        self.assertRedirects(self.client.post(url, data), reverse('portal:ops-shipment-detail', args=[shipment.pk]),
+                             fetch_redirect_response=False)
+        shipment.refresh_from_db()
+        item.refresh_from_db()
+        self.assertEqual((shipment.scheduled_for, item.quantity), (self.today + timedelta(days=2), 1))
+        # The action form keeps working after a change: each form has its own token.
+        self.assertEqual(self.client.post(reverse('portal:ops-shipment-detail', args=[shipment.pk]), {
+            'workflow_context': self.token('ops-shipment-detail', [shipment.pk]), 'action': 'prepare', 'confirm': 'on'}).status_code, 302)
+        lock = self.page('ops-shipping', week=shipment.scheduled_for)
+        self.client.post(reverse('portal:ops-shipping-lock'), {'workflow_context': lock.context['lock_context'], 'week': shipment.scheduled_for})
+        self.assertNotContains(self.page('ops-shipment-detail', [shipment.pk]), 'Change this parcel')
+
+    def test_the_weeks_pens_to_order_are_listed_and_exported_privately_and_formula_safe(self):
+        week = self.today - timedelta(days=self.today.weekday())
+        MedicationProduct.objects.filter(pk=self.product.pk).update(name='=1+1')
+        self.ready(self.shipment(quantity=3, scheduled_for=week))
+        self.shipment(quantity=1, scheduled_for=week)
+        foreign = self.shipment(company=self.beta, patient=self.beta_patient, product=self.beta_product, subscription=None,
+                                scheduled_for=week, status='ready')
+        ShipmentItem.objects.filter(shipment=foreign).update(quantity=9)
+        page = self.page('ops-shipping', week=week)
+        self.assertEqual([(line['product'].pk, line['pens']) for line in page.context['week_order']['lines']], [(self.product.pk, 3)])
+        self.assertContains(page, 'Pens to order')
+        self.assertContains(page, 'Not included: 1 draft parcel.')
+        url = reverse('portal:ops-week-order')
         PracticeSettings.objects.update_or_create(company=self.company, defaults={'store_view_log': True})
         count = AuditEvent.objects.count()
-        head = self.client.head(url)
-        self.assertEqual(head.content, b'')
+        self.assertEqual(self.client.head(url, {'week': week}).content, b'')
         self.assertEqual(AuditEvent.objects.count(), count)
-        response = self.client.get(url)
-        self.assertEqual(response.status_code, 200)
+        response = self.client.get(url, {'week': week})
         self.assertIn('no-store', response['Cache-Control'])
-        self.assertEqual(response['X-Content-Type-Options'], 'nosniff')
         self.assertIn('attachment', response['Content-Disposition'])
         rows = list(csv.reader(io.StringIO(response.content.decode())))
-        self.assertTrue(rows[1][0].startswith("'"))
-        self.assertNotContains(response, 'FOREIGN-SECRET')
+        self.assertEqual(rows, [['Medicine', 'Pen', 'Pens'], ["'=1+1", 'Dose A', '3']])
+        self.assertNotContains(response, self.beta_product.name)
         self.assertEqual(AuditEvent.objects.count(), count + 1)
+        self.assertEqual(self.client.get(url, {'week': 'bad'}).status_code, 400)
 
     def test_history_export_uses_immutable_snapshot_and_escapes_patient_formula(self):
-        self.receive()
         shipment = dispatch_shipment(shipment=self.locked(), actor=self.admin, tracking_number='TRACK', confirm=True)
         shipment.dispatch_snapshot['patient_name'] = ' =HYPERLINK("bad")'
         shipment.save(update_fields=('dispatch_snapshot',))
@@ -274,13 +335,14 @@ class OperationsPortalTests(OperationsPortalFixture):
         self.assertEqual(rows[1][3][0], "'")
         self.assertEqual(self.client.get(reverse('portal:ops-history-export'), {'start': 'bad'}).status_code, 400)
 
-    def test_invalid_filters_are_validated_and_stock_pagination_reaches_page_two(self):
-        for i in range(21):
-            self.receive(batch_number=f'PAGE-{i:02d}')
-        response = self.page('ops-stock', page=2)
+    def test_invalid_filters_are_validated_and_shipping_pagination_reaches_page_two(self):
+        week = self.today - timedelta(days=self.today.weekday())
+        for _ in range(21):
+            self.shipment(quantity=1, scheduled_for=week)
+        response = self.page('ops-shipping', week=week, page=2)
         self.assertEqual(response.context['page_obj'].number, 2)
-        self.assertEqual(len(response.context['batches']), 1)
-        response = self.page('ops-stock', status='invalid')
+        self.assertEqual(len(response.context['shipments']), 1)
+        response = self.page('ops-shipping', status='invalid')
         self.assertTrue(response.context['filter_form'].errors)
         self.assertEqual(response.context['page_obj'].paginator.count, 0)
         self.assertEqual(self.client.get(reverse('portal:ops-manifest'), {'week': 'bad'}).status_code, 400)
@@ -288,10 +350,9 @@ class OperationsPortalTests(OperationsPortalFixture):
     def test_mutation_endpoints_require_csrf(self):
         client = Client(enforce_csrf_checks=True)
         self.login(client=client)
-        response = self.page('ops-stock-receive', client=client)
-        self.assertEqual(client.post(reverse('portal:ops-stock-receive'), self.receipt_data(
-            workflow_context=response.context['workflow_context'])).status_code, 403)
-        self.assertFalse(MedicationBatch.objects.exists())
+        self.assertEqual(client.post(reverse('portal:ops-shipping-create'), self.shipment_data(
+            workflow_context=self.create_token(client))).status_code, 403)
+        self.assertFalse(Shipment.objects.exists())
 
 
 class PatientPharmacyPortalTests(OperationsPortalFixture):
@@ -349,7 +410,6 @@ class PatientPharmacyPortalTests(OperationsPortalFixture):
         self.assertEqual(response.status_code, 302)
         self.assertEqual(Shipment.objects.get().status, 'draft')
         self.assertFalse(Payment.objects.exists())
-        self.assertFalse(StockMovement.objects.exists())
         self.assertEqual(get_user_model().objects.count(), users_before)
 
     def test_quantity_repeat_is_set_once_and_bad_or_missing_context_never_writes(self):

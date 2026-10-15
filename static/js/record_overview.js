@@ -94,17 +94,17 @@
     window.history.replaceState(null, '', url.pathname + url.search);
   }
 
-  /* Renew: the new expiry follows the months chosen. */
+  /* Renew: the new expiry follows the weeks chosen. */
   const renew = document.querySelector('[data-renew-form]');
   if (renew) {
     const expiry = renew.querySelector('[data-renew-expiry]');
     renew.addEventListener('change', () => {
-      const chosen = renew.querySelector('input[name="months"]:checked');
+      const chosen = renew.querySelector('input[name="weeks"]:checked');
       if (chosen && expiry) expiry.textContent = chosen.dataset.expires;
     });
   }
 
-  /* Change: the doses follow the medicine chosen, and the preview follows both and the months. */
+  /* Change: the doses follow the medicine chosen, and the preview follows both and the weeks. */
   const change = document.querySelector('[data-change-form]');
   if (change) {
     const medicine = change.querySelector('[data-change-medicine]');
@@ -113,8 +113,8 @@
     const options = dose ? [...dose.options] : [];
     function updatePreview() {
       const chosen = dose && dose.selectedOptions[0];
-      const months = change.querySelector('input[name="months"]:checked');
-      if (preview) preview.textContent = chosen && months ? `${chosen.dataset.label} · to ${months.dataset.expires}` : '';
+      const weeks = change.querySelector('input[name="weeks"]:checked');
+      if (preview) preview.textContent = chosen && weeks ? `${chosen.dataset.label} · to ${weeks.dataset.expires}` : '';
     }
     function fillDoses() {
       if (!medicine || !dose) return;
@@ -130,12 +130,12 @@
   }
 
   /* Initiate: the plans follow the medicine chosen, the lengths follow the plan (starting on its usual length),
-     and the preview shows each strength with its dates. */
+     and the preview shows each dose with its dates. */
   const initiate = document.querySelector('[data-initiate-form]');
   const initiateMedicine = initiate && initiate.querySelector('[data-initiate-medicine]');
   if (initiateMedicine) {
     const plans = [...initiate.querySelectorAll('input[name="plan"]')];
-    const lengths = [...initiate.querySelectorAll('input[name="months"]')];
+    const lengths = [...initiate.querySelectorAll('input[name="weeks"]')];
     const preview = initiate.querySelector('[data-initiate-preview]');
     const shown = (input) => !input.closest('label').hidden;
     const chosenPlan = () => plans.find((input) => input.checked && shown(input));
@@ -147,7 +147,7 @@
     }
     function showLengths(reset) {
       const plan = chosenPlan();
-      const allowed = plan ? plan.dataset.months.split(',') : [];
+      const allowed = plan ? plan.dataset.weeks.split(',') : [];
       lengths.forEach((input) => { input.closest('label').hidden = !allowed.includes(input.value); });
       if (plan && (reset || !lengths.some((input) => input.checked && shown(input)))) {
         const usual = lengths.find((input) => input.value === plan.dataset.default);

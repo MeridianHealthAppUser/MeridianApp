@@ -2,7 +2,7 @@
 {% load static workspace_ui %}
 
 {% block title %}My Treatment | Meridian{% endblock %}
-{% block patient_extra_css %}<link rel="stylesheet" href="{% static 'css/treatment.css' %}?v=20261010">{% endblock %}
+{% block patient_extra_css %}<link rel="stylesheet" href="{% static 'css/treatment.css' %}?v=20261015l"><link rel="stylesheet" href="{% static 'css/dialogs.css' %}?v=20261008b"><script src="{% static 'js/dialogs.js' %}?v=20261015a" defer></script>{% endblock %}
 {% block patient_content_class %}patient-treatment{% endblock %}
 {% block patient_breadcrumbs %}{% breadcrumbs 'My Treatment' %}{% endblock %}
 {% block patient_heading %}<header class="patient-page-heading"><div><h1>My Treatment</h1></div></header>{% endblock %}
@@ -63,14 +63,15 @@
           {{ enrollment_form.non_field_errors }}
           <h2 class="patient-eyebrow" id="treatment-plan-heading">{% if current_plan.status == 'active' %}My active subscription{% else %}My subscription{% endif %}</h2>
           <div class="patient-plan__head">
-            <p class="patient-plan__product">{% if plan_authorization %}<strong>{{ plan_authorization.product.name }}{% if plan_authorization.product.strength %} {{ plan_authorization.product.strength }}{% endif %}</strong> <span>· {{ plan_authorization.quantity_per_cycle }} per cycle</span>{% else %}<strong>{{ current_plan.plan_name }}</strong>{% endif %}</p>
-            <p class="patient-plan__amount">R{{ current_plan.monthly_amount|floatformat:"-2" }}<span>a month</span></p>
+            <p class="patient-plan__product">{% if treatment %}<strong>{{ treatment.medicine }} {{ treatment.dose }}</strong>{% elif plan_authorization %}<strong>{{ plan_authorization.product.name }} {{ plan_authorization.max_dose }}</strong> <span>· {{ plan_authorization.quantity_per_cycle }} per cycle</span>{% else %}<strong>{{ current_plan.plan_name }}</strong>{% endif %}</p>
+            {% if plan_dose.price is not None %}<p class="patient-plan__amount">R{{ plan_dose.price|floatformat:"-2" }}<span>{{ plan_dose.billing_text }}</span></p>{% endif %}
           </div>
           <p class="patient-small patient-plan__billing">Reference amount only. No payment is collected in this app.</p>
+          {% if treatment %}{% include 'portal/includes/patient_treatment_overview.html' %}{% endif %}
           <dl class="patient-kv">
             <div><dt>Plan</dt><dd>{{ current_plan.plan_name }}</dd></div>
             <div><dt>Status</dt><dd>{{ current_plan.get_status_display }}</dd></div>
-            {% if plan_authorization %}
+            {% if plan_authorization and not treatment %}
               <div><dt>Maximum dose</dt><dd>{{ plan_authorization.max_dose }}</dd></div>
               <div><dt>Authorised on</dt><dd>{{ plan_authorization.starts_on|date:"j M Y" }}</dd></div>
               <div><dt>Valid until</dt><dd class="patient-kv__amber">{{ plan_authorization.expires_on|date:"j M Y" }}</dd></div>
@@ -103,19 +104,21 @@
           {{ action_form.non_field_errors }}
           <h2 class="patient-eyebrow" id="treatment-plan-heading">My treatment</h2>
           <div class="patient-plan__head">
-            <p class="patient-plan__product"><strong>{{ current_authorization.product.name }}{% if current_authorization.product.strength %} {{ current_authorization.product.strength }}{% endif %}</strong> <span>· {{ current_authorization.quantity_per_cycle }} per cycle</span></p>
+            {% if treatment %}<p class="patient-plan__product"><strong>{{ treatment.medicine }} {{ treatment.dose }}</strong></p>{% if enroll_dose.price is not None %}<p class="patient-plan__amount">R{{ enroll_dose.price|floatformat:"-2" }}<span>{{ enroll_dose.billing_text }}</span></p>{% endif %}
+            {% else %}<p class="patient-plan__product"><strong>{{ current_authorization.product.name }} {{ current_authorization.max_dose }}</strong> <span>· {{ current_authorization.quantity_per_cycle }} per cycle</span></p>{% endif %}
           </div>
+          {% if treatment %}{% include 'portal/includes/patient_treatment_overview.html' %}{% else %}
           <dl class="patient-kv">
             <div><dt>Maximum dose</dt><dd>{{ current_authorization.max_dose }}</dd></div>
             <div><dt>Authorised on</dt><dd>{{ current_authorization.starts_on|date:"j M Y" }}</dd></div>
             <div><dt>Valid until</dt><dd class="patient-kv__amber">{{ current_authorization.expires_on|date:"j M Y" }}</dd></div>
             <div><dt>Prescribing doctor</dt><dd>{{ current_authorization.prescribed_by.full_name }}</dd></div>
-          </dl>
+          </dl>{% endif %}
           {% if current_authorization.instructions %}<div class="patient-plan__note"><h3 class="patient-eyebrow">Your doctor’s instructions</h3><p class="treatment-instructions">{{ current_authorization.instructions|linebreaksbr }}</p></div>{% endif %}
           {% if can_enroll or enrollment_form.errors %}
             <div class="patient-plan__manage">
               <h3 class="patient-eyebrow">Start your subscription</h3>
-              <p class="patient-small">Your parcels are scheduled from your subscription.{% if plan_settings %} The reference amount is R{{ plan_settings.standard_subscription_amount|floatformat:"-2" }} a month.{% endif %} No payment is collected in this app.</p>
+              <p class="patient-small">Your parcels are scheduled from your subscription.{% if enroll_dose.price is not None %} The reference amount is R{{ enroll_dose.price|floatformat:"-2" }} {{ enroll_dose.billing_text }}.{% endif %} No payment is collected in this app.</p>
               <form method="post" action="{% url 'portal:patient-subscription-enroll' %}" class="console-form">
                 {% csrf_token %}
                 <input type="hidden" name="treatment_context" value="{{ enrollment_context }}">
@@ -206,4 +209,5 @@
     </div>
   </details>
 </div>
+{% if timeline %}{% include 'portal/includes/patient_treatment_timeline.html' %}{% endif %}
 {% endblock %}

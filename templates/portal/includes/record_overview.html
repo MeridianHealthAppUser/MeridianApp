@@ -223,15 +223,15 @@
           <legend>Dosage plan</legend>
           {% for plan in starting_plans %}
             <label class="record-plan-option" data-medicine="{{ plan.medicine }}">
-              <input type="radio" name="plan" value="{{ plan.pk }}" required data-months="{{ plan.month_choices|join:',' }}" data-default="{{ plan.default }}" data-previews="{{ plan.previews }}"{% if plan.pk|stringformat:'s' == initiate_form.plan.value|stringformat:'s' %} checked{% endif %}>
+              <input type="radio" name="plan" value="{{ plan.pk }}" required data-weeks="{{ plan.week_choices|join:',' }}" data-default="{{ plan.default }}" data-previews="{{ plan.previews }}"{% if plan.pk|stringformat:'s' == initiate_form.plan.value|stringformat:'s' %} checked{% endif %}>
               <span>{% if plan.name %}<strong>{{ plan.name }}</strong>{% endif %}{{ plan.medicine }} {{ plan.summary }}</span>
             </label>
           {% endfor %}
         </fieldset>
         <fieldset class="record-dialog__months">
           <legend>Valid for</legend>
-          {% for option in initiate_months %}
-            <label class="record-chip"><input type="radio" name="months" value="{{ option.months }}"{% if option.months|stringformat:'s' == initiate_form.months.value|stringformat:'s' %} checked{% endif %}><span>{{ option.months }} month{{ option.months|pluralize }}</span></label>
+          {% for option in initiate_weeks %}
+            <label class="record-chip"><input type="radio" name="weeks" value="{{ option.weeks }}"{% if option.weeks|stringformat:'s' == initiate_form.weeks.value|stringformat:'s' %} checked{% endif %}><span>{{ option.weeks }} week{{ option.weeks|pluralize }}</span></label>
           {% endfor %}
         </fieldset>
         <div class="console-form__field">
@@ -263,13 +263,13 @@
         {% if renew_form.non_field_errors %}<div class="record-error" role="alert">{{ renew_form.non_field_errors|join:' ' }}</div>{% endif %}
         <fieldset class="record-dialog__months">
           <legend>Renew for</legend>
-          {% for option in renew_months %}
-            <label class="record-chip"><input type="radio" name="months" value="{{ option.months }}" data-expires="{{ option.expires_on|date:'j M Y' }}"{% if option.months|stringformat:'s' == renew_form.months.value|stringformat:'s' %} checked{% endif %}><span>{{ option.months }} month{{ option.months|pluralize }}</span></label>
+          {% for option in renew_weeks %}
+            <label class="record-chip"><input type="radio" name="weeks" value="{{ option.weeks }}" data-expires="{{ option.expires_on|date:'j M Y' }}"{% if option.weeks|stringformat:'s' == renew_form.weeks.value|stringformat:'s' %} checked{% endif %}><span>{{ option.weeks }} week{{ option.weeks|pluralize }}</span></label>
           {% endfor %}
         </fieldset>
         <dl class="record-rows">
           <div><dt>Current expiry</dt><dd>{{ prescription.ends_on|date:'j M Y' }}</dd></div>
-          <div><dt>New expiry</dt><dd class="is-teal" data-renew-expiry>{% for option in renew_months %}{% if option.months|stringformat:'s' == renew_form.months.value|stringformat:'s' %}{{ option.expires_on|date:'j M Y' }}{% endif %}{% endfor %}</dd></div>
+          <div><dt>New expiry</dt><dd class="is-teal" data-renew-expiry>{% for option in renew_weeks %}{% if option.weeks|stringformat:'s' == renew_form.weeks.value|stringformat:'s' %}{{ option.expires_on|date:'j M Y' }}{% endif %}{% endfor %}</dd></div>
         </dl>
         {% include 'portal/includes/record_safety_flags.html' with prefix='renew' %}
         <div class="record-dialog__actions">
@@ -297,16 +297,16 @@
           </div>
           <div class="console-form__field">
             <label for="record-change-dose">Dose</label>
-            <select id="record-change-dose" name="product" data-change-dose>
-              {% for choice in prescription_choices %}{% for product in choice.doses %}<option value="{{ product.pk }}" data-medicine="{{ choice.name }}" data-label="{{ product.name }} {{ product.strength }} {{ product.get_dose_frequency_display|lower }}"{% if product.pk|stringformat:'s' == change_form.product.value|stringformat:'s' %} selected{% endif %}>{{ product.strength }} {{ product.get_dose_frequency_display|lower }}</option>{% endfor %}{% endfor %}
+            <select id="record-change-dose" name="dose" data-change-dose>
+              {% for choice in prescription_choices %}{% for dose in choice.doses %}<option value="{{ dose.pk }}" data-medicine="{{ choice.name }}" data-label="{{ dose }}"{% if dose.pk|stringformat:'s' == change_form.dose.value|stringformat:'s' %} selected{% endif %}>{{ dose.label }}{% if dose.tier != 'standard' %} · {{ dose.get_tier_display|lower }}{% endif %}</option>{% endfor %}{% endfor %}
             </select>
-            {% if change_form.product.errors %}<p class="record-error">{{ change_form.product.errors|join:' ' }}</p>{% endif %}
+            {% if change_form.dose.errors %}<p class="record-error">{{ change_form.dose.errors|join:' ' }}</p>{% endif %}
           </div>
         </div>
         <fieldset class="record-dialog__months">
           <legend>Valid for</legend>
-          {% for option in change_months %}
-            <label class="record-chip"><input type="radio" name="months" value="{{ option.months }}" data-expires="{{ option.expires_on|date:'j M Y' }}"{% if option.months|stringformat:'s' == change_form.months.value|stringformat:'s' %} checked{% endif %}><span>{{ option.months }} month{{ option.months|pluralize }}</span></label>
+          {% for option in change_weeks %}
+            <label class="record-chip"><input type="radio" name="weeks" value="{{ option.weeks }}" data-expires="{{ option.expires_on|date:'j M Y' }}"{% if option.weeks|stringformat:'s' == change_form.weeks.value|stringformat:'s' %} checked{% endif %}><span>{{ option.weeks }} week{{ option.weeks|pluralize }}</span></label>
           {% endfor %}
         </fieldset>
         <div class="console-form__field">

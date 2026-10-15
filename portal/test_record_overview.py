@@ -9,8 +9,8 @@ from django.utils import timezone
 
 from care.clinical_summary import get_summary
 from care.models import (
-    AuditEvent, ClinicalEncounter, ConsentRecord, LabRequest, MedicationBatch, MedicationProduct, PatientClinicalSummary,
-    Shipment, ShipmentItem, TreatmentAuthorization, WeightEntry,
+    AuditEvent, ClinicalEncounter, ConsentRecord, LabRequest, MedicationDose, MedicationProduct,
+    PatientClinicalSummary, Shipment, ShipmentItem, TreatmentAuthorization, WeightEntry,
 )
 from practices.models import Company, CompanyMembership, Patient
 from practices.services import ACTIVE_COMPANY_SESSION_KEY
@@ -35,14 +35,18 @@ class RecordOverviewTests(TestCase):
         cls.patient = Patient.objects.create(company=cls.company, first_name='Nadia', last_name='Mokoena', city='Cape Town',
                                              assigned_doctor=cls.doctor, id_number='9201015800087',
                                              date_of_birth=date(timezone.localdate().year - 34, 1, 1))
-        product = dict(company=cls.company, price='100.00', category=MedicationProduct.Category.WEIGHT_MANAGEMENT,
-                       dose_frequency=MedicationProduct.DoseFrequency.WEEKLY)
-        cls.low = MedicationProduct.objects.create(name='Semaglutide', strength='0.5 mg', **product)
-        cls.high = MedicationProduct.objects.create(name='Semaglutide', strength='1.0 mg', **product)
+        pen = dict(company=cls.company, price='100.00', category=MedicationProduct.Category.WEIGHT_MANAGEMENT)
+        cls.low = MedicationDose.objects.create(
+            company=cls.company, pen=MedicationProduct.objects.create(name='Semaglutide', strength='2 mg', **pen), amount_mg='0.5',
+            price='1995')
+        cls.high = MedicationDose.objects.create(
+            company=cls.company, pen=MedicationProduct.objects.create(name='Semaglutide', strength='4 mg', **pen), amount_mg='1',
+            price='3295')
         today = timezone.localdate()
         cls.today = today
         cls.prescription = TreatmentAuthorization.objects.create(
-            company=cls.company, patient=cls.patient, prescribed_by=cls.doctor, product=cls.low, max_dose='0.5 mg weekly',
+            company=cls.company, patient=cls.patient, prescribed_by=cls.doctor, product=cls.low.pen, dose=cls.low,
+            max_dose='0.5 mg weekly',
             starts_on=today - timedelta(days=150), expires_on=today + timedelta(days=20),
             log_text='Prescription created: Semaglutide 0.5 mg weekly, 6 months.',
         )
@@ -55,12 +59,11 @@ class RecordOverviewTests(TestCase):
         ClinicalEncounter.objects.create(company=cls.company, patient=cls.patient, clinician=cls.doctor,
                                          clinical_summary='DRAFT_NOT_FOR_THE_LOG')
         LabRequest.objects.create(company=cls.company, patient=cls.patient, requested_by=cls.doctor, panel_name='HbA1c and lipids')
-        batch = MedicationBatch.objects.create(company=cls.company, product=cls.low, batch_number='SG-2604', received_on=today,
-                                               expires_on=today.replace(year=today.year + 1), quantity_received=10, quantity_on_hand=6)
         shipment = Shipment.objects.create(company=cls.company, patient=cls.patient, cycle_number=4, status=Shipment.Status.DISPATCHED,
                                            scheduled_for=today - timedelta(weeks=6), dispatched_at=timezone.now() - timedelta(weeks=6),
                                            tracking_number='MER-438-771-ZA')
-        ShipmentItem.objects.create(company=cls.company, shipment=shipment, product=cls.low, batch=batch, dose='0.5 mg weekly', quantity=4)
+        ShipmentItem.objects.create(company=cls.company, shipment=shipment, product=cls.low.pen, dose='0.5 mg weekly', quantity=4,
+                                    batch_note='SG-2604, expiry 04/2027')
         ConsentRecord.objects.create(company=cls.company, patient=cls.patient, consent_type='telehealth', document_version='v1', accepted=True)
 
     def login(self, user):
@@ -90,7 +93,9 @@ class RecordOverviewTests(TestCase):
         self.assertContains(response, 'Blood form for HbA1c and lipids sent.')
         self.assertNotContains(response, 'DRAFT_NOT_FOR_THE_LOG')
         self.assertContains(response, '3 entries')
-        self.assertContains(response, 'Semaglutide 0.5 mg × 4 pens')
+        # The dose it was sent for, then the pens.
+        self.assertContains(response, 'Semaglutide 0.5 mg weekly')
+        self.assertContains(response, '4 × 2 mg pens')
         self.assertContains(response, 'Month 4')
         self.assertContains(response, 'courier MER-438-771-ZA')
         # Valid but expiring within 30 days.
@@ -136,7 +141,7 @@ class RecordOverviewTests(TestCase):
     def test_doctor_renews_from_the_dialog_and_it_is_logged(self):
         self.login(self.doctor)
         response = self.client.post(reverse('portal:patient-prescription-renew', args=[self.patient.pk]), {
-            'workflow_context': self.token(self.doctor, 'patient-prescription'), 'current': self.prescription.pk, 'months': '3',
+            'workflow_context': self.token(self.doctor, 'patient-prescription'), 'current': self.prescription.pk, 'weeks': '12',
         })
         self.assertEqual(response.status_code, 302)
         renewal = TreatmentAuthorization.objects.get(replaces=self.prescription)
@@ -149,7 +154,7 @@ class RecordOverviewTests(TestCase):
         self.login(self.doctor)
         response = self.client.post(reverse('portal:patient-prescription-change', args=[self.patient.pk]), {
             'workflow_context': self.token(self.doctor, 'patient-prescription'), 'current': self.prescription.pk,
-            'medicine': 'Semaglutide', 'product': self.low.pk, 'months': '6',
+            'medicine': 'Semaglutide', 'dose': self.low.pk, 'weeks': '24',
         })
         self.assertEqual(response.status_code, 400)
         self.assertEqual(response.context['open_dialog'], 'change')
@@ -163,13 +168,13 @@ class RecordOverviewTests(TestCase):
         self.assertContains(page, 'Safety flag')
         self.assertContains(page, 'name="acknowledge_flags"')
         data = {'workflow_context': self.token(self.doctor, 'patient-prescription'), 'current': self.prescription.pk,
-                'medicine': 'Semaglutide', 'product': self.high.pk, 'months': '6', 'reason': 'Tolerating well'}
+                'medicine': 'Semaglutide', 'dose': self.high.pk, 'weeks': '24', 'reason': 'Tolerating well'}
         url = reverse('portal:patient-prescription-change', args=[self.patient.pk])
         self.assertEqual(self.client.post(url, data).status_code, 400)
         self.assertEqual(self.client.post(url, {**data, 'acknowledge_flags': 'on'}).status_code, 302)
         changed = TreatmentAuthorization.objects.get(replaces=self.prescription)
         self.assertTrue(changed.log_text.startswith('Tolerating well. Prescription changed from Semaglutide 0.5 mg weekly '
-                                                    'to Semaglutide 1.0 mg weekly, 6 months'))
+                                                    'to Semaglutide 1 mg weekly, 24 weeks'))
 
     def test_only_doctors_prescribe_and_only_clinical_staff_edit_summary_data(self):
         # The dietitian is Nadia's clinician here, so only being a dietitian stops them prescribing.
@@ -180,7 +185,7 @@ class RecordOverviewTests(TestCase):
             with self.subTest(user=user.email):
                 self.login(user)
                 self.assertEqual(self.client.post(renew, {'workflow_context': self.token(user, 'patient-prescription'),
-                                                          'current': self.prescription.pk, 'months': '6'}).status_code, 403)
+                                                          'current': self.prescription.pk, 'weeks': '24'}).status_code, 403)
         self.login(self.dietitian)
         page = self.page()
         self.assertNotContains(page, 'Renew prescription')

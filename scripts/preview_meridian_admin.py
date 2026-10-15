@@ -61,7 +61,7 @@ for week, count in enumerate((3, 7, 5, 11, 14)):
         Appointment.objects.create(company=company, patient=patient, clinician=user, starts_at=day,
                                    status=('booked', 'completed', 'completed', 'cancelled', 'no_show')[index % 5])
         if index % 2:
-            PatientSubscription.objects.create(company=company, patient=patient, plan_name='Example programme', monthly_amount='1250.00')
+            PatientSubscription.objects.create(company=company, patient=patient, plan_name='Example programme')
         if index == 0:
             Invoice.objects.create(company=company, patient=patient, invoice_number=f'PREVIEW-{week}',
                                    subtotal='1250.00', total='1250.00', due_on=now.date(), status='issued')
