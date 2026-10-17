@@ -312,14 +312,20 @@ class ScheduleCalendarTests(TestCase):
         response = self.page()
         # The heading matches the menu item.
         self.assertContains(response, '<h1>Calendar &amp; Bookings</h1>', html=True)
-        self.assertNotContains(response, 'Whose diary')
+        self.assertNotContains(response, 'class="schedule-clinician"')
         self.assertNotContains(response, 'id="availability-heading"')
         self.assertEqual(response.context['open_slots'], [])
         self.assertNotContains(response, '<th scope="col">Clinician</th>', html=True)
         self.login(self.admin)
         response = self.page()
         self.assertContains(response, '<h1>Calendar &amp; Bookings</h1>', html=True)
-        self.assertContains(response, 'Whose diary')
+        # One Clinician dropdown above the diary, which applies when changed; no date field or View schedule button.
+        self.assertContains(response, 'class="schedule-clinician"')
+        self.assertContains(response, '<label for="id_clinician">Clinician</label>', html=True)
+        self.assertContains(response, '<option value="" selected>All clinicians</option>', html=True)
+        self.assertContains(response, 'data-submit-on-change')
+        self.assertNotContains(response, 'View schedule')
+        self.assertNotContains(response, 'staff-filter-form--schedule')
         self.assertContains(response, 'id="availability-heading"')
         self.assertContains(response, '<th scope="col">Clinician</th>', html=True)
 
@@ -340,6 +346,10 @@ class ScheduleCalendarTests(TestCase):
                 response = self.page(view=mode, page=3)
                 self.assertEqual(response.context['next_appointment_date'], next_day)
                 self.assert_schedule_url(response.context['next_appointment_url'], day=next_day, clinician=self.doctor, view=mode)
+                self.assertContains(response, 'Next appointment day:')
+        # Practice administrators don't get the button.
+        self.login(self.admin)
+        self.assertNotContains(self.page(), 'Next appointment day:')
 
     def test_invalid_filters_show_no_calendar_or_appointments_without_broadening_scope(self):
         self.appointment()

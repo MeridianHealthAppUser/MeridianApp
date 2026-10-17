@@ -10,6 +10,7 @@ from django.core.validators import MaxValueValidator, MinValueValidator
 
 from care.models import ConsentDocument, PatientDataRequest
 from practices.models import Company
+from .filter_menus import TickedChoiceField
 from practices.tenancy import multi_practice_enabled
 
 
@@ -50,14 +51,18 @@ class DataRequestForm(forms.Form):
 
 
 class DataRequestReplyForm(forms.Form):
-    status = forms.ChoiceField(label='Updated status', choices=PatientDataRequest.Status.choices)
+    # Submitted is where a request starts, not something a reply sets; Resolved comes first as the usual outcome.
+    status = forms.ChoiceField(label='Updated status', initial=PatientDataRequest.Status.RESOLVED, choices=[
+        (status, dict(PatientDataRequest.Status.choices)[status]) for status in (
+            PatientDataRequest.Status.RESOLVED, PatientDataRequest.Status.IN_REVIEW, PatientDataRequest.Status.DECLINED)])
     body = forms.CharField(label='Response visible to the patient', max_length=5000,
                           widget=forms.Textarea(attrs={'rows': 6}))
 
 
 class DataRequestFilterForm(forms.Form):
-    status = forms.ChoiceField(label='Status', required=False, choices=(('', 'All statuses'), *PatientDataRequest.Status.choices))
-    kind = forms.ChoiceField(label='Request type', required=False, choices=(('', 'All types'), *PatientDataRequest.Kind.choices))
+    q = forms.CharField(label='Search data requests', max_length=200, required=False)
+    status = TickedChoiceField(label='Status', choices=PatientDataRequest.Status.choices)
+    kind = TickedChoiceField(label='Type', choices=PatientDataRequest.Kind.choices)
 
 
 class AccessHistoryFilterForm(forms.Form):

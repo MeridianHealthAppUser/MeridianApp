@@ -101,6 +101,15 @@ class FollowUpTests(OperationsFixture):
         self.plan.save()
         self.assertEqual(self.client.get(reverse('portal:dropout-detail', args=[self.plan.pk])).status_code, 404)
 
+    def test_dropouts_have_a_search_with_plan_status_and_follow_up_filters_before_it(self):
+        response = self.client.get(reverse('portal:dropouts'))
+        self.assertNotContains(response, 'Apply filters')
+        self.assertEqual([section['label'] for section in response.context['filter_menu']['sections']], ['Plan status', 'Follow-up'])
+        self.assertContains(response, 'data-conversation-search')
+        self.assertContains(self.client.get(reverse('portal:dropouts'), {'status': 'cancelled'}), self.plan.plan_name)
+        self.assertNotContains(self.client.get(reverse('portal:dropouts'), {'status': 'paused'}), self.plan.plan_name)
+        self.assertNotContains(self.client.get(reverse('portal:dropouts'), {'status': 'active'}), self.plan.plan_name)
+
     def test_bad_filters_fail_closed_and_lead_table_shows_followup(self):
         self.post()
         self.assertContains(self.client.get(reverse('portal:staff-leads') + '?follow_up=open'), 'Follow-up: open')

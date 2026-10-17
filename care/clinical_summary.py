@@ -2,8 +2,11 @@
 
 Until a clinician edits it, the values are read from the patient's screening questionnaire and
 their own medical profile, and nothing is written. The first edit stores the summary. Every edit
-is kept with the field, the old and new value, who made it and when. The questionnaire and the
-patient's profile are never changed.
+is kept with the field, the old and new value, who made it and when. The questionnaire is never changed.
+
+From the first edit, the clinician owns the answers the summary shares with the patient's medical
+profile (SHARED): each change is written to the profile as a new saved version, so the patient sees
+it, and the patient can no longer change those answers themselves (see care.patient_care).
 """
 
 from decimal import Decimal, InvalidOperation
@@ -15,11 +18,15 @@ from django.db.models import Q
 from practices.models import CompanyMembership
 
 from .clinical import _lock_context
-from .models import Lead, PatientClinicalSummary, PatientMedicalProfile, PatientSummaryEdit, ScreeningQuestionnaire, WeightEntry
+from .models import (
+    Lead, PatientClinicalSummary, PatientMedicalProfile, PatientMedicalProfileRevision, PatientSummaryEdit,
+    ScreeningQuestionnaire, WeightEntry,
+)
 from .services import record_audit
 
 
 FIELDS = {
+    'height_cm': 'Height',
     'goal_weight_kg': 'Goal weight',
     'medical_history': 'Medical history',
     'surgical_history': 'Surgical history',
@@ -30,12 +37,24 @@ FIELDS = {
     'pregnancy': 'Pregnant or breastfeeding',
 }
 TEXT_FIELDS = ('medical_history', 'surgical_history', 'chronic_medication', 'allergies')
+# The medical profile's answer for each summary field the two share.
+SHARED = {
+    'medications': 'chronic_medication',
+    'allergies': 'allergies',
+    'medical_history': 'medical_history',
+    'surgical_history': 'surgical_history',
+}
 FLAG_CHOICES = {
     'pancreatitis': ('no', 'yes'),
     'thyroid_cancer': ('no', 'yes', 'unsure'),
     'pregnancy': ('no', 'yes', 'not_applicable'),
 }
 ANSWER_LABELS = dict(PatientClinicalSummary.Answer.choices)
+# Number fields: the range allowed, the message outside it, and the unit shown after the value.
+NUMBERS = {
+    'height_cm': (80, 260, 'Give a height between 80 and 260 cm.', 'cm'),
+    'goal_weight_kg': (40, 250, 'Give a goal weight between 40 and 250 kg.', 'kg'),
+}
 
 
 def _decimal(value):
@@ -113,8 +132,9 @@ def summary_safety_flags(company, patient, summary=None):
 def display_value(field, value):
     if value in (None, ''):
         return 'Not recorded'
-    if field == 'goal_weight_kg':
-        return f'{value.normalize():f} kg' if isinstance(value, Decimal) else f'{value} kg'
+    if field in NUMBERS:
+        unit = NUMBERS[field][3]
+        return f'{value.normalize():f} {unit}' if isinstance(value, Decimal) else f'{value} {unit}'
     if field in FLAG_CHOICES:
         return ANSWER_LABELS.get(value, value)
     return value
@@ -133,13 +153,14 @@ def _clean(field, value):
     if not isinstance(value, str):
         raise ValidationError('Enter a value.')
     value = value.strip()
-    if field == 'goal_weight_kg':
+    if field in NUMBERS:
+        low, high, message, _ = NUMBERS[field]
         try:
             number = Decimal(value)
         except InvalidOperation:
             number = None
-        if number is None or not number.is_finite() or not 40 <= number <= 250:
-            raise ValidationError('Give a goal weight between 40 and 250 kg.')
+        if number is None or not number.is_finite() or not low <= number <= high:
+            raise ValidationError(message)
         return number.quantize(Decimal('0.1'))
     if field in FLAG_CHOICES:
         if value not in FLAG_CHOICES[field]:
@@ -148,6 +169,39 @@ def _clean(field, value):
     if len(value) > 2000:
         raise ValidationError('Keep this to 2,000 characters or fewer.')
     return value
+
+
+def stored_summary(company, patient):
+    return PatientClinicalSummary.objects.for_company(company).filter(patient=patient).first()
+
+
+def sync_profile_from_summary(*, company, patient, summary, actor, request=None):
+    """Write the shared answers into the patient's medical profile as a new saved version, by the clinician who
+    changed them. The profile keeps every earlier version. Nothing is written when they already match."""
+    profile = PatientMedicalProfile.objects.select_for_update().for_company(company).filter(patient=patient).first()
+    answers = dict(profile.answers) if profile and isinstance(profile.answers, dict) else {}
+    changed = False
+    for key, field in SHARED.items():
+        value = getattr(summary, field) or ''
+        if (answers.get(key) or '') != value:
+            answers[key] = value
+            changed = True
+    if not changed:
+        return profile
+    if profile is None:
+        profile = PatientMedicalProfile(company=company, patient=patient)
+    profile.answers = answers
+    profile.revision += 1
+    profile.saved_by = actor
+    profile.full_clean()
+    profile.save()
+    snapshot = PatientMedicalProfileRevision(company=company, patient=patient, profile=profile,
+                                             revision=profile.revision, answers=dict(answers), saved_by=actor)
+    snapshot.full_clean()
+    snapshot.save()
+    record_audit(company=company, actor=actor, patient=patient, action='patient.medical_profile_updated', target=profile,
+                 request=request, metadata={'revision': profile.revision, 'snapshot_id': snapshot.pk, 'from': 'summary'})
+    return profile
 
 
 @transaction.atomic
@@ -173,4 +227,5 @@ def edit_summary(*, company, patient, actor, field, value, request=None):
     # The audit trail names the field only; the clinical values stay in the edit history.
     record_audit(company=company, actor=actor, patient=patient, action='summary.updated', target=summary,
                  request=request, metadata={'field': field})
+    sync_profile_from_summary(company=company, patient=patient, summary=summary, actor=actor, request=request)
     return summary

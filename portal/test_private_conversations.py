@@ -177,11 +177,8 @@ class PrivateConversationTests(TestCase):
                 # Never Nadia's clinician: her record doesn't open for them at all.
                 self.assertRedirects(overview, reverse('portal:patient-list'), fetch_redirect_response=False)
                 continue
-            # Administrators' Overview counts conversations; a clinician's clinical Overview doesn't list them at all.
-            if 'overview_cards' in overview.context:
-                self.assertEqual([card['count'] for card in overview.context['overview_cards'] if card['label'] == 'Conversations'], [0])
-            else:
-                self.assertNotContains(overview, thread.subject)
+            # No one's Overview lists conversations.
+            self.assertNotContains(overview, thread.subject)
         # A Super Admin (self.admin) reads it, in Patient messages and on Nadia's record, without joining it.
         self.login_staff(self.admin)
         self.assertEqual(self.client.get(reverse('portal:staff-inbox'), {'thread': thread.pk}).context['inbox_thread'].pk, thread.pk)

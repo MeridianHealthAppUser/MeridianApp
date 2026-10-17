@@ -327,3 +327,11 @@ a.schedule-week__date:focus-visible { outline: 2px solid var(--console-teal); ou
   .schedule-week__tag { font-size: .58rem; padding-inline: .32rem; }
   .schedule-week__bookings { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* Whose diary, for administrators: one dropdown on the right above the diary. */
+.schedule-clinician { align-items: center; display: flex; flex-wrap: wrap; gap: .4rem .65rem; justify-content: flex-end; margin: 0 0 .9rem; }
+.schedule-clinician label { color: var(--console-ink); font-size: .78rem; font-weight: 800; }
+.schedule-clinician select { background: #fff; border: 1px solid #cfe0dc; border-radius: .55rem; color: var(--console-ink); font: inherit; font-size: .82rem; min-width: 13rem; padding: .62rem .68rem; }
+.schedule-clinician select:focus { border-color: var(--console-teal); box-shadow: 0 0 0 3px rgba(7, 135, 127, .12); outline: none; }
+.schedule-clinician ul.errorlist { color: var(--console-red); flex-basis: 100%; font-size: .7rem; list-style: none; margin: 0; padding: 0; text-align: right; }
+@media (max-width: 36rem) { .schedule-clinician select { flex: 1 1 auto; min-width: 0; } }

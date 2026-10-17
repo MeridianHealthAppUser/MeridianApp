@@ -33,10 +33,9 @@ from care.prescriptions import started, with_plan_ends
 from care.services import record_audit
 from practices.models import CompanyMembership, Patient
 from practices.tenancy import multi_practice_enabled, scope_queryset
-from .navigation import uses_flat_menu
 from .patient_care_forms import PROFILE_FIELDS
 from .record_forms import ClinicalRecordFilterForm, RECORD_CATEGORIES, RECORD_PURPOSES, ScopedPatientDirectoryFilterForm
-from .record_access import label_access, openable_patients, require_record_view
+from .record_access import label_access, limited_by_assignment, openable_patients, require_record_view
 from .views import StaffCompanyRequiredMixin
 
 
@@ -113,7 +112,7 @@ def patient_directory_context(view):
     ).order_by('last_name', 'first_name', 'company__name', 'pk')
     # Clinicians see only their own patients: assigned to them now or before, or booked with them as cover.
     # So there is no clinician to filter by.
-    own_patients_only = uses_flat_menu(view.membership)
+    own_patients_only = limited_by_assignment(view.membership)
     if own_patients_only:
         queryset = openable_patients(queryset, view.request.user)
         del form.fields['clinician']

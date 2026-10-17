@@ -9,17 +9,19 @@ from care.models import ConsentRecord, Lead, ScreeningQuestionnaire
 from care.services import record_audit
 from practices.models import CompanyMembership, Patient
 
+from django.template.defaultfilters import pluralize
+from django.urls import reverse
+
+from .filter_menus import TickedChoiceField, list_tools, ticked_sections
 from .staff_views import StaffPageView
-from .followup_views import with_follow_up
-from django.utils import timezone
+from .followup_views import FOLLOW_UP_CHOICES, follow_up_matches, with_follow_up
 
 
 class LeadFilterForm(forms.Form):
-    q = forms.CharField(label='Search leads', max_length=200, required=False,
-                        widget=forms.TextInput(attrs={'type': 'search', 'placeholder': 'Name, email, phone or ID'}))
-    screening_status = forms.ChoiceField(label='Screening', required=False, choices=(('', 'All outcomes'), *Lead.ScreeningStatus.choices))
-    stage = forms.ChoiceField(label='Stage', required=False, choices=(('', 'All stages'), *Lead.Stage.choices))
-    follow_up = forms.ChoiceField(label='Follow-up', required=False, choices=(('', 'All follow-ups'), ('due', 'Due for contact'), ('open', 'Open'), ('done', 'Completed'), ('none', 'Not yet followed up')))
+    q = forms.CharField(label='Search leads', max_length=200, required=False)
+    screening_status = TickedChoiceField(label='Screening', choices=Lead.ScreeningStatus.choices)
+    stage = TickedChoiceField(label='Stage', choices=Lead.Stage.choices)
+    follow_up = TickedChoiceField(label='Follow-up', choices=FOLLOW_UP_CHOICES)
 
 
 @method_decorator(never_cache, name='dispatch')
@@ -40,12 +42,6 @@ class LeadListView(LeadPageView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         queryset = with_follow_up(Lead.objects.for_company(self.company).order_by('-created_at', '-pk'), 'lead')
-        context['metrics'] = {
-            'total': queryset.count(),
-            'cleared': queryset.filter(screening_status=Lead.ScreeningStatus.CLEARED, converted_patient__isnull=True).count(),
-            'referred': queryset.filter(screening_status=Lead.ScreeningStatus.REFERRED).count(),
-            'converted': queryset.filter(stage=Lead.Stage.CONVERTED).count(),
-        }
         form = LeadFilterForm(self.request.GET)
         filters = {}
         if form.is_valid():
@@ -54,19 +50,21 @@ class LeadListView(LeadPageView):
                 queryset = queryset.filter(Q(first_name__icontains=term) | Q(last_name__icontains=term) |
                                            Q(email__icontains=term) | Q(phone__icontains=term) | Q(id_number__icontains=term))
             if filters['screening_status']:
-                queryset = queryset.filter(screening_status=filters['screening_status'])
+                queryset = queryset.filter(screening_status__in=filters['screening_status'])
             if filters['stage']:
-                queryset = queryset.filter(stage=filters['stage'])
-            if filters['follow_up'] == 'due':
-                queryset = queryset.filter(follow_up_status='open', next_contact_on__lte=timezone.localdate())
-            elif filters['follow_up'] == 'none':
-                queryset = queryset.filter(follow_up_status__isnull=True)
-            elif filters['follow_up']:
-                queryset = queryset.filter(follow_up_status=filters['follow_up'])
+                queryset = queryset.filter(stage__in=filters['stage'])
+            if filters['follow_up']:
+                queryset = queryset.filter(follow_up_matches(filters['follow_up']))
         else:
             queryset = queryset.none()
         context.update(self.paginate(queryset, **filters))
-        context.update(filter_form=form, leads=context['page_obj'].object_list)
+        count = context['page_obj'].paginator.count
+        context.update(filter_form=form, leads=context['page_obj'].object_list, count_label=f'{count} lead{pluralize(count)}')
+        context.update(list_tools(
+            action=reverse('portal:staff-leads'), data=self.request.GET, form=form, label='Filter leads',
+            sections=ticked_sections(form, self.request.GET, ('screening_status', 'stage', 'follow_up'),
+                                     icons={'stage': 'list', 'follow_up': 'list'}),
+            placeholder='Name, email, phone or ID'))
         return context
 
 

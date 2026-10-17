@@ -247,6 +247,22 @@ class OperationsPortalTests(OperationsPortalFixture):
         self.login(self.doctor)
         self.assertEqual(self.client.post(reverse('portal:ops-shipping-prepare'), {'week': week}).status_code, 403)
 
+    def test_shipping_list_searches_and_filters_by_several_statuses_from_the_filters_menu(self):
+        week = self.today - timedelta(days=self.today.weekday())
+        draft = self.shipment(quantity=1, scheduled_for=week)
+        ready = self.ready(self.shipment(quantity=1, scheduled_for=week, tracking_number='TRACK-123'))
+        page = self.page('ops-shipping', week=week)
+        self.assertNotContains(page, 'Show week')
+        self.assertEqual([section['label'] for section in page.context['filter_menu']['sections']], ['Week', 'Status'])
+        self.assertContains(page, 'data-conversation-search')
+        listed = lambda **query: {row.pk for row in self.page('ops-shipping', week=week, **query).context['shipments']}
+        self.assertEqual(listed(status=['draft', 'ready']), {draft.pk, ready.pk})
+        self.assertEqual(listed(status='ready'), {ready.pk})
+        self.assertEqual(listed(q='TRACK-123'), {ready.pk})
+        self.assertEqual(listed(q=self.patient.last_name), {draft.pk, ready.pk})
+        # Older links that say status=all still mean every status.
+        self.assertEqual(listed(status='all'), {draft.pk, ready.pk})
+
     def test_each_draft_line_has_its_own_mark_ready_button(self):
         week = self.today - timedelta(days=self.today.weekday())
         draft = self.shipment(quantity=1, scheduled_for=week)

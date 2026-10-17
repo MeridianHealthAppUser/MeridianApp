@@ -1,5 +1,6 @@
-<form method="get" class="privacy-form privacy-filters">{% include 'portal/privacy_form_fields.html' with form=filter_form %}<button class="console-button console-button--primary" type="submit">Apply filters</button></form>
-{% if filter_form.errors %}<p class="privacy-error" role="alert">Correct the filters to view requests.</p>{% else %}
+{# Staff Data requests: the table and its pages follow the search above as you type (data-search-region). #}
+<div data-search-region="list">
+{% if filter_form.errors %}<div class="staff-filter-error" role="alert">Correct the filters to view requests.</div>{% else %}
   <div class="privacy-table-wrap" role="region" aria-label="Privacy requests" tabindex="0"><table class="privacy-table">
     <thead><tr>{% if privacy_staff %}<th scope="col">Patient</th>{% endif %}<th scope="col">Request</th><th scope="col">Submitted</th><th scope="col">Status</th><th scope="col">Action</th></tr></thead>
     <tbody>{% for item in page_obj %}<tr>
@@ -8,4 +9,5 @@
     </tr>{% empty %}<tr><td colspan="{% if privacy_staff %}5{% else %}4{% endif %}">No requests match these filters.</td></tr>{% endfor %}</tbody>
   </table></div>
 {% endif %}
-{% include 'portal/privacy_pagination.html' with pagination_label='Privacy request pages' %}
+</div>
+<div data-search-region="pages">{% include 'portal/privacy_pagination.html' with pagination_label='Privacy request pages' %}</div>

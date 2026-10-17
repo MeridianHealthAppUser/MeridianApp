@@ -150,7 +150,7 @@ class DoctorAvailabilityMixin(LoginRequiredMixin, StaffCompanyRequiredMixin):
         self.diary = self.request.user
 
     def require_diary(self):
-        """The doctor's own diary, or for an administrator the doctor chosen in the schedule filter."""
+        """The doctor's own diary, or for an administrator the clinician chosen in the Clinician list."""
         if self.membership.is_admin:
             raw = self.request.GET.get('clinician', '')
             doctor = practice_doctors(self.company).filter(pk=int(raw)).first() if raw.isdigit() and len(raw) < 12 else None
@@ -160,7 +160,7 @@ class DoctorAvailabilityMixin(LoginRequiredMixin, StaffCompanyRequiredMixin):
         if self.membership.is_clinician:
             self.diary = self.request.user
             return self.diary
-        raise PermissionDenied('Choose a doctor in the schedule filter before changing their leave or special days.')
+        raise PermissionDenied('Choose a clinician in the Clinician list before changing their leave or special days.')
 
     def invalid(self, **overrides):
         from .staff_views import StaffScheduleView

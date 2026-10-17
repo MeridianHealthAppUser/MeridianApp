@@ -1,4 +1,7 @@
-"""Clinicians get one flat menu; other staff see sections, and on mobile each section has a page of its options."""
+"""Clinicians and practice administrators get one flat menu; Super Admins see sections, and on mobile each section
+has a page of its options."""
+
+import re
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
@@ -37,9 +40,9 @@ class StaffMenuTests(TestCase):
 
     def test_each_role_sees_only_its_sections_on_the_mobile_bar(self):
         expected = {
-            # The Clinician role has a flat menu instead of sections.
+            # Clinicians and practice administrators have a flat menu instead of sections.
             'doctor': [],
-            'practice_admin': ['care', 'operations', 'administration', 'insights'],
+            'practice_admin': [],
             'super_admin': ['care', 'operations', 'administration', 'insights', 'settings'],
         }
         for role, sections in expected.items():
@@ -55,9 +58,10 @@ class StaffMenuTests(TestCase):
             self.assertContains(page, reverse(f'portal:{name}'))
         self.assertNotContains(page, reverse('portal:management-practices'))
         self.assertContains(page, 'aria-current="page"')
-        self.login('doctor')
-        for section in ('operations', 'administration', 'insights', 'settings'):
-            self.assertEqual(self.client.get(reverse('portal:staff-menu-section', args=[section])).status_code, 404)
+        for role in ('doctor', 'practice_admin'):
+            self.login(role)
+            for section in ('care', 'operations', 'administration', 'insights', 'settings'):
+                self.assertEqual(self.client.get(reverse('portal:staff-menu-section', args=[section])).status_code, 404)
         self.assertEqual(self.client.get(reverse('portal:staff-menu-section', args=['invented'])).status_code, 404)
 
     def test_active_practice_box_is_hidden_for_a_single_practice(self):
@@ -108,10 +112,46 @@ class StaffMenuTests(TestCase):
         self.assertIn('<span class="nav-badge" aria-hidden="true">2</span>', mobile[:mobile.index('</nav>')])
         inbox = self.client.get(reverse('portal:staff-inbox'))
         self.assertContains(inbox, '<h1>Patient Records &amp; Messages</h1>', html=True)
-        # Practice admins keep their sections, with the count on Messages for their team conversation.
+        # Practice admins get the same flat menu, with Operations and Administration after it. They sent the team
+        # message, so nothing is unread for them.
         self.login('practice_admin')
         page = self.client.get(reverse('portal:desktop-dashboard')).content.decode()
-        self.assertIn('<details class="console-nav__group"', page)
+        sidebar = page[page.index('class="console-nav'):]
+        sidebar = sidebar[:sidebar.index('</nav>')]
+        self.assertNotIn('<details', sidebar)
+        labels = ['Overview', 'My tasks', 'Patient Records &amp; Messages', 'Calendar &amp; Bookings', 'Operations', 'Administration']
+        self.assertEqual(re.findall(r'<span class="console-nav__text">([^<]+)</span>', sidebar), labels)
+        self.assertNotIn('Insights', sidebar)
         self.assertNotIn('nav-badge', page)
-        self.assertIn('Patient Records &amp; Messages', page)
         self.assertContains(self.client.get(reverse('portal:staff-inbox')), '<h1>Patient Records &amp; Messages</h1>', html=True)
+
+    def test_practice_admins_open_operations_and_administration_as_pages_of_tabs_without_insights(self):
+        self.login('practice_admin')
+        tabs = {
+            'Operations': [('treatment-subscriptions', 'Subscriptions'), ('ops-orders', 'Supply requests'),
+                           ('ops-shipping', 'Weekly shipping list'), ('ops-history', 'Dispatch history'),
+                           ('ops-catalogue', 'Catalogue')],
+            'Administration': [('staff-leads', 'Leads'), ('dropouts', 'Dropouts'), ('staff-data-requests', 'Data requests')],
+        }
+        for group, pages in tabs.items():
+            for name, label in pages:
+                with self.subTest(page=name):
+                    response = self.client.get(reverse(f'portal:{name}'))
+                    self.assertContains(response, f'<h1>{group}</h1>', html=True)
+                    html = response.content.decode()
+                    nav = html[html.index('class="patient-workspace-tabs"'):]
+                    nav = nav[:nav.index('</nav>')]
+                    self.assertEqual(re.findall(r'<a href="[^"]+"[^>]*>([^<]+)', nav), [tab for _, tab in pages])
+                    self.assertIn(f'<a href="{reverse(f"portal:{name}")}" class="is-active" aria-current="page">{label}', nav)
+                    # Each tab's table has its search at the top right with the Filters menu before it.
+                    self.assertContains(response, 'class="staff-list-tools"')
+                    self.assertContains(response, 'data-conversation-search')
+                    self.assertTrue(response.context['filter_menu']['sections'])
+                    self.assertNotContains(response, 'Apply filters')
+                    # The menu entry stays current on every tab.
+                    sidebar = html[html.index('class="console-nav'):]
+                    self.assertIn(f'aria-current="true" href="{reverse(f"portal:{pages[0][0]}")}"', sidebar[:sidebar.index('</nav>')])
+        for name in ('metrics', 'metrics-export'):
+            self.assertEqual(self.client.get(reverse(f'portal:{name}')).status_code, 403)
+        self.login('super_admin')
+        self.assertEqual(self.client.get(reverse('portal:metrics')).status_code, 200)

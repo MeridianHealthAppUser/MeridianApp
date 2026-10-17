@@ -2,7 +2,7 @@
 {% load static workspace_ui %}
 
 {% block title %}{{ title|default:page_title }} | {{ company.name }} | Meridian{% endblock %}
-{% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/filter_menu.css' %}?v=20261010a"><script src="{% static 'js/filter_menu.js' %}?v=20261008b" defer></script><link rel="stylesheet" href="{% static 'css/task_list.css' %}?v=20261008b"><link rel="stylesheet" href="{% static 'css/person_tags.css' %}?v=20261009e">{% endblock %}
+{% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/filter_menu.css' %}?v=20261017a"><script src="{% static 'js/filter_menu.js' %}?v=20261008b" defer></script><link rel="stylesheet" href="{% static 'css/task_list.css' %}?v=20261008b"><link rel="stylesheet" href="{% static 'css/person_tags.css' %}?v=20261009e">{% endblock %}
 
 
 {% block breadcrumbs %}{% breadcrumbs page_title %}{% endblock %}
@@ -17,7 +17,7 @@
 {% endblock %}
 
 {% block page_content %}
-  {# Clinicians don't need the count cards; administrators keep them. #}{% if not is_doctor %}
+  {# Clinicians and practice administrators don't need the count cards; Super Admins keep them. #}{% if not simple_tasks %}
   <section class="staff-metrics staff-metrics--three" aria-label="Task summary">
     <article><span>Open</span><strong>{{ metrics.open }}</strong></article>
     <article><span>Overdue</span><strong>{{ metrics.overdue }}</strong></article>
@@ -81,7 +81,7 @@
                 <td data-label="Workflow status"><span class="console-status console-status--{{ task.status }}">{{ task.get_status_display }}</span>{% if task.completed_at %}<span class="staff-task-table__completed">Completed {{ task.completed_at|date:"j M, H:i" }} SAST</span>{% endif %}</td>
                 <td class="staff-task-table__actions-cell" data-label="Actions">
                   <div class="staff-task-table__actions">
-                    {% if task.workflow_url %}<a class="console-button console-button--secondary" href="{{ task.workflow_url }}">{{ task.workflow_label }}</a>{% elif task.is_clinical_workflow %}<span class="staff-task-table__due">Completed by the responsible doctor in the clinical workflow.</span>{% else %}<a class="console-button console-button--secondary" href="{% url 'portal:task-edit' task.pk %}">Edit task</a>{% endif %}
+                    {% if task.workflow_url %}<a class="console-button console-button--secondary" href="{{ task.workflow_url }}">{{ task.workflow_label }}</a>{% if task.also_editable %}<a class="console-button console-button--secondary" href="{% url 'portal:task-edit' task.pk %}">Edit task</a>{% endif %}{% elif task.is_clinical_workflow %}<span class="staff-task-table__due">Completed by the responsible doctor in the clinical workflow.</span>{% else %}<a class="console-button console-button--secondary" href="{% url 'portal:task-edit' task.pk %}">Edit task</a>{% endif %}
                     {% if task.patient %}<a class="console-button console-button--secondary" href="{% url 'portal:patient-detail' task.patient_id %}">Open record<span class="sr-only"> for {{ task.patient }}</span></a>{% endif %}
                     {% if task.is_actionable %}
                       <form method="post" action="{% url 'portal:task-complete' task.pk %}">

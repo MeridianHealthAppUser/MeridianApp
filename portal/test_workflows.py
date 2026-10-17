@@ -222,7 +222,8 @@ class PortalWorkflowTests(TestCase):
         self.assertEqual((task.company_id, task.patient_id), (self.company.pk, self.patient.pk))
 
     def test_task_form_rejects_different_patient_and_preserves_input(self):
-        self.login(self.administrator)
+        # A record's Tasks tab is a Super Admin's; practice administrators create tasks from My tasks.
+        self.login(self.super_admin)
         count = ClinicalTask.objects.count()
         response = self.client.post(reverse('portal:patient-task-create', args=[self.patient.pk]), {
             'patient': self.other_patient.pk, 'title': 'Do not silently change the patient',
@@ -234,7 +235,8 @@ class PortalWorkflowTests(TestCase):
         self.assertContains(response, 'Retained description')
 
     def test_invalid_task_form_preserves_errors_and_entered_description(self):
-        self.login(self.administrator)
+        # A record's Tasks tab is a Super Admin's; practice administrators create tasks from My tasks.
+        self.login(self.super_admin)
         response = self.client.post(reverse('portal:patient-task-create', args=[self.patient.pk]), {
             'patient': self.patient.pk, 'title': '', 'description': 'Keep this task draft.',
             'priority': ClinicalTask.Priority.HIGH,

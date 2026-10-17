@@ -1,0 +1,10 @@
+{% comment %}Operations or Administration as one page of tabs, styled as a patient record's tabs (patient_workspace.css),
+with the same one-button section picker on mobile. Data requests carries its count, as the menu does.{% endcomment %}{% if group %}
+<nav class="patient-workspace-tabs" aria-label="{{ group.label }} sections">
+  {% for tab in group.tabs %}<a href="{{ tab.url }}"{% if tab.active %} class="is-active" aria-current="page"{% endif %}>{{ tab.label }}{% include 'portal/includes/nav_badge.html' with count=tab.badge badge_label=tab.badge_label %}</a>{% endfor %}
+</nav>
+<details class="patient-workspace-picker">
+  <summary><span><span class="sr-only">Section: </span>{% for tab in group.tabs %}{% if tab.active %}{{ tab.label }}{% include 'portal/includes/nav_badge.html' with count=tab.badge badge_label=tab.badge_label %}{% endif %}{% endfor %}</span><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="m6 9 6 6 6-6"/></svg></summary>
+  <nav aria-label="Choose a {{ group.label|lower }} section"><ul>{% for tab in group.tabs %}<li><a href="{{ tab.url }}"{% if tab.active %} aria-current="page"{% endif %}>{{ tab.label }}{% include 'portal/includes/nav_badge.html' with count=tab.badge badge_label=tab.badge_label %}</a></li>{% endfor %}</ul></nav>
+</details>
+{% endif %}

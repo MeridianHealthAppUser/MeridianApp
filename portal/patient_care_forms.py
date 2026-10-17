@@ -86,11 +86,14 @@ PROFILE_FIELDS = (
 
 
 class PatientMedicalProfileForm(forms.Form):
-    def __init__(self, *args, **kwargs):
+    """The patient's own answers. Those in locked are their clinician's now, so they're shown, not asked."""
+
+    def __init__(self, *args, locked=(), **kwargs):
         super().__init__(*args, **kwargs)
         for name, label, help_text in PROFILE_FIELDS:
-            self.fields[name] = forms.CharField(label=label, required=False, max_length=2000,
-                                                help_text=help_text, widget=forms.Textarea(attrs={'rows': 3}))
+            if name not in locked:
+                self.fields[name] = forms.CharField(label=label, required=False, max_length=2000,
+                                                    help_text=help_text, widget=forms.Textarea(attrs={'rows': 3}))
 
 
 class PatientUpdatesFilterForm(forms.Form):

@@ -48,6 +48,7 @@ from practices.services import (
     set_active_patient_company,
 )
 
+from .navigation import uses_flat_menu
 from .patient_context import validate_patient_context
 
 
@@ -135,16 +136,19 @@ class StaffDashboardContextMixin(StaffCompanyRequiredMixin):
                 scheduled_for__lte=today + timedelta(days=7),
                 status__in=(Shipment.Status.DRAFT, Shipment.Status.HELD, Shipment.Status.READY),
             ).count()
+        # Clinicians and practice administrators get the same simple Overview: appointments and open tasks only.
+        simple = uses_flat_menu(self.membership)
         context.update(
             company=self.company,
             active_membership=self.membership,
             today=today,
             metrics=metrics,
+            simple_overview=simple,
             upcoming_appointments=upcoming_appointments[:8],
             open_tasks=attach_clinical_task_links(list(open_tasks[:8]), self.request.user, self.membership),
         )
-        # Clinicians find their patients in Patient Records and conversations in Messages, so Overview doesn't list them.
-        if self.membership.role != self.membership.Role.DOCTOR:
+        # They find patients in Patient Records and conversations in Messages, so Overview doesn't list them.
+        if not simple:
             context.update(patients=patients.select_related('assigned_doctor')[:8], recent_messages=self.tagged(recent_threads[:6]))
         return context
 
@@ -229,15 +233,15 @@ class ActivateCompanyView(LoginRequiredMixin, View):
                 if membership.has_clinical_access:
                     return redirect(destination)
         for destination in ('portal:management-practices', 'portal:management-users', 'portal:policy-list',
-                            'portal:treatment-review-rules', 'portal:activity-statements'):
+                            'portal:treatment-review-rules', 'portal:activity-statements', 'portal:metrics'):
             if next_path.startswith(reverse(destination)):
                 membership = active_membership_for(request, company)
                 if membership.role == CompanyMembership.Role.SUPER_ADMIN:
                     return redirect(destination)
-        # Admin, Operations and Insights pages; the Clinician role is sent to the overview instead.
+        # Administration and Operations pages; the Clinician role is sent to the overview instead.
         for destination in ('portal:staff-leads', 'portal:dropouts', 'portal:staff-data-requests',
                             'portal:ops-catalogue', 'portal:ops-shipping', 'portal:ops-history', 'portal:ops-orders',
-                            'portal:treatment-subscriptions', 'portal:metrics'):
+                            'portal:treatment-subscriptions'):
             if next_path.startswith(reverse(destination)):
                 membership = active_membership_for(request, company)
                 if membership.is_admin:
@@ -544,7 +548,8 @@ class TaskCompleteView(LoginRequiredMixin, StaffCompanyRequiredMixin, View):
         except ValidationError as error:
             messages.error(request, ' '.join(error.messages))
         else:
-            messages.success(request, 'Task marked complete.')
+            messages.success(request, 'Task marked complete. The data request is resolved and the patient can see it.'
+                             if getattr(task, 'data_request', None) else 'Task marked complete.')
         return _task_redirect(request, task)
 
 

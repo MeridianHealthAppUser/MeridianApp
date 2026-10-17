@@ -19,7 +19,7 @@ from django.views.decorators.cache import never_cache
 from care.forms import ClinicalNoteForm, ClinicalTaskForm
 from care.models import (
     Appointment, AuditEvent, ClinicalEncounter, ClinicalTask, LabRequest,
-    MessageThread, PatientSubscription, Payment, RecordTag, Shipment, TreatmentAuthorization,
+    PatientSubscription, Payment, RecordTag, Shipment, TreatmentAuthorization,
 )
 from care.patient_assignment import can_assign_doctor, is_care_team
 from care.services import record_audit
@@ -39,11 +39,13 @@ TABS = (
     ('overview', 'Overview'), ('history', 'History'), ('appointments', 'Appointments'),
     ('consultations', 'Consultations'), ('blood-tests', 'Blood results'), ('notes', 'Notes'),
     ('weights', 'Weight'), ('messages', 'Messages'), ('tasks', 'Tasks'),
-    ('payments', 'Payments'), ('treatment', 'Treatment'), ('deliveries', 'Deliveries'),
+    ('payments', 'Payments'), ('treatment', 'Treatment'), ('deliveries', 'Dispatch history'),
 )
 CLINICAL_TABS = {'consultations', 'blood-tests', 'notes', 'treatment'}
 # Doctors (the Clinician role) work from the Overview: they also see Blood results and, for their own patients, Messages.
 CLINICIAN_TABS = {'overview', 'blood-tests', 'messages'}
+# Practice administrators see these, in this order.
+ADMIN_TABS = ('overview', 'appointments', 'messages', 'payments', 'deliveries', 'history')
 OPERATIONAL_AUDIT_LABELS = {
     'appointment.created': 'Appointment booked', 'appointment.patient_booked': 'Appointment booked by patient',
     'appointment.status_changed': 'Appointment status changed', 'appointment.proposal.accepted': 'Appointment time changed',
@@ -70,13 +72,21 @@ def workspace_url(patient, tab='overview', **query):
 
 def shows_tab(membership, user, patient, tab):
     """Doctors (the Clinician role) see the Overview, Blood results and, only as the patient's Prescribing doctor,
-    Messages: another doctor's conversations with the patient aren't theirs to read. Everyone else sees every tab
-    their access allows."""
+    Messages: another doctor's conversations with the patient aren't theirs to read. Practice administrators see
+    ADMIN_TABS. Super Admins see every tab."""
     if tab in CLINICAL_TABS and not membership.has_clinical_access:
         return False
+    if membership.role == CompanyMembership.Role.PRACTICE_ADMIN:
+        return tab in ADMIN_TABS
     if membership.role != CompanyMembership.Role.DOCTOR:
         return True
     return tab in CLINICIAN_TABS and (tab != 'messages' or patient.assigned_doctor_id == user.pk)
+
+
+def tab_order(membership):
+    if membership.role == CompanyMembership.Role.PRACTICE_ADMIN:
+        return [(name, dict(TABS)[name]) for name in ADMIN_TABS]
+    return TABS
 
 
 def patient_workspace_context(request, company, membership, patient, tab='overview'):
@@ -94,7 +104,7 @@ def patient_workspace_context(request, company, membership, patient, tab='overvi
         patient_workspace=True, workspace_base_template='portal/patient_workspace_base.html',
         workspace_patient=patient, workspace_tab=tab, workspace_url=workspace_url(patient, tab),
         workspace_tabs=[dict(name=name, label=label, url=workspace_url(patient, name), active=name == section)
-                        for name, label in TABS if shows_tab(membership, request.user, patient, name)],
+                        for name, label in tab_order(membership) if shows_tab(membership, request.user, patient, name)],
         workspace_return_url=workspace_url(patient, section), workspace_return_label=f'Back to {dict(TABS)[section].lower()}',
         is_super_admin=membership.role == CompanyMembership.Role.SUPER_ADMIN,
         patient=patient, company=company, active_membership=membership, nav_section='record',
@@ -236,12 +246,10 @@ def workspace_tab_context(request, company, membership, patient, tab, **override
     if tab == 'overview':
         # Conversations live on the Messages tab, not here.
         if not membership.has_clinical_access:
-            context['overview_cards'] = [
-                dict(label='Appointments', count=scoped(Appointment, company, patient).count(), url=workspace_url(patient, 'appointments')),
-                dict(label='Open tasks', count=scoped(ClinicalTask, company, patient).filter(status__in=('open', 'in_progress')).count(), url=workspace_url(patient, 'tasks')),
-                dict(label='Conversations', count=scoped(MessageThread, company, patient).filter(participants=request.user).count(), url=workspace_url(patient, 'messages')),
-                dict(label='Deliveries', count=scoped(Shipment, company, patient).count(), url=workspace_url(patient, 'deliveries')),
-            ]
+            # Practice administrators get the clinical Overview's layout without anything clinical.
+            from .record_overview import admin_overview_context
+
+            context.update(admin_overview_context(company, patient))
         # Existing integrations may request this token before their dedicated
         # legacy booking POST. No form or booking list is rendered on Overview.
         context['legacy_appointment_context'] = make_workflow_context(request, company, 'legacy-staff-booking', patient)

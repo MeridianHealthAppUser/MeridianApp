@@ -12,7 +12,7 @@ from django.utils import timezone
 from care.models import Appointment, AuditEvent, BloodResult, ClinicalNote, ClinicalTask, MessageThread, PatientMessage, Payment
 from practices.models import CompanyMembership
 from . import test_workflows
-from .patient_workspace import CLINICAL_TABS, TABS
+from .patient_workspace import ADMIN_TABS, CLINICAL_TABS, TABS
 
 # The tabs a doctor in the Clinician role sees on their own patient's record.
 DOCTOR_TABS = [('overview', 'Overview'), ('blood-tests', 'Blood results'), ('messages', 'Messages')]
@@ -46,8 +46,8 @@ class PatientWorkspaceTests(TestCase):
                     continue
                 with self.subTest(actor=actor.pk, tab=tab):
                     response = self.page(tab)
-                    if actor == self.doctor and tab not in dict(DOCTOR_TABS):
-                        # A doctor works from the Overview: the tabs they don't see send them there.
+                    if (actor == self.doctor and tab not in dict(DOCTOR_TABS)) or (actor == self.administrator and tab not in ADMIN_TABS):
+                        # Doctors and practice administrators: the tabs they don't see send them to the Overview.
                         self.assertRedirects(response, self.overview(), fetch_redirect_response=False)
                         continue
                     self.assertEqual(response.status_code, 200)
@@ -62,6 +62,9 @@ class PatientWorkspaceTests(TestCase):
                     self.assertEqual([link['name'] for link in response.context['workspace_tabs'] if link['active']], [tab])
                     if actor == self.doctor:
                         self.assertEqual([(link['name'], link['label']) for link in response.context['workspace_tabs']], DOCTOR_TABS)
+                    if actor == self.administrator:
+                        self.assertEqual([link['label'] for link in response.context['workspace_tabs']],
+                                         ['Overview', 'Appointments', 'Messages', 'Payments', 'Dispatch history', 'History'])
 
     def test_overview_logs_general_notes_and_blood_results_but_no_conversations_and_the_messages_tab_waits_for_a_choice(self):
         self.login(self.doctor)

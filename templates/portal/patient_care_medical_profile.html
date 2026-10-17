@@ -1,6 +1,6 @@
 {% extends 'portal/patient_page_base.html' %}
 {% load static workspace_ui %}
-{% block patient_extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/patient_care.css' %}?v=20261001">{% endblock %}
+{% block patient_extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/patient_care.css' %}?v=20261017a">{% endblock %}
 
 {% block patient_breadcrumbs %}{% breadcrumbs 'My Treatment' 'portal:patient-treatment' 'Medical profile' %}{% endblock %}
 {% block patient_heading %}
@@ -11,11 +11,19 @@
   <div class="patient-care">
     <aside class="patient-care-notice"><strong>Save now, come back later.</strong> Every section is optional. Use “Save my profile” to keep your progress. Changes apply only to {{ patient_company.name }}; previous saved versions are retained in your record.</aside>
     <section class="console-card" aria-labelledby="medical-profile-heading">
-      <header class="console-card__header"><div class="console-card__heading"><h2 id="medical-profile-heading">Your health and daily life</h2><p>{% if profile %}Last saved {{ profile.updated_at|date:"j F Y, H:i" }} SAST · version {{ profile.revision }}{% else %}You have not saved this profile yet.{% endif %}</p></div></header>
+      <header class="console-card__header"><div class="console-card__heading"><h2 id="medical-profile-heading">Your health and daily life</h2><p>{% if profile %}Last saved {{ profile.updated_at|date:"j F Y, H:i" }} SAST{% if profile.saved_by and profile.saved_by != request.user %} by {{ profile.saved_by.formal_name }}{% endif %} · version {{ profile.revision }}{% else %}You have not saved this profile yet.{% endif %}</p></div></header>
       <div class="console-card__body">
         <form method="post" action="{% url 'portal:patient-medical-profile' %}" class="console-form" id="medical-profile-form">
           {% csrf_token %}<input type="hidden" name="clinical_context" value="{{ clinical_context }}">
           {{ profile_form.non_field_errors }}
+          {% if care_team_answers %}
+            {# Their clinician keeps these from here on; each change they make is saved as a new version. #}
+            <section class="patient-care-team-answers" aria-labelledby="care-team-answers-heading">
+              <h3 id="care-team-answers-heading">Kept up to date by your care team</h3>
+              <p>Your clinician has reviewed these and updates them for you. If something is wrong, <a class="patient-inline-link" href="{{ correction_url }}">request a correction</a>.</p>
+              <dl class="patient-kv">{% for label, value in care_team_answers %}<div><dt>{{ label }}</dt><dd>{{ value|default:'Not recorded' }}</dd></div>{% endfor %}</dl>
+            </section>
+          {% endif %}
           <div class="patient-care-profile-fields">
             {% for field in profile_form %}<div class="console-form__field"><label for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}{{ field.errors }}<span class="helptext" id="{{ field.auto_id }}_helptext">{{ field.help_text }}</span></div>{% endfor %}
           </div>

@@ -3,6 +3,6 @@
 {% block page_heading %}<header class="staff-page-header"><div><h1>{{ section.label }}</h1></div></header>{% endblock %}
 {% block page_content %}
 <nav class="staff-menu-section" aria-label="{{ section.label }}">
-  <ul>{% for item in section.items %}<li><a href="{{ item.url }}">{{ item.label }}{% include 'portal/includes/nav_badge.html' with count=item.badge %}<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="m9 6 6 6-6 6"/></svg></a></li>{% endfor %}</ul>
+  <ul>{% for item in section.items %}<li><a href="{{ item.url }}">{{ item.label }}{% include 'portal/includes/nav_badge.html' with count=item.badge badge_label=item.badge_label %}<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="m9 6 6 6-6 6"/></svg></a></li>{% endfor %}</ul>
 </nav>
 {% endblock %}

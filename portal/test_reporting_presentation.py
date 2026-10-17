@@ -18,7 +18,7 @@ from .reporting_presentation import metrics_dashboard
 
 class ReportingDashboardTests(ReportingFixture):
     def page(self, **params):
-        self.client.force_login(self.admin)
+        self.client.force_login(self.super_admin)
         session = self.client.session
         session[ACTIVE_COMPANY_SESSION_KEY] = self.company.pk
         session.save()

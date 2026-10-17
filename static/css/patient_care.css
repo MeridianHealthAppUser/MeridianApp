@@ -13,6 +13,10 @@
 .patient-care .patient-care-filters button { flex: 0 1 auto; margin-bottom: 0; }
 .patient-care-filters .patient-inline-link { align-self: center; font-size: .84rem; }
 .patient-care-profile-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.5rem; }
+.patient-care-team-answers { border-bottom: 1px solid var(--console-soft-line); margin: 0 0 1.5rem; padding-bottom: 1.2rem; }
+.patient-care-team-answers h3 { font-size: 1rem; margin: 0 0 .35rem; }
+.patient-care-team-answers > p { color: var(--console-muted); font-size: .88rem; margin: 0; }
+.patient-care-team-answers dd { overflow-wrap: anywhere; white-space: pre-line; }
 .patient-care .helptext { color: var(--console-muted); font-size: .82rem; line-height: 1.5; }
 .patient-care-profile-footer { border-top: 1px solid var(--console-line); padding-top: 1.5rem; margin-top: 1.5rem; display: flex; justify-content: space-between; align-items: center; gap: 1.5rem; }
 .patient-care-profile-footer p { margin: 0; max-width: 44rem; color: var(--patient-text); font-size: .875rem; }

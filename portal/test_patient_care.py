@@ -352,6 +352,39 @@ class PatientCareTests(TestCase):
         self.assertEqual(audit.metadata['revision'], 1)
         self.assertFalse(PatientEvent.objects.exists())
 
+    def test_once_a_clinician_starts_summary_data_they_keep_the_shared_answers_with_every_version(self):
+        from care.clinical_summary import edit_summary
+
+        CompanyMembership.objects.filter(company=self.company, user=self.doctor).update(clinician_type='doctor')
+        get_user_model().objects.filter(pk=self.doctor.pk).update(title='DR')
+        doctor = get_user_model().objects.get(pk=self.doctor.pk)
+        self.login()
+        # Before a clinician starts Summary data, the patient fills in every answer themselves.
+        self.client.post(self.url('patient-medical-profile'), self.profile_data(allergies='None known', goals='Lose 10 kg'))
+        self.assertEqual(PatientMedicalProfile.objects.get().answers['allergies'], 'None known')
+        # The clinician records an allergy: it goes into the profile as a new version, saved by them.
+        edit_summary(company=self.company, patient=self.patient, actor=doctor, field='allergies', value='Bees')
+        profile = PatientMedicalProfile.objects.get()
+        self.assertEqual((profile.answers['allergies'], profile.answers['goals'], profile.revision, profile.saved_by_id),
+                         ('Bees', 'Lose 10 kg', 2, self.doctor.pk))
+        self.assertEqual([(row.revision, row.answers['allergies'], row.saved_by_id) for row in profile.history.order_by('revision')],
+                         [(1, 'None known', self.user.pk), (2, 'Bees', self.doctor.pk)])
+        # The patient sees it read-only, with who saved it, and a way to ask for a correction; their other answers
+        # are still theirs to change.
+        page = self.client.get(self.url('patient-medical-profile'))
+        self.assertContains(page, 'Kept up to date by your care team')
+        self.assertContains(page, '<div><dt>Allergies and previous reactions</dt><dd>Bees</dd></div>', html=True)
+        self.assertContains(page, 'by Dr One')
+        self.assertContains(page, f"{self.url('patient-profile')}?request=1&amp;kind=correction#profile-requests")
+        self.assertNotIn('allergies', page.context['profile_form'].fields)
+        self.assertIn('goals', page.context['profile_form'].fields)
+        self.assertEqual(self.client.get(self.url('patient-profile'), {'request': 1, 'kind': 'correction'})
+                         .context['request_form']['kind'].value(), 'correction')
+        # A post that tries to change it anyway leaves it as the clinician saved it.
+        self.client.post(self.url('patient-medical-profile'), self.profile_data(allergies='None', goals='Lose 12 kg'))
+        profile.refresh_from_db()
+        self.assertEqual((profile.answers['allergies'], profile.answers['goals'], profile.revision), ('Bees', 'Lose 12 kg', 3))
+
     def test_profile_updates_keep_original_snapshot(self):
         self.login()
         self.client.post(self.url('patient-medical-profile'), self.profile_data(medications='Original answer'))

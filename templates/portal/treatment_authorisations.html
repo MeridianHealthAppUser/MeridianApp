@@ -1,6 +1,6 @@
 {% extends 'portal/staff_page_base.html' %}{% load static workspace_ui %}
 {% block title %}Treatment authorisations | Meridian{% endblock %}
-{% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/treatment.css' %}?v=20261010">{% endblock %}
+{% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/treatment.css' %}?v=20261017a">{% endblock %}
 {% block breadcrumbs %}{% breadcrumbs 'Authorisations' %}{% endblock %}
 {% block page_heading %}<header class="staff-page-header"><div><h1>Authorisations</h1><p>Doctor-recorded treatment decisions for {{ company.name }}. Renewals retain the original record.</p></div>{% if is_doctor and selected_patient %}<a class="console-button console-button--primary" href="{% url 'portal:treatment-authorisation-create' selected_patient.pk %}">Authorise treatment</a>{% endif %}</header>{% endblock %}
 {% block page_content %}<div class="treatment-workspace">

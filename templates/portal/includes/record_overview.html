@@ -65,6 +65,7 @@
       {% if summary_error %}<p class="record-error" role="alert">{{ summary_error }}</p>{% endif %}
       <dl class="record-rows record-rows--summary">
         <div><dt>Weight <span>start &rarr; current &rarr; goal</span></dt><dd>{{ summary_weight.start }} &rarr; {{ summary_weight.current }} &rarr; {% if summary.goal_weight_kg %}{% firstof summary.goal_weight_kg|kg as goal_display %}{% else %}{% firstof 'Not set' as goal_display %}{% endif %}{% include 'portal/includes/record_summary_value.html' with field='goal_weight_kg' label='Goal weight' kind='number' current=summary.goal_weight_kg display=goal_display %}&nbsp;kg</dd></div>
+        <div><dt>Height</dt><dd>{% if summary.height_cm %}{% firstof summary.height_cm|kg as height_display %}{% else %}{% firstof 'Not recorded' as height_display %}{% endif %}{% include 'portal/includes/record_summary_value.html' with field='height_cm' label='Height' kind='number' current=summary.height_cm display=height_display number_min=80 number_max=260 %}{% if summary.height_cm %}&nbsp;cm{% endif %}</dd></div>
         <div><dt>BMI <span>start &rarr; current</span></dt><dd>{{ summary_bmi.start|default:'—' }} &rarr; {{ summary_bmi.current|default:'—' }}</dd></div>
         {% for row in summary_texts %}
           <div><dt>{{ row.label }}</dt><dd>{% include 'portal/includes/record_summary_value.html' with field=row.field label=row.label kind='text' current=row.value display=row.value|default:'Not recorded' %}</dd></div>

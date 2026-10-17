@@ -232,3 +232,7 @@
   .record-rows dt { max-width: 45%; }
   .record-sum-edit__form input[type='text'] { width: 100%; }
 }
+
+/* A practice administrator's Overview links each upcoming appointment from its date. */
+.record-rows dt a { color: var(--console-teal-dark); font-weight: 700; text-decoration: none; }
+.record-rows dt a:hover, .record-rows dt a:focus-visible { text-decoration: underline; }

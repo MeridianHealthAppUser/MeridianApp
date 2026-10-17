@@ -124,4 +124,7 @@ def complete_task(*, task: ClinicalTask, actor, request=None):
         target=task,
         request=request,
     )
+    from .privacy import finish_request_with_task
+
+    finish_request_with_task(task=task, actor=actor, request=request)
     return task

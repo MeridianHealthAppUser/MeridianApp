@@ -2,7 +2,7 @@
 {% load static %}
 
 {% block title %}Clinical record | {{ company.name }} | Meridian{% endblock %}
-{% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/record_pages.css' %}?v=20261008b"><link rel="stylesheet" href="{% static 'css/filter_menu.css' %}?v=20261010a"><script src="{% static 'js/filter_menu.js' %}?v=20261008b" defer></script><script src="{% static 'js/record_timeline.js' %}" defer></script>{% endblock %}
+{% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/record_pages.css' %}?v=20261008b"><link rel="stylesheet" href="{% static 'css/filter_menu.css' %}?v=20261017a"><script src="{% static 'js/filter_menu.js' %}?v=20261008b" defer></script><script src="{% static 'js/record_timeline.js' %}" defer></script>{% endblock %}
 {% block patient_workspace_heading_actions %}
   {% if export_url %}<a class="console-button console-button--quiet" data-no-loader href="{{ export_url }}">Export clinical record</a>{% endif %}
 {% endblock %}

@@ -21,7 +21,7 @@ from practices.services import ACTIVE_COMPANY_SESSION_KEY
 
 NAMESPACE = {'x': 'http://schemas.openxmlformats.org/spreadsheetml/2006/main'}
 SHEETS = ['Overview', 'History', 'Appointments', 'Consultations', 'Blood results', 'Notes', 'Weight', 'Messages',
-          'Tasks', 'Payments', 'Treatment', 'Deliveries', 'Export details']
+          'Tasks', 'Payments', 'Treatment', 'Dispatch history', 'Export details']
 
 
 @override_settings(MULTI_PRACTICE_ENABLED=True)

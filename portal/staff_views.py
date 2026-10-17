@@ -23,6 +23,7 @@ from .schedule_calendar import (
 )
 from .clinical_tasks import attach_clinical_task_links
 from .filter_menus import choice_section, filter_menu
+from .navigation import uses_flat_menu
 from .people_tags import person_tag
 from .views import StaffCompanyRequiredMixin
 
@@ -73,10 +74,14 @@ class StaffTaskListView(StaffPageView):
         context = super().get_context_data(**kwargs)
         now = timezone.now()
         queryset = visible_tasks(self.company, self.request.user, self.membership).select_related(
-            'patient', 'assigned_to', 'created_by', 'encounter_signing', 'lab_review_request',
+            'patient', 'assigned_to', 'created_by', 'encounter_signing', 'lab_review_request', 'data_request',
         ).prefetch_related('tags')
-        if context['is_doctor']:
+        # Clinicians and practice administrators have the same simple list: My tasks, no count cards.
+        # Administrators still see every task in the practice, as unassigned ones are theirs to pick up.
+        simple = uses_flat_menu(self.membership)
+        if simple:
             context['page_title'] = 'My tasks'
+        context['simple_tasks'] = simple
         open_statuses = (ClinicalTask.Status.OPEN, ClinicalTask.Status.IN_PROGRESS)
         open_tasks = queryset.filter(status__in=open_statuses)
         context['metrics'] = {

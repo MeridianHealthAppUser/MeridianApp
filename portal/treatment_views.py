@@ -2,10 +2,12 @@
 
 from urllib.parse import urlencode
 
+from django import forms
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.exceptions import ValidationError
 from django.core.paginator import Paginator
+from django.db.models import Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
@@ -13,7 +15,7 @@ from django.utils.decorators import method_decorator
 from django.views import View
 from django.views.decorators.cache import never_cache
 
-from care.models import AuditEvent, PatientSubscription, Shipment, TreatmentAuthorization
+from care.models import AuditEvent, PatientClinicalSummary, PatientSubscription, Shipment, TreatmentAuthorization
 from care.treatment import (
     authorization_is_current, change_authorization_status, change_subscription_status,
     create_authorization, dose_in_effect, enroll_local_subscription, subscription_hold_reason,
@@ -21,6 +23,7 @@ from care.treatment import (
 from practices.models import CompanyMembership
 
 from .clinical_views import StaffClinicalView, _error, _listing
+from .filter_menus import TickedChoiceField, list_tools, ticked_sections, without_all
 from .patient_views import patient_page_context
 from .treatment_forms import AuthorizationForm, ConfirmTreatmentForm, EnrollmentForm, make_treatment_context, validate_treatment_context
 from .views import PatientPortalRequiredMixin, StaffCompanyRequiredMixin
@@ -159,13 +162,38 @@ class SubscriptionListView(LoginRequiredMixin, StaffCompanyRequiredMixin, View):
     http_method_names = ('get', 'head', 'options')
 
     def get(self, request):
-        listing = _listing(request, self.company, _plans(self.company), PatientSubscription.Status.choices)
-        for plan in listing['page_obj']:
+        form = SubscriptionFilterForm(without_all(request.GET, 'status'))
+        plans = _plans(self.company)
+        if form.is_valid():
+            for term in form.cleaned_data['q'].split():
+                plans = plans.filter(Q(patient__first_name__icontains=term) | Q(patient__last_name__icontains=term)
+                                     | Q(plan_name__icontains=term))
+            if form.cleaned_data['status']:
+                plans = plans.filter(status__in=form.cleaned_data['status'])
+        else:
+            plans = plans.none()
+        page = Paginator(plans, 20).get_page(request.GET.get('page'))
+        for plan in page:
             plan.dose = dose_in_effect(plan)
+        query = request.GET.copy()
+        query.pop('page', None)
+        count = page.paginator.count
         return render(request, 'portal/treatment_subscriptions.html', dict(
             company=self.company, active_membership=self.membership, nav_section='subscriptions',
-            can_read_clinical=self.membership.has_clinical_access, **listing,
+            can_read_clinical=self.membership.has_clinical_access, filter_form=form, page_obj=page,
+            is_paginated=page.has_other_pages(), pagination_query=query.urlencode(),
+            count_label=f'{count} care plan{"" if count == 1 else "s"}',
+            **list_tools(action=reverse('portal:treatment-subscriptions'), data=request.GET, form=form,
+                         label='Filter subscriptions', sections=ticked_sections(form, request.GET, ('status',)),
+                         placeholder='Patient or plan'),
         ))
+
+
+class SubscriptionFilterForm(forms.Form):
+    """Subscriptions: a search at the top right of the table, with a Status filter before it."""
+
+    q = forms.CharField(label='Search subscriptions', required=False, max_length=100)
+    status = TickedChoiceField(label='Status', choices=PatientSubscription.Status.choices)
 
 
 def _enrollment_form(company, patient):
@@ -223,7 +251,9 @@ def patient_treatment_context(request, company, patient, *, enrollment_form=None
             authorization=authorization, plan=current, consult=consult, weight=weight, profile=profile,
             labs=open_lab_requests(company, patient),
         ),
-        medical_rows=medical_information(profile=profile, intake=intake_answers(company, patient), weight=weight),
+        medical_rows=medical_information(profile=profile, intake=intake_answers(company, patient), weight=weight,
+                                         recorded_height=PatientClinicalSummary.objects.for_company(company).filter(
+                                             patient=patient).values_list('height_cm', flat=True).first()),
         medical_profile=profile,
         medical_change_url=_compose_url('Change to my medical information'),
         treatment_help_url=_compose_url('Something is not working with my treatment'),

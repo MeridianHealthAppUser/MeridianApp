@@ -322,10 +322,11 @@ def _decimal(value):
     return number if number > 0 else None
 
 
-def medical_information(*, profile, intake, weight):
-    """Rows for the read-only Medical information card, from the patient's own record."""
+def medical_information(*, profile, intake, weight, recorded_height=None):
+    """Rows for the read-only Medical information card, from the patient's own record. Height is the one their
+    clinician recorded in Summary data, when there is one, so a corrected height shows here too."""
     answers = profile.answers if profile else {}
-    height = _decimal(intake.get('height_cm'))
+    height = _decimal(recorded_height) or _decimal(intake.get('height_cm'))
     rows = [('Height', f'{format_kg(height)} cm' if height else 'Not recorded')]
     if weight is not None:
         rows.append(('Weight', f'{format_kg(weight.weight_kg)} kg · logged {date_format(weight.recorded_on, "j M")}'))

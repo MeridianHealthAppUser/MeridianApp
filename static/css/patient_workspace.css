@@ -7,6 +7,8 @@
 .patient-workspace-tabs a { align-items: center; border: 1px solid transparent; border-radius: .55rem; color: var(--console-muted); display: inline-flex; font-size: .8rem; font-weight: 650; min-height: 44px; padding: .55rem .75rem; text-decoration: none; }
 .patient-workspace-tabs a.is-active { background: var(--console-teal-soft); border-color: #acd8cb; color: var(--console-teal-dark); }
 .patient-workspace-tabs a:hover { background: #edf6f2; }
+/* Operations and Administration use these tabs too (includes/page_tabs.html); Data requests carries a count. */
+.patient-workspace-tabs a .nav-badge { margin-left: .45rem; }
 .patient-workspace-content { min-width: 0; }
 .patient-workspace-toolbar { align-items: center; display: flex; flex-wrap: wrap; gap: .7rem; justify-content: space-between; margin-bottom: 1rem; }
 .patient-workspace-toolbar h2 { color: var(--console-ink); font-size: 1.15rem; margin: 0; }
@@ -76,6 +78,8 @@
   .patient-workspace-picker a:hover, .patient-workspace-picker a:focus-visible { background: #edf6f2; }
   .patient-workspace-picker a[aria-current="page"] { background: var(--console-teal-soft); color: var(--console-teal-dark); }
   .patient-workspace-picker a[aria-current="page"]::after { content: '✓'; font-weight: 800; }
+  .patient-workspace-picker a .nav-badge { margin-left: auto; margin-right: .6rem; }
+  .patient-workspace-picker > summary .nav-badge { margin-left: .5rem; vertical-align: middle; }
 }
 @media (prefers-reduced-motion: reduce) { .patient-workspace-picker > summary svg { transition: none; } }
 /* As in the conversation's Patient notes: a grey Private tag on the right, and Open consultation as a small button on the right. */

@@ -131,12 +131,21 @@ class RecordOverviewTests(TestCase):
         history = self.page(tab='history')
         self.assertNotContains(history, 'Current consent')
 
-    def test_administrators_keep_the_administrative_overview(self):
+    def test_practice_administrators_get_the_overview_layout_without_anything_clinical(self):
         self.login(self.admin)
         response = self.page()
-        self.assertIn('overview_cards', response.context)
-        self.assertNotContains(response, 'data-record-overview')
-        self.assertNotContains(response, 'Nausea settled')
+        self.assertTrue(response.context['record_overview_admin'])
+        self.assertContains(response, 'data-record-overview')
+        # The doctor's header: the prescription's status (not the medicine) and the quick facts.
+        self.assertContains(response, 'Renewal due')
+        for fact in ('<dt>Title</dt>', '<dt>Age</dt><dd>34</dd>', '<dt>Prescribing doctor</dt>', '<dt>ID number</dt><dd>9201015800087</dd>'):
+            self.assertContains(response, fact, html=False)
+        # Shipments and contact details on the left; appointments and payments on the right.
+        for card in ('courier MER-438-771-ZA', 'Contact and delivery', 'Upcoming appointments', 'id="record-payments-heading"'):
+            self.assertContains(response, card)
+        for clinical in ('Nausea settled', 'Summary data', 'id="record-weight"', 'Current prescription', 'Request blood tests',
+                         'Create note', 'data-log-filter="clinical"', 'Export record', 'HbA1c'):
+            self.assertNotContains(response, clinical)
 
     def test_doctor_renews_from_the_dialog_and_it_is_logged(self):
         self.login(self.doctor)
@@ -213,6 +222,26 @@ class RecordOverviewTests(TestCase):
         self.assertContains(page, '<s>Not recorded</s> &rarr; 75 kg', html=False)
         self.assertTrue(AuditEvent.objects.filter(action='summary.updated', patient=self.patient).exists())
 
+    def test_height_is_edited_in_summary_data_and_changes_the_bmi(self):
+        from decimal import Decimal
+
+        from .patient_summary import medical_information
+
+        self.login(self.doctor)
+        url = reverse('portal:patient-summary-edit', args=[self.patient.pk])
+        token = self.token(self.doctor, 'patient-summary')
+        self.assertContains(self.page(), '<dt>Height</dt>', html=False)
+        bad = self.client.post(url, {'workflow_context': token, 'field': 'height_cm', 'value': '16.4'})
+        self.assertContains(bad, 'between 80 and 260 cm', status_code=400)
+        self.client.post(url, {'workflow_context': token, 'field': 'height_cm', 'value': '164'})
+        page = self.page()
+        self.assertEqual(page.context['summary'].height_cm, Decimal('164.0'))
+        self.assertEqual(page.context['summary_bmi'], {'start': Decimal('34.9'), 'current': Decimal('32.0')})
+        self.assertContains(page, '<s>Not recorded</s> &rarr; 164 cm', html=False)
+        # The patient's own Medical information card shows the height their clinician recorded.
+        rows = medical_information(profile=None, intake={'height_cm': '170'}, weight=None, recorded_height=Decimal('164.0'))
+        self.assertEqual(rows[0], ('Height', '164 cm'))
+
     def test_weight_tab_has_the_overview_chart_beside_the_history(self):
         self.login(self.owner)
         response = self.page(tab='weights')
@@ -236,21 +265,16 @@ class RecordOverviewTests(TestCase):
         self.assertContains(response, 'js/record_overview.js')
         self.assertNotContains(response, 'DRAFT_NOT_FOR_THE_LOG')
 
-    def test_administrators_see_the_weights_on_the_weight_tab_without_doses_consults_or_goal(self):
+    def test_super_admins_see_the_weight_tab_and_practice_administrators_do_not(self):
         summary = get_summary(self.company, self.patient)
         summary.goal_weight_kg = 75
         summary.save()
         self.login(self.owner)
         self.assertTrue(self.page(tab='weights').context['weight_chart']['goal_pill'].startswith('Goal 75 kg · around '))
+        # Practice administrators keep Overview, Appointments, Messages, Payments, Dispatch history and History.
         self.login(self.admin)
-        response = self.page(tab='weights')
-        self.assertEqual(response.status_code, 200)
-        chart = response.context['weight_chart']
-        self.assertEqual(len(chart['points']), 3)
-        self.assertEqual((chart['bars'], chart['consults'], chart['projection'], chart['goal_pill']), ([], [], [], ''))
-        self.assertContains(response, 'class="record-chart"')
-        for hidden in ('record-chart__dose', 'data-consult=', 'record-consult-', 'Nausea settled', 'Goal 75 kg', 'Set a goal weight'):
-            self.assertNotContains(response, hidden)
+        self.assertRedirects(self.page(tab='weights'), f'{reverse("portal:patient-detail", args=[self.patient.pk])}?tab=overview',
+                             fetch_redirect_response=False)
 
     def test_an_open_conversation_shows_the_patients_notes_to_clinical_staff_only(self):
         from care.messaging import add_participant

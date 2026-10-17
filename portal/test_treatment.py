@@ -70,7 +70,8 @@ class TreatmentPageTests(TestCase):
         # Subscriptions sit in Operations, which the Clinician role doesn't see.
         self.assertEqual(self.client.get(reverse('portal:treatment-subscriptions')).status_code, 403)
         self.login(self.admin)
-        self.assertContains(self.client.get(reverse('portal:treatment-subscriptions')), '<h1>Subscriptions</h1>')
+        self.assertContains(self.client.get(reverse('portal:treatment-subscriptions')),
+                            f'<a href="{reverse("portal:treatment-subscriptions")}" class="is-active" aria-current="page">Subscriptions</a>')
         self.login(self.super_admin)
         self.assertContains(self.client.get(reverse('portal:treatment-authorisations')), '<h1>Authorisations</h1>')
         self.login(self.patient_user)

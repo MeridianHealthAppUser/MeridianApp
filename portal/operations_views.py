@@ -12,6 +12,7 @@ from django.db import transaction
 from django.db.models import Q, Sum
 from django.http import HttpResponse, QueryDict
 from django.shortcuts import get_object_or_404, redirect, render
+from django.template.defaultfilters import pluralize
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.decorators import method_decorator
@@ -29,9 +30,9 @@ from care.treatment import dose_in_effect
 from care.shipment_intake import create_manual_shipment
 from practices.models import Company, CompanyMembership
 
-from .clinical_forms import ClinicalFilterForm
+from .filter_menus import fields_section, list_tools, ticked_sections, without_all
 from .operations_forms import (
-    BasketQuantityForm, CatalogueFilterForm, ConfirmForm, DoseForm, HistoryFilterForm,
+    BasketQuantityForm, CatalogueFilterForm, ConfirmForm, DoseForm, HistoryFilterForm, OrderFilterForm,
     OrderReviewForm, ProductForm, ShipmentActionForm, ShipmentChangeForm, ShipmentCreateForm, ShippingFilterForm,
     SupplyRequestForm,
 )
@@ -52,6 +53,26 @@ def _form_data(request, **defaults):
     for key, value in defaults.items():
         data.setdefault(key, value)
     return data
+
+
+def _list_tools(request, form, *, url_name, sections, label, placeholder, count, noun):
+    """The search at the top right of an Operations table, its Filters menu before it, and its count."""
+    return dict(list_tools(action=reverse(url_name), data=request.GET, form=form, label=label, sections=sections,
+                           placeholder=placeholder), count_label=f'{count} {noun}{pluralize(count)}')
+
+
+def _search(queryset, query, *fields):
+    """Every word of the search in at least one of the fields."""
+    for term in query.split():
+        condition = Q()
+        for field in fields:
+            condition |= Q(**{f'{field}__icontains': term})
+        queryset = queryset.filter(condition)
+    return queryset
+
+
+def _shipment_search(queryset, query):
+    return _search(queryset, query, 'patient__first_name', 'patient__last_name', 'tracking_number')
 
 
 def _errors(request, form, error):
@@ -95,16 +116,19 @@ class CatalogueView(OperationsView):
     http_method_names = ('get', 'head', 'options')
 
     def get(self, request):
-        form = CatalogueFilterForm(_form_data(request, status='all'))
+        form = CatalogueFilterForm(without_all(request.GET, 'status'))
         queryset = MedicationProduct.objects.for_company(self.company).order_by('name', 'strength', 'pk')
         if form.is_valid():
-            if form.cleaned_data['q']:
-                queryset = queryset.filter(Q(name__icontains=form.cleaned_data['q']) | Q(strength__icontains=form.cleaned_data['q']))
-            if form.cleaned_data['status'] != 'all':
-                queryset = queryset.filter(is_active=form.cleaned_data['status'] == 'active')
+            queryset = _search(queryset, form.cleaned_data['q'], 'name', 'strength')
+            # Published and Hidden together are every product.
+            if len(form.cleaned_data['status']) == 1:
+                queryset = queryset.filter(is_active=form.cleaned_data['status'] == ['active'])
         else:
             queryset = queryset.none()
         context = self.context(filter_form=form, **_paginate(request, queryset))
+        context.update(_list_tools(request, form, url_name='portal:ops-catalogue', label='Filter products',
+                                   sections=ticked_sections(form, request.GET, ('status',)), placeholder='Product or strength',
+                                   count=context['page_obj'].paginator.count, noun='product'))
         context['can_edit'] = self.membership.role == CompanyMembership.Role.SUPER_ADMIN
         context['products'] = list(context['page_obj'].object_list)
         # What doctors prescribe: each dose, its pen, how often it is sent and what it costs.
@@ -201,15 +225,21 @@ class DoseEditorView(OperationsView):
 
 def _shipping_filter(request, queryset):
     today = timezone.localdate()
-    form = ShippingFilterForm(_form_data(request, week=(today - timedelta(days=today.weekday())).isoformat(), status='all'))
+    form = ShippingFilterForm(without_all(_form_data(request, week=this_week().isoformat()), 'status'))
     if form.is_valid():
         week = form.cleaned_data['week']
         queryset = queryset.filter(scheduled_for__range=(week, week + timedelta(days=6)))
-        if form.cleaned_data['status'] != 'all':
-            queryset = queryset.filter(status=form.cleaned_data['status'])
+        if form.cleaned_data['status']:
+            queryset = queryset.filter(status__in=form.cleaned_data['status'])
+        queryset = _shipment_search(queryset, form.cleaned_data['q'])
     else:
         queryset = queryset.none()
     return form, queryset
+
+
+def this_week():
+    today = timezone.localdate()
+    return today - timedelta(days=today.weekday())
 
 
 class ShippingListView(OperationsView):
@@ -234,6 +264,11 @@ class ShippingListView(OperationsView):
             if self.can_edit and shipment.status in (Shipment.Status.DRAFT, Shipment.Status.HELD):
                 shipment.ready_context = make_workflow_context(request, self.company, 'shipment-ready', shipment)
         context['list_query'] = request.GET.urlencode()
+        week = form['week'].value()
+        context.update(_list_tools(request, form, url_name='portal:ops-shipping', label='Filter shipments', sections=[
+            fields_section('week', 'Week', [form['week']], count=int(str(week) != this_week().isoformat())),
+            *ticked_sections(form, request.GET, ('status',))], placeholder='Patient or tracking',
+            count=context['page_obj'].paginator.count, noun='shipment'))
         # What to order for the week: the pens in its ready parcels.
         context['week_order'] = week_order(self.company, form.cleaned_data['week']) if form.is_valid() else None
         if self.can_edit:
@@ -280,7 +315,7 @@ class ShippingPrepareView(OperationsView):
 
     def post(self, request):
         require_operations_actor(self.company, request.user)
-        form = ShippingFilterForm({'week': request.POST.get('week'), 'status': 'all'})
+        form = ShippingFilterForm({'week': request.POST.get('week')})
         try:
             validate_workflow_context(request, self.company, 'shipping-prepare')
             if not form.is_valid():
@@ -431,7 +466,7 @@ class ShippingLockView(OperationsView):
 
     def post(self, request):
         require_operations_actor(self.company, request.user)
-        form = ShippingFilterForm({'week': request.POST.get('week'), 'status': 'all'})
+        form = ShippingFilterForm({'week': request.POST.get('week')})
         try:
             validate_workflow_context(request, self.company, 'shipping-week')
             if not form.is_valid():
@@ -450,6 +485,7 @@ def _history_filter(request, queryset):
             queryset = queryset.filter(dispatched_at__date__gte=form.cleaned_data['start'])
         if form.cleaned_data.get('end'):
             queryset = queryset.filter(dispatched_at__date__lte=form.cleaned_data['end'])
+        queryset = _shipment_search(queryset, form.cleaned_data['q'])
     else:
         queryset = queryset.none()
     return form, queryset
@@ -463,6 +499,10 @@ class DispatchHistoryView(OperationsView):
         form, queryset = _history_filter(request, self.shipments().filter(status__in=('dispatched', 'delivered')).order_by('-dispatched_at', '-pk'))
         context = self.context(filter_form=form, **_paginate(request, queryset))
         context['shipments'] = list(context['page_obj'].object_list)
+        dated = int(bool(form['start'].value() or form['end'].value()))
+        context.update(_list_tools(request, form, url_name='portal:ops-history', label='Filter dispatches',
+                                   sections=[fields_section('dispatched', 'Dispatched', [form['start'], form['end']], count=dated)],
+                                   placeholder='Patient or tracking', count=context['page_obj'].paginator.count, noun='shipment'))
         return render(request, 'portal/operations_history.html', context)
 
 
@@ -528,17 +568,19 @@ class StaffOrderListView(OperationsView):
     http_method_names = ('get', 'head', 'options')
 
     def get(self, request):
-        form = ClinicalFilterForm(_form_data(request, status='all'), company=self.company, statuses=PharmacyOrder.Status.choices)
+        form = OrderFilterForm(without_all(request.GET, 'status'))
         queryset = self.orders()
         if form.is_valid():
-            if form.cleaned_data['status'] != 'all':
-                queryset = queryset.filter(status=form.cleaned_data['status'])
-            if form.cleaned_data.get('patient'):
-                queryset = queryset.filter(patient=form.cleaned_data['patient'])
+            if form.cleaned_data['status']:
+                queryset = queryset.filter(status__in=form.cleaned_data['status'])
+            queryset = _search(queryset, form.cleaned_data['q'], 'patient__first_name', 'patient__last_name')
         else:
             queryset = queryset.none()
         context = self.context(filter_form=form, **_paginate(request, queryset))
         context['orders'] = list(context['page_obj'].object_list)
+        context.update(_list_tools(request, form, url_name='portal:ops-orders', label='Filter supply requests',
+                                   sections=ticked_sections(form, request.GET, ('status',)), placeholder='Patient name',
+                                   count=context['page_obj'].paginator.count, noun='request'))
         return render(request, 'portal/operations_orders.html', context)
 
 

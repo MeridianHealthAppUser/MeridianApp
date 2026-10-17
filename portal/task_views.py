@@ -53,7 +53,7 @@ class TaskEditorView(LoginRequiredMixin, StaffCompanyRequiredMixin, View):
         task = self.get_task()
         if task:
             attach_clinical_task_links([task], request.user, self.membership)
-            if task.workflow_url:
+            if task.workflow_url and not task.also_editable:
                 return redirect(workspace_destination(request, task.workflow_url))
             if task.is_clinical_workflow:
                 raise PermissionDenied('This task is managed by its responsible doctor in the clinical workflow.')

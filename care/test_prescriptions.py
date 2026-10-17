@@ -242,7 +242,8 @@ class ClinicalSummaryTests(PrescriptionTestData, TestCase):
 
     def test_values_are_validated_and_only_clinical_staff_may_edit(self):
         for field, value in (('goal_weight_kg', '39'), ('goal_weight_kg', '251'), ('goal_weight_kg', 'heavy'),
-                             ('pancreatitis', 'unsure'), ('pregnancy', 'maybe'), ('height_cm', '170')):
+                             ('pancreatitis', 'unsure'), ('pregnancy', 'maybe'), ('height_cm', '79'), ('height_cm', '261'),
+                             ('start_weight_kg', '90')):
             with self.subTest(field=field, value=value):
                 with self.assertRaises(ValidationError):
                     edit_summary(company=self.company, patient=self.patient, actor=self.doctor, field=field, value=value)

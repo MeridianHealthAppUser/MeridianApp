@@ -100,6 +100,15 @@ def book_patient_appointment(*, company, patient, actor, clinician_id, starts_at
 
 
 @transaction.atomic
+def clinician_answers(company, patient):
+    """The medical profile answers the patient's clinician now owns: once Summary data is started, its shared
+    answers, which only a clinician or Super Admin changes there. Before then, none."""
+    from .clinical_summary import SHARED, stored_summary
+
+    summary = stored_summary(company, patient)
+    return {key: getattr(summary, field) or '' for key, field in SHARED.items()} if summary else {}
+
+
 def save_patient_medical_profile(*, company, patient, actor, answers, expected_revision, request=None):
     from .models import PatientMedicalProfile, PatientMedicalProfileRevision
 
@@ -114,6 +123,7 @@ def save_patient_medical_profile(*, company, patient, actor, answers, expected_r
         raise ValidationError('Your medical profile changed in another tab. No answers were overwritten. Reload before editing again.')
     if not isinstance(answers, dict) or any(not isinstance(value, str) or len(value) > 2000 for value in answers.values()):
         raise ValidationError('Keep each answer to 2,000 characters or fewer.')
+    answers = {**answers, **clinician_answers(company, patient)}
     if (profile and profile.answers == answers) or (profile is None and not any(answers.values())):
         return profile, False
     if profile is None:

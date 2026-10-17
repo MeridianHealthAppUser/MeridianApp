@@ -55,8 +55,8 @@ class ReportingPortalFixture(ReportingFixture):
 
 
 class MetricsPortalTests(ReportingPortalFixture):
-    def test_separate_page_is_admin_only_current_practice_scoped_and_private(self):
-        for actor in (self.super_admin, self.admin):
+    def test_separate_page_is_super_admin_only_current_practice_scoped_and_private(self):
+        for actor in (self.super_admin,):
             self.login(actor)
             response = self.get('metrics', start=self.start, end=self.end)
             self.assertEqual(response.status_code, 200)
@@ -66,7 +66,8 @@ class MetricsPortalTests(ReportingPortalFixture):
             self.assertIn('no-store', response['Cache-Control'])
             self.assertNotContains(response, 'name="summary"')
             self.assertNotContains(response, 'name="body"')
-        for actor in (self.doctor, self.patient_user):
+        # Insights is for Super Admins: practice administrators don't see it either.
+        for actor in (self.admin, self.doctor, self.patient_user):
             self.login(actor)
             self.assertEqual(self.get('metrics').status_code, 403)
         self.client.logout()

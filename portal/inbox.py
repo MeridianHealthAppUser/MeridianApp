@@ -14,8 +14,8 @@ from care.messaging import staff_threads, unread_for_staff
 from care.models import MessageThread, MessageThreadParticipant, PatientMessage
 from care.team_messaging import unread_team_messages
 from practices.models import CompanyMembership, Patient
-from .navigation import messages_title, uses_flat_menu
-from .record_access import can_change_record, can_view_record
+from .navigation import messages_title
+from .record_access import can_change_record, can_view_record, limited_by_assignment
 
 
 def message_tab_counts(company, user):
@@ -79,7 +79,7 @@ def messageable_patients(company, user, membership):
     """Patients a staff member can start a conversation with: active, able to sign in to read it, and
     for a clinician only their own patients, as in All patients."""
     patients = Patient.objects.for_company(company).filter(is_active=True, user__isnull=False).order_by('last_name', 'first_name', 'pk')
-    if uses_flat_menu(membership):
+    if limited_by_assignment(membership):
         patients = patients.filter(assigned_doctor=user)
     return patients
 

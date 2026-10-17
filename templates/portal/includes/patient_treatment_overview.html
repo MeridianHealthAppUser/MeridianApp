@@ -10,7 +10,7 @@
 </div>
 <dl class="patient-kv">
   {% if treatment.on_its_way %}<div><dt>On its way</dt><dd>Sent {{ treatment.on_its_way.date|date:"j M" }}{% if treatment.on_its_way.tracking %} · {{ treatment.on_its_way.tracking }}{% endif %}</dd></div>{% endif %}
-  <div><dt>Next parcel</dt><dd{% if not treatment.next_parcel %} class="patient-kv__quiet"{% endif %}>{% if treatment.next_parcel %}{{ treatment.next_parcel.date|date:"D j M" }} · {{ treatment.next_parcel.contents|join:", " }}{% if treatment.next_parcel.held %} · on hold{% endif %}{% else %}Planned by your care team{% endif %}</dd></div>
+  <div><dt>Next shipment</dt><dd{% if not treatment.next_parcel %} class="patient-kv__quiet"{% endif %}>{% if treatment.next_parcel %}{{ treatment.next_parcel.date|date:"D j M" }} · {{ treatment.next_parcel.contents|join:", " }}{% if treatment.next_parcel.held %} · on hold{% endif %}{% else %}Planned by your care team{% endif %}</dd></div>
   <div><dt>Prescription runs to</dt><dd class="patient-kv__amber">{{ treatment.ends_on|date:"j M Y" }}</dd></div>
   <div><dt>Prescribing doctor</dt><dd>{{ treatment.prescribed_by.full_name }}</dd></div>
 </dl>

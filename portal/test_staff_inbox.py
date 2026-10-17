@@ -280,8 +280,9 @@ class StaffInboxTests(TestCase):
         self.assertEqual(dict(MessageThreadParticipant.objects.values_list('pk', 'last_read_at')), positions)
 
     def test_desktop_and_mobile_link_to_staff_inbox(self):
-        # The practice's Overview lists recent conversations; a clinician's has none and opens Messages from Patient Records.
-        self.login(self.administrator)
+        # A Super Admin's Overview lists recent conversations; clinicians' and practice administrators' have none and
+        # open Messages from Patient Records.
+        self.login(self.super_admin)
         for name in ('desktop-dashboard', 'mobile-dashboard'):
             with self.subTest(workspace=name):
                 response = self.client.get(reverse(f'portal:{name}'))

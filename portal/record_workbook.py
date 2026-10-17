@@ -23,6 +23,7 @@ from care.models import (
 )
 from care.prescriptions import current_prescription
 
+from .patient_summary import format_kg
 from .patient_workspace import scoped
 from .record_overview import clinical_log, dispensed, summary_context
 from .record_views import RECORD_TIMEZONE, ClinicalRecordAccessMixin
@@ -80,6 +81,7 @@ def overview_rows(company, patient):
     weight, bmi = summary['summary_weight'], summary['summary_bmi']
     yield from _table('Summary data', ('Field', 'Value'), (
         ('Weight start → current → goal (kg)', f"{weight['start']} → {weight['current']} → {weight['goal'] or 'Not set'}"),
+        ('Height (cm)', format_kg(summary['summary'].height_cm) if summary['summary'].height_cm else 'Not recorded'),
         ('BMI start → current', f"{bmi['start'] or '—'} → {bmi['current'] or '—'}"),
         *((row['label'], row['value'] or 'Not recorded') for row in summary['summary_texts']),
         *((flag['label'], flag['display']) for flag in summary['summary_flags']),
@@ -164,7 +166,7 @@ def workbook_sheets(request, company, patient, timeline):
         ('Treatment', _sheet(('Medication', 'Dose', 'Doctor', 'Valid from', 'Valid to', 'Status'), (
             (row.product.name, row.max_dose, _person(row.prescribed_by), _day(row.starts_on), _day(row.expires_on), row.get_status_display())
             for row in treatment)), (26, 18, 24, 14, 14, 14), True),
-        ('Deliveries', _sheet(('Scheduled', 'Cycle', 'Status', 'Tracking', 'Dispatched (SAST)'), (
+        ('Dispatch history', _sheet(('Scheduled', 'Cycle', 'Status', 'Tracking', 'Dispatched (SAST)'), (
             (_day(row.scheduled_for), row.cycle_number, row.get_status_display(), row.tracking_number or 'Not dispatched', _when(row.dispatched_at))
             for row in deliveries)), (14, 8, 16, 24, 20), True),
         ('Export details', _sheet(('Field', 'Value'), (

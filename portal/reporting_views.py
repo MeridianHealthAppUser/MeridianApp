@@ -85,6 +85,9 @@ class MetricsView(ReportingView):
     export = False
 
     def get(self, request):
+        # Insights is for Super Admins; practice administrators don't see it.
+        if self.membership.role != CompanyMembership.Role.SUPER_ADMIN:
+            raise PermissionDenied('Metrics and cohorts are available to the practice Super Admin.')
         data = request.GET.copy()
         data.setdefault('start', reporting_today().replace(day=1))
         data.setdefault('end', reporting_today())

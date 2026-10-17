@@ -2,7 +2,7 @@
 {% load static workspace_ui %}
 
 {% block title %}{{ active_company.name }} | Meridian Mobile{% endblock %}
-{% block extra_css %}<link rel="stylesheet" href="{% static 'css/console.css' %}?v=20261015a"><link rel="stylesheet" href="{% static 'css/person_tags.css' %}?v=20261009e">{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{% static 'css/console.css' %}?v=20261017a"><link rel="stylesheet" href="{% static 'css/person_tags.css' %}?v=20261009e">{% endblock %}
 {% block content %}
   <div class="meridian-console console-mobile workspace-overview">
     <header class="mobile-console__top">
@@ -30,7 +30,7 @@
         </section>
       {% endif %}
 
-      {# Clinicians don't need the count cards; administrators keep them. #}{% if active_membership.role != 'doctor' %}
+      {# Clinicians and practice administrators don't need the count cards; Super Admins keep them. #}{% if not simple_overview %}
       <section class="mobile-metrics" aria-label="Practice metrics">
         {% for metric_name, metric_value in metrics.items %}
           <article class="metric-card">
@@ -126,7 +126,7 @@
         </div>
       </section>
 
-      {# Clinicians find their patients in Patient Records and conversations in Messages, so Overview doesn't list them. #}{% if active_membership.role != 'doctor' %}
+      {# Clinicians and practice administrators find patients in Patient Records and conversations in Messages, so their Overview doesn't list them. #}{% if not simple_overview %}
       <section class="console-card mobile-card" id="messages" aria-labelledby="mobile-messages-heading">
         <header class="console-card__header">
           <div class="console-card__heading">

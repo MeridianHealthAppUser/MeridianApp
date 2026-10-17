@@ -2,34 +2,19 @@
 {% load static workspace_ui %}
 
 {% block title %}Leads | {{ company.name }} | Meridian{% endblock %}
-{% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/leads.css' %}">{% endblock %}
+{% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/leads.css' %}"><link rel="stylesheet" href="{% static 'css/filter_menu.css' %}?v=20261017a"><script src="{% static 'js/filter_menu.js' %}?v=20261008b" defer></script><link rel="stylesheet" href="{% static 'css/conversation_search.css' %}?v=20261005b"><script src="{% static 'js/conversation_search.js' %}?v=20261005" defer></script>{% endblock %}
 
-{% block breadcrumbs %}{% breadcrumbs 'Leads' %}{% endblock %}
+{% block breadcrumbs %}{% breadcrumbs 'Administration' %}{% endblock %}
 {% block page_heading %}
-  <header class="staff-page-header"><div><h1>Leads</h1><p>Questionnaire submissions for {{ company.name }}. A lead is not a patient account; viewing an enquiry does not convert it.</p></div></header>
+  <header class="staff-page-header"><div><h1>Administration</h1><p>Questionnaire submissions for {{ company.name }}. A lead is not a patient account; viewing an enquiry does not convert it.</p></div></header>{% page_tabs %}
 {% endblock %}
 
 {% block page_content %}
-  <section class="staff-metrics staff-metrics--four" aria-label="Lead summary">
-    <article><span>Total enquiries</span><strong>{{ metrics.total }}</strong></article>
-    <article><span>Cleared for consult</span><strong>{{ metrics.cleared }}</strong></article>
-    <article><span>Needs review</span><strong>{{ metrics.referred }}</strong></article>
-    <article><span>Converted</span><strong>{{ metrics.converted }}</strong></article>
-  </section>
-  <section class="staff-page-card" aria-labelledby="lead-filters-heading">
-    <header class="staff-page-card__header"><div><h2 id="lead-filters-heading">Find an enquiry</h2><p>{% if multi_practice_enabled %}Use the practice selector above to switch between practices you administer.{% else %}Search enquiries or filter by stage and screening status.{% endif %}</p></div></header>
-    <form class="staff-filter-form staff-filter-form--leads" method="get" action="{% url 'portal:staff-leads' %}">
-      {{ filter_form.non_field_errors }}
-      <div class="staff-filter-form__field">{{ filter_form.q.label_tag }}{{ filter_form.q }}{{ filter_form.q.errors }}</div>
-      <div class="staff-filter-form__field">{{ filter_form.screening_status.label_tag }}{{ filter_form.screening_status }}{{ filter_form.screening_status.errors }}</div>
-      <div class="staff-filter-form__field">{{ filter_form.stage.label_tag }}{{ filter_form.stage }}{{ filter_form.stage.errors }}</div>
-      <div class="staff-filter-form__field">{{ filter_form.follow_up.label_tag }}{{ filter_form.follow_up }}{{ filter_form.follow_up.errors }}</div>
-      <button class="console-button console-button--primary" type="submit">Apply filters</button>
-    </form>
-  </section>
   <section class="staff-page-card staff-page-card--list" aria-labelledby="lead-list-heading">
-    <header class="staff-page-card__header"><div><h2 id="lead-list-heading">Enquiries</h2><p>Screening status is separate from payment and account activation.</p></div><span class="staff-page-card__count">{{ page_obj.paginator.count }} lead{{ page_obj.paginator.count|pluralize }}</span></header>
-    {% if filter_form.errors %}<div class="staff-filter-error" role="alert">Correct the filter fields above to view leads.</div>{% else %}
+    {# The search at the top right of the table, with Filters before it; the table follows the search as you type. #}
+    <header class="staff-page-card__header staff-list-header"><div><h2 id="lead-list-heading">Enquiries</h2><p>Screening status is separate from payment and account activation.</p></div>{% include 'portal/includes/list_tools.html' with search_label='Search leads' %}</header>
+    <div data-search-region="list">
+    {% if filter_form.errors %}<div class="staff-filter-error" role="alert">Correct the filters to view leads.</div>{% else %}
       <div class="staff-lead-table-wrap">
         <table class="staff-lead-table">
           <thead><tr><th scope="col">Name</th><th scope="col">Contact</th><th scope="col">ID / passport</th><th scope="col">BMI</th><th scope="col">Screening</th><th scope="col">Stage</th><th scope="col">Submitted</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead>
@@ -50,12 +35,13 @@
         </table>
       </div>
     {% endif %}
+    </div>
   </section>
-  {% if page_obj.has_other_pages %}
+  <div data-search-region="pages">{% if page_obj.has_other_pages %}
     <nav class="staff-pagination" aria-label="Lead pages">
       {% if page_obj.has_previous %}<a class="console-button console-button--quiet" href="?{{ pagination_query }}{% if pagination_query %}&amp;{% endif %}page={{ page_obj.previous_page_number }}">Previous</a>{% endif %}
       <span>Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
       {% if page_obj.has_next %}<a class="console-button console-button--quiet" href="?{{ pagination_query }}{% if pagination_query %}&amp;{% endif %}page={{ page_obj.next_page_number }}">Next</a>{% endif %}
     </nav>
-  {% endif %}
+  {% endif %}</div>
 {% endblock %}

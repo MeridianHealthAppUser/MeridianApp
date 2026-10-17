@@ -273,7 +273,9 @@ class StaffPagesTests(TestCase):
     def test_administrator_task_page_includes_unassigned_and_other_doctor_tasks(self):
         self.login(self.administrator)
         response = self.page('staff-tasks', status='all')
-        self.assertContains(response, 'aria-label="Task summary"')
+        # Practice administrators get the clinician's My tasks layout, without the count cards, but every task.
+        self.assertContains(response, '<h1>My tasks</h1>', html=True)
+        self.assertNotContains(response, 'aria-label="Task summary"')
         self.assertEqual({task.pk for task in response.context['tasks']}, {
             self.own_open.pk, self.own_progress.pk, self.own_done.pk, self.own_cancelled.pk,
             self.other_task.pk, self.unassigned_task.pk,

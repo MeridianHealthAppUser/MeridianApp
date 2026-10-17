@@ -66,7 +66,8 @@ class ScheduleFilterForm(forms.Form):
         widget=forms.DateInput(attrs={'type': 'date', 'min': '1900-01-01', 'max': '2100-12-31'}),
     )
     clinician = DoctorChoiceField(
-        label='Whose diary', required=False, queryset=get_user_model().objects.none(), empty_label='All clinicians',
+        label='Clinician', required=False, queryset=get_user_model().objects.none(), empty_label='All clinicians',
+        widget=forms.Select(attrs={'data-submit-on-change': ''}),
     )
 
     def __init__(self, *args, company, actor, membership, **kwargs):

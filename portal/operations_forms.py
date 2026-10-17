@@ -5,8 +5,10 @@ from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.utils import timezone
 
-from care.models import MedicationDose, MedicationProduct, PatientSubscription, Shipment
+from care.models import MedicationDose, MedicationProduct, PatientSubscription, PharmacyOrder, Shipment
 from practices.models import Patient
+
+from .filter_menus import TickedChoiceField
 
 
 class ProductForm(forms.ModelForm):
@@ -117,17 +119,26 @@ class DoseForm(forms.ModelForm):
         return data
 
 
+# Each Operations list has a search at the top right of its table and a Filters menu before it (filter_menus.list_tools).
 class CatalogueFilterForm(forms.Form):
     q = forms.CharField(label='Search catalogue', required=False, max_length=100)
-    status = forms.ChoiceField(choices=(('all', 'All products'), ('active', 'Published'), ('hidden', 'Hidden')))
+    status = TickedChoiceField(label='Visibility', choices=(('active', 'Published'), ('hidden', 'Hidden')))
+
+
+class OrderFilterForm(forms.Form):
+    q = forms.CharField(label='Search supply requests', required=False, max_length=100)
+    status = TickedChoiceField(label='Status', choices=[choice for choice in PharmacyOrder.Status.choices
+                                                         if choice[0] != PharmacyOrder.Status.DRAFT])
 
 
 class ShippingFilterForm(forms.Form):
+    q = forms.CharField(label='Search shipments', required=False, max_length=100)
     week = forms.DateField(label='Week beginning', widget=forms.DateInput(attrs={'type': 'date'}))
-    status = forms.ChoiceField(choices=(('all', 'All shipments'), *Shipment.Status.choices))
+    status = TickedChoiceField(label='Status', choices=Shipment.Status.choices)
 
 
 class HistoryFilterForm(forms.Form):
+    q = forms.CharField(label='Search dispatches', required=False, max_length=100)
     start = forms.DateField(label='From', required=False, widget=forms.DateInput(attrs={'type': 'date'}))
     end = forms.DateField(label='Until', required=False, widget=forms.DateInput(attrs={'type': 'date'}))
 

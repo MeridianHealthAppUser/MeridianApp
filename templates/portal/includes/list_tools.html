@@ -1,0 +1,7 @@
+{% comment %}A table's tools at the top right of its card: the count, the Filters menu, then the search, which the table
+follows as you type (portal.filter_menus.list_tools). The page loads filter_menu and conversation_search CSS and JS.{% endcomment %}
+<div class="staff-list-tools">
+  {% if count_label %}<span class="staff-page-card__count" data-search-region="count">{{ count_label }}</span>{% endif %}
+  {% if filter_menu %}{% include 'portal/includes/filter_menu.html' with filter_menu_class='filter-menu--compact' %}{% endif %}
+  {% include 'portal/includes/conversation_search.html' %}
+</div>

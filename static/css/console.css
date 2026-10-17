@@ -1413,3 +1413,13 @@
 @media (max-width: 43.75rem) {
   .records-tabs { gap: 1rem; }
 }
+
+/* A table's search at the top right of its card, with the Filters menu before it (includes/list_tools.html). */
+.staff-list-header { flex-wrap: wrap; }
+.staff-list-header > div:first-child { flex: 1 1 22rem; }
+.staff-list-tools { align-items: center; display: flex; flex: 0 0 auto; gap: .6rem; justify-content: flex-end; margin-left: auto; max-width: 100%; }
+.staff-list-tools .conversation-search { flex: 0 0 19rem; }
+@media (max-width: 46rem) {
+  .staff-list-tools { flex: 1 1 100%; flex-wrap: wrap; }
+  .staff-list-tools .conversation-search { flex: 1 1 100%; }
+}

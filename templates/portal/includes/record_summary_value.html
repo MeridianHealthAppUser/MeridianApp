@@ -9,7 +9,7 @@
       {% if kind == 'select' %}
         <select id="record-summary-{{ field }}" name="value" data-summary-select>{% if not current %}<option value="" selected disabled>Not recorded</option>{% endif %}{% for value, text in choices %}<option value="{{ value }}"{% if value == current %} selected{% endif %}>{{ text }}</option>{% endfor %}</select>
       {% elif kind == 'number' %}
-        <input id="record-summary-{{ field }}" type="number" name="value" min="40" max="250" step="0.1" inputmode="decimal" value="{{ current|default_if_none:''|kg }}" required>
+        <input id="record-summary-{{ field }}" type="number" name="value" min="{{ number_min|default:40 }}" max="{{ number_max|default:250 }}" step="0.1" inputmode="decimal" value="{{ current|default_if_none:''|kg }}" required>
       {% else %}
         <input id="record-summary-{{ field }}" type="text" name="value" maxlength="2000" value="{{ current }}">
       {% endif %}

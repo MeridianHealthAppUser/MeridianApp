@@ -1,5 +1,9 @@
 {% extends 'portal/staff_page_base.html' %}{% load static workspace_ui %}
-{% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/privacy.css' %}?v=20261007">{% endblock %}
-{% block breadcrumbs %}{% breadcrumbs 'Data requests' %}{% endblock %}
-{% block page_heading %}<header class="staff-page-header"><div><h1>Data requests</h1><p>Review requests held at {{ company.name }}. Responses are visible to the requesting patient.</p></div></header>{% endblock %}
-{% block page_content %}<div class="privacy-workspace"><section class="privacy-card">{% include 'portal/privacy_request_table.html' with privacy_staff=True %}</section></div>{% endblock %}
+{% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/privacy.css' %}?v=20261007"><link rel="stylesheet" href="{% static 'css/filter_menu.css' %}?v=20261017a"><script src="{% static 'js/filter_menu.js' %}?v=20261008b" defer></script><link rel="stylesheet" href="{% static 'css/conversation_search.css' %}?v=20261005b"><script src="{% static 'js/conversation_search.js' %}?v=20261005" defer></script>{% endblock %}
+{% block breadcrumbs %}{% breadcrumbs 'Administration' %}{% endblock %}
+{% block page_heading %}<header class="staff-page-header"><div><h1>Administration</h1><p>Review requests held at {{ company.name }}. Responses are visible to the requesting patient.</p></div></header>{% page_tabs %}{% endblock %}
+{% block page_content %}<section class="staff-page-card staff-page-card--list" aria-labelledby="data-request-list-heading">
+  {# The search at the top right of the table, with Filters before it; the table follows the search as you type. #}
+  <header class="staff-page-card__header staff-list-header"><div><h2 id="data-request-list-heading">Requests</h2><p>Copies, corrections, deletion reviews and privacy questions from patients.</p></div>{% include 'portal/includes/list_tools.html' with search_label='Search data requests' %}</header>
+  {% include 'portal/privacy_request_table.html' with privacy_staff=True %}
+</section>{% endblock %}

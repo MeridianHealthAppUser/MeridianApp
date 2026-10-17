@@ -17,9 +17,11 @@ from django.views.decorators.cache import never_cache
 
 from care.availability import SAST, open_slots_for_day
 from care.models import Appointment, PatientEvent, PatientMedicalProfile
-from care.patient_care import book_patient_appointment, patient_busy_intervals, save_patient_medical_profile
+from care.patient_care import book_patient_appointment, clinician_answers, patient_busy_intervals, save_patient_medical_profile
 from .clinical_forms import make_clinical_context, validate_clinical_context
-from .patient_care_forms import BookingTimesQuery, PatientBookingForm, PatientMedicalProfileForm, PatientUpdatesFilterForm
+from .patient_care_forms import (
+    PROFILE_FIELDS, BookingTimesQuery, PatientBookingForm, PatientMedicalProfileForm, PatientUpdatesFilterForm,
+)
 from .patient_context import validate_patient_context
 from .patient_views import JUST_BOOKED, patient_appointments_context, patient_page_context
 from .views import PatientPortalRequiredMixin
@@ -109,10 +111,18 @@ class PatientMedicalProfileView(PatientCarePage):
     def profile(self):
         return PatientMedicalProfile.objects.for_company(self.patient_company).filter(patient=self.patient).first()
 
+    def locked(self):
+        return clinician_answers(self.patient_company, self.patient)
+
     def display(self, request, profile, form=None):
+        locked = self.locked()
         context = self.context(
             'medical_profile', 'Your medical profile', profile=profile,
-            profile_form=form if form is not None else PatientMedicalProfileForm(initial=profile.answers if profile else {}),
+            profile_form=form if form is not None else PatientMedicalProfileForm(
+                initial=profile.answers if profile else {}, locked=locked),
+            # What their care team keeps, in the profile's order, with a way to ask for a correction.
+            care_team_answers=[(label, locked[name]) for name, label, _ in PROFILE_FIELDS if name in locked],
+            correction_url=f"{reverse('portal:patient-profile')}?request=1&kind=correction#profile-requests",
             clinical_context=request.POST.get('clinical_context') or make_clinical_context(
                 request, self.patient_company, self.patient, 'medical-profile', profile,
             ),
@@ -124,7 +134,7 @@ class PatientMedicalProfileView(PatientCarePage):
 
     def post(self, request):
         profile = self.profile()
-        form = PatientMedicalProfileForm(request.POST)
+        form = PatientMedicalProfileForm(request.POST, locked=self.locked())
         valid = form.is_valid()
         try:
             token = validate_clinical_context(request, self.patient_company, self.patient, 'medical-profile', profile)

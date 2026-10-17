@@ -7,7 +7,7 @@ from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.core.paginator import Paginator
-from django.db.models import F
+from django.db.models import F, Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
@@ -62,7 +62,7 @@ TARGET_LABELS = {
 def paginate(request, queryset, **filters):
     page = Paginator(queryset, 20).get_page(request.GET.get('page'))
     return {'page_obj': page, 'is_paginated': page.has_other_pages(),
-            'pagination_query': urlencode({key: value for key, value in filters.items() if value})}
+            'pagination_query': urlencode({key: value for key, value in filters.items() if value}, doseq=True)}
 
 
 def safe_access_rows(queryset):
@@ -73,16 +73,26 @@ def safe_access_rows(queryset):
 
 
 def filtered_requests(request, queryset):
+    """Data requests for staff: a search by patient at the top right of the table, with Status and Type filters."""
+    from .filter_menus import list_tools, ticked_sections
+
     form = DataRequestFilterForm(request.GET, auto_id='request_filter_%s')
     filters = {}
     if form.is_valid():
         filters = form.cleaned_data
+        for term in filters['q'].split():
+            queryset = queryset.filter(Q(patient__first_name__icontains=term) | Q(patient__last_name__icontains=term)
+                                       | Q(patient__medical_record_number__icontains=term))
         for key in ('status', 'kind'):
             if filters[key]:
-                queryset = queryset.filter(**{key: filters[key]})
+                queryset = queryset.filter(**{f'{key}__in': filters[key]})
     else:
         queryset = queryset.none()
-    return dict(paginate(request, queryset.order_by('-created_at', '-pk'), **filters), filter_form=form)
+    context = paginate(request, queryset.order_by('-created_at', '-pk'), **filters)
+    count = context['page_obj'].paginator.count
+    return dict(context, filter_form=form, count_label=f'{count} request{"" if count == 1 else "s"}', **list_tools(
+        action=reverse('portal:staff-data-requests'), data=request.GET, form=form, label='Filter data requests',
+        sections=ticked_sections(form, request.GET, ('status', 'kind'), icons={'kind': 'type'}), placeholder='Patient name'))
 
 
 def patient_data_requests(request, company, patient):
@@ -145,7 +155,10 @@ class PatientProfileView(PatientCarePage):
         subject = ' '.join(filter(None, ('Request for Detail Change:', self.patient.first_name, self.patient.last_name)))
         context = self.context('account', 'My profile', form=form, privacy_context=token,
             # New request opens its dialog; ?request=1 (the button without scripts) or a mistake opens it with the page.
-            request_form=request_form if request_form is not None else DataRequestForm(), request_context=request_token,
+            # ?kind=correction (from the medical profile) starts the dialog on that type.
+            request_form=request_form if request_form is not None else DataRequestForm(initial={
+                'kind': request.GET.get('kind') if request.GET.get('kind') in PatientDataRequest.Kind.values else None}),
+            request_context=request_token,
             request_dialog_open=request_form is not None or request.GET.get('request') == '1',
             shipping_address=', '.join(part for part in patient_address(self.patient_company, self.patient) if part),
             support_email=settings.SUPPORT_EMAIL,
@@ -234,13 +247,13 @@ class StaffDataRequestListView(PrivacyStaffPage):
 class StaffDataRequestDetailView(PrivacyStaffPage):
     def record(self, pk):
         require_privacy_admin(self.request.user, self.company)
-        return get_object_or_404(PatientDataRequest.objects.select_related('patient'), pk=pk,
+        return get_object_or_404(PatientDataRequest.objects.select_related('patient', 'task__assigned_to'), pk=pk,
                                 company=self.company, patient__company=self.company)
 
     def display(self, request, data_request, form=None):
         replies = PatientDataRequestReply.objects.filter(company=self.company, data_request=data_request).select_related('author').order_by('created_at', 'pk')
         context = self.context('Privacy request', data_request=data_request,
-            form=form if form is not None else DataRequestReplyForm(initial={'status': data_request.status}),
+            form=form if form is not None else DataRequestReplyForm(),
             privacy_context=request.POST.get('privacy_context') or privacy_context(request, self.company, 'data-response',
                 record_id=data_request.pk, version=data_request.updated_at.isoformat()), **paginate(request, replies))
         return render(request, 'portal/privacy_staff_request_detail.html', context)

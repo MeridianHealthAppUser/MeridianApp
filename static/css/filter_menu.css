@@ -42,3 +42,6 @@
 
 /* Beside a search (Messages, the patient directory): the same height as the search, square-cornered like the others. */
 .filter-menu--compact .filter-menu__toggle { font-size: .76rem; gap: .4rem; min-height: 2.15rem; padding: .35rem .8rem; }
+
+/* A card clips what spills out of it; while its Filters menu is open the menu shows in full, even over a short table. */
+.staff-page-card:has(.filter-menu[open]) { overflow: visible; }

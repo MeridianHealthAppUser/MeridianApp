@@ -498,6 +498,26 @@ class StaffLeadWorkspaceTests(TestCase):
                 self.assertNotContains(response, self.pending.last_name)
                 self.assertNotContains(response, self.foreign.last_name)
 
+    def test_leads_have_a_search_at_the_top_right_of_the_table_with_filters_before_it(self):
+        self.login()
+        url = reverse('portal:staff-leads')
+        response = self.client.get(url)
+        self.assertNotContains(response, 'Find an enquiry')
+        self.assertNotContains(response, 'Apply filters')
+        self.assertEqual([section['label'] for section in response.context['filter_menu']['sections']],
+                         ['Screening', 'Stage', 'Follow-up'])
+        for markup in ('class="staff-list-tools"', 'data-conversation-search', 'data-search-region="list"', 'data-search-region="pages"'):
+            self.assertContains(response, markup)
+        # Ticking several shows any of them, sent as repeated fields or one comma-separated field as the search keeps it.
+        for params in ({'screening_status': [Lead.ScreeningStatus.CLEARED, Lead.ScreeningStatus.PENDING]},
+                       {'screening_status': f'{Lead.ScreeningStatus.CLEARED},{Lead.ScreeningStatus.PENDING}'}):
+            with self.subTest(params=params):
+                response = self.client.get(url, params)
+                self.assertContains(response, self.cleared.last_name)
+                self.assertContains(response, self.pending.last_name)
+                self.assertEqual(response.context['filter_menu']['count'], 2)
+                self.assertEqual(response.context['search_hidden'], {'screening_status': 'pending,cleared'})
+
     def test_invalid_filters_do_not_fall_back_to_an_unfiltered_list(self):
         self.login()
         for field in ('screening_status', 'stage'):

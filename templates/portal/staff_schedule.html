@@ -2,7 +2,7 @@
 {% load static workspace_ui %}
 
 {% block title %}{{ title|default:page_title }} | {{ company.name }} | Meridian{% endblock %}
-{% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/schedule_availability.css' %}?v=20261012a"><link rel="stylesheet" href="{% static 'css/dialogs.css' %}?v=20261008b"><script src="{% static 'js/dialogs.js' %}?v=20261015a" defer></script><script src="{% static 'js/appointment_booking.js' %}?v=20261010b" defer></script><script src="{% static 'js/time_ranges.js' %}?v=20261011a" defer></script><script src="{% static 'js/working_hours.js' %}?v=20261012a" defer></script>{% endblock %}
+{% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/schedule_availability.css' %}?v=20261017a"><link rel="stylesheet" href="{% static 'css/dialogs.css' %}?v=20261008b"><script src="{% static 'js/dialogs.js' %}?v=20261015a" defer></script><script src="{% static 'js/appointment_booking.js' %}?v=20261010b" defer></script><script src="{% static 'js/time_ranges.js' %}?v=20261011a" defer></script><script src="{% static 'js/working_hours.js' %}?v=20261012a" defer></script><script src="{% static 'js/submit_on_change.js' %}?v=20261017a" defer></script>{% endblock %}
 
 
 {% block breadcrumbs %}{% breadcrumbs page_title %}{% endblock %}
@@ -13,7 +13,7 @@
     </div>
     <div class="staff-schedule-header-actions">
       <a class="console-button console-button--primary" href="{% url 'portal:appointment-book' %}" data-modal-open="create-appointment" aria-haspopup="dialog">Create appointment</a>
-      {% if next_appointment_date and next_appointment_url %}
+      {# Practice administrators don't need it. #}{% if next_appointment_date and next_appointment_url and active_membership.role != 'practice_admin' %}
         <a class="console-button console-button--secondary" href="{{ next_appointment_url }}">Next appointment day: {{ next_appointment_date|date:"j M" }}</a>
       {% endif %}
     </div>
@@ -25,35 +25,22 @@
 {% endblock %}
 
 {% block page_content %}
+
   {% if not is_doctor %}
-    <section class="staff-page-card" aria-labelledby="schedule-filters-heading">
-      <header class="staff-page-card__header">
-        <div>
-          <h2 id="schedule-filters-heading">View schedule</h2>
-          <p>{% if selected_clinician %}Showing {{ selected_clinician.full_name }}'s appointments.{% else %}Showing appointments for all clinicians.{% endif %}</p>
-        </div>
-      </header>
-      <form class="staff-filter-form staff-filter-form--schedule" method="get" action="{% url 'portal:staff-schedule' %}">
-        <input type="hidden" name="view" value="{{ schedule_view }}">
-        {% if schedule_section == 'availability' %}<input type="hidden" name="section" value="availability">{% endif %}
-        {{ filter_form.non_field_errors }}
-        <div class="staff-filter-form__field">
-          <label for="{{ filter_form.date.id_for_label }}">{{ filter_form.date.label }}</label>
-          {{ filter_form.date }}
-          {{ filter_form.date.errors }}
-        </div>
-        <div class="staff-filter-form__field">
-          <label for="{{ filter_form.clinician.id_for_label }}">{{ filter_form.clinician.label }}</label>
-          {{ filter_form.clinician }}
-          {{ filter_form.clinician.errors }}
-        </div>
-        <button class="console-button console-button--primary" type="submit">View schedule</button>
-      </form>
-    </section>
+    {# Whose diary: one dropdown on the right, above the diary; choosing a clinician shows theirs. #}
+    <form class="schedule-clinician" method="get" action="{% url 'portal:staff-schedule' %}">
+      <input type="hidden" name="view" value="{{ schedule_view }}">
+      {% if schedule_section == 'availability' %}<input type="hidden" name="section" value="availability">{% endif %}
+      <input type="hidden" name="date" value="{% if selected_date %}{{ selected_date|date:'Y-m-d' }}{% else %}{{ today|date:'Y-m-d' }}{% endif %}">
+      <label for="{{ filter_form.clinician.id_for_label }}">{{ filter_form.clinician.label }}</label>
+      {{ filter_form.clinician }}
+      <noscript><button class="console-button console-button--secondary" type="submit">Show</button></noscript>
+      {{ filter_form.clinician.errors }}
+    </form>
   {% endif %}
 
   {% if filter_form.errors %}
-    <div class="staff-filter-error" role="alert">{% if is_doctor %}That date can't be shown. <a href="{% url 'portal:staff-schedule' %}">Go to today</a>.{% else %}Correct the filter fields above to view appointments.{% endif %}</div>
+    <div class="staff-filter-error" role="alert">That date can't be shown. <a href="{% url 'portal:staff-schedule' %}">Go to today</a>.</div>
   {% else %}
     {% if schedule_section == 'availability' %}
       {% include 'portal/includes/schedule_availability.html' %}

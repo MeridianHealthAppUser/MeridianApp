@@ -12,6 +12,14 @@ from .models import ClinicalNote, ClinicalNoteTagAssignment, ClinicalTask, Recor
 from .services import record_audit
 
 
+DATA_REQUEST_TASK_ERROR = ('Only the assigned clinician or a Super Admin can change a data request task. '
+                           'Open the data request to reply, or complete the task from Tasks.')
+
+
+def is_data_request_task(task):
+    return bool(task.pk) and ClinicalTask.objects.filter(pk=task.pk, data_request__isnull=False).exists()
+
+
 def visible_tasks(company, actor, membership):
     tasks = ClinicalTask.objects.for_company(company).filter(
         Q(patient__isnull=True) | Q(patient__company=company, patient__is_active=True),
@@ -108,6 +116,8 @@ def save_task(*, company, actor, form, request=None):
     else:
         task = ClinicalTask.objects.select_for_update().get(pk=form.instance.pk, company=company)
         _validate_record_actor(task, actor, membership)
+        if membership.role == CompanyMembership.Role.PRACTICE_ADMIN and is_data_request_task(task):
+            raise PermissionDenied(DATA_REQUEST_TASK_ERROR)
     old_status = task.status
     for field in ('title', 'description', 'patient', 'assigned_to', 'priority', 'status', 'due_at'):
         setattr(task, field, form.cleaned_data[field])
@@ -129,4 +139,8 @@ def save_task(*, company, actor, form, request=None):
         action='task.created' if created else 'task.updated', target=task, request=request,
         metadata={'assigned_to_id': task.assigned_to_id, 'tag_ids': sorted(tag.pk for tag in tags), 'status': task.status},
     )
+    if task.status == ClinicalTask.Status.DONE and old_status != ClinicalTask.Status.DONE:
+        from .privacy import finish_request_with_task
+
+        finish_request_with_task(task=task, actor=actor, request=request)
     return task

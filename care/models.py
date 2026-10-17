@@ -1432,6 +1432,8 @@ class PatientClinicalSummary(PatientCompanyScopedModel):
         super().clean()
         if self.goal_weight_kg is not None and not 40 <= self.goal_weight_kg <= 250:
             raise ValidationError({'goal_weight_kg': 'Give a goal weight between 40 and 250 kg.'})
+        if self.height_cm is not None and not 80 <= self.height_cm <= 260:
+            raise ValidationError({'height_cm': 'Give a height between 80 and 260 cm.'})
 
 
 class PatientSummaryEdit(PatientCompanyScopedModel):
@@ -1550,6 +1552,8 @@ class PatientDataRequest(PatientCompanyScopedModel):
     description = models.TextField()
     status = models.CharField(max_length=16, choices=Status.choices, default=Status.OPEN)
     submission_key = models.UUIDField(unique=True, editable=False)
+    # The practice task raised with the request; marking the request Resolved or Declined completes it.
+    task = models.OneToOneField(ClinicalTask, null=True, blank=True, on_delete=models.PROTECT, related_name='data_request')
 
     class Meta:
         ordering = ('-created_at', '-pk')

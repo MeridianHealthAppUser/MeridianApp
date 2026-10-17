@@ -8,11 +8,64 @@ from django.db import transaction
 
 from practices.models import Company, CompanyMembership, Patient
 from practices.tenancy import require_enabled_company
-from .models import ConsentDocument, PatientCommunicationPreference, PatientDataRequest, PatientDataRequestReply
+from .models import ClinicalTask, ConsentDocument, PatientCommunicationPreference, PatientDataRequest, PatientDataRequestReply
 from .services import record_audit
 
 
 ADMIN_ROLES = (CompanyMembership.Role.PRACTICE_ADMIN, CompanyMembership.Role.SUPER_ADMIN)
+# Requests still waiting on the practice: the Data requests menu counts these.
+UNRESOLVED = (PatientDataRequest.Status.OPEN, PatientDataRequest.Status.IN_REVIEW)
+# Replying with one of these completes the request's task.
+CLOSING = (PatientDataRequest.Status.RESOLVED, PatientDataRequest.Status.DECLINED)
+TASK_TITLES = {
+    PatientDataRequest.Kind.ACCESS: 'Data request: copy of information',
+    PatientDataRequest.Kind.CORRECTION: 'Data request: correction',
+    PatientDataRequest.Kind.DELETION: 'Data request: deletion review',
+    PatientDataRequest.Kind.QUESTION: 'Data request: privacy question',
+}
+
+
+def task_done_reply(actor):
+    """What the patient reads when the request is finished from its task rather than with a written reply."""
+    return f'{actor.formal_name} has marked your request as complete.'
+
+
+def unresolved_request_count(company):
+    return PatientDataRequest.objects.filter(company=company, patient__company=company, status__in=UNRESOLVED).count()
+
+
+def request_task_assignee(company, patient):
+    """The patient's clinician, so it's in their My tasks; administrators and Super Admins see every task anyway."""
+    if not patient.assigned_doctor_id:
+        return None
+    clinician = CompanyMembership.objects.filter(
+        company=company, user_id=patient.assigned_doctor_id, user__is_active=True, is_active=True,
+        clinician_type__in=CompanyMembership.CLINICIAN_TYPES,
+    ).exists()
+    return patient.assigned_doctor if clinician else None
+
+
+def request_task_note(kind, description):
+    lines = ["The patient's request:", description, '']
+    if kind == PatientDataRequest.Kind.CORRECTION:
+        lines.append("Height, allergies and medical history are changed in Summary data on the record's Overview.")
+    lines.append('Completing this task marks the request Resolved and tells the patient you have marked it complete. '
+                 'To give a fuller answer, or to decline, an administrator replies from Data requests instead, '
+                 'which also completes this task.')
+    return '\n'.join(lines)
+
+
+def raise_request_task(record):
+    task = ClinicalTask(
+        company=record.company, patient=record.patient, title=TASK_TITLES[record.kind],
+        description=request_task_note(record.kind, record.description),
+        assigned_to=request_task_assignee(record.company, record.patient),
+    )
+    task.full_clean()
+    task.save()
+    record.task = task
+    record.save(update_fields=('task', 'updated_at'))
+    return task
 
 
 def require_privacy_admin(actor, company, *, policies=False):
@@ -81,8 +134,9 @@ def create_data_request(*, actor, company, patient, kind, description, submissio
     record = PatientDataRequest(company=company, patient=patient, kind=kind, description=description, submission_key=key)
     record.full_clean()
     record.save()
+    task = raise_request_task(record)
     record_audit(company=company, actor=actor, patient=patient, target=record,
-                 action='privacy.request_submitted', request=request, metadata={'kind': kind})
+                 action='privacy.request_submitted', request=request, metadata={'kind': kind, 'task_id': task.pk})
     return record, True
 
 
@@ -116,7 +170,31 @@ def respond_to_data_request(*, actor, company, data_request, body, status, submi
     record.save(update_fields=('status', 'updated_at'))
     record_audit(company=company, actor=actor, patient=record.patient, target=record,
                  action='privacy.request_responded', request=request, metadata={'reply_id': reply.pk, 'status': status})
+    if status in CLOSING and record.task_id:
+        task = ClinicalTask.objects.select_for_update().get(pk=record.task_id, company=company)
+        if task.status in (ClinicalTask.Status.OPEN, ClinicalTask.Status.IN_PROGRESS):
+            task.mark_done()
+            record_audit(company=company, actor=actor, patient=record.patient, action='task.completed', target=task,
+                         request=request, metadata={'data_request_id': record.pk})
     return reply, True
+
+
+def finish_request_with_task(*, task, actor, request=None):
+    """Completing a data request's task, from the task list or the task editor, resolves the request for everyone:
+    it leaves the Data requests count and the patient sees it Resolved. Called inside the task's transaction."""
+    record = PatientDataRequest.objects.select_for_update().filter(task_id=task.pk, company_id=task.company_id).first()
+    if record is None or record.status not in UNRESOLVED:
+        return None
+    reply = PatientDataRequestReply(company_id=record.company_id, data_request=record, author=actor, body=task_done_reply(actor),
+                                    status=PatientDataRequest.Status.RESOLVED, submission_key=uuid.uuid4())
+    reply.full_clean()
+    reply.save()
+    record.status = PatientDataRequest.Status.RESOLVED
+    record.save(update_fields=('status', 'updated_at'))
+    record_audit(company=record.company, actor=actor, patient=record.patient, target=record,
+                 action='privacy.request_responded', request=request,
+                 metadata={'reply_id': reply.pk, 'status': record.status, 'task_id': task.pk})
+    return record
 
 
 @transaction.atomic

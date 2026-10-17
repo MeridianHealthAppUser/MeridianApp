@@ -7,6 +7,8 @@ from django.core.paginator import Paginator
 from django.db import transaction
 from django.db.models import OuterRef, Q, Subquery
 from django.shortcuts import get_object_or_404, redirect, render
+from django.template.defaultfilters import pluralize
+from django.urls import reverse
 from django.utils import timezone
 from django.utils.decorators import method_decorator
 from django.views import View
@@ -16,6 +18,7 @@ from care.followups import append_follow_up
 from care.models import AdministrativeFollowUp, Lead, PatientSubscription
 from care.services import record_audit
 from practices.models import Company, CompanyMembership
+from .filter_menus import TickedChoiceField, list_tools, ticked_sections
 from .views import StaffCompanyRequiredMixin
 from .workflow_context import make_workflow_context, validate_workflow_context
 
@@ -34,9 +37,26 @@ class FollowUpForm(forms.Form):
             del self.fields['stage']
 
 
+FOLLOW_UP_CHOICES = (('due', 'Due for contact'), ('open', 'Open'), ('done', 'Completed'), ('none', 'Not yet followed up'))
+
+
+def follow_up_matches(states):
+    """Any of the ticked follow-up states, for a queryset annotated by with_follow_up."""
+    condition = Q()
+    for state in states:
+        if state == 'due':
+            condition |= Q(follow_up_status='open', next_contact_on__lte=timezone.localdate())
+        elif state == 'none':
+            condition |= Q(follow_up_status__isnull=True)
+        else:
+            condition |= Q(follow_up_status=state)
+    return condition
+
+
 class FollowUpFilter(forms.Form):
     q = forms.CharField(label='Search', required=False, max_length=200)
-    follow_up = forms.ChoiceField(required=False, choices=(('', 'All follow-ups'), ('due', 'Due for contact'), ('open', 'Open'), ('done', 'Completed'), ('none', 'Not yet followed up')))
+    status = TickedChoiceField(label='Plan status', choices=(('paused', 'Paused'), ('cancelled', 'Cancelled')))
+    follow_up = TickedChoiceField(label='Follow-up', choices=FOLLOW_UP_CHOICES)
 
 
 def with_follow_up(queryset, field):
@@ -72,19 +92,22 @@ class DropoutListView(AdminFollowUpView):
         if form.is_valid():
             for term in form.cleaned_data['q'].split():
                 queryset = queryset.filter(Q(patient__first_name__icontains=term) | Q(patient__last_name__icontains=term) | Q(plan_name__icontains=term))
-            state = form.cleaned_data['follow_up']
-            if state == 'due':
-                queryset = queryset.filter(follow_up_status='open', next_contact_on__lte=timezone.localdate())
-            elif state == 'none':
-                queryset = queryset.filter(follow_up_status__isnull=True)
-            elif state:
-                queryset = queryset.filter(follow_up_status=state)
+            if form.cleaned_data['status']:
+                queryset = queryset.filter(status__in=form.cleaned_data['status'])
+            if form.cleaned_data['follow_up']:
+                queryset = queryset.filter(follow_up_matches(form.cleaned_data['follow_up']))
         else:
             queryset = queryset.none()
         page = Paginator(queryset, 20).get_page(request.GET.get('page'))
         query = request.GET.copy()
         query.pop('page', None)
-        return render(request, 'portal/followup_dropouts.html', self.context(filter_form=form, page_obj=page, pagination_query=query.urlencode()))
+        tools = list_tools(action=reverse('portal:dropouts'), data=request.GET, form=form, label='Filter dropouts',
+                           sections=ticked_sections(form, request.GET, ('status', 'follow_up'), icons={'follow_up': 'list'}),
+                           placeholder='Patient or plan')
+        count = page.paginator.count
+        return render(request, 'portal/followup_dropouts.html', self.context(
+            filter_form=form, page_obj=page, pagination_query=query.urlencode(),
+            count_label=f'{count} care plan{pluralize(count)}', **tools))
 
 
 class FollowUpDetailView(AdminFollowUpView):

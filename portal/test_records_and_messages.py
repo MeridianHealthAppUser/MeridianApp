@@ -211,9 +211,22 @@ class RecordsAndMessagesTests(TestCase):
         mobile = self.client.get(reverse('portal:mobile-dashboard'))
         for stale in ('id="mobile-patients-heading"', 'id="mobile-messages-heading"'):
             self.assertNotContains(mobile, stale)
+        # Practice administrators get the same Overview, with the practice's appointments rather than their own.
         self.login(self.admin)
         page = self.client.get(reverse('portal:desktop-dashboard'))
-        for text in ('People currently receiving care', 'Recent conversations', 'Your latest patient conversations', 'View patient messages'):
+        self.assertContains(page, 'Your upcoming appointments and open tasks.')
+        self.assertContains(page, 'Booked appointments')
+        for stale in ('id="patients-heading"', 'Recent conversations', 'aria-label="Practice metrics"'):
+            self.assertNotContains(page, stale)
+        self.assertNotIn('recent_messages', page.context)
+        mobile = self.client.get(reverse('portal:mobile-dashboard'))
+        for stale in ('id="mobile-messages-heading"', 'aria-label="Practice metrics"'):
+            self.assertNotContains(mobile, stale)
+        # Super Admins keep the count cards, Patients and Recent conversations.
+        CompanyMembership.objects.filter(user=self.admin).update(role=CompanyMembership.Role.SUPER_ADMIN)
+        page = self.client.get(reverse('portal:desktop-dashboard'))
+        for text in ('aria-label="Practice metrics"', 'People currently receiving care', 'Recent conversations',
+                     'Your latest patient conversations', 'View patient messages'):
             self.assertContains(page, text)
         self.assertNotContains(page, 'Patients assigned to you')
 
@@ -553,10 +566,10 @@ class PerPersonReadStateTests(TestCase):
         self.assertEqual(dashboard.context['metrics']['unread_messages'], 1)
         # The sidebar's badge, worked out once per request.
         self.assertEqual(dashboard.wsgi_request._staff_message_counts, {'patient_unread_total': 1, 'team_unread_total': 0})
-        # An administrator's menu carries it too.
+        # An administrator's menu carries it too, on Patient Records & Messages.
         self.login(self.admin)
-        care = self.client.get(reverse('portal:staff-menu-section', args=['care']))
-        self.assertEqual(care.context['section']['badge'], 1)
+        self.assertContains(self.client.get(reverse('portal:desktop-dashboard')),
+                            '<span class="nav-badge" aria-hidden="true">1</span><span class="sr-only">, 1 unread message</span>')
 
     def test_opening_a_conversation_reads_it_only_for_the_person_who_opened_it(self):
         self.add_josh()
