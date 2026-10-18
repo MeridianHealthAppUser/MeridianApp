@@ -57,7 +57,7 @@
 
     <section class="patient-conversation" id="patient-conversation" aria-labelledby="patient-conversation-heading" tabindex="-1">
       {% if composing %}
-        <header class="patient-conversation__header">
+        <header class="patient-conversation__header" data-live-region="header">
           <div>
             <h2 id="patient-conversation-heading">New message</h2>
             <p>Only you and the person you choose can read this conversation · kept in your medical record</p>
@@ -95,7 +95,7 @@
         </form>
         {% endif %}
       {% elif selected_thread %}
-        <header class="patient-conversation__header">
+        <header class="patient-conversation__header" data-live-region="header">
           <div>
             <h2 id="patient-conversation-heading">{{ selected_thread.subject|default:"Your care" }}</h2>
             <p>With {% for row in selected_thread.participant_rows %}{{ row.user.full_name }}{% if not forloop.last %}, {% endif %}{% empty %}{{ patient_company.name }}{% endfor %} · kept in your medical record · times in SAST</p>
@@ -104,18 +104,16 @@
           {% if selected_thread.is_closed %}<span class="patient-inbox-pill">Closed</span>{% endif %}
         </header>
 
-        {% if older_messages_url or newer_messages_url %}
-          <nav class="patient-inbox-pagination patient-inbox-pagination--history" aria-label="Message history pages">
+          <nav class="patient-inbox-pagination patient-inbox-pagination--history" data-live-region="history"{% if not older_messages_url and not newer_messages_url %} hidden{% endif %} aria-label="Message history pages">
             {% if older_messages_url %}<a href="{{ older_messages_url }}#patient-conversation">Older messages</a>{% endif %}
             {% if message_page_obj %}<span>Page {{ message_page_obj.number }} of {{ message_page_obj.paginator.num_pages }}</span>{% endif %}
             {% if newer_messages_url %}<a href="{{ newer_messages_url }}#patient-conversation">Newer messages</a>{% endif %}
           </nav>
-        {% endif %}
 
-        <ol class="patient-conversation-messages" aria-label="Messages in {{ selected_thread.subject }}">
+        <ol class="patient-conversation-messages" data-live-region="messages" data-live-thread="patient:{{ selected_thread.pk }}" data-live-closed="{{ selected_thread.is_closed|yesno:'true,false' }}" data-live-read-url="{% url 'portal:patient-message-seen' selected_thread.pk %}"{% if message_page_obj.number > 1 %} data-live-history="older"{% endif %} aria-label="Messages in {{ selected_thread.subject }}">
           {% patient_thread_messages selected_thread user as thread_messages %}
           {% for message in thread_messages %}
-            <li class="patient-conversation-message{% if message.is_mine %} patient-conversation-message--mine{% else %} message-tone--{{ message.tone }}{% endif %}">
+            <li data-message-id="{{ message.pk }}" class="patient-conversation-message{% if message.is_mine %} patient-conversation-message--mine{% else %} message-tone--{{ message.tone }}{% endif %}">
               <p>{{ message.body|linebreaksbr }}</p>
               <div class="patient-conversation-message__meta">
                 <strong>{% if message.is_mine %}You{% elif message.sender %}{{ message.sender.full_name }}{% else %}Meridian care team{% endif %}</strong>
@@ -128,7 +126,7 @@
         </ol>
 
         {% if not selected_thread.is_closed %}
-          <form class="console-form patient-conversation-reply" method="post" action="{% url 'portal:patient-message-create' selected_thread.pk %}">
+          <form class="console-form patient-conversation-reply" data-live-reply method="post" action="{% url 'portal:patient-message-create' selected_thread.pk %}">
             {% csrf_token %}
             {{ message_form.non_field_errors }}
             <div class="console-form__field">

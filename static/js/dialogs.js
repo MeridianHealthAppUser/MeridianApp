@@ -23,12 +23,15 @@
     if (dialog.hasAttribute('open')) open(dialog);
   });
 
-  document.querySelectorAll('[data-modal-open]').forEach((trigger) => trigger.addEventListener('click', (event) => {
+  // Conversation headers can refresh while their existing dialogs stay in place.
+  document.addEventListener('click', (event) => {
+    const trigger = event.target.closest('[data-modal-open]');
+    if (!trigger) return;
     const dialog = document.getElementById(trigger.dataset.modalOpen);
     if (!dialog || typeof dialog.showModal !== 'function') return;
     event.preventDefault();
     open(dialog);
-  }));
+  });
 
   // The no-script link to a dialog (?update=status) leaves its query in the address; tidy it.
   const url = new URL(window.location.href);

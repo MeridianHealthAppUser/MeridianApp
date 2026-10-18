@@ -33,6 +33,8 @@ class ManagementView(LoginRequiredMixin, View):
             raise PermissionDenied('An active Super Admin membership is required.')
         require_super_admin(request.user, self.company)
         self.membership = active_membership_for(request, self.company)
+        from portal.realtime_context import staff_scope
+        request.realtime_scope = staff_scope(self.company, request.user)
         return super().dispatch(request, *args, **kwargs)
 
     def context(self, **kwargs):

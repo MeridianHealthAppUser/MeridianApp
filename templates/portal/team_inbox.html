@@ -76,7 +76,7 @@
                   </div>
                 </form>
               {% elif selected_thread %}
-                <div class="record-messages__pane-head">
+                <div class="record-messages__pane-head" data-live-region="header">
                   <h3>{{ selected_thread.subject }}</h3>
                   <span class="record-messages__tools">
                     {% if selected_thread.patient %}<a class="console-button console-button--secondary record-messages__tool" href="{% url 'portal:patient-detail' selected_thread.patient_id %}">Open record<span class="sr-only"> for {{ selected_thread.patient }}</span></a>{% endif %}
@@ -101,14 +101,16 @@
                     </form>
                   </div>
                 </dialog>
+                <div data-live-region="people">
                 {% if selected_thread.people_tags %}<p class="record-messages__people record-messages__tags person-tags"><span class="sr-only">With </span>{% for tag in selected_thread.people_tags %}{% include 'portal/includes/person_tag.html' %}{% endfor %}</p>{% endif %}
                 {% if selected_thread.about %}<p class="record-messages__about"><span class="person-tags__label">Patient:</span>{% include 'portal/includes/person_tag.html' with tag=selected_thread.about %}</p>{% endif %}
                 {% if selected_thread.added_rows %}<p class="record-messages__people">{% for row in selected_thread.added_rows %}{% if not forloop.first %} &middot; {% endif %}{% if row.added_by_id == user.pk %}You{% else %}{{ row.added_by.full_name }}{% endif %} added {{ row.user.full_name }} {{ row.created_at|date:'j M' }}{% endfor %}</p>{% endif %}
 
-                <ol class="record-conversation" data-record-conversation tabindex="0" aria-label="Messages in {{ selected_thread.subject }}">
+                </div>
+                <ol class="record-conversation" data-live-region="messages" data-live-thread="team-message-seen:{{ selected_thread.pk }}" data-live-closed="{{ selected_thread.is_closed|yesno:'true,false' }}" data-live-read-url="{% url 'portal:team-message-seen' selected_thread.pk %}" data-record-conversation tabindex="0" aria-label="Messages in {{ selected_thread.subject }}">
                   {% team_thread_messages selected_thread user as thread_messages %}
                   {% for message in thread_messages %}
-                    <li class="record-bubble{% if message.is_mine %} record-bubble--mine{% else %} message-tone--{{ message.tone }}{% endif %}">
+                    <li data-message-id="{{ message.pk }}" class="record-bubble{% if message.is_mine %} record-bubble--mine{% else %} message-tone--{{ message.tone }}{% endif %}">
                       <p>{{ message.body|linebreaksbr }}</p>
                       <span class="record-bubble__meta">{% if message.is_mine %}You{% elif message.sender %}{{ message.sender.full_name }}{% else %}Former colleague{% endif %} &middot; <time datetime="{{ message.created_at|date:'c' }}">{{ message.created_at|message_time }}</time></span>
                     </li>
@@ -120,7 +122,7 @@
                 {% if selected_thread.is_closed %}
                 <p class="record-messages__note">This conversation is closed. Reopen it under Message action to reply, or <a href="{% url 'portal:team-inbox' %}?compose=1">start a new one</a>.</p>
                 {% else %}
-                <form class="record-reply" method="post" action="{% url 'portal:team-message-create' selected_thread.pk %}" data-record-reply>
+                <form class="record-reply" method="post" action="{% url 'portal:team-message-create' selected_thread.pk %}" data-record-reply data-live-reply>
                   {% csrf_token %}<input type="hidden" name="status" value="{{ filter_status }}"><input type="hidden" name="about" value="{{ filter_about }}"><input type="hidden" name="q" value="{{ search }}">
                   {% if message_form.errors %}<p class="record-error" role="alert">{% for errors in message_form.errors.values %}{{ errors|join:' ' }} {% endfor %}</p>{% endif %}
                   <label class="sr-only" for="team-reply-body">Reply</label>

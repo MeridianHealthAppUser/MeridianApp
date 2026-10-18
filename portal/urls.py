@@ -2,10 +2,17 @@ from django.urls import include, path
 
 from . import availability_views, blood_result_views, pathcare_views, prescription_views, clinical_views, intake_views, lead_views, menu_views, message_management_views, patient_assignment_views, patient_views, practice_settings_views, staff_views, task_views, team_views, views
 from .patient_workspace import PatientWorkspaceView, RecordConversationSearchView
+from . import realtime_views
 
 app_name = 'portal'
 
 urlpatterns = [
+    path('patient/appointments/video-status/', patient_views.PatientAppointmentVideoStatusView.as_view(), name='patient-appointment-video-status'),
+    path('messages/status/', realtime_views.StaffMessageStatusView.as_view(), name='staff-message-status'),
+    path('patient/messages/status/', realtime_views.PatientMessageStatusView.as_view(), name='patient-message-status'),
+    path('messages/<int:pk>/seen/', realtime_views.StaffMessageSeenView.as_view(), name='staff-message-seen'),
+    path('patient/messages/<int:pk>/seen/', realtime_views.PatientMessageSeenView.as_view(), name='patient-message-seen'),
+    path('messages/team/<int:pk>/seen/', realtime_views.TeamMessageSeenView.as_view(), name='team-message-seen'),
     path('', include('portal.privacy_urls')),
     path('messages/<int:pk>/manage/', message_management_views.ConversationManagementView.as_view(), name='conversation-manage'),
     path('', include('portal.appointment_detail_urls')),

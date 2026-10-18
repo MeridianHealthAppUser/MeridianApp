@@ -8,14 +8,16 @@
   it themselves.
 - Appointment cancelled: to the patient, with the practice's reason when the practice cancelled it, and to the
   clinician unless they cancelled it themselves. The patient's own reason is never emailed.
-- Appointment reminder, APPOINTMENT_REMINDER_HOURS before it starts, to the patient and the clinician
-  (`manage.py send_appointment_reminders`, every 15 minutes). A confirmation sent within that time is the reminder.
+- Appointment reminders, a day before and shortly before it starts, to the patient and the clinician
+  (`manage.py send_appointment_reminders`, every 15 minutes). A recent confirmation replaces only the day-before
+  reminder; the 15-minute reminder records successful delivery separately for each recipient.
 - Welcome: to a patient who made their account at checkout.
 
 Patients are emailed only with an active login, and staff only while active in the practice.
 """
 
 import logging
+import time
 from contextlib import contextmanager
 from contextvars import ContextVar
 from datetime import timedelta
@@ -29,7 +31,10 @@ from django.utils import timezone
 from practices.models import CompanyMembership
 from practices.tenancy import enabled_companies
 from .emails import appointment_details, build_email, greeting_name, person_name, site_link
-from .models import Appointment, MessageThread, MessageThreadParticipant, PatientMessage, TeamMessage, TeamThreadMember
+from .models import (
+    Appointment, AppointmentStartReminder, MessageThread, MessageThreadParticipant,
+    PatientMessage, TeamMessage, TeamThreadMember,
+)
 
 logger = logging.getLogger(__name__)
 _paused = ContextVar('notifications_paused', default=False)
@@ -70,26 +75,100 @@ def deliver(kind, object_id, recipient_id, actor_id=None):
     build(load(object_id), get_user_model().objects.get(pk=recipient_id), actor_id).send(fail_silently=False)
 
 
-def send_due_reminders():
-    """Remind the patient and clinician of each booked appointment starting within APPOINTMENT_REMINDER_HOURS that
-    hasn't had a reminder. Returns how many appointments were reminded."""
+def send_due_reminders(*, retry_delays=()):
+    """Send day-before and independent 15-minute reminders; count appointments with a delivery.
+
+    The scheduled command supplies short retry delays for failed start reminders.
+    Waiting happens outside database transactions, and every retry reloads the
+    appointment and skips recipients whose email already succeeded.
+    """
     if not settings.EMAIL_ENABLED:
         return 0
     from .tasks import send_notification
 
     now = timezone.now()
     due = Appointment.objects.filter(
-        status=Appointment.Status.BOOKED, reminder_sent_at__isnull=True, starts_at__gt=now,
+        status=Appointment.Status.BOOKED, reminder_sent_at__isnull=True,
+        starts_at__gt=now + timedelta(minutes=settings.APPOINTMENT_START_REMINDER_MINUTES),
         starts_at__lte=now + timedelta(hours=settings.APPOINTMENT_REMINDER_HOURS),
         patient__is_active=True, company__in=enabled_companies(),
     )
-    reminded = 0
+    reminded = set()
     for appointment_id in due.values_list('pk', flat=True):
         # Claimed first, so two runs at once never remind twice.
         if Appointment.objects.filter(pk=appointment_id, reminder_sent_at__isnull=True).update(reminder_sent_at=now):
             send_notification.delay('appointment_reminder', appointment_id)
-            reminded += 1
-    return reminded
+            reminded.add(appointment_id)
+    sent, pending = _send_start_reminders()
+    reminded.update(sent)
+    for delay in retry_delays:
+        if not pending:
+            break
+        time.sleep(delay)
+        sent, pending = _send_start_reminders(appointment_ids=pending)
+        reminded.update(sent)
+    return len(reminded)
+
+
+def _send_start_reminders(*, appointment_ids=None):
+    now = timezone.now()
+    due = Appointment.objects.filter(
+        status=Appointment.Status.BOOKED, starts_at__gt=now,
+        starts_at__lte=now + timedelta(minutes=settings.APPOINTMENT_START_REMINDER_MINUTES),
+        patient__is_active=True, company__in=enabled_companies(),
+    )
+    if appointment_ids is not None:
+        due = due.filter(pk__in=appointment_ids)
+    sent, pending = set(), set()
+    for appointment_id in due.values_list('pk', flat=True):
+        delivered, failed = _send_start_reminder(appointment_id)
+        if delivered:
+            sent.add(appointment_id)
+        if failed:
+            pending.add(appointment_id)
+    return sent, pending
+
+
+@transaction.atomic
+def _send_start_reminder(appointment_id):
+    # Serialize overlapping invocations, then recheck cancellation, start time,
+    # and recipients. Holding this appointment lock during the bounded SMTP send
+    # also prevents a concurrent cancellation from being followed by a reminder.
+    now = timezone.now()
+    appointment = Appointment.objects.select_for_update(of=('self',)).filter(
+        pk=appointment_id, status=Appointment.Status.BOOKED, starts_at__gt=now,
+        starts_at__lte=now + timedelta(minutes=settings.APPOINTMENT_START_REMINDER_MINUTES),
+        patient__is_active=True, company__in=enabled_companies(),
+    ).first()
+    if appointment is None or appointment.patient.company_id != appointment.company_id:
+        return False, False
+    successful = set(AppointmentStartReminder.objects.filter(
+        appointment=appointment, starts_at=appointment.starts_at,
+    ).values_list('recipient_id', flat=True))
+    delivered = failed = False
+    for recipient_id in set(_appointment_people(appointment, None)) - successful:
+        # A previous send may have waited on SMTP until the appointment started.
+        if appointment.starts_at <= timezone.now():
+            break
+        user = get_user_model().objects.filter(pk=recipient_id, is_active=True).exclude(email='').first()
+        if user is None:
+            continue
+        try:
+            # Send in this job even when ordinary notification emails use Celery:
+            # the success record must reflect SMTP acceptance, not queue insertion.
+            accepted = _appointment_email(appointment, user, reminder=True, starting=True).send(fail_silently=False)
+            if not accepted:
+                raise RuntimeError('The email backend did not accept the reminder.')
+        except Exception as error:
+            logger.warning('Appointment start reminder could not be sent (%s).', type(error).__name__)
+            failed = True
+            continue
+        AppointmentStartReminder.objects.create(
+            company_id=appointment.company_id, appointment=appointment,
+            starts_at=appointment.starts_at, recipient=user, sent_at=timezone.now(),
+        )
+        delivered = True
+    return delivered, failed
 
 
 def _active_staff(company_id):
@@ -243,11 +322,11 @@ def _when(appointment):
     return f'{starts:%A} {starts.day} {starts:%B} at {starts:%H:%M}'
 
 
-def _appointment_email(appointment, user, *, moved=False, reminder=False, actor_id=None):
+def _appointment_email(appointment, user, *, moved=False, reminder=False, starting=False, actor_id=None):
     when = _when(appointment)
     if user.pk == appointment.patient.user_id:
         if reminder:
-            subject = f'Reminder: your appointment on {when}'
+            subject = f'{"Starting soon" if starting else "Reminder"}: your appointment on {when}'
         else:
             subject = f'Your appointment has moved to {when}' if moved else f'Appointment confirmed: {when}'
         return build_email(
@@ -259,7 +338,7 @@ def _appointment_email(appointment, user, *, moved=False, reminder=False, actor_
         )
     patient = str(appointment.patient)
     if reminder:
-        subject = f'Reminder: {patient} on {when}'
+        subject = f'{"Starting soon" if starting else "Reminder"}: {patient} on {when}'
     else:
         subject = f'Appointment moved: {patient} on {when}' if moved else f'New booking: {patient} on {when}'
     booked_by = ''

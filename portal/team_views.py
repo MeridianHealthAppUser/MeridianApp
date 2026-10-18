@@ -29,6 +29,7 @@ from .inbox import latest_from, message_tab_counts, search_text
 from .people_tags import in_join_order, people_tags, person_tag, staff_kinds
 from .navigation import messages_title
 from .record_messages import patient_notes
+from .realtime_context import records_conversation_view
 from .views import StaffCompanyRequiredMixin
 from .workflow_context import make_workflow_context, validate_workflow_context
 
@@ -189,13 +190,13 @@ def team_inbox_context(request, company, membership, *, selected_id=None, **over
         # About a patient: their notes under the reply box, as in a patient conversation. Clinical staff only, so a
         # practice admin in the same conversation never sees them.
         context['conversation_notes'] = patient_notes(company, membership, selected.patient, request.user) if selected.patient_id else None
-        if request.method == 'GET':
+        if records_conversation_view(request):
             if selected.patient_id:
                 notes = context['conversation_notes']
                 record_audit(company=company, actor=request.user, patient=selected.patient, action='team_thread.viewed',
                              target=selected, request=request,
                              metadata={'patient_notes': len(notes['entries'])} if notes else None)
-            mark_team_thread_read(selected, request.user)
+            mark_team_thread_read(selected, request.user, [message.pk for message in selected.conversation_messages])
             for thread in context['threads']:
                 if thread.pk == selected.pk:
                     thread.unread_count = 0

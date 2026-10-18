@@ -45,7 +45,7 @@ Metrics and cohorts uses four compact summary cards, daily activity lines, an ap
 
 From an appointment's **Details** page, the booked doctor can record completed/no-show attendance after its end time. Administrators can cancel a booking; patients can cancel their own future booking with a reason. Completing attendance does not sign a clinical note. Rebooking retains the original appointment and requires a separate accepted proposal.
 
-Native **video consultations** are available from appointment details for the booked doctor and patient, from five minutes before the appointment until its end. Camera access requires an explicit Join action. Mic/camera controls, screen sharing, reconnect handling and in-app invitations are included; connection history is not automatic attendance. Read the [video guide](VIDEO_CONSULTATIONS.md) for local testing and required Redis/TURN deployment configuration.
+Native **video consultations** are available from appointment details for the booked doctor and patient, from fifteen minutes before the appointment until its end. On My Appointments, **Join video call** appears automatically in Actions when the room opens. Camera access requires an explicit Join action. Mic/camera controls, screen sharing, reconnect handling and in-app invitations are included; connection history is not automatic attendance. Read the [video guide](VIDEO_CONSULTATIONS.md) for local testing and required Redis/TURN deployment configuration.
 
 In Messages, **Route / manage** can assign a reply task to a doctor, close or reopen a conversation. Closing retains its history and is blocked while an appointment suggestion is pending. Administrative task notes are not sent as a patient reply.
 

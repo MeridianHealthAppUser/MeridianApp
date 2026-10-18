@@ -2,7 +2,7 @@
 {% load static workspace_ui %}
 
 {% block title %}My Appointments | Meridian{% endblock %}
-{% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/info_tips.css' %}?v=20261008a"><script src="{% static 'js/info_tips.js' %}?v=20261008a" defer></script><link rel="stylesheet" href="{% static 'css/dialogs.css' %}?v=20261008b"><script src="{% static 'js/dialogs.js' %}?v=20261015a" defer></script><script src="{% static 'js/appointment_booking.js' %}?v=20261010b" defer></script><link rel="stylesheet" href="{% static 'css/filter_menu.css' %}?v=20261017a"><script src="{% static 'js/filter_menu.js' %}?v=20261008b" defer></script>{% endblock %}
+{% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/info_tips.css' %}?v=20261008a"><script src="{% static 'js/info_tips.js' %}?v=20261008a" defer></script><link rel="stylesheet" href="{% static 'css/dialogs.css' %}?v=20261008b"><script src="{% static 'js/dialogs.js' %}?v=20261015a" defer></script><script src="{% static 'js/appointment_booking.js' %}?v=20261010b" defer></script><script src="{% static 'js/appointment_video.js' %}?v=20261018" defer></script><link rel="stylesheet" href="{% static 'css/filter_menu.css' %}?v=20261017a"><script src="{% static 'js/filter_menu.js' %}?v=20261008b" defer></script>{% endblock %}
 {% block patient_content_class %}patient-appointments{% endblock %}
 
 {% block patient_breadcrumbs %}{% breadcrumbs 'My Appointments' %}{% endblock %}
@@ -32,21 +32,21 @@
     </header>
     {% if not filter_form.errors %}
       <div class="patient-table-wrap">
-        <table class="patient-table patient-appointment-table" aria-labelledby="patient-appointments-heading">
+        <table class="patient-table patient-appointment-table" aria-labelledby="patient-appointments-heading" data-appointment-video data-status-url="{% url 'portal:patient-appointment-video-status' %}" data-video-scope="{{ request.realtime_scope }}" data-server-time="{{ video_server_time|date:'c' }}">
           <thead><tr><th scope="col">Date and time</th><th scope="col">Appointment</th><th scope="col">Clinician</th><th scope="col">Status</th><th class="patient-table__fit" scope="col">Actions</th></tr></thead>
           <tbody>
             {% for appointment in appointments %}
-              <tr>
-                <td data-label="Date and time"><div class="patient-table__when"><div class="patient-table__date"><time datetime="{{ appointment.starts_at|date:'c' }}">{{ appointment.starts_at|date:"j M Y" }}</time><span>{{ appointment.starts_at|date:"H:i" }} · {{ appointment.duration_minutes }} minutes</span></div>{% if not appointment.video_room_url %}{% include 'portal/includes/video_join_link.html' with join_tip=True %}{% endif %}</div></td>
+              <tr data-video-appointment-id="{{ appointment.pk }}" data-video-opens-at="{{ appointment.video_join_opens_at|date:'c' }}" data-video-closes-at="{{ appointment.video_join_closes_at|date:'c' }}">
+                <td data-label="Date and time"><div class="patient-table__when"><div class="patient-table__date"><time datetime="{{ appointment.starts_at|date:'c' }}">{{ appointment.starts_at|date:"j M Y" }}</time><span>{{ appointment.starts_at|date:"H:i" }} · {{ appointment.duration_minutes }} minutes</span></div><span data-appointment-video-note{% if appointment.video_room_url or not appointment.video_join_message %} hidden{% endif %}><span class="info-tip" data-info-tip><button class="info-tip__button" type="button" aria-label="When the video room opens" aria-describedby="video-join-{{ appointment.pk }}">i</button><span class="info-tip__bubble" id="video-join-{{ appointment.pk }}" role="tooltip">{{ appointment.video_join_message }}{% if appointment.video_join_opens_at %} Join window: {{ appointment.video_join_opens_at|date:'j M, H:i' }}–{{ appointment.video_join_closes_at|date:'H:i' }} SAST.{% endif %}</span></span></span></div></td>
                 <td data-label="Appointment">{{ appointment.get_appointment_type_display }}</td>
                 <td data-label="Clinician">{% if appointment.clinician %}{{ appointment.clinician.full_name }}{% else %}Your care team{% endif %}</td>
                 <td data-label="Status"><span class="console-status console-status--{{ appointment.status }}">{{ appointment.get_status_display }}</span></td>
                 <td class="patient-table__fit" data-label="Actions">
                   {# Download (a calendar file), then View Appointment; Join comes first while the room is open. A new time is asked of support, and the practice moves the appointment. #}
                   <div class="patient-table__actions">
-                    {% if appointment.video_room_url %}{% include 'portal/includes/video_join_link.html' %}{% endif %}
+                    <span data-appointment-video-action{% if not appointment.video_room_url %} hidden{% endif %}><a class="console-button console-button--primary" data-appointment-video-join{% if appointment.video_room_url %} href="{{ appointment.video_room_url }}"{% endif %}>Join video call</a></span>
                     <a class="console-button console-button--secondary" data-no-loader href="{% url 'portal:patient-appointment-calendar' appointment.pk %}" aria-label="Download to your calendar"><svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4m10-4v4M3 10h18M12 13v5m-2.5-2.5L12 18l2.5-2.5"/></svg>Download</a>
-                    <a class="console-button {% if appointment.video_room_url %}console-button--secondary{% else %}console-button--primary{% endif %}" href="{% url 'portal:patient-appointment-detail' appointment.pk %}">View Appointment</a>
+                    <a class="console-button {% if appointment.video_room_url %}console-button--secondary{% else %}console-button--primary{% endif %}" data-appointment-video-view href="{% url 'portal:patient-appointment-detail' appointment.pk %}">View Appointment</a>
                   </div>
                 </td>
               </tr>
@@ -55,6 +55,7 @@
             {% endfor %}
           </tbody>
         </table>
+        <span class="sr-only" data-appointment-video-announcement role="status" aria-live="polite"></span>
       </div>
     {% endif %}
   </section>

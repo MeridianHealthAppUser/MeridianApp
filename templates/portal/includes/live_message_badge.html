@@ -1,0 +1,2 @@
+{# Always render the target so a first unread message can light up navigation without reloading. #}
+<span class="{% if dot %}message-unread-dot{% else %}nav-badge{% endif %}" data-live-unread="{{ kind }}"{% if not count %} hidden{% endif %} aria-hidden="true">{% if not dot %}{% if count > 9 %}9+{% else %}{{ count|default:0 }}{% endif %}{% endif %}</span><span class="sr-only" data-live-unread-label="{{ kind }}">{% if count %}, {{ count }} unread message{{ count|pluralize }}{% endif %}</span>

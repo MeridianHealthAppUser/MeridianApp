@@ -5,12 +5,13 @@ from care.notifications import send_due_reminders
 
 
 class Command(BaseCommand):
-    help = (f'Email patients and clinicians a reminder of booked appointments starting in the next '
-            f'{settings.APPOINTMENT_REMINDER_HOURS} hours. Each appointment is reminded once; run every 15 minutes.')
+    help = (f'Email patients and clinicians reminders {settings.APPOINTMENT_REMINDER_HOURS} hours and '
+            f'{settings.APPOINTMENT_START_REMINDER_MINUTES} minutes before booked appointments. '
+            'Run every 15 minutes; failed start reminders retry after 60 and 120 seconds.')
 
     def handle(self, *args, **options):
         if not settings.EMAIL_ENABLED:
             self.stdout.write('Email is not set up, so no reminders were sent.')
             return
-        reminded = send_due_reminders()
+        reminded = send_due_reminders(retry_delays=(60, 120))
         self.stdout.write(f'Sent reminders for {reminded} appointment{"" if reminded == 1 else "s"}.')

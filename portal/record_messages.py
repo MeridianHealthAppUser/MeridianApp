@@ -18,6 +18,7 @@ from care.services import record_audit
 from .inbox import _inbox_threads, latest_from, search_text, search_threads
 from .people_tags import in_join_order, people_tags, staff_kinds
 from .record_access import can_change_record, can_view_record
+from .realtime_context import records_conversation_view
 
 
 def new_thread_subject(actor, membership):
@@ -151,7 +152,7 @@ def open_conversation(request, company, membership, thread, context):
     thread.manage_form = ConversationManagementForm(company=company, thread=thread, auto_id='manage_%s')
     thread.manage_context = make_workflow_context(request, company, 'conversation-management', thread)
     context['conversation_notes'] = patient_notes(company, membership, patient, request.user)
-    if request.method == 'GET':
+    if records_conversation_view(request):
         # Read up to the latest message shown, for this staff member only. A Super Admin reading a conversation
         # they aren't in leaves it as it was: no read position, and no receipt on the patient's messages.
         if thread.is_member and mark_read_by_staff(thread, request.user, [message.pk for message in thread.conversation_messages]):

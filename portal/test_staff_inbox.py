@@ -532,8 +532,10 @@ class StaffInboxTests(TestCase):
         self.assertNotContains(response, 'Your conversations with patients at')
         self.assertNotContains(response, 'Conversations you are not part of are not shown')
         self.assertContains(response, f'<a class="record-inbox-thread is-unread" href="{self.thread_url(self.recent_thread)}"')
-        # The unread count is the red badge used in the patient app: sidebar, mobile bar, Messages tab and row.
-        self.assertContains(response, '<span class="nav-badge" aria-hidden="true">1</span><span class="sr-only">, 1 unread message</span>', count=4)
+        # Both navigation layouts have a live red dot; the tab and row retain numeric unread counts.
+        self.assertContains(response, '<span class="message-unread-dot" data-live-unread="total" aria-hidden="true"></span>', count=2)
+        self.assertContains(response, '<span class="nav-badge" data-live-unread="patient" aria-hidden="true">1</span>')
+        self.assertContains(response, '<span class="nav-badge" aria-hidden="true">1</span><span class="sr-only">, 1 unread message</span>', count=1)
         # Someone else's last message is shown as it is; your own starts "You:". The patient is the first tag.
         self.assertContains(response, '<span class="record-inbox-thread__preview">Secure inbox test message</span>', html=True)
         self.assertContains(response, '<span class="record-inbox-thread__people person-tags"><span class="sr-only">With </span><span class="person-tag person-tag--patient" title="Alice Patient · Patient">')

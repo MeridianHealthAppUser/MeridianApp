@@ -30,6 +30,7 @@ from .filter_menus import choice_section, filter_menu
 from .patient_assignment_views import AssignedDoctorForm
 from .people_tags import in_join_order
 from .record_access import require_record_view
+from .realtime_context import is_realtime_snapshot
 from .record_weight import record_weight_tab_context
 from .views import StaffCompanyRequiredMixin
 from .workflow_context import make_workflow_context
@@ -379,7 +380,7 @@ class PatientWorkspaceView(LoginRequiredMixin, StaffCompanyRequiredMixin, View):
             from .record_views import ClinicalRecordView
             return ClinicalRecordView.as_view()(request, pk=pk)
         context = workspace_tab_context(request, self.company, self.membership, patient, tab)
-        if request.method == 'GET':
+        if request.method == 'GET' and not (tab == 'messages' and is_realtime_snapshot(request)):
             record_audit(company=self.company, actor=request.user, patient=patient, action='patient.record_viewed', target=patient,
                          request=request, metadata={'section': tab})
         return render(request, 'portal/patient_workspace.html', context)

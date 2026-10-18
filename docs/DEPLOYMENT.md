@@ -65,6 +65,27 @@ DigitalOcean has no South African region. Choose the nearest one, ideally the re
 
 Local development keeps patient files under `media/patient-files/`. Git ignores that folder and the app never serves it. The test suite keeps them in memory and never reaches a real Space.
 
+## Realtime messages
+
+Deploy the updated application code to enable live patient and team conversations and unread navigation dots on
+desktop and mobile. PostgreSQL continues to store messages and read positions. The existing shared `REDIS_URL`
+provides the Channels transport; if `VIDEO_REDIS_URL` is also set, that override currently backs the shared channel
+layer for both messages and video. App-level environment variables can supply this connection to the web service.
+No additional database, Celery worker or TURN relay is needed for realtime text messages.
+
+Keep the web component running Daphne with `config.asgi:application`, as in the Dockerfile. The same service serves
+the authenticated, same-origin `/ws/messages/` WebSocket. Its events contain no message text or patient identifiers:
+they trigger an authorized HTTP request for the viewer's current message view and unread status. Hidden tabs do not
+mark newly arriving messages as read until the messages are actually shown.
+
+Ordinary form POSTs remain available when JavaScript cannot enhance the page. If the live connection drops, the
+client reconnects and reconciles visible content at 30-second intervals. Verify using two separate accounts: send a
+patient or team message, check it appears without reloading in an open conversation, and check the unread dot on the
+recipient's desktop and mobile navigation. Reading it should clear that recipient's dot without clearing another
+participant's unread state. Deployment does not require a messaging schema migration; migration `0036` in this
+release is for the separate 15-minute email reminder delivery records. Existing components are reused, although
+higher traffic and connection counts can increase resource requirements.
+
 ## Emails and appointment reminders
 
 With the `DJANGO_EMAIL_*` settings in place, the app emails:
@@ -76,20 +97,49 @@ With the `DJANGO_EMAIL_*` settings in place, the app emails:
 | Appointment confirmed | The patient, and the clinician unless they made the booking | An appointment is booked, or moved to an agreed new time |
 | Appointment cancelled | The patient (with the practice's reason, when the practice cancelled), and the clinician unless they cancelled it | A booking is cancelled |
 | Appointment reminder | The patient and the clinician | 24 hours before it starts |
+| Appointment starting soon | The patient and the clinician | When the appointment enters its final 15 minutes, independently of the booking confirmation or day-before reminder |
 | PathCare form | The patient | A doctor requests blood tests, or resends the form |
 
 Patients are emailed only when they have an active login, and staff only while active in the practice. Each email links into the app. `templates/emails/` holds their look; `care/notifications.py` decides who gets what.
 
-Reminders need a **scheduled job**, because nothing else runs on a timer:
+Reminders need a **scheduled job**, because nothing else runs on a timer. The existing Valkey connection does not
+schedule work. This command sends the starting-soon emails itself; it needs no Celery worker or additional database:
 
 1. Add a **job** component to the app on DigitalOcean, or add the `appointment-reminders` job from `.do/app.yaml.example` to the app spec.
 2. Build it from the same repository and Dockerfile as the web component, with run command `python manage.py send_appointment_reminders`.
-3. Under **Job Trigger**, choose **On a schedule**, cron `*/15 * * * *` (every 15 minutes, the shortest App Platform allows), time zone `Africa/Johannesburg`.
+3. Under **Job Trigger**, choose **On a schedule**, cron `*/15 * * * *` (every 15 minutes, the shortest App Platform allows), time zone `Africa/Johannesburg`. This lines up with the app's quarter-hour appointment slots. Container startup and email delivery take additional time, so an email arrives approximately 15 minutes before the appointment, not at an exact guaranteed second. An appointment imported with an off-quarter-hour start can receive it later within the final 15 minutes. A booking created after the scheduled run may have only its immediate confirmation before the appointment starts.
 4. Give it the same environment as the web component: `DATABASE_URL`, `DJANGO_SECRET_KEY`, `DJANGO_SITE_URL`, the `DJANGO_EMAIL_*` settings, `MULTI_PRACTICE_ENABLED`, `SINGLE_PRACTICE_SLUG` and `DJANGO_DEBUG=false`, plus `CELERY_BROKER_URL` if you run a worker.
 
-Each appointment is reminded once, even if two runs overlap. An appointment booked less than 24 hours ahead gets no separate reminder: its confirmation serves as one. Moving an appointment to a new time brings a new reminder. You can run the command by hand from the web component's **Console** at any time. Without email set up it sends nothing and leaves the reminders for later.
+The **day-before reminder** retains its existing behavior: an appointment booked less than 24 hours ahead gets a
+confirmation instead of a separate day-before email. The **starting-soon reminder** is separate and still goes to both
+the patient and booked clinician, including a clinician who made the booking. Both emails link to the appointment's
+detail page, where the eligible participant can join the video call during the permitted joining window.
 
-Locally, every email is printed in the terminal running `runserver` instead of being sent. Run `python manage.py send_appointment_reminders` to see the reminders for the next 24 hours. `seed_demo` sends nothing.
+Starting-soon deliveries are recorded in PostgreSQL for each recipient and booked start only after the email server
+accepts the email. Overlapping or repeated job runs skip successful recipients. If one recipient's send fails, only
+that recipient is retried, after 60 seconds and then another 120 seconds within the same job invocation. An invocation
+with failures can therefore run for about three additional minutes, plus the email attempts; successful runs do not
+wait. Retries reload the booking and stop when it has started, been cancelled or moved out of the due window. They
+also use the currently booked clinician. A changed start permits a fresh reminder; rebooking through the app creates
+a new appointment. If a clinician changes after the patient was reminded for that start, the new clinician receives
+their own reminder and the patient is not emailed twice. A process or database failure after the mail server accepts
+an email but before its success record commits can still cause a duplicate on retry; SMTP does not offer an atomic
+transaction with the application database.
+
+This feature needs the normal pre-deploy `python manage.py migrate --noinput` step for the successful-delivery table.
+You can run `python manage.py send_appointment_reminders` by hand from the web component's **Console**, but it sends
+real emails for currently due appointments. Without email configured it sends nothing and leaves reminders eligible.
+Do not set `CELERY_BROKER_URL` without also running the Celery worker: ordinary notifications and the day-before
+reminder use that queue when configured.
+
+DigitalOcean scheduled jobs are charged only while running, at the selected component size's rate. The minimum
+shared size is currently $5/month if running continuously; a short scheduled job is prorated for its runtime. Confirm
+the component estimate in DigitalOcean before adding it. For tighter timing than the platform's 15-minute schedule,
+an always-running scheduler would be a separate component and additional cost. See the official
+[scheduled-job setup](https://docs.digitalocean.com/products/app-platform/how-to/manage-jobs/) and
+[App Platform pricing](https://docs.digitalocean.com/products/app-platform/details/pricing/).
+
+Locally, every email is printed in the terminal running `runserver` instead of being sent. Run `python manage.py send_appointment_reminders` to see due day-before and starting-soon reminders. `seed_demo` sends nothing.
 
 ## Meridian administration and first login
 

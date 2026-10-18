@@ -569,7 +569,7 @@ class PerPersonReadStateTests(TestCase):
         # An administrator's menu carries it too, on Patient Records & Messages.
         self.login(self.admin)
         self.assertContains(self.client.get(reverse('portal:desktop-dashboard')),
-                            '<span class="nav-badge" aria-hidden="true">1</span><span class="sr-only">, 1 unread message</span>')
+                            '<span class="message-unread-dot" data-live-unread="total" aria-hidden="true"></span>')
 
     def test_opening_a_conversation_reads_it_only_for_the_person_who_opened_it(self):
         self.add_josh()

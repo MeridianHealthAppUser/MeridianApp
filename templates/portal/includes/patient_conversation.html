@@ -6,7 +6,7 @@
   A Super Admin can read a conversation they aren't in (thread.is_member is false): no Mark as unread or Message
   action until they reply, which adds them to it.
 {% endcomment %}
-<div class="record-messages__pane-head">
+<div class="record-messages__pane-head" data-live-region="header">
   <h3>{{ thread.subject|default:"Patient message" }}</h3>
   <span class="record-messages__tools">
     {% if open_record_url %}<a class="console-button console-button--secondary record-messages__tool" href="{{ open_record_url }}">Open record<span class="sr-only"> for {{ patient }}</span></a>{% endif %}
@@ -35,13 +35,15 @@
   </dialog>
 {% endif %}
 {# Who's in it as tags (Patient messages; the record's own tab needs no patient tag), then who added whom. #}
+<div data-live-region="people">
 {% if open_record_url and thread.people_tags %}<p class="record-messages__people record-messages__tags person-tags"><span class="sr-only">With </span>{% for tag in thread.people_tags %}{% include 'portal/includes/person_tag.html' %}{% endfor %}</p>{% endif %}
 {% if thread.added_rows %}<p class="record-messages__people">{% for row in thread.added_rows %}{% if not forloop.first %} &middot; {% endif %}{% if row.added_by_id == user.pk %}You{% else %}{{ row.added_by.full_name }}{% endif %} added {{ row.user.full_name }} {{ row.created_at|date:'j M' }}{% endfor %}</p>{% endif %}
+</div>
 {% load conversation_ui %}{% patient_thread_messages thread user as thread_messages %}
-<ol class="record-conversation" data-record-conversation tabindex="0" aria-label="Messages in {{ thread.subject }}">
+<ol class="record-conversation" data-live-region="messages" data-live-thread="staff-message-seen:{{ thread.pk }}" data-live-closed="{{ thread.is_closed|yesno:'true,false' }}" {% if thread.is_member %}data-live-read-url="{% url 'portal:staff-message-seen' thread.pk %}"{% endif %} data-record-conversation tabindex="0" aria-label="Messages in {{ thread.subject }}">
   {% for message in thread_messages %}
     {# Yours on the right in white; everyone else on the left in their own colour. #}
-    <li class="record-bubble{% if message.is_mine %} record-bubble--mine{% else %} message-tone--{{ message.tone }}{% endif %}">
+    <li data-message-id="{{ message.pk }}" class="record-bubble{% if message.is_mine %} record-bubble--mine{% else %} message-tone--{{ message.tone }}{% endif %}">
       <p>{{ message.body|linebreaksbr }}</p>
       <span class="record-bubble__meta">{% if message.is_mine %}You{% elif message.is_from_patient %}{{ patient }}{% elif message.sender %}{{ message.sender.full_name }}{% else %}Care team{% endif %} &middot; <time datetime="{{ message.created_at|date:'c' }}">{{ message.created_at|message_time }}</time></span>
     </li>
@@ -54,7 +56,7 @@
   <p class="record-messages__note">{{ patient.first_name }} doesn’t have a login yet, so they can’t read messages.</p>
 {% elif not thread.is_closed %}
   {% if not thread.is_member %}<p class="record-messages__note">You’re not in this conversation. Replying adds you to it.</p>{% endif %}
-  <form class="record-reply" method="post" action="{% url 'portal:staff-message-create' thread.pk %}" data-record-reply>
+  <form class="record-reply" method="post" action="{% url 'portal:staff-message-create' thread.pk %}" data-record-reply data-live-reply>
     {% csrf_token %}
     <input type="hidden" name="return_to" value="{{ conversation_return_to }}">{% if conversation_return_to == 'patient_messages' %}<input type="hidden" name="status" value="{{ read_state_fields.status }}"><input type="hidden" name="patients" value="{{ read_state_fields.patients }}"><input type="hidden" name="q" value="{{ read_state_fields.q }}">{% endif %}
     {% if message_form.errors %}<p class="record-error" role="alert">{% for errors in message_form.errors.values %}{{ errors|join:' ' }} {% endfor %}</p>{% endif %}

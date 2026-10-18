@@ -18,10 +18,13 @@ django_asgi_application = get_asgi_application()
 # Initialise Django before imports that can touch models.
 from channels.auth import AuthMiddlewareStack
 from channels.routing import ProtocolTypeRouter, URLRouter
-from video.routing import websocket_urlpatterns
+from care.routing import websocket_urlpatterns as message_websocket_urlpatterns
+from video.routing import websocket_urlpatterns as video_websocket_urlpatterns
 from video.security import SameOriginWebSocketMiddleware
 
 application = ProtocolTypeRouter({
     'http': django_asgi_application,
-    'websocket': SameOriginWebSocketMiddleware(AuthMiddlewareStack(URLRouter(websocket_urlpatterns))),
+    'websocket': SameOriginWebSocketMiddleware(AuthMiddlewareStack(URLRouter(
+        message_websocket_urlpatterns + video_websocket_urlpatterns,
+    ))),
 })

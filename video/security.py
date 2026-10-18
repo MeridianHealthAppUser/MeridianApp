@@ -1,8 +1,11 @@
 """Restrict cookie-authenticated WebSockets to the exact trusted page origin."""
+import logging
 from urllib.parse import urlsplit
 
 from django.conf import settings
 from django.http.request import split_domain_port, validate_host
+
+logger = logging.getLogger(__name__)
 
 
 class SameOriginWebSocketMiddleware:
@@ -13,7 +16,7 @@ class SameOriginWebSocketMiddleware:
         headers = scope.get('headers', [])
         hosts = [value for name, value in headers if name.lower() == b'host']
         origins = [value for name, value in headers if name.lower() == b'origin']
-        valid = False
+        rejection = 'missing_or_duplicate_headers'
         try:
             if len(hosts) == len(origins) == 1:
                 host = hosts[0].decode('ascii')
@@ -27,15 +30,22 @@ class SameOriginWebSocketMiddleware:
                     secure = secure or (len(forwarded) == 1 and forwarded[0] == proxy[1])
                 scheme = 'https' if secure else 'http'
                 target = urlsplit(scheme+'://'+host)
-                valid = bool(domain and validate_host(domain, settings.ALLOWED_HOSTS)
-                    and origin.scheme == scheme and (settings.DEBUG or secure)
-                    and origin.hostname == target.hostname
-                    and (origin.port or (443 if secure else 80)) == (target.port or (443 if secure else 80))
-                    and origin.username is None and origin.password is None
-                    and not origin.path and not origin.query and not origin.fragment)
+                checks = (
+                    ('untrusted_host', domain and validate_host(domain, settings.ALLOWED_HOSTS)),
+                    ('scheme_mismatch', origin.scheme == scheme),
+                    ('insecure_transport', settings.DEBUG or secure),
+                    ('host_mismatch', origin.hostname == target.hostname),
+                    ('port_mismatch', (origin.port or (443 if secure else 80)) == (target.port or (443 if secure else 80))),
+                    ('origin_credentials', origin.username is None and origin.password is None),
+                    ('origin_path', not origin.path and not origin.query and not origin.fragment),
+                )
+                rejection = next((reason for reason, passed in checks if not passed), None)
         except (ValueError, UnicodeError):
-            pass
-        if not valid:
+            rejection = 'malformed_headers'
+        if rejection:
+            # A fixed reason identifies proxy configuration errors without
+            # recording cookies, URLs, patient identifiers or header values.
+            logger.warning('WebSocket origin rejected: %s', rejection)
             await send({'type': 'websocket.close', 'code': 4403})
             return
         return await self.application(scope, receive, send)

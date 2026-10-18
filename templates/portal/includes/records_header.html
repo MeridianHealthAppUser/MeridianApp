@@ -7,7 +7,7 @@
   </div>
   <nav class="records-tabs" aria-label="Patient Records &amp; Messages">
     <a href="{% url 'portal:patient-list' %}"{% if records_tab == 'patients' %} class="is-active" aria-current="page"{% endif %}>All patients</a>
-    <a href="{% url 'portal:staff-inbox' %}"{% if records_tab == 'messages' %} class="is-active" aria-current="page"{% endif %}>Patient messages{% include 'portal/includes/nav_badge.html' with count=counts.patient_unread_total %}</a>
-    <a href="{% url 'portal:team-inbox' %}"{% if records_tab == 'team' %} class="is-active" aria-current="page"{% endif %}>Team messages{% include 'portal/includes/nav_badge.html' with count=counts.team_unread_total %}</a>
+    <a href="{% url 'portal:staff-inbox' %}"{% if records_tab == 'messages' %} class="is-active" aria-current="page"{% endif %}>Patient messages{% include 'portal/includes/live_message_badge.html' with kind='patient' count=counts.patient_unread_total %}</a>
+    <a href="{% url 'portal:team-inbox' %}"{% if records_tab == 'team' %} class="is-active" aria-current="page"{% endif %}>Team messages{% include 'portal/includes/live_message_badge.html' with kind='team' count=counts.team_unread_total %}</a>
   </nav>
 </header>

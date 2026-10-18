@@ -1,0 +1,12 @@
+/* Navigation dots are present at zero too, so the first new message needs no page refresh. */
+[data-live-unread][hidden], [data-live-status][hidden], [data-live-region][hidden] { display: none !important; }
+.message-unread-dot { background: #d92d20; border-radius: 50%; display: inline-block; flex: 0 0 .55rem; height: .55rem; margin-left: auto; width: .55rem; }
+.staff-mobile-nav a .message-unread-dot { box-shadow: 0 0 0 2px #fff; left: calc(50% + .5rem); margin: 0; position: absolute; top: .2rem; }
+.patient-navigation a { position: relative; }
+@media (max-width: 52rem) {
+  .patient-navigation a .message-unread-dot { box-shadow: 0 0 0 2px #fff; left: calc(50% + .5rem); margin: 0; position: absolute; top: .2rem; }
+}
+.live-message-status { background: #fff5e6; border: 1px solid #e7cfa8; border-radius: .5rem; color: #744917; font-size: .85rem; margin: .75rem 0; padding: .65rem .85rem; }
+.live-message-status a { color: inherit; font-weight: 600; }
+.live-message-error { color: #a73f37; flex-basis: 100%; font-size: .85rem; margin: .25rem 0; }
+.record-reply:has(.live-message-error) { flex-wrap: wrap; }

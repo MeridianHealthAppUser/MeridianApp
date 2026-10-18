@@ -512,6 +512,24 @@ class Appointment(PatientCompanyScopedModel):
             raise ValidationError({'clinician': 'The clinician must be active in this practice.'})
 
 
+class AppointmentStartReminder(CompanyScopedModel):
+    """A successful 15-minute reminder, separately for each recipient and booked start.
+
+    A later retry sends only the recipient whose email failed. Changing the start
+    time makes a new reminder eligible without erasing the earlier delivery.
+    """
+
+    appointment = models.ForeignKey(Appointment, on_delete=models.CASCADE, related_name='start_reminders')
+    recipient = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='+')
+    starts_at = models.DateTimeField()
+    sent_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(
+            fields=('appointment', 'starts_at', 'recipient'), name='one_start_reminder_per_recipient',
+        )]
+
+
 class AvailabilitySlot(CompanyScopedModel):
     clinician = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='availability_slots')
     starts_at = models.DateTimeField()

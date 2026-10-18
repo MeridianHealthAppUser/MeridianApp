@@ -12,13 +12,14 @@ from datetime import timedelta
 from django.contrib.auth import get_user_model
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
-from django.db.models import Count, F, OuterRef, Q, Subquery
+from django.db.models import Count, F, Max, OuterRef, Q, Subquery
 from django.utils import timezone
 
 from practices.models import CompanyMembership, Patient
 from practices.tenancy import require_enabled_company
 from .models import TeamMessage, TeamThread, TeamThreadMember
 from .notifications import queue as notify
+from .realtime import team_thread_changed
 from .services import record_audit
 
 
@@ -137,16 +138,41 @@ def manage_team_conversation(*, thread, actor, action, user=None, request=None):
     return thread
 
 
-def mark_team_thread_read(thread, user):
-    TeamThreadMember.objects.filter(thread=thread, user=user).update(last_read_at=timezone.now())
+@transaction.atomic
+def mark_team_thread_read(thread, user, message_ids=None):
+    """Advance this member's position only through messages actually displayed."""
+    messages = TeamMessage.objects.filter(company_id=thread.company_id, thread=thread)
+    if message_ids is not None:
+        messages = messages.filter(pk__in=message_ids)
+    up_to = messages.aggregate(latest=Max('created_at'))['latest']
+    if up_to is None:
+        return 0
+    links = TeamThreadMember.objects.filter(company_id=thread.company_id, thread=thread, user=user)
+    link = links.values('pk', 'last_read_at').first()
+    if link is None or (link['last_read_at'] is not None and link['last_read_at'] >= up_to):
+        return 0
+    unread = TeamMessage.objects.filter(company_id=thread.company_id, thread=thread, created_at__lte=up_to).exclude(sender=user)
+    if link['last_read_at'] is not None:
+        unread = unread.filter(created_at__gt=link['last_read_at'])
+    changed = unread.count()
+    links.filter(Q(last_read_at__isnull=True) | Q(last_read_at__lt=up_to)).update(last_read_at=up_to)
+    if changed:
+        team_thread_changed(thread)
+    return changed
 
 
 def set_team_read_state(thread, user, *, read):
     """Mark a conversation read, or unread from the latest message someone else sent."""
     if read:
-        mark_team_thread_read(thread, user)
-        return
+        return mark_team_thread_read(thread, user)
     latest = TeamMessage.objects.filter(thread=thread).exclude(sender=user).order_by('-created_at', '-pk').values_list(
         'created_at', flat=True).first()
     if latest is not None:
-        TeamThreadMember.objects.filter(thread=thread, user=user).update(last_read_at=latest - timedelta(microseconds=1))
+        position = latest - timedelta(microseconds=1)
+        changed = TeamThreadMember.objects.filter(
+            company_id=thread.company_id, thread=thread, user=user, last_read_at__gt=position,
+        ).update(last_read_at=position)
+        if changed:
+            team_thread_changed(thread)
+        return changed
+    return 0

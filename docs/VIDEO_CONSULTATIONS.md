@@ -6,14 +6,14 @@ Meridian includes its own one-to-one appointment room. The booked doctor and pat
 
 1. Install updated dependencies: `.venv/bin/python -m pip install -r requirements.txt`.
 2. Apply `.venv/bin/python manage.py migrate`, then `.venv/bin/python manage.py runserver`. Daphne now serves HTTP and WebSockets on port 8000. Restart an old development server once if necessary.
-3. Sign in as the booked doctor in one browser and the patient in a separate browser/private profile. Use a booked appointment starting within five minutes or currently in progress.
+3. Sign in as the booked doctor in one browser and the patient in a separate browser/private profile. Use a booked appointment starting within fifteen minutes or currently in progress.
 4. Open **Schedule → Appointment details** or **Patient → Appointments** and choose the video join action. Administrative roles do not grant room entry.
 5. Opening the room does not activate devices. Choose **Join with camera** or **Join with audio only**, then grant browser permissions. The other participant gets an in-app banner while signed in.
 6. Use microphone/camera controls, screen sharing where supported, and **Leave** to finish. Closing the page also stops local media. Leaving does not mark attendance or sign a clinical note.
 
 The room URL is `/video/appointments/<appointment-id>/`. The practice is explicitly displayed and access is checked independently of the practice selected in another tab. Joining does not silently switch that selection. A second tab for the same person replaces the older connection; it cannot occupy a third slot.
 
-Rooms open five minutes before the scheduled start and close at the scheduled end. Cancelled, completed, missed, inactive or mismatched records cannot enter. Access is rechecked during the call. Signing out, changing a password or losing access ends signalling; these checks do not replace locking an unattended device.
+Rooms open fifteen minutes before the scheduled start and close at the scheduled end. My Appointments updates the Join video call action automatically at the opening time and checks for scheduling changes while the page is open. Cancelled, completed, missed, inactive or mismatched records cannot enter. Access is rechecked during the call. Signing out, changing a password or losing access ends signalling; these checks do not replace locking an unattended device.
 
 ## Connection behaviour and history
 
@@ -29,6 +29,7 @@ Camera/microphone access requires HTTPS except for trusted local development ori
 
 Production settings:
 
+- `DJANGO_DEBUG=false` on the deployed web component, including any component-level override of an app-level value.
 - `VIDEO_ENABLED=true`
 - `REDIS_URL` or `VIDEO_REDIS_URL`: private authenticated Redis, shared by every app instance; use TLS where appropriate. Channel delivery and atomic expiring room presence use the same configured backend.
 - `VIDEO_TURN_URLS`: comma-separated coturn-compatible relay URLs, e.g. `turn:relay.example.com:3478?transport=udp,turns:relay.example.com:5349?transport=tcp`.
@@ -48,6 +49,27 @@ In-memory signalling and presence support one local process only. With `DEBUG=Fa
 The optional Chrome regression suite can be run with `MERIDIAN_PLAYWRIGHT_PATH=/path/to/playwright python manage.py test video.test_room_presentation`. It uses synthetic media, including two real browser peer connections, without a live app database. Set `VIDEO_TEST_REDIS_URL` to a disposable Redis test database to include atomic cross-client presence checks in the Django suite. Ordinary tests skip these checks when their optional dependencies are not configured.
 
 The Dockerfile runs Daphne with bounded WebSocket frame/message sizes. A WSGI-only Gunicorn command cannot serve these rooms. The front proxy must pass WebSocket upgrades, preserve the intended host/origin and terminate HTTPS. Only the trusted proxy may supply forwarded headers. See [Channels deployment guidance](https://channels.readthedocs.io/en/stable/deploying.html).
+
+### Repeated WebSocket rejections on DigitalOcean
+
+If runtime logs show `WSCONNECTING` immediately followed by `WSREJECT`, the signalling connection is being rejected
+before the browser can exchange a media offer. TURN cannot fix this stage. When both `/ws/video/appointments/.../`
+and `/ws/notifications/` fail, check the shared origin and session configuration first.
+
+The web component's Console can safely show the relevant settings without printing connection secrets:
+
+```sh
+python manage.py shell -c "from django.conf import settings; print('DEBUG:', settings.DEBUG); print('PROXY_SSL_HEADER:', settings.SECURE_PROXY_SSL_HEADER)"
+```
+
+Expect `DEBUG: False` and `PROXY_SSL_HEADER: ('HTTP_X_FORWARDED_PROTO', 'https')`. Earlier releases only set the
+proxy header when debug was off. With debug on, Daphne's WebSocket scope could omit the scheme and cause a secure
+browser's origin to be compared against HTTP. Set `DJANGO_DEBUG=false`, let DigitalOcean redeploy, and refresh both
+participants' pages. This release also keeps trusted proxy scheme handling consistent in both modes, without
+relaxing origin validation. Rejection logs report fixed reasons such as `scheme_mismatch`, without header values.
+
+After signalling succeeds, test audio and video between the two accounts on different networks. If media still
+cannot connect, investigate ICE connectivity and configure TURN for networks that need a relay.
 
 Sockets require exact same-origin validation and current authenticated sessions. Only the appointment's two participants can signal or receive its invitation. Payload types, sizes and rates are bounded; replaced sockets and expired presence cannot act as current participants. WebRTC handles media transport; this is not a separately audited end-to-end-encryption or clinical certification claim.
 

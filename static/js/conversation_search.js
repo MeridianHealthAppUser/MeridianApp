@@ -8,23 +8,53 @@
   const input = form.querySelector('input[name="q"]');
   const clear = form.querySelector('[data-conversation-search-clear]');
   const openThread = new URL(window.location.href).searchParams.get('thread');
+  const live = document.querySelector('[data-live-messages]');
+  const scope = live?.dataset.liveScope;
   let timer = null;
   let pending = null;
+  let stopped = false;
+
+  document.addEventListener('messages:stopped', () => {
+    stopped = true;
+    window.clearTimeout(timer);
+    pending?.abort();
+  });
+
+  function accessChanged() {
+    document.dispatchEvent(new CustomEvent('messages:access-changed'));
+  }
 
   async function search() {
+    if (stopped) return;
     const query = input.value.trim().replace(/\s+/g, ' ');
     const params = new URLSearchParams(new FormData(form));
     if (query) params.set('q', query); else params.delete('q');
     if (pending) pending.abort();
     pending = new AbortController();
+    const current = pending;
+    document.dispatchEvent(new CustomEvent('messages:searching'));
     let page;
     try {
-      const response = await fetch(`${form.dataset.searchUrl || form.action}?${params}`, { credentials: 'same-origin', signal: pending.signal });
-      if (!response.ok) return;
+      const response = await fetch(`${form.dataset.searchUrl || form.action}?${params}`, {
+        credentials: 'same-origin', cache: 'no-store', signal: pending.signal,
+        headers: scope ? { 'X-Meridian-Scope': scope, 'X-Meridian-Realtime': 'snapshot' } : {},
+      });
+      if (stopped || current !== pending) return;
+      if (scope && (response.redirected || [401, 403, 409].includes(response.status))) { accessChanged(); return; }
+      if (!response.ok) {
+        if (current === pending) document.dispatchEvent(new CustomEvent('messages:searched'));
+        return;
+      }
       page = new DOMParser().parseFromString(await response.text(), 'text/html');
     } catch (error) {
+      if (current === pending) document.dispatchEvent(new CustomEvent('messages:searched'));
       return;  // A newer search replaced this one, or the network failed; the list stays as it was.
     }
+    if (stopped || current !== pending) return;
+    // The record's search returns only a fragment; its request scope is checked
+    // by the same server mixin. Full-page search responses also carry a marker.
+    const returnedScope = page.querySelector('[data-live-messages]')?.dataset.liveScope;
+    if (scope && returnedScope && returnedScope !== scope) { accessChanged(); return; }
     document.querySelectorAll('[data-search-region]').forEach((region) => {
       const fresh = page.querySelector(`[data-search-region="${region.dataset.searchRegion}"]`);
       if (fresh) region.innerHTML = fresh.innerHTML;
@@ -42,6 +72,7 @@
     if (query) address.searchParams.set('q', query); else address.searchParams.delete('q');
     address.searchParams.delete('page');
     window.history.replaceState(null, '', address);
+    document.dispatchEvent(new CustomEvent('messages:searched'));
   }
 
   input.addEventListener('input', () => {

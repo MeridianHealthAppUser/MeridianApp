@@ -106,10 +106,11 @@ class StaffMenuTests(TestCase):
         labels = ['Overview', 'My tasks', 'Patient Records &amp; Messages', 'Calendar &amp; Bookings']
         self.assertEqual([label for label in labels if label in sidebar], labels)
         self.assertNotIn('My Messages', sidebar)
-        # Patient records and messages are one entry; its badge counts patient and team messages.
-        self.assertIn('<span class="nav-badge" aria-hidden="true">2</span><span class="sr-only">, 2 unread messages</span>', sidebar)
+        # The red dot combines patient/team unread state; assistive text keeps the actual count.
+        self.assertIn('<span class="message-unread-dot" data-live-unread="total" aria-hidden="true"></span>', sidebar)
+        self.assertIn('data-live-unread-label="total">, 2 unread messages</span>', sidebar)
         mobile = page[page.index('class="mobile-bottom-nav staff-mobile-nav"'):]
-        self.assertIn('<span class="nav-badge" aria-hidden="true">2</span>', mobile[:mobile.index('</nav>')])
+        self.assertIn('<span class="message-unread-dot" data-live-unread="total" aria-hidden="true"></span>', mobile[:mobile.index('</nav>')])
         inbox = self.client.get(reverse('portal:staff-inbox'))
         self.assertContains(inbox, '<h1>Patient Records &amp; Messages</h1>', html=True)
         # Practice admins get the same flat menu, with Operations and Administration after it. They sent the team
@@ -122,7 +123,7 @@ class StaffMenuTests(TestCase):
         labels = ['Overview', 'My tasks', 'Patient Records &amp; Messages', 'Calendar &amp; Bookings', 'Operations', 'Administration']
         self.assertEqual(re.findall(r'<span class="console-nav__text">([^<]+)</span>', sidebar), labels)
         self.assertNotIn('Insights', sidebar)
-        self.assertNotIn('nav-badge', page)
+        self.assertIn('data-live-unread="total" hidden', sidebar)
         self.assertContains(self.client.get(reverse('portal:staff-inbox')), '<h1>Patient Records &amp; Messages</h1>', html=True)
 
     def test_practice_admins_open_operations_and_administration_as_pages_of_tabs_without_insights(self):

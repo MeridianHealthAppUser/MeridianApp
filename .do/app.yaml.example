@@ -2,7 +2,7 @@
 # runtime DJANGO_SECRET_KEY and DATABASE_URL in DigitalOcean for ALL components.
 # The worker is optional: add it with CELERY_BROKER_URL set on web AND worker, plus the DJANGO_EMAIL_*
 # settings. Without CELERY_BROKER_URL, web sends emails itself and no worker is needed.
-# The appointment-reminders job emails reminders every 15 minutes: give it DATABASE_URL, DJANGO_SECRET_KEY
+# The appointment-reminders job checks for day-before and 15-minute reminders every 15 minutes: give it DATABASE_URL, DJANGO_SECRET_KEY
 # and the DJANGO_EMAIL_* settings too (and CELERY_BROKER_URL when a worker runs).
 # Native video also needs private REDIS_URL/VIDEO_REDIS_URL, VIDEO_TURN_URLS
 # and an encrypted VIDEO_TURN_SECRET on web. Provision the relay separately;
@@ -133,7 +133,8 @@ jobs:
       #   type: SECRET
       #   scope: RUN_TIME
   - name: appointment-reminders
-    # Emails each booked appointment's patient and clinician a reminder 24 hours before; each is reminded once.
+    # Emails the booked patient and clinician day-before and independent 15-minute reminders.
+    # Failed 15-minute sends retry inside this invocation after 60 seconds and another 120 seconds.
     kind: SCHEDULED
     schedule:
       cron: '*/15 * * * *'

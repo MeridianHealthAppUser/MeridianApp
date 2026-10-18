@@ -105,10 +105,10 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = 'config.wsgi.application'
-ASGI_APPLICATION = 'config.asgi.application'  # Daphne serves HTTP and native video WebSockets.
+ASGI_APPLICATION = 'config.asgi.application'  # Daphne serves HTTP, messaging and native video WebSockets.
 
-# Local development is one ASGI process. Shared Redis is required for video in
-# production; absent Redis disables video only, never silently using local rooms.
+# Local development is one ASGI process. Shared Redis is required for video and
+# live messaging in production. Ordinary HTTP messaging still works without it.
 VIDEO_ENABLED = os.getenv('VIDEO_ENABLED', 'true').lower() == 'true'
 REDIS_URL = os.getenv('REDIS_URL', '')
 VIDEO_REDIS_URL = os.getenv('VIDEO_REDIS_URL', '').strip() or REDIS_URL
@@ -117,7 +117,7 @@ CHANNEL_LAYERS = {'default': (
         'hosts': [VIDEO_REDIS_URL], 'prefix': 'meridian-channels', 'expiry': 30,
     }} if VIDEO_REDIS_URL else {'BACKEND': 'channels.layers.InMemoryChannelLayer'}
 )}
-VIDEO_JOIN_EARLY_MINUTES = 5
+VIDEO_JOIN_EARLY_MINUTES = 15
 VIDEO_JOIN_GRACE_MINUTES = 0
 VIDEO_STUN_URLS = [url.strip() for url in os.getenv('VIDEO_STUN_URLS', 'stun:stun.l.google.com:19302,stun:stun1.l.google.com:19302').split(',') if url.strip()]
 VIDEO_TURN_URLS = [url.strip() for url in os.getenv('VIDEO_TURN_URLS', '').split(',') if url.strip()]
@@ -246,6 +246,7 @@ SITE_URL = (os.getenv('DJANGO_SITE_URL', '').strip()
             or (f'https://{ALLOWED_HOSTS[0]}' if ALLOWED_HOSTS and not DEBUG else 'http://127.0.0.1:8000')).rstrip('/')
 # Appointment reminders go this long before the start, from `manage.py send_appointment_reminders` every 15 minutes.
 APPOINTMENT_REMINDER_HOURS = 24
+APPOINTMENT_START_REMINDER_MINUTES = 15
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend' if EMAIL_HOST else 'django.core.mail.backends.console.EmailBackend'
 EMAIL_ENABLED = bool(EMAIL_HOST) or DEBUG or TESTING  # The test suite keeps sent email in memory.
 PASSWORD_RESET_EMAIL_ENABLED = EMAIL_ENABLED
@@ -265,8 +266,13 @@ CELERY_TIMEZONE = 'Africa/Johannesburg'
 LOGIN_REDIRECT_URL = 'portal:desktop-dashboard'
 LOGOUT_REDIRECT_URL = 'landing'
 
+# DigitalOcean terminates TLS before Daphne. Trust its forwarded scheme in both
+# modes: Daphne's WebSocket scope omits scheme, so exact-origin checks need this
+# even when debug is temporarily enabled. The public deployment must remain
+# behind the trusted proxy, which sets/replaces this header; use DEBUG=false there.
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+
 if not DEBUG:
-    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
     SECURE_SSL_REDIRECT = True
     # Platform health probes reach the internal HTTP port, without a proxy header.
     SECURE_REDIRECT_EXEMPT = [r'^health/$']

@@ -93,7 +93,8 @@ class GroupConversationTestCase(TestCase):
 class ConversationBubbleTests(GroupConversationTestCase):
     def bubble(self, tone, body, meta):
         mine = ' record-bubble--mine' if not tone else f' message-tone--{tone}'
-        return f'<li class="record-bubble{mine}">\n      <p>{body}</p>\n      <span class="record-bubble__meta">{meta} &middot; '
+        message_id = self.thread.messages.get(body=body).pk
+        return f'<li data-message-id="{message_id}" class="record-bubble{mine}">\n      <p>{body}</p>\n      <span class="record-bubble__meta">{meta} &middot; '
 
     def test_each_clinician_sees_their_own_messages_as_you_and_everyone_else_in_colour(self):
         older = f'{(self.today - timedelta(days=4)).day} {self.today - timedelta(days=4):%b}, 06:00'
@@ -116,11 +117,13 @@ class ConversationBubbleTests(GroupConversationTestCase):
     def test_the_patient_sees_their_own_messages_as_you_and_each_clinician_in_colour(self):
         self.login(self.patient_user, ACTIVE_PATIENT_COMPANY_SESSION_KEY)
         page = self.client.get(f"{reverse('portal:patient-messages')}?thread={self.thread.pk}")
-        self.assertContains(page, '<li class="patient-conversation-message patient-conversation-message--mine">\n              <p>Hi Sam</p>')
+        mine_id = self.thread.messages.get(body='Hi Sam').pk
+        self.assertContains(page, f'<li data-message-id="{mine_id}" class="patient-conversation-message patient-conversation-message--mine">\n              <p>Hi Sam</p>')
         self.assertContains(page, '<strong>You</strong>', count=1)
         for tone, body in (('blue', 'I have added Josh'), ('orange', 'Hello Nadia, how can I help?'),
                            ('pink', 'Happy to help with meal plans.')):
-            self.assertContains(page, f'<li class="patient-conversation-message message-tone--{tone}">\n              <p>{body}</p>')
+            message_id = self.thread.messages.get(body=body).pk
+            self.assertContains(page, f'<li data-message-id="{message_id}" class="patient-conversation-message message-tone--{tone}">\n              <p>{body}</p>')
 
     def test_team_conversations_show_you_and_colleagues_in_colour(self):
         thread = start_team_conversation(company=self.company, actor=self.doctor, members=[self.colleague],
@@ -128,8 +131,10 @@ class ConversationBubbleTests(GroupConversationTestCase):
         post_team_message(thread=thread, sender=self.colleague, body='Will do')
         self.login(self.doctor)
         page = self.client.get(f"{reverse('portal:team-inbox')}?thread={thread.pk}")
-        self.assertContains(page, '<li class="record-bubble record-bubble--mine">\n                      <p>Please update the billing</p>\n                      <span class="record-bubble__meta">You &middot; ')
-        self.assertContains(page, '<li class="record-bubble message-tone--blue">\n                      <p>Will do</p>\n                      <span class="record-bubble__meta">Joshua Czech &middot; ')
+        mine_id = thread.messages.get(body='Please update the billing').pk
+        reply_id = thread.messages.get(body='Will do').pk
+        self.assertContains(page, f'<li data-message-id="{mine_id}" class="record-bubble record-bubble--mine">\n                      <p>Please update the billing</p>\n                      <span class="record-bubble__meta">You &middot; ')
+        self.assertContains(page, f'<li data-message-id="{reply_id}" class="record-bubble message-tone--blue">\n                      <p>Will do</p>\n                      <span class="record-bubble__meta">Joshua Czech &middot; ')
 
 
 class ConversationListPreviewTests(GroupConversationTestCase):

@@ -1,6 +1,8 @@
 import base64
 import hashlib
 import hmac
+import importlib.util
+import os
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -67,7 +69,10 @@ class WebSocketOriginTests(SimpleTestCase):
                 await send({'type': 'websocket.accept'})
             async def send(event):
                 events.append(event)
-            await SameOriginWebSocketMiddleware(application)({'type': 'websocket', 'scheme': scheme, 'headers': headers}, None, send)
+            scope = {'type': 'websocket', 'headers': headers}
+            if scheme is not None:
+                scope['scheme'] = scheme
+            await SameOriginWebSocketMiddleware(application)(scope, None, send)
             return events
         return async_to_sync(run)()[0]['type']
 
@@ -94,7 +99,34 @@ class WebSocketOriginTests(SimpleTestCase):
         headers = [(b'host',b'testserver'),(b'origin',b'https://testserver')]
         self.assertEqual(self.invoke(headers), 'websocket.close')
         self.assertEqual(self.invoke(headers+[(b'x-forwarded-proto',b'https')]), 'websocket.accept')
+        self.assertEqual(self.invoke(headers+[(b'x-forwarded-proto',b'https')], scheme=None), 'websocket.accept')
         self.assertEqual(self.invoke(headers,scheme='wss'), 'websocket.accept')
+
+    def test_debug_configuration_keeps_proxy_scheme_for_real_daphne_scope(self):
+        # Load the actual settings, not an override that would conceal this
+        # deployment regression: DEBUG used to remove the trusted proxy setting.
+        spec = importlib.util.find_spec('config.settings')
+        configured = importlib.util.module_from_spec(spec)
+        with patch.dict(os.environ, {'DJANGO_DEBUG': 'true'}):
+            spec.loader.exec_module(configured)
+        self.assertEqual(configured.SECURE_PROXY_SSL_HEADER, ('HTTP_X_FORWARDED_PROTO', 'https'))
+        headers = [(b'host', b'testserver'), (b'origin', b'https://testserver'), (b'x-forwarded-proto', b'https')]
+        with override_settings(SECURE_PROXY_SSL_HEADER=configured.SECURE_PROXY_SSL_HEADER):
+            # Daphne 4.2.3 omits scheme from WebSocket ASGI scopes even when
+            # --proxy-headers is enabled. Trust the proxy, never the Origin.
+            self.assertEqual(self.invoke(headers, scheme=None), 'websocket.accept')
+            self.assertEqual(self.invoke(headers[:2], scheme=None), 'websocket.close')
+            self.assertEqual(self.invoke([headers[0], (b'origin', b'https://other.test'), headers[2]], scheme=None), 'websocket.close')
+
+    def test_rejection_log_contains_reason_without_request_secrets(self):
+        headers = [(b'host', b'testserver'), (b'origin', b'https://testserver'),
+                   (b'cookie', b'sessionid=PRIVATE_SESSION_SENTINEL')]
+        with self.assertLogs('video.security', level='WARNING') as captured:
+            self.assertEqual(self.invoke(headers, scheme=None), 'websocket.close')
+        logged = '\n'.join(captured.output)
+        self.assertIn('scheme_mismatch', logged)
+        self.assertNotIn('PRIVATE_SESSION_SENTINEL', logged)
+        self.assertNotIn('testserver', logged)
 
     @override_settings(VIDEO_ENABLED=True, DEBUG=False, VIDEO_REDIS_URL='')
     def test_notifications_disabled_for_unconfigured_production(self):

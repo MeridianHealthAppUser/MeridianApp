@@ -18,6 +18,7 @@ from django.utils import timezone
 from practices.models import CompanyMembership
 from .models import ClinicianAssignment, MessageThread, MessageThreadParticipant, PatientMessage
 from .patient_assignment import active_doctors
+from .realtime import patient_thread_changed
 from .services import post_patient_message, record_audit
 
 
@@ -57,6 +58,19 @@ def unread_for_staff(company, user):
     )
 
 
+def mark_patient_messages_read(thread, user, message_ids):
+    """Acknowledge only staff messages actually shown to this conversation's patient."""
+    if thread.patient.user_id != user.pk:
+        raise PermissionDenied('This conversation does not belong to you.')
+    changed = PatientMessage.objects.filter(
+        company_id=thread.company_id, thread_id=thread.pk, pk__in=message_ids, read_at__isnull=True,
+    ).exclude(sender_id=user.pk).update(read_at=timezone.now())
+    if changed:
+        patient_thread_changed(thread)
+    return changed
+
+
+@transaction.atomic
 def mark_read_by_staff(thread, user, message_ids=None):
     """Reading a conversation marks it read for this staff member only; the other people in it keep their own.
 
@@ -96,7 +110,10 @@ def mark_read_by_staff(thread, user, message_ids=None):
         # read_at on a patient's message has always meant "seen by staff"; it is kept in step.
         unreceipted.filter(read_at__isnull=True).update(read_at=now)
         receipts = unreceipted.update(staff_read_at=now, staff_read_by=user)
-    return max(unread, receipts)
+    changed = max(unread, receipts)
+    if changed:
+        patient_thread_changed(thread)
+    return changed
 
 
 def mark_unread_for_staff(thread, user):
@@ -112,7 +129,9 @@ def mark_unread_for_staff(thread, user):
         return 0
     position = latest - timedelta(microseconds=1)
     link = MessageThreadParticipant.objects.filter(thread_id=thread.pk, user_id=user.pk)
-    link.filter(last_read_at__gt=position).update(last_read_at=position)
+    changed = link.filter(last_read_at__gt=position).update(last_read_at=position)
+    if changed:
+        patient_thread_changed(thread)
     return 1 if link.exists() else 0
 
 

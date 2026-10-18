@@ -8,13 +8,14 @@ from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.paginator import Paginator
 from django.db.models import Count, DateTimeField, DurationField, ExpressionWrapper, F, IntegerField, OuterRef, Q, Subquery, Value
 from django.db.models.functions import Cast, Coalesce
-from django.http import Http404
+from django.http import Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
 from django.views import View
 
 from care.forms import PatientMessageForm, PatientThreadForm, WeightEntryForm
+from care.messaging import mark_patient_messages_read
 from care.models import (
     Appointment, MessageThread, PatientMessage, PracticeSettings, WeightEntry,
 )
@@ -24,6 +25,7 @@ from video.access import attach_video_join
 from .inbox import latest_from, search_text, search_threads
 from .patient_context import make_patient_context
 from .people_tags import in_join_order
+from .realtime_context import records_conversation_view
 from .video_links import safe_video_link
 from .views import PatientPortalRequiredMixin, PatientThreadCreateView
 
@@ -175,6 +177,7 @@ def _appointment_list(request, company, patient, now):
             choice_section('type', 'Appointment type', Appointment.Type.choices, types, icon='type'),
         ]))
     context['appointments'] = list(context['page_obj'].object_list)
+    context['video_server_time'] = now
     attach_video_join(context['appointments'], request.user.pk, allowed_role='patient', now=now)
     return context
 
@@ -296,8 +299,8 @@ def patient_messages_context(request, company, patient, *, selected_thread_id=No
     # HEAD has no displayed body, and an invalid POST must not cause incidental
     # writes while returning a preserved form draft. Successful POSTs redirect
     # to a GET, which records the actual conversation view.
-    if read_ids and request.method == 'GET':
-        PatientMessage.objects.for_company(company).filter(thread=selected, pk__in=read_ids, read_at__isnull=True).update(read_at=timezone.now())
+    if read_ids and records_conversation_view(request):
+        mark_patient_messages_read(selected, request.user, read_ids)
         context['patient_unread_messages'] = unread_patient_messages(request, company, patient)
     selected.unread_count = history.filter(read_at__isnull=True).exclude(sender=request.user).count()
     for thread in threads:
@@ -315,7 +318,7 @@ def patient_messages_context(request, company, patient, *, selected_thread_id=No
         older_messages_url=history_url(message_page.next_page_number()) if message_page.has_next() else None,
         newer_messages_url=history_url(message_page.previous_page_number()) if message_page.has_previous() else None,
     )
-    if request.method == 'GET':
+    if records_conversation_view(request):
         record_audit(company=company, actor=request.user, patient=patient, action='message.thread_viewed', target=selected, request=request)
     return context
 
@@ -329,6 +332,36 @@ class PatientAppointmentsView(LoginRequiredMixin, PatientPortalRequiredMixin, Vi
         context = patient_appointments_context(request, self.patient_company, self.patient)
         context.update(booking_context(request, self.patient_company, self.patient))
         return render(request, 'portal/patient_appointments.html', context)
+
+
+class PatientAppointmentVideoStatusView(LoginRequiredMixin, PatientPortalRequiredMixin, View):
+    """Refresh only a bounded visible page, with the same fresh policy as room access."""
+
+    http_method_names = ('get', 'head', 'options')
+
+    def get(self, request):
+        raw = request.GET.getlist('id')
+        if not raw or len(raw) > 50 or any(
+            not value.isascii() or not value.isdecimal() or len(value) > 19
+            or not 0 < int(value) < 2 ** 63 for value in raw
+        ):
+            return JsonResponse({'error': 'Supply between 1 and 50 valid appointment IDs.'}, status=400)
+        now = timezone.now()
+        appointments = Appointment.objects.for_company(self.patient_company).filter(
+            patient=self.patient, pk__in={int(value) for value in raw},
+        )
+        rows = attach_video_join(appointments, request.user.pk, allowed_role='patient', now=now)
+        return JsonResponse({
+            'scope': request.realtime_scope,
+            'serverTime': now.isoformat(),
+            'appointments': [{
+                'id': item.pk,
+                'joinUrl': item.video_room_url,
+                'opensAt': item.video_join_opens_at.isoformat() if item.video_join_opens_at else None,
+                'closesAt': item.video_join_closes_at.isoformat() if item.video_join_closes_at else None,
+                'message': item.video_join_message,
+            } for item in rows],
+        })
 
 
 class PatientProgressView(LoginRequiredMixin, PatientPortalRequiredMixin, View):

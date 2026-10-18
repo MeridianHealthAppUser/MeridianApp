@@ -2,14 +2,14 @@
 <nav class="console-nav{% if menu.flat %} console-nav--flat{% endif %}" aria-label="Staff pages" data-rail-navigation>
   {% if menu.flat %}
   {# Clinicians: one flat list with icons, like the patient app's menu. #}
-  {% for item in menu.flat %}<a class="console-nav__item{% if item.current %} is-active{% endif %}"{% if item.current %} aria-current="{{ item.current }}"{% endif %} href="{{ item.url }}">{% include 'portal/includes/nav_icon.html' with name=item.key %}<span class="console-nav__text">{{ item.label }}</span>{% include 'portal/includes/nav_badge.html' with count=item.badge badge_label=item.badge_label %}</a>{% endfor %}
+  {% for item in menu.flat %}<a class="console-nav__item{% if item.current %} is-active{% endif %}"{% if item.current %} aria-current="{{ item.current }}"{% endif %} href="{{ item.url }}">{% include 'portal/includes/nav_icon.html' with name=item.key %}<span class="console-nav__text">{{ item.label }}</span>{% if item.key == 'records' %}{% include 'portal/includes/live_message_badge.html' with kind='total' count=item.badge dot=True %}{% else %}{% include 'portal/includes/nav_badge.html' with count=item.badge badge_label=item.badge_label %}{% endif %}</a>{% endfor %}
   {% else %}
   <a class="console-nav__top{% if nav_section == 'overview' %} is-active{% endif %}"{% if nav_section == 'overview' %} aria-current="page"{% endif %} href="{% url 'portal:desktop-dashboard' %}">{% include 'portal/includes/nav_icon.html' with name='overview' %}<span>Overview</span></a>
   {% for section in menu.sections %}
   <details class="console-nav__group" data-navigation-group="{{ section.key }}" open>
     <summary class="console-nav__toggle"><span class="console-nav__label">{% include 'portal/includes/nav_icon.html' with name=section.key %}{{ section.label }}</span></summary>
     <div class="console-nav__links">
-      {% for item in section.items %}<a{% if item.current %} class="is-active" aria-current="{{ item.current }}"{% endif %} href="{{ item.url }}"><span class="console-nav__text">{{ item.label }}</span>{% include 'portal/includes/nav_badge.html' with count=item.badge badge_label=item.badge_label %}</a>{% endfor %}
+      {% for item in section.items %}<a{% if item.current %} class="is-active" aria-current="{{ item.current }}"{% endif %} href="{{ item.url }}"><span class="console-nav__text">{{ item.label }}</span>{% if item.key == 'records' %}{% include 'portal/includes/live_message_badge.html' with kind='total' count=item.badge dot=True %}{% else %}{% include 'portal/includes/nav_badge.html' with count=item.badge badge_label=item.badge_label %}{% endif %}</a>{% endfor %}
     </div>
   </details>
   {% endfor %}

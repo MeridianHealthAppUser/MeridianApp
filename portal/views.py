@@ -50,6 +50,7 @@ from practices.services import (
 
 from .navigation import uses_flat_menu
 from .patient_context import validate_patient_context
+from .realtime_context import changed_scope_response, patient_scope, records_conversation_view, staff_scope
 
 
 class LandingPageView(TemplateView):
@@ -74,6 +75,9 @@ class StaffCompanyRequiredMixin:
         self.membership = active_membership_for(request, self.company)
         if self.company is None or self.membership is None:
             raise PermissionDenied('You need an active practice membership to access this workspace.')
+        request.realtime_scope = staff_scope(self.company, request.user)
+        if response := changed_scope_response(request):
+            return response
         if self.admin_only and not self.membership.is_admin:
             raise PermissionDenied('This page is for practice administrators.')
         if self.clinician_redirect_message and self.membership.role == CompanyMembership.Role.DOCTOR:
@@ -94,6 +98,9 @@ class PatientPortalRequiredMixin:
         self.patient = active_patient_for(request, self.patient_company)
         if self.patient_company is None or self.patient is None:
             raise PermissionDenied('You do not have an active patient record.')
+        request.realtime_scope = patient_scope(self.patient_company, self.patient, request.user)
+        if response := changed_scope_response(request):
+            return response
         return super().dispatch(request, *args, **kwargs)
 
 
@@ -377,7 +384,7 @@ def _patient_record_context(request, company, membership, patient, **overrides):
             'assigned_to', 'encounter_signing', 'lab_review_request',
         ).prefetch_related('tags')[:8]), request.user, membership),
         'notes': notes,
-        'message_threads': _conversation_threads(company, patient, patient_view=False, viewer=request.user, mark_read=request.method == 'GET'),
+        'message_threads': _conversation_threads(company, patient, patient_view=False, viewer=request.user, mark_read=records_conversation_view(request)),
         'task_form': ClinicalTaskForm(company=company, patient=patient),
         'appointment_form': _staff_booking_form(company, patient=patient),
         'legacy_appointment_context': (
