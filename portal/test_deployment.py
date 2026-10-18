@@ -1,11 +1,30 @@
+import json
 import os
 import subprocess
 import sys
 from unittest.mock import patch
 
 from django.db import DatabaseError
-from django.test import TestCase, override_settings
+from django.test import SimpleTestCase, TestCase, override_settings
 from django.urls import reverse
+
+
+class ASGIDatabaseConfigurationTests(SimpleTestCase):
+    def test_settings_disable_persistent_connections_and_keep_health_checks_and_tls(self):
+        # Import real deployment settings in a clean interpreter. No database is
+        # contacted: these synthetic URLs only exercise the configuration parser.
+        code = (
+            'import json; from config.settings import DATABASES; db = DATABASES["default"]; '
+            'print(json.dumps({"max_age": db["CONN_MAX_AGE"], '
+            '"health_checks": db["CONN_HEALTH_CHECKS"], "sslmode": db["OPTIONS"]["sslmode"]}))'
+        )
+        for query in ('sslmode=require', 'sslmode=require&conn_max_age=600'):
+            with self.subTest(query=query):
+                environment = {**os.environ, 'DJANGO_DEBUG': 'true',
+                               'DATABASE_URL': f'postgresql://example:example@localhost/example?{query}'}
+                result = subprocess.run([sys.executable, '-c', code], env=environment,
+                                        capture_output=True, text=True, check=True, timeout=10)
+                self.assertEqual(json.loads(result.stdout), {'max_age': 0, 'health_checks': True, 'sslmode': 'require'})
 
 
 @override_settings(MULTI_PRACTICE_ENABLED=True)

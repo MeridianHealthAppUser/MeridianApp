@@ -43,6 +43,26 @@ HSTS preload is deliberately not enabled automatically. A deployment check may r
 
 Payments, third-party Zoom integration and courier APIs are not configured. Transactional email (password reset links, PathCare forms and notifications; see [Emails and appointment reminders](#emails-and-appointment-reminders)) uses the `DJANGO_EMAIL_*` settings. Native WebRTC video is included; production Redis and TURN must be provisioned separately. Configure any future integration separately; never infer payment success from a browser flag. The local review-reminder command can be scheduled only after choosing an authorised operational account and reviewing its scope.
 
+## PostgreSQL connection limits
+
+The Daphne/ASGI application uses `CONN_MAX_AGE=0`: HTTP requests release database connections when they finish,
+and the message/video consumers use Channels' `database_sync_to_async` to release connections after database work.
+Keep this value at zero for ASGI, as recommended by [Django's database guidance](https://docs.djangoproject.com/en/5.2/ref/databases/#persistent-connections).
+An older configuration retained connections for 600 seconds, which could exhaust a small database's connection
+slots during rapid navigation and realtime requests.
+
+If runtime logs show `remaining connection slots are reserved for roles with the SUPERUSER attribute`, PostgreSQL
+is refusing new connections, including the query needed to load a login session. This can make unrelated pages
+return 500. Deploy the connection-lifetime fix and let the web component restart; replacing the old processes
+releases their connections. No migration or additional environment variable is required for this fix. Retest rapid
+navigation and check the PostgreSQL cluster's connection metrics after deployment.
+
+Closing idle connections does not impose a hard limit on simultaneous active requests. If the database still
+reaches its limit after this fix, check other app instances, workers and database clients, then consider
+[DigitalOcean's managed PostgreSQL connection pooling](https://docs.digitalocean.com/products/app-platform/how-to/connect-pg-pools/)
+to queue excess clients behind a bounded set of database connections. Pool configuration must account for all app
+components; keep migration and database administration connections separate from a transaction pool.
+
 ## Patient files on Spaces
 
 PathCare blood-test forms and patients' uploaded lab reports are private patient files. Once the four `SPACES_*` settings are set, they are stored in a private DigitalOcean Space. Until then, production keeps them in the database. They are never kept on the container's own disk, which is wiped on every deploy. The app never hands out a link to the Space: every view or download goes through the app's own access checks, and the app fetches the file with its own key. Each file's SHA-256 is checked when it is read.

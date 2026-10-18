@@ -132,7 +132,10 @@ VIDEO_ICE_TRANSPORT_POLICY = os.getenv('VIDEO_ICE_TRANSPORT_POLICY', 'all')
 DATABASES = {
     'default': dj_database_url.config(
         default=f"sqlite:///{BASE_DIR / 'db.sqlite3'}",
-        conn_max_age=600,
+        # Daphne/ASGI must release connections after each HTTP request and
+        # Channels database operation instead of retaining per-thread sessions.
+        # Persistent connections can exhaust PostgreSQL during rapid navigation.
+        conn_max_age=0,
         conn_health_checks=True,
     )
 }
