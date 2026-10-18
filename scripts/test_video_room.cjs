@@ -263,6 +263,13 @@ async function screenshot(page, name) {
       await second.page.exposeFunction('signalToPeer', relay(first.page, 2));
       await join(first.page); await join(second.page);
       await emit(first.page, { type: 'room_status', peer_count: 1, should_initiate: false, my_user_id: 1, room_epoch: 'first' });
+      // Simulate the answerer's microphone disconnecting while they wait.
+      // Rejoining audio after negotiation must reuse the sender with no track.
+      await first.page.evaluate(() => {
+        const microphone = videoTest.tracks.find(track => track.kind === 'audio');
+        microphone.stop();
+        microphone.dispatchEvent(new Event('ended'));
+      });
       await emit(first.page, { type: 'peer_joined', from_user_id: 2, room_epoch: 'native' });
       await emit(second.page, { type: 'room_status', peer_count: 2, should_initiate: true, my_user_id: 2, room_epoch: 'native' });
       for (const { page } of [first, second]) {
@@ -274,6 +281,17 @@ async function screenshot(page, name) {
         assert.equal(video[0].sends, 'video');
         assert.equal(await page.locator('#connection-label').innerText(), 'Connected');
       }
+      assert.equal(await first.page.evaluate(() => videoTest.peers[0].getTransceivers().find(item => item.receiver.track.kind === 'audio').sender.track), null);
+      assert.equal(await first.page.locator('#toggle-mic').getAttribute('aria-pressed'), 'true');
+      await first.page.locator('#toggle-mic').click();
+      await first.page.waitForFunction(() => videoTest.peers[0].getTransceivers().find(item => item.receiver.track.kind === 'audio').sender.track?.readyState === 'live');
+      await second.page.waitForFunction(async () => {
+        const stats = await videoTest.peers[0].getStats();
+        return [...stats.values()].some(item => item.type === 'inbound-rtp' && item.kind === 'audio' && item.packetsReceived > 0);
+      });
+      assert.equal(await first.page.locator('#toggle-mic').getAttribute('aria-pressed'), 'false');
+      assert.deepEqual(await first.page.evaluate(() => videoTest.mediaCalls[1]), { audio: true, video: false });
+      assert.equal(await first.page.evaluate(() => videoTest.peers.length), 1, 'microphone recovery does not recreate the peer connection');
       await screenshot(first.page, 'native-answerer');
       await screenshot(second.page, 'native-offerer');
       await first.page.locator('#toggle-camera').click();

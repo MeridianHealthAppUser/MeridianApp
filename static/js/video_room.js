@@ -481,7 +481,8 @@
           this.localStream.addTrack(track);
           this.watchLocalTracks(stream);
           this.micMuted = false;
-          const sender = this.pc?.getSenders().find(item => item.track?.kind === 'audio');
+          // An answer negotiated while the microphone was unavailable has a null sender track.
+          const sender = this.pc?.getTransceivers().find(item => item.receiver.track.kind === 'audio')?.sender;
           if (sender) await sender.replaceTrack(track);
         } else this.micMuted = !this.micMuted;
         track.enabled = !this.micMuted;
