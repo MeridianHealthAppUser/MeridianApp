@@ -85,12 +85,25 @@ const { chromium } = require(process.env.MERIDIAN_PLAYWRIGHT_PATH || 'playwright
     for (const width of [1280, 390]) {
       const { page, context, state, changed } = await setup({ inbox: false, viewport: { width, height: 800 } });
       assert.equal(state.snapshots, 0);
-      state.unread = 2; await changed();
       const nav = width > 700 ? '.console-nav' : '.staff-mobile-nav';
-      await page.waitForFunction(selector => !document.querySelector(selector).hidden, `${nav} [data-live-unread]`);
-      assert.equal(await page.locator(`${nav} .message-unread-dot`).isVisible(), true);
-      assert.equal(await page.locator(`${nav} .message-unread-dot`).evaluate(el => getComputedStyle(el).backgroundColor), 'rgb(217, 45, 32)');
-      assert.match(await page.locator(`${nav} [data-live-unread-label]`).innerText(), /2 unread messages/);
+      for (const count of [2, 12, 100, 0]) {
+        state.unread = count; await changed();
+        const expected = count > 99 ? '99+' : String(count);
+        await page.waitForFunction(({ selector, count, expected }) => {
+          const badge = document.querySelector(selector);
+          return count ? !badge.hidden && badge.textContent === expected : badge.hidden;
+        }, { selector: `${nav} [data-live-unread]`, count, expected });
+        const badge = page.locator(`${nav} .message-unread-dot`);
+        assert.equal(await badge.isVisible(), count > 0);
+        // Both responsive copies receive the count, including whichever is currently hidden by layout.
+        assert.deepEqual(await page.locator('[data-live-unread="total"]').allTextContents(), [expected, expected]);
+        assert.equal(await page.locator(`${nav} [data-live-unread-label]`).textContent(), count ? `, ${count} unread messages` : '');
+        if (count) {
+          assert.equal(await badge.evaluate(el => getComputedStyle(el).backgroundColor), 'rgb(217, 45, 32)');
+          assert.equal(await badge.evaluate(el => getComputedStyle(el).color), 'rgb(255, 255, 255)');
+          assert.ok(await badge.evaluate(el => el.scrollWidth <= el.clientWidth));
+        }
+      }
       assert.equal(state.snapshots, 0);
       await context.close(); cases += 1;
     }
@@ -103,9 +116,26 @@ const { chromium } = require(process.env.MERIDIAN_PLAYWRIGHT_PATH || 'playwright
         el.innerHTML = '<div class="patient-navigation__links"><a href="/patient/messages/">My Messages<span class="message-unread-dot" data-live-unread="patient" hidden></span><span class="sr-only" data-live-unread-label="patient"></span></a></div>';
       });
       await page.addStyleTag({ path: 'static/css/patient_pages.css' });
-      state.unread = 1; await changed();
-      await page.waitForFunction(() => !document.querySelector('[data-live-unread="patient"]').hidden);
-      assert.equal(await page.locator('.patient-navigation .message-unread-dot').isVisible(), true);
+      for (const count of [2, 12, 100, 0]) {
+        state.unread = count; await changed();
+        const expected = count > 99 ? '99+' : String(count);
+        await page.waitForFunction(({ count, expected }) => {
+          const badge = document.querySelector('[data-live-unread="patient"]');
+          return count ? !badge.hidden && badge.textContent === expected : badge.hidden;
+        }, { count, expected });
+        const badge = page.locator('.patient-navigation .message-unread-dot');
+        assert.equal(await badge.isVisible(), count > 0);
+        assert.equal(await badge.textContent(), expected);
+        assert.equal(await page.locator('[data-live-unread-label="patient"]').textContent(), count ? `, ${count} unread messages` : '');
+        if (count === 12 && process.env.MERIDIAN_MESSAGE_SCREENSHOTS) {
+          await page.screenshot({ path: `${process.env.MERIDIAN_MESSAGE_SCREENSHOTS}/meridian-message-badge-${width}.png` });
+        }
+        if (count) {
+          assert.equal(await badge.evaluate(el => getComputedStyle(el).backgroundColor), 'rgb(217, 45, 32)');
+          assert.equal(await badge.evaluate(el => getComputedStyle(el).color), 'rgb(255, 255, 255)');
+          assert.ok(await badge.evaluate(el => el.scrollWidth <= el.clientWidth));
+        }
+      }
       assert.equal(await page.locator('.patient-navigation').evaluate(el => getComputedStyle(el).position), width > 832 ? 'sticky' : 'fixed');
       await context.close(); cases += 1;
     }
@@ -282,6 +312,6 @@ const { chromium } = require(process.env.MERIDIAN_PLAYWRIGHT_PATH || 'playwright
       await context.close(); cases += 1;
     }
     assert.deepEqual(errors, []);
-    console.log(`${cases} realtime messaging browser scenarios passed (desktop/mobile dots, unread visibility, drafts/scroll, sends, history, reconnect and session isolation).`);
+    console.log(`${cases} realtime messaging browser scenarios passed (desktop/mobile numeric badges, unread visibility, drafts/scroll, sends, history, reconnect and session isolation).`);
   } finally { await browser.close(); }
 })().catch(error => { console.error(error); process.exitCode = 1; });

@@ -106,11 +106,11 @@ class StaffMenuTests(TestCase):
         labels = ['Overview', 'My tasks', 'Patient Records &amp; Messages', 'Calendar &amp; Bookings']
         self.assertEqual([label for label in labels if label in sidebar], labels)
         self.assertNotIn('My Messages', sidebar)
-        # The red dot combines patient/team unread state; assistive text keeps the actual count.
-        self.assertIn('<span class="message-unread-dot" data-live-unread="total" aria-hidden="true"></span>', sidebar)
+        # Both red navigation badges combine patient/team unread counts.
+        self.assertIn('<span class="message-unread-dot" data-live-unread="total" aria-hidden="true">2</span>', sidebar)
         self.assertIn('data-live-unread-label="total">, 2 unread messages</span>', sidebar)
         mobile = page[page.index('class="mobile-bottom-nav staff-mobile-nav"'):]
-        self.assertIn('<span class="message-unread-dot" data-live-unread="total" aria-hidden="true"></span>', mobile[:mobile.index('</nav>')])
+        self.assertIn('<span class="message-unread-dot" data-live-unread="total" aria-hidden="true">2</span>', mobile[:mobile.index('</nav>')])
         inbox = self.client.get(reverse('portal:staff-inbox'))
         self.assertContains(inbox, '<h1>Patient Records &amp; Messages</h1>', html=True)
         # Practice admins get the same flat menu, with Operations and Administration after it. They sent the team

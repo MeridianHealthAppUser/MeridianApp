@@ -39,7 +39,8 @@
       const count = Math.max(0, Number(data[name]) || 0);
       document.querySelectorAll(`[data-live-unread="${name}"]`).forEach(el => {
         el.hidden = count === 0;
-        if (!el.classList.contains('message-unread-dot')) el.textContent = count > 9 ? '9+' : String(count);
+        const limit = el.classList.contains('message-unread-dot') ? 99 : 9;
+        el.textContent = count > limit ? `${limit}+` : String(count);
       });
       document.querySelectorAll(`[data-live-unread-label="${name}"]`).forEach(el => {
         el.textContent = count ? `, ${count} unread message${count === 1 ? '' : 's'}` : '';

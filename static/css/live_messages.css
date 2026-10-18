@@ -1,6 +1,6 @@
-/* Navigation dots are present at zero too, so the first new message needs no page refresh. */
+/* Unread count targets stay present at zero so new messages need no page refresh. */
 [data-live-unread][hidden], [data-live-status][hidden], [data-live-region][hidden] { display: none !important; }
-.message-unread-dot { background: #d92d20; border-radius: 50%; display: inline-block; flex: 0 0 .55rem; height: .55rem; margin-left: auto; width: .55rem; }
+.message-unread-dot, .patient-navigation a .message-unread-dot { align-items: center; background: #d92d20; border-radius: 999px; box-sizing: border-box; color: #fff; display: inline-flex; flex: 0 0 auto; font-size: .7rem; font-variant-numeric: tabular-nums; font-weight: 700; height: 1.375rem; justify-content: center; line-height: 1; margin-left: auto; min-width: 1.375rem; padding: 0 .3rem; white-space: nowrap; }
 .staff-mobile-nav a .message-unread-dot { box-shadow: 0 0 0 2px #fff; left: calc(50% + .5rem); margin: 0; position: absolute; top: .2rem; }
 .patient-navigation a { position: relative; }
 @media (max-width: 52rem) {

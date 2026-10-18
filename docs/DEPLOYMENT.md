@@ -67,7 +67,7 @@ Local development keeps patient files under `media/patient-files/`. Git ignores 
 
 ## Realtime messages
 
-Deploy the updated application code to enable live patient and team conversations and unread navigation dots on
+Deploy the updated application code to enable live patient and team conversations and unread count badges on
 desktop and mobile. PostgreSQL continues to store messages and read positions. The existing shared `REDIS_URL`
 provides the Channels transport; if `VIDEO_REDIS_URL` is also set, that override currently backs the shared channel
 layer for both messages and video. App-level environment variables can supply this connection to the web service.
@@ -80,8 +80,8 @@ mark newly arriving messages as read until the messages are actually shown.
 
 Ordinary form POSTs remain available when JavaScript cannot enhance the page. If the live connection drops, the
 client reconnects and reconciles visible content at 30-second intervals. Verify using two separate accounts: send a
-patient or team message, check it appears without reloading in an open conversation, and check the unread dot on the
-recipient's desktop and mobile navigation. Reading it should clear that recipient's dot without clearing another
+patient or team message, check it appears without reloading in an open conversation, and check the unread count on the
+recipient's desktop and mobile navigation. Reading it should reduce that recipient's count without clearing another
 participant's unread state. Deployment does not require a messaging schema migration; migration `0036` in this
 release is for the separate 15-minute email reminder delivery records. Existing components are reused, although
 higher traffic and connection counts can increase resource requirements.
