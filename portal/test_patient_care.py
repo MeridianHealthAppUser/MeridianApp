@@ -158,7 +158,10 @@ class PatientCareTests(TestCase):
     def test_appointments_filter_by_status_date_clinician_and_type(self):
         self.login()
         now = timezone.localtime()
-        today = self.create_appointment(starts_at=now + timedelta(minutes=30), appointment_type='follow_up')
+        # Today and still upcoming whatever the time: it started a few minutes ago (never before midnight) and its
+        # 15 minutes haven't ended. Half an hour ahead would be tomorrow when the tests run after 23:30 SAST.
+        midnight = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        today = self.create_appointment(starts_at=max(now - timedelta(minutes=5), midnight), appointment_type='follow_up')
         later = self.create_appointment(starts_at=now + timedelta(days=40), clinician=self.other_doctor)
         past = self.create_appointment(starts_at=now - timedelta(days=3), status='completed')
 
