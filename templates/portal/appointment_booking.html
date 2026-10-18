@@ -7,7 +7,7 @@
     <form class="console-form" method="post">
       {% csrf_token %}<input type="hidden" name="workflow_context" value="{{ workflow_context }}">
       {% include 'portal/includes/appointment_booking_fields.html' %}
-      <p>Times are SAST. The native video room opens shortly before the appointment for its booked doctor and patient. No external meeting link is needed and no payment is created. The patient, if they have a login, and the doctor, if someone else books, are emailed a confirmation.</p>
+      <p>Times are SAST. The native video room opens 15 minutes before the appointment for its booked doctor and patient. No external meeting link is needed and no payment is created. The patient, if they have a login, and the doctor, if someone else books, are emailed a confirmation.</p>
       <button class="console-button console-button--primary" type="submit">Confirm booking</button>
     </form>
   </section></div>

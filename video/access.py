@@ -158,7 +158,7 @@ def attach_video_join(appointments, user_id, *, allowed_role, now=None):
         if not settings.DEBUG and not getattr(settings, 'VIDEO_REDIS_URL', ''):
             appointment.video_join_message = 'Video consultations are temporarily unavailable.'
         elif now < access.join_opens_at:
-            appointment.video_join_message = 'The video room opens shortly before your appointment.'
+            appointment.video_join_message = f'The video room opens {settings.VIDEO_JOIN_EARLY_MINUTES} minutes before your appointment.'
         elif now > access.join_closes_at:
             appointment.video_join_message = 'The video join window has ended.'
         else:
