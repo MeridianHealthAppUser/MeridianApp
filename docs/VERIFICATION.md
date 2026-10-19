@@ -84,6 +84,21 @@ Browser workflows used disposable database copies. Existing local accounts, pass
 
 The relay check used an isolated **local** coturn container. It verifies TURN credentials, relay-only configuration and real media transport, but does not replace testing HTTPS devices on separate mobile/home networks against the eventual production relay. See [VIDEO_CONSULTATIONS.md](VIDEO_CONSULTATIONS.md).
 
+## Messages navigation — 19 October 2026
+
+Messages pauses background refreshes and conversation searches when a same-tab page navigation starts. Pending GETs are cancelled through response-body loading; responses from before navigation cannot replace the restored page. Back and cancelled loads resume live updates. An already submitted reply is never automatically retried, and only its confirmed, unchanged draft is cleared.
+
+Run the focused browser checks with an installed Playwright package and Chrome:
+
+```sh
+MERIDIAN_PLAYWRIGHT_PATH=<installed-playwright-package> node scripts/test_live_messages.cjs
+MERIDIAN_PLAYWRIGHT_PATH=<installed-playwright-package> node scripts/test_message_navigation.cjs
+```
+
+The navigation suite also runs WebKit when installed. Both suites use synthetic responses and accounts. The reported missed first click was not reproduced locally; the earlier implementation did demonstrably continue background work while a destination was loading. These checks verify navigation cleanup, recovery and message-delivery behavior without claiming to reproduce the original symptom.
+
+The focused run passed all 16 existing messaging scenarios in Chrome and all 20 navigation scenarios across Chrome and WebKit. Django system checks and JavaScript syntax checks also passed.
+
 ## Limits
 
 Passing tests is not a clinical, regulatory or penetration-test certification. Payment collection, outbound email, live prescribing, third-party Zoom integration and courier APIs remain excluded. Native appointment video is provided instead. The questionnaire remains lead-only; the checkout creates a patient login only with the checkout test code. File uploads have basic PDF checks, not malware scanning. Review the live-use prerequisites in [USER_GUIDE.md](USER_GUIDE.md) and [DEPLOYMENT.md](DEPLOYMENT.md) before handling real patient data.

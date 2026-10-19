@@ -7,9 +7,10 @@
   const headers = { 'X-Meridian-Realtime': 'snapshot', 'X-Meridian-Scope': scope };
   let stopped = false, suspended = false, socket, reconnectTimer, refreshTimer, readTimer, heartbeatTimer;
   let retry = 1000, refreshing = false, refreshAgain = false, sending = false, reading = false;
-  let revision = 0, searching = false;
+  let revision = 0, searching = false, generation = 0;
   let lastSocketMessage = Date.now();
   const acknowledged = new Set();
+  const pendingGets = new Set();
   const messageList = () => document.querySelector('[data-live-region="messages"]');
   const hasInbox = !!document.querySelector('[data-record-messages], .patient-inbox');
   const token = () => config.querySelector('[name="csrfmiddlewaretoken"]')?.value;
@@ -76,21 +77,28 @@
   }
 
   async function request(url, options = {}) {
+    if (stopped || suspended) throw new Error('Page is inactive');
     const controller = new AbortController();
+    const version = generation;
+    const background = !options.method || options.method.toUpperCase() === 'GET';
+    if (background) pendingGets.add(controller);
     const timeout = setTimeout(() => controller.abort(), 15000);
     try {
       const response = await fetch(url, { credentials: 'same-origin', cache: 'no-store', signal: controller.signal, ...options,
         headers: { ...headers, ...options.headers } });
       if ([401, 403, 409].includes(response.status)) { stop(); throw new Error('Access changed'); }
-      return response;
-    } finally { clearTimeout(timeout); }
+      // Keep the cancellation and timeout active until the whole body has arrived.
+      const body = await response.text();
+      if (background && (suspended || version !== generation)) throw new Error('Page is inactive');
+      return { response, body };
+    } finally { clearTimeout(timeout); pendingGets.delete(controller); }
   }
 
   async function status() {
-    const response = await request(config.dataset.statusUrl);
+    const { response, body } = await request(config.dataset.statusUrl);
     if (!response.ok) throw new Error('Unable to refresh messages');
     if (!(response.headers.get('content-type') || '').includes('application/json')) { stop(); return; }
-    const data = await response.json();
+    const data = JSON.parse(body);
     if (validScope(data.scope)) updateCounts(data);
   }
 
@@ -128,7 +136,7 @@
   }
 
   function applyPage(page) {
-    if (!page || stopped) return;
+    if (!page || stopped || suspended) return;
     const current = messageList(), fresh = page.querySelector('[data-live-region="messages"]');
     if (current && (!fresh || current.dataset.liveThread !== fresh.dataset.liveThread)) { stop(); return; }
     const older = current?.dataset.liveHistory === 'older';
@@ -170,27 +178,28 @@
     refreshAgain = false;
     const address = window.location.href;
     const version = revision;
+    const cycle = generation;
     try {
       await status();
-      if (!stopped && hasInbox && !document.hidden) {
-        const response = await request(address);
+      if (!stopped && !suspended && cycle === generation && hasInbox && !document.hidden) {
+        const { response, body } = await request(address);
         if (response.status === 404) { stop(); return; }
         if (!response.ok) throw new Error('Unable to load messages');
-        const page = parsePage(await response.text());
+        const page = parsePage(body);
         // A search can finish while the request is in flight. Do not put its old list back.
-        if (address === window.location.href && version === revision && !sending && !searching) applyPage(page);
+        if (cycle === generation && address === window.location.href && version === revision && !sending && !searching) applyPage(page);
         else refreshAgain = true;
       }
     } catch (error) {
       // Transient disconnects are retried by the socket and periodic catch-up.
     } finally {
       refreshing = false;
-      if (refreshAgain && !stopped && !sending && !searching) scheduleRefresh();
+      if (refreshAgain && !stopped && !suspended && !sending && !searching) scheduleRefresh();
     }
   }
 
   function scheduleRefresh() {
-    if (stopped) return;
+    if (stopped || suspended) return;
     clearTimeout(refreshTimer);
     refreshTimer = setTimeout(refresh, 150);
   }
@@ -206,20 +215,21 @@
   }
 
   async function acknowledge() {
-    if (stopped || document.hidden || reading) return;
+    if (stopped || suspended || document.hidden || reading) return;
     const list = messageList();
     if (!list?.dataset.liveReadUrl) return;
     const ids = visibleMessages(list);
     if (!ids.length) return;
     reading = true;
+    const cycle = generation;
     try {
-      const response = await request(list.dataset.liveReadUrl, { method: 'POST', headers: {
+      const { response, body } = await request(list.dataset.liveReadUrl, { method: 'POST', headers: {
         'Content-Type': 'application/json', 'X-CSRFToken': token(),
       }, body: JSON.stringify({ message_ids: ids }) });
       if (response.status === 404) { stop(); return; }
       if (!response.ok) return;
-      const data = await response.json();
-      if (validScope(data.scope)) {
+      const data = JSON.parse(body);
+      if (!suspended && cycle === generation && validScope(data.scope)) {
         ids.forEach(id => acknowledged.add(`${list.dataset.liveThread}:${id}`));
         updateCounts(data);
         if (data.changed) scheduleRefresh();
@@ -229,6 +239,7 @@
   }
 
   function scheduleRead() {
+    if (stopped || suspended) return;
     clearTimeout(readTimer);
     readTimer = setTimeout(acknowledge, 250);
   }
@@ -244,19 +255,20 @@
     const form = event.target.closest('[data-live-reply]');
     if (!form) return;
     event.preventDefault();
-    if (sending || stopped || messageList()?.dataset.liveClosed === 'true') return;
+    if (sending || stopped || suspended || messageList()?.dataset.liveClosed === 'true') return;
     const textarea = form.querySelector('textarea[name="body"]');
     if (!textarea?.value.trim() || !form.reportValidity()) return;
     const draft = textarea.value;
     revision += 1;
     const fields = new FormData(form);
+    const cycle = generation;
     sending = true; sendError(form, '');
     form.setAttribute('aria-busy', 'true');
     form.querySelectorAll('button[type="submit"]').forEach(el => { el.disabled = true; });
     try {
-      const response = await request(form.action, { method: 'POST', body: fields });
+      const { response, body } = await request(form.action, { method: 'POST', body: fields });
       if (!response.ok && response.status !== 400 && response.status !== 422) throw new Error('Send failed');
-      const page = parsePage(await response.text());
+      const page = parsePage(body);
       if (!page) return;
       if (!response.redirected) {
         const errors = [...page.querySelectorAll('[data-live-reply] .errorlist, [data-live-reply] .record-error')].map(el => el.textContent.trim());
@@ -266,9 +278,9 @@
       if (textarea.value === draft) { textarea.value = ''; textarea.dispatchEvent(new Event('input', { bubbles: true })); }
       // Preserve an older history page when replying; fetch that page, not the redirect's latest slice.
       if (messageList()?.dataset.liveHistory === 'older') historyNotice();
-      else applyPage(page);
+      else if (cycle === generation) applyPage(page);
     } catch (error) {
-      if (!stopped) sendError(form, 'We could not confirm whether this message was sent. Your draft is saved here. Check the conversation before sending again.');
+      if (!stopped && !suspended) sendError(form, 'We could not confirm whether this message was sent. Your draft is saved here. Check the conversation before sending again.');
     } finally {
       sending = false;
       form.removeAttribute('aria-busy');
@@ -308,6 +320,21 @@
     retry = Math.min(retry * 2, 30000);
   }
 
+  function suspend() {
+    suspended = true;
+    generation += 1;
+    clearTimeout(reconnectTimer); clearTimeout(refreshTimer); clearTimeout(readTimer);
+    pendingGets.forEach(controller => controller.abort());
+    socket?.close();
+  }
+
+  function resume() {
+    if (stopped) return;
+    suspended = false;
+    if (!socket || socket.readyState > 1) connect();
+    scheduleRefresh(); scheduleRead();
+  }
+
   document.addEventListener('visibilitychange', () => {
     if (!document.hidden) { scheduleRefresh(); scheduleRead(); }
   });
@@ -317,11 +344,13 @@
   document.addEventListener('scroll', scheduleRead, true);
   window.addEventListener('resize', scheduleRead);
   window.addEventListener('online', () => { scheduleRefresh(); if (!socket || socket.readyState > 1) connect(); });
-  window.addEventListener('pageshow', () => { suspended = false; if (socket && socket.readyState > 1) connect(); scheduleRefresh(); });
-  window.addEventListener('pagehide', () => { suspended = true; clearTimeout(reconnectTimer); socket?.close(); });
+  document.addEventListener('workspace:navigating', suspend);
+  document.addEventListener('workspace:navigation-cancelled', resume);
+  window.addEventListener('pageshow', resume);
+  window.addEventListener('pagehide', suspend);
   const pollTimer = setInterval(() => { scheduleRefresh(); scheduleRead(); }, 30000);
   heartbeatTimer = setInterval(() => {
-    if (!stopped && socket && socket.readyState < 2 && Date.now() - lastSocketMessage > 65000) socket.close();
+    if (!stopped && !suspended && socket && socket.readyState < 2 && Date.now() - lastSocketMessage > 65000) socket.close();
   }, 10000);
   // Initial read acknowledgements wait until the browser has laid out the visible conversation.
   const initial = messageList();

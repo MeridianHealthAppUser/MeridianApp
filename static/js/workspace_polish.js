@@ -56,6 +56,7 @@
   )).join('')}</span>`;
   let showTimer;
   let giveUpTimer;
+  let navigating = false;
   // WebKit (Safari, and every browser on iPhone and iPad) stops painting as soon as the next page
   // starts loading, so a loader added after that is never seen. There it shows at once, and the
   // page leaves only after it has been painted (one frame, about 16ms later).
@@ -65,6 +66,16 @@
 
   function afterPaint(callback) {
     requestAnimationFrame(() => requestAnimationFrame(callback));
+  }
+
+  function startNavigation() {
+    if (navigating) return;
+    navigating = true;
+    // Pause live requests before the browser waits for the destination, including Safari's paint delay.
+    document.dispatchEvent(new CustomEvent('workspace:navigating'));
+    // Resume even on a page without a content region if navigation was cancelled or downloaded a file.
+    window.clearTimeout(giveUpTimer);
+    giveUpTimer = window.setTimeout(hideLoader, GIVE_UP_AFTER_MS);
   }
 
   function contentRegion() {
@@ -83,6 +94,7 @@
     region.setAttribute('aria-busy', 'true');
     region.appendChild(loader);
     // A response the browser downloads never replaces this page.
+    window.clearTimeout(giveUpTimer);
     giveUpTimer = window.setTimeout(hideLoader, GIVE_UP_AFTER_MS);
   }
 
@@ -94,6 +106,11 @@
       region.classList.remove('is-page-loading');
       region.removeAttribute('aria-busy');
     });
+    if (navigating) {
+      navigating = false;
+      // A download or cancelled navigation can leave this document open.
+      document.dispatchEvent(new CustomEvent('workspace:navigation-cancelled'));
+    }
   }
 
   function queueLoader(event) {
@@ -116,6 +133,7 @@
     const link = event.target.closest && event.target.closest('a[href]');
     if (!link || link.closest('[data-no-loader]') || link.hasAttribute('download')) return;
     if ((link.target && link.target !== '_self') || !opensAnotherPage(link)) return;
+    startNavigation();
     if (PAINT_FIRST) {
       event.preventDefault();
       showLoader();
@@ -134,9 +152,10 @@
     const method = (submitter && submitter.getAttribute('formmethod')) || form.getAttribute('method') || '';
     if (method.toLowerCase() === 'dialog' || (target && target !== '_self')) return;
     if (form.closest('[data-no-loader]') || (submitter && submitter.closest('[data-no-loader]'))) return;
+    // Safari's second pass is the same navigation, after the loader has been painted.
+    if (PAINT_FIRST && form.dataset.loaderPainted) { delete form.dataset.loaderPainted; return; }
+    startNavigation();
     if (PAINT_FIRST) {
-      // The second pass is our own resubmission once the loader has been painted.
-      if (form.dataset.loaderPainted) { delete form.dataset.loaderPainted; return; }
       event.preventDefault();
       showLoader();
       afterPaint(() => {

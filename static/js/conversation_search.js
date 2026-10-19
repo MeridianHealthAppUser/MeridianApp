@@ -13,6 +13,8 @@
   let timer = null;
   let pending = null;
   let stopped = false;
+  let suspended = false;
+  let needsSearch = false;
 
   document.addEventListener('messages:stopped', () => {
     stopped = true;
@@ -25,7 +27,9 @@
   }
 
   async function search() {
-    if (stopped) return;
+    if (stopped || suspended) return;
+    timer = null;
+    needsSearch = true;
     const query = input.value.trim().replace(/\s+/g, ' ');
     const params = new URLSearchParams(new FormData(form));
     if (query) params.set('q', query); else params.delete('q');
@@ -39,18 +43,24 @@
         credentials: 'same-origin', cache: 'no-store', signal: pending.signal,
         headers: scope ? { 'X-Meridian-Scope': scope, 'X-Meridian-Realtime': 'snapshot' } : {},
       });
-      if (stopped || current !== pending) return;
+      if (stopped || suspended || current !== pending) return;
       if (scope && (response.redirected || [401, 403, 409].includes(response.status))) { accessChanged(); return; }
       if (!response.ok) {
-        if (current === pending) document.dispatchEvent(new CustomEvent('messages:searched'));
+        if (!stopped && !suspended && current === pending) {
+          needsSearch = false;
+          document.dispatchEvent(new CustomEvent('messages:searched'));
+        }
         return;
       }
       page = new DOMParser().parseFromString(await response.text(), 'text/html');
     } catch (error) {
-      if (current === pending) document.dispatchEvent(new CustomEvent('messages:searched'));
+      if (!stopped && !suspended && current === pending) {
+        needsSearch = false;
+        document.dispatchEvent(new CustomEvent('messages:searched'));
+      }
       return;  // A newer search replaced this one, or the network failed; the list stays as it was.
     }
-    if (stopped || current !== pending) return;
+    if (stopped || suspended || current !== pending) return;
     // The record's search returns only a fragment; its request scope is checked
     // by the same server mixin. Full-page search responses also carry a marker.
     const returnedScope = page.querySelector('[data-live-messages]')?.dataset.liveScope;
@@ -72,10 +82,13 @@
     if (query) address.searchParams.set('q', query); else address.searchParams.delete('q');
     address.searchParams.delete('page');
     window.history.replaceState(null, '', address);
+    needsSearch = false;
     document.dispatchEvent(new CustomEvent('messages:searched'));
   }
 
   input.addEventListener('input', () => {
+    if (stopped || suspended) return;
+    needsSearch = true;
     if (clear) clear.hidden = !input.value;
     window.clearTimeout(timer);
     timer = window.setTimeout(search, 200);
@@ -93,4 +106,24 @@
     search();
     input.focus();
   });
+
+  function suspend() {
+    suspended = true;
+    window.clearTimeout(timer);
+    pending?.abort();
+    pending = null;
+  }
+
+  function resume() {
+    if (stopped || !suspended) return;
+    suspended = false;
+    // A cancelled search must also release the live refresh's search lock.
+    document.dispatchEvent(new CustomEvent('messages:searched'));
+    if (needsSearch) search();
+  }
+
+  document.addEventListener('workspace:navigating', suspend);
+  document.addEventListener('workspace:navigation-cancelled', resume);
+  window.addEventListener('pagehide', suspend);
+  window.addEventListener('pageshow', resume);
 })();
