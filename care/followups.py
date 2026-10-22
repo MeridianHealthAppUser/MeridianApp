@@ -78,7 +78,7 @@ def request_help(*, patient, actor, reason, request=None):
     """A patient's "Something is wrong, help me". It starts a conversation with their prescribing doctor and the
     practice administrators, and puts them on the Dropouts list. While one is open, asking again adds to the same
     conversation."""
-    patient = Patient.objects.select_for_update().select_related('company', 'assigned_doctor').get(pk=patient.pk)
+    patient = Patient.objects.select_for_update(of=('self',)).select_related('company', 'assigned_doctor').get(pk=patient.pk)
     if not (actor.is_active and patient.is_active and patient.user_id == actor.pk):
         raise PermissionDenied('This is not your patient record.')
     reason = reason.strip() if isinstance(reason, str) else ''
