@@ -11,3 +11,5 @@
 .app-dialog .console-form textarea { resize: vertical; width: 100%; }
 .app-dialog__actions { display: flex; flex-wrap: wrap; gap: .6rem; justify-content: flex-end; }
 @media (max-width: 760px) { .app-dialog__body { padding: 1.1rem; } }
+/* A dialog's button that waits until its form has everything it needs, such as a booking's time. */
+.app-dialog .console-button:disabled, .app-dialog .console-button[disabled] { cursor: not-allowed; opacity: .5; }

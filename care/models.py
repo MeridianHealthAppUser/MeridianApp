@@ -374,10 +374,28 @@ class PatientSubscription(PatientCompanyScopedModel):
     next_debit_on = models.DateField(null=True, blank=True)
     review_due_on = models.DateField(null=True, blank=True)
     cancelled_at = models.DateTimeField(null=True, blank=True)
+    # Why the patient cancelled: at least one of CANCELLATION_REASONS, and anything they added. One win-back email
+    # follows a cancellation (care.treatment.change_subscription_status).
+    cancellation_reasons = models.JSONField(default=list, blank=True)
+    cancellation_note = models.CharField(max_length=500, blank=True)
+    winback_sent_at = models.DateTimeField(null=True, blank=True)
+
+    CANCELLATION_REASONS = (
+        ('cost', 'The cost'),
+        ('side_effects', 'Side effects'),
+        ('slow_results', 'My results are too slow'),
+        ('goal_reached', 'I’ve reached my goal'),
+        ('break', 'I want a break'),
+        ('other', 'Something else'),
+    )
 
     class Meta:
         indexes = [models.Index(fields=('company', 'status', 'next_debit_on'))]
         ordering = ('-created_at',)
+
+    def cancellation_reason_labels(self):
+        labels = dict(self.CANCELLATION_REASONS)
+        return [labels[reason] for reason in self.cancellation_reasons if reason in labels]
 
     def clean(self):
         super().clean()
@@ -1220,6 +1238,8 @@ class Shipment(PatientCompanyScopedModel):
     prepared_at = models.DateTimeField(null=True, blank=True)
     locked_at = models.DateTimeField(null=True, blank=True)
     dispatch_snapshot = models.JSONField(default=dict, blank=True)
+    # The practice's own note on this parcel, from the Weekly shipping list's Notes column.
+    note = models.CharField(max_length=500, blank=True)
 
     class Meta:
         indexes = [models.Index(fields=('company', 'status', 'scheduled_for')), models.Index(fields=('company', 'patient', 'cycle_number'))]
@@ -1514,6 +1534,59 @@ class PharmacyOrderItem(CompanyScopedModel):
             raise ValidationError('The basket must belong to this practice.')
         if self.product_id and self.product.company_id != self.company_id:
             raise ValidationError('The product must belong to this practice.')
+
+
+class HelpRequest(PatientCompanyScopedModel):
+    """A patient's "Something is wrong, help me" from their care plan. It's on Administration > Dropouts until the
+    practice confirms it's resolved, or until the patient cancels, when they move to the cancelled list there."""
+
+    class Status(models.TextChoices):
+        OPEN = 'open', 'Open'
+        RESOLVED = 'resolved', 'Resolved'
+        CANCELLED = 'cancelled', 'Subscription cancelled'
+
+    subscription = models.ForeignKey(PatientSubscription, null=True, blank=True, on_delete=models.SET_NULL, related_name='help_requests')
+    # The conversation it started with the patient's clinician and the practice administrators.
+    thread = models.ForeignKey('MessageThread', null=True, blank=True, on_delete=models.SET_NULL, related_name='help_requests')
+    reason = models.TextField()
+    status = models.CharField(max_length=12, choices=Status.choices, default=Status.OPEN)
+    resolved_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name='resolved_help_requests')
+    resolved_at = models.DateTimeField(null=True, blank=True)
+    resolution_note = models.CharField(max_length=1000, blank=True)
+
+    class Meta:
+        ordering = ('-created_at', '-pk')
+        indexes = [models.Index(fields=('company', 'status'))]
+
+
+class CallbackRequest(CompanyScopedModel):
+    """"Please call me first" from the end of the screening questionnaire. It's on Administration > Dropouts (Please
+    call) until someone confirms they called, or until the person books their consultation. Kept afterwards, with the
+    caller's note."""
+
+    class Status(models.TextChoices):
+        OPEN = 'open', 'Waiting for a call'
+        CALLED = 'called', 'Called'
+        BOOKED = 'booked', 'Booked'
+
+    lead = models.ForeignKey(Lead, null=True, blank=True, on_delete=models.SET_NULL, related_name='callback_requests')
+    name = models.CharField(max_length=300)
+    phone = models.CharField(max_length=32)
+    email = models.EmailField(blank=True)
+    note = models.CharField(max_length=1000, blank=True)
+    status = models.CharField(max_length=12, choices=Status.choices, default=Status.OPEN)
+    called_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name='callback_requests_called')
+    called_at = models.DateTimeField(null=True, blank=True)
+    staff_note = models.CharField(max_length=1000, blank=True)
+
+    class Meta:
+        ordering = ('-created_at', '-pk')
+        indexes = [models.Index(fields=('company', 'status'))]
+
+    def clean(self):
+        super().clean()
+        if self.lead_id and self.company_id and self.lead.company_id != self.company_id:
+            raise ValidationError({'lead': 'The enquiry must belong to the same company.'})
 
 
 class AdministrativeFollowUp(CompanyScopedModel):

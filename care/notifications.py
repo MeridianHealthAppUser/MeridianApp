@@ -12,6 +12,7 @@
   (`manage.py send_appointment_reminders`, every 15 minutes). A recent confirmation replaces only the day-before
   reminder; the 15-minute reminder records successful delivery separately for each recipient.
 - Welcome: to a patient who made their account at checkout.
+- Win-back: once, to a patient who cancels their subscription.
 
 Patients are emailed only with an active login, and staff only while active in the practice.
 """
@@ -33,7 +34,7 @@ from practices.tenancy import enabled_companies
 from .emails import appointment_details, build_email, greeting_name, person_name, site_link
 from .models import (
     Appointment, AppointmentStartReminder, MessageThread, MessageThreadParticipant,
-    PatientMessage, TeamMessage, TeamThreadMember,
+    PatientMessage, PatientSubscription, TeamMessage, TeamThreadMember,
 )
 
 logger = logging.getLogger(__name__)
@@ -373,6 +374,24 @@ def _welcome_email(user, recipient, actor_id):
     })
 
 
+# Win-back, once, after a patient cancels their subscription
+
+def _subscription(pk):
+    return PatientSubscription.objects.select_related('patient__user').get(pk=pk)
+
+
+def _winback_recipients(subscription, actor_id):
+    user = subscription.patient.user
+    return [user.pk] if user is not None and user.is_active and user.email and subscription.patient.is_active else []
+
+
+def _winback_email(subscription, user, actor_id):
+    return build_email(to=user.email, subject='Can we help before you go?', template='subscription_winback', context={
+        'greeting': subscription.patient.first_name,
+        'url': site_link('portal:patient-messages', query='compose=1&subject=Before+I+go'),
+    })
+
+
 # kind: (load the object, who to email, build one person's email)
 KINDS = {
     'patient_message': (_patient_message, _patient_message_recipients, _patient_message_email),
@@ -385,4 +404,5 @@ KINDS = {
     'appointment_reminder': (_appointment, lambda appointment, actor_id: _appointment_people(appointment, None),
                              lambda appointment, user, actor_id: _appointment_email(appointment, user, reminder=True)),
     'welcome': (_user, _welcome_recipients, _welcome_email),
+    'subscription_winback': (_subscription, _winback_recipients, _winback_email),
 }

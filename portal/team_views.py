@@ -24,7 +24,7 @@ from care.team_messaging import (
     start_team_conversation, team_threads,
 )
 from practices.models import CompanyMembership, Patient
-from .filter_menus import choice_section, filter_menu, one_ticked
+from .filter_menus import choice_section, filter_menu, one_ticked, ticked_ids
 from .inbox import latest_from, message_tab_counts, search_text
 from .people_tags import in_join_order, people_tags, person_tag, staff_kinds
 from .navigation import messages_title
@@ -154,7 +154,6 @@ def team_inbox_context(request, company, membership, *, selected_id=None, **over
         thread.latest_from = latest_from(thread, request.user, unnamed={others[0].pk} if len(others) == 1 else ())
         thread.about = person_tag(str(thread.patient), 'patient') if thread.patient_id else None
         thread.read_state_url = reverse('portal:team-thread-read-state', args=[thread.pk]) if thread.has_others_message else ''
-    preselected_patient = request.GET.get('patient', '')
     composing = request.GET.get('compose') == '1' or overrides.get('failed_form') == 'thread_form' or (selected is None and not threads.exists())
     context = dict(
         company=company, active_membership=membership, nav_section='messages', page_obj=page, is_paginated=page.has_other_pages(),
@@ -171,8 +170,7 @@ def team_inbox_context(request, company, membership, *, selected_id=None, **over
         team_search_clear_url=team_url(status=status, about=about),
         team_previous_url=team_url(status=status, page=page.previous_page_number(), search=search, about=about) if page.has_previous() else '',
         team_next_url=team_url(status=status, page=page.next_page_number(), search=search, about=about) if page.has_next() else '',
-        thread_form=TeamThreadForm(company=company, actor=request.user,
-                                   initial={'patient': preselected_patient} if preselected_patient.isdecimal() else None),
+        thread_form=TeamThreadForm(company=company, actor=request.user, initial=compose_initial(request)),
         message_form=TeamMessageForm(auto_id='team_%s'),
         **message_tab_counts(company, request.user), messages_title=messages_title(membership),
     )
@@ -203,6 +201,20 @@ def team_inbox_context(request, company, membership, *, selected_id=None, **over
             context.update(message_tab_counts(company, request.user))
     context.update(overrides)
     return context
+
+
+def compose_initial(request):
+    """A new team conversation can come prefilled from a link, such as Message doctor on Administration > Dropouts:
+    ?patient=, ?members= (repeated or comma-separated) and ?subject=."""
+    initial = {}
+    patient = request.GET.get('patient', '')
+    if patient.isdecimal() and len(patient) < 19:
+        initial['patient'] = patient
+    if members := ticked_ids(request.GET.getlist('members')):
+        initial['members'] = members
+    if subject := ' '.join(request.GET.get('subject', '').split())[:255]:
+        initial['subject'] = subject
+    return initial or None
 
 
 def team_redirect(thread, search='', status='', about=''):

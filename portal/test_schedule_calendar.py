@@ -314,7 +314,7 @@ class ScheduleCalendarTests(TestCase):
         self.assertContains(response, '<h1>Calendar &amp; Bookings</h1>', html=True)
         self.assertNotContains(response, 'class="schedule-clinician"')
         self.assertNotContains(response, 'id="availability-heading"')
-        self.assertEqual(response.context['open_slots'], [])
+        self.assertEqual(response.context['day_diaries'], [])
         self.assertNotContains(response, '<th scope="col">Clinician</th>', html=True)
         self.login(self.admin)
         response = self.page()
@@ -368,7 +368,7 @@ class ScheduleCalendarTests(TestCase):
                 self.assertIn(field, response.context['filter_form'].errors)
                 self.assertEqual(response.context['calendar_weeks'], [])
                 self.assertEqual(response.context['appointments'], [])
-                self.assertEqual(response.context['open_slots'], [])
+                self.assertEqual(response.context['day_diaries'], [])
                 self.assertEqual(response.context['metrics'], {status: 0 for status in Appointment.Status.values})
                 self.assertNotContains(response, 'id="calendar-heading"')
 

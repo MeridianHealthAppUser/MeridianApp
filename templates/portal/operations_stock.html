@@ -1,0 +1,39 @@
+{% extends 'portal/operations_base.html' %}
+{% load workspace_ui %}
+{% block title %}Dispatch stock | Meridian{% endblock %}
+{% block breadcrumbs %}{% breadcrumbs 'Operations' %}{% endblock %}
+{% block page_heading %}<header class="staff-page-header"><div><h1>Operations</h1><p>{{ company.name }} · Each catalogue item for a shipping week: how many go out, and how many to order once the week’s parcels are ready.</p></div>{% if week_order.lines %}<a class="console-button console-button--secondary" data-no-loader href="{{ order_csv_url }}">Download order CSV</a>{% endif %}</header>{% page_tabs %}{% endblock %}
+{% block operations_content %}<section class="staff-page-card" aria-labelledby="stock-week-heading">
+  {# A shipping week at a time, as Calendar & Bookings' Week view. #}
+  <header class="staff-page-card__header ops-week-header">
+    <div class="ops-week-nav">
+      <a class="ops-week-step" href="{{ prev_week_url }}" aria-label="Previous week">&lsaquo;</a>
+      <h2 id="stock-week-heading">Week {{ week_number }} &middot; <span class="ops-week-range">{{ week_start|date:"j M Y" }} &ndash; {{ week_end|date:"j M Y" }}</span></h2>
+      <a class="ops-week-step" href="{{ next_week_url }}" aria-label="Next week">&rsaquo;</a>
+    </div>
+    <div class="ops-actions">{% if this_week_url %}<a class="ops-week-today" href="{{ this_week_url }}">This week</a>{% endif %}<a class="console-button console-button--secondary" href="{{ shipping_url }}">Weekly shipping list</a></div>
+  </header>
+  <div class="ops-table-wrap"><table class="ops-table ops-stock-table">
+    {# On hand and Safety stock wait on the doctor: pens aren't counted in stock yet, so they show TBC. #}
+    <thead><tr><th scope="col">Medicine</th><th scope="col">On hand</th>{% if show_detail %}<th scope="col">Safety stock</th>{% endif %}<th scope="col">To be shipped</th><th scope="col">To order</th>{% if show_detail %}<th scope="col">In draft parcels</th><th scope="col">In held parcels</th><th scope="col">Average a week</th><th scope="col">Next week</th>{% endif %}</tr></thead>
+    <tbody>{% for row in rows %}<tr>
+      <td data-label="Medicine"><strong>{{ row.product.name }}</strong>{% if row.product.strength %} {{ row.product.strength }}{% endif %}</td>
+      <td data-label="On hand"><span class="ops-tbc">TBC</span></td>{% if show_detail %}<td data-label="Safety stock"><span class="ops-tbc">TBC</span></td>{% endif %}
+      <td data-label="To be shipped">{{ row.to_ship }}</td>
+      <td data-label="To order"><strong>{{ row.to_order }}</strong></td>
+      {% if show_detail %}<td data-label="In draft parcels">{{ row.draft }}</td><td data-label="In held parcels">{{ row.held }}</td><td data-label="Average a week">{{ row.average|floatformat:1 }}</td><td data-label="Next week">{{ row.next_week }}</td>{% endif %}
+    </tr>{% empty %}<tr><td colspan="{% if show_detail %}9{% else %}4{% endif %}" class="ops-empty">Nothing is in the catalogue yet.</td></tr>{% endfor %}</tbody>
+  </table></div>
+  {% if week_order.drafts or week_order.held %}<p class="ops-stock-note">Not in To order yet: {% if week_order.drafts %}{{ week_order.drafts }} draft parcel{{ week_order.drafts|pluralize }}{% endif %}{% if week_order.drafts and week_order.held %} and {% endif %}{% if week_order.held %}{{ week_order.held }} held parcel{{ week_order.held|pluralize }}{% endif %}. Mark them ready on the Weekly shipping list to include them.</p>{% endif %}
+</section>
+{% if show_detail %}
+  {# Super Admins: how the numbers above are worked out. Practice administrators only need the two columns. #}
+  <section class="staff-page-card ops-panel" aria-labelledby="stock-method-heading">
+    <h2 id="stock-method-heading">How To order is worked out</h2>
+    <p><strong>To be shipped</strong> counts the pens in every parcel planned for this week that isn’t cancelled: draft, held, ready or already dispatched.</p>
+    <p><strong>To order</strong> counts the pens in this week’s ready parcels only{% if week_order.parcels %} ({{ week_order.parcels }} parcel{{ week_order.parcels|pluralize }}, {% if week_order.locked == week_order.parcels %}week locked{% else %}{{ week_order.locked }} locked{% endif %}){% endif %}. Pens aren’t kept in stock, so nothing on hand or held back as safety stock is taken off: what’s ordered is what the ready parcels need.</p>
+    <p><strong>On hand</strong> and <strong>Safety stock</strong> are to be confirmed: once pens on hand are counted, To order would take off what’s on hand and add the safety stock.</p>
+    <p><strong>In draft parcels</strong> and <strong>In held parcels</strong> are the difference between the two: they join To order once marked ready. <strong>Average a week</strong> is the pens dispatched over the {{ average_weeks }} weeks before this one, divided by {{ average_weeks }}. <strong>Next week</strong> is the pens planned for the following week so far.</p>
+  </section>
+{% endif %}
+<div class="ops-notice">Nothing is ordered from here. Download the order CSV and place the order with your supplier.</div>{% endblock %}

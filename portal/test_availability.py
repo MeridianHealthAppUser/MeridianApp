@@ -158,8 +158,8 @@ class AvailabilityPortalTests(TestCase):
                 self.assertEqual(self.client.post(url, data).status_code, 403)
         self.assertEqual(self.mutation_snapshot(), before)
 
-    def test_admins_manage_days_off_and_special_days_for_the_chosen_doctor(self):
-        for user in (self.admin, self.super_admin):
+    def test_super_admins_manage_days_off_and_special_days_for_the_chosen_doctor(self):
+        for user in (self.super_admin,):
             with self.subTest(user=user.email):
                 self.login(user)
                 query = f'?date={self.monday.isoformat()}&clinician={self.doctor.pk}'
@@ -180,13 +180,21 @@ class AvailabilityPortalTests(TestCase):
                 self.assertFalse(DoctorSpecialDay.objects.exists())
                 self.assertFalse(DoctorTimeOff.objects.filter(is_active=True).exists())
         # Without a chosen doctor there is no diary to change, and a token for one doctor can't change another's.
-        self.login(self.admin)
+        self.login(self.super_admin)
         before = self.mutation_snapshot()
         self.assertEqual(self.client.post(reverse('portal:availability-time-off-create'),
-                                          self.time_off_data(actor=self.admin)).status_code, 403)
+                                          self.time_off_data(actor=self.super_admin)).status_code, 403)
         response = self.client.post(f'{reverse("portal:availability-time-off-create")}?clinician={self.colleague.pk}',
-                                    self.time_off_data(actor=self.admin))
+                                    self.time_off_data(actor=self.super_admin))
         self.assertEqual(response.status_code, 200)
+        self.assertEqual(self.mutation_snapshot(), before)
+        # Practice administrators only read them (22 Oct 2026).
+        self.login(self.admin)
+        query = f'?date={self.monday.isoformat()}&clinician={self.doctor.pk}'
+        for url, data in ((reverse('portal:availability-time-off-create'), self.time_off_data(actor=self.admin)),
+                          (reverse('portal:availability-special-day-set'), self.special_day_data(actor=self.admin))):
+            with self.subTest(user='practice admin', url=url):
+                self.assertEqual(self.client.post(url + query, data).status_code, 403)
         self.assertEqual(self.mutation_snapshot(), before)
 
     def test_doctor_sets_replaces_and_removes_special_hours_for_a_date(self):
@@ -446,16 +454,17 @@ class AvailabilityPortalTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'name="schedule_context"')
         self.assertEqual(self.mutation_snapshot(), before)
-        for user in (self.admin, self.super_admin):
+        # Super Admins add leave and special days for the doctor they choose; practice administrators only read them.
+        for user, manages_days in ((self.admin, False), (self.super_admin, True)):
             self.login(user)
             response = self.client.get(reverse('portal:staff-schedule'), {'date': self.monday.isoformat(), 'clinician': self.doctor.pk,
                                                                           'section': 'availability'})
             self.assertEqual(response.status_code, 200)
             self.assertFalse(response.context['can_manage_availability'])
-            self.assertTrue(response.context['can_manage_days'])
+            self.assertEqual(response.context['can_manage_days'], manages_days)
             self.assertNotContains(response, f'action="{reverse("portal:availability-working-pattern")}')
             for name in ('availability-time-off-create', 'availability-special-day-set'):
-                self.assertContains(response, f'action="{reverse(f"portal:{name}")}')
+                (self.assertContains if manages_days else self.assertNotContains)(response, f'action="{reverse(f"portal:{name}")}')
 
     def test_existing_booking_is_not_moved_when_doctor_adds_time_off(self):
         appointment = Appointment.objects.create(

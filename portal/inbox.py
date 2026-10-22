@@ -1,5 +1,7 @@
 """Practice-scoped staff inbox presentation and safe return destinations."""
 
+from urllib.parse import urlencode
+
 from django import forms
 from django.contrib.auth import get_user_model
 from django.core.paginator import Paginator
@@ -15,7 +17,7 @@ from care.models import MessageThread, MessageThreadParticipant, PatientMessage
 from care.team_messaging import unread_team_messages
 from practices.models import CompanyMembership, Patient
 from .navigation import messages_title
-from .record_access import can_change_record, can_view_record, limited_by_assignment
+from .record_access import can_change_record, can_view_record, limited_by_assignment, no_records
 
 
 def message_tab_counts(company, user):
@@ -35,8 +37,6 @@ def latest_from(thread, user, *, unnamed=()):
 
 def record_thread_url(thread, **query):
     """The patient record's Messages tab with this conversation open, from the top of the page."""
-    from urllib.parse import urlencode
-
     params = urlencode({'tab': 'messages', 'thread': thread.pk, **query})
     return f'{reverse("portal:patient-detail", args=[thread.patient_id])}?{params}'
 
@@ -126,8 +126,6 @@ def search_threads(threads, company, search):
 
 def staff_inbox_url(thread=None, *, status=(), page=1, search='', patients=()):
     """Patient messages with its filters, search and page kept, and a conversation open if one is given."""
-    from urllib.parse import urlencode
-
     from .filter_menus import one_ticked, ticked_ids
 
     query = {}
@@ -225,7 +223,10 @@ def staff_inbox_context(request, company, membership, *, selected_id=None, **ove
             # A clinician in the conversation may not be one who can open, or change, this patient's record.
             inbox_record_url=workspace_url(selected.patient) if can_view_record(membership, request.user, selected.patient) else '',
             inbox_new_url=workspace_url(selected.patient, 'messages', new=1)
-            if can_change_record(membership, request.user, selected.patient) else '',
+            if can_change_record(membership, request.user, selected.patient) else
+            # A practice administrator starts the new one here, in Patient messages.
+            f"{reverse('portal:staff-inbox')}?{urlencode({'compose': 1, 'patient': selected.patient_id})}"
+            if no_records(membership) else '',
             inbox_message_form=overrides.get('message_form') or PatientMessageForm(auto_id='record_message_%s'),
         )
         context = open_conversation(request, company, membership, selected, context)

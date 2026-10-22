@@ -69,6 +69,66 @@ def book_staff_appointment(*, company, patient, actor, clinician, starts_at, dur
 
 
 @transaction.atomic
+def reschedule_appointment(*, appointment, actor, starts_at, expected_updated, request=None):
+    """Move a booked appointment to a new time with the same clinician and length. Practice administrators and Super
+    Admins move any; a doctor moves their own. The new time is checked like a booking, the reminder starts again for
+    it, and the patient and clinician are emailed (the clinician unless they moved it themselves)."""
+    original = Appointment.objects.select_related('patient').get(pk=appointment.pk, company_id=appointment.company_id)
+    user_ids = {actor.pk, original.clinician_id}
+    if original.patient.user_id:
+        user_ids.add(original.patient.user_id)
+    users = {user.pk: user for user in get_user_model().objects.select_for_update().filter(pk__in=user_ids).order_by('pk')}
+    actor = users.get(actor.pk)
+    appointment = Appointment.objects.select_for_update().select_related('company', 'patient', 'clinician').get(pk=original.pk)
+    require_enabled_company(appointment.company)
+    if (appointment.clinician_id != original.clinician_id or appointment.patient_id != original.patient_id
+            or appointment.patient.user_id != original.patient.user_id):
+        raise ValidationError('Appointment participants changed. Reload before changing the time.')
+    if actor is None or not actor.is_active or not appointment.patient.is_active or appointment.patient.company_id != appointment.company_id:
+        raise PermissionDenied('This appointment is not available in the selected practice.')
+    membership = _membership(appointment.company, actor)
+    if membership is None:
+        raise PermissionDenied('An active practice membership is required.')
+    if membership.role == CompanyMembership.Role.DOCTOR and appointment.clinician_id != actor.pk:
+        raise PermissionDenied('Only the booked clinician or a practice administrator can change this appointment.')
+    if appointment.status != Appointment.Status.BOOKED:
+        raise ValidationError('Only a booked appointment can be moved.')
+    if appointment.updated_at.isoformat() != expected_updated:
+        raise ValidationError('This appointment changed since you opened it. Reload before changing the time.')
+    if not isinstance(starts_at, datetime) or timezone.is_naive(starts_at) or starts_at <= timezone.now():
+        raise ValidationError('Choose a future appointment time.')
+    if starts_at == appointment.starts_at:
+        raise ValidationError('Choose a different time from the current one.')
+    if ClinicalEncounter.objects.for_company(appointment.company).filter(appointment=appointment, status='signed').exists():
+        raise ValidationError('This appointment has a signed consultation note, so it can’t be moved. Book a new appointment instead.')
+    ensure_clinician_available(company=appointment.company, clinician=appointment.clinician, starts_at=starts_at,
+                               duration_minutes=appointment.duration_minutes, exclude_appointment=appointment)
+    ensure_patient_available(patient=appointment.patient, starts_at=starts_at, duration_minutes=appointment.duration_minutes,
+                             exclude_appointment=appointment)
+    previous = appointment.starts_at
+    appointment.starts_at = starts_at
+    appointment.reminder_sent_at = None  # The reminder is for the new time.
+    appointment.full_clean()
+    appointment.save(update_fields=('starts_at', 'reminder_sent_at', 'updated_at'))
+    slots = AvailabilitySlot.objects.for_company(appointment.company)
+    slots.filter(appointment=appointment).update(appointment=None, is_booked=False, updated_at=timezone.now())
+    slots.filter(clinician=appointment.clinician, starts_at=starts_at,
+                 ends_at=starts_at + timedelta(minutes=appointment.duration_minutes), is_booked=False,
+                 appointment__isnull=True).update(is_booked=True, appointment=appointment, updated_at=timezone.now())
+    AppointmentProposal.objects.for_company(appointment.company).filter(appointment=appointment, status='pending').update(
+        status='superseded', responded_by=actor, responded_at=timezone.now(), updated_at=timezone.now())
+    PatientEvent.objects.create(company=appointment.company, patient=appointment.patient, category='appointment',
+        title='Appointment moved',
+        detail=f'{appointment.get_appointment_type_display()} moved from {timezone.localtime(previous):%d %B %Y at %H:%M} '
+               f'to {timezone.localtime(starts_at):%d %B %Y at %H:%M} SAST.',
+        source_type=appointment._meta.label_lower, source_id=str(appointment.pk))
+    record_audit(company=appointment.company, actor=actor, patient=appointment.patient, action='appointment.time_changed',
+                 target=appointment, request=request, metadata={'from': previous.isoformat(), 'to': starts_at.isoformat()})
+    notify('appointment_moved', appointment.pk, actor.pk)
+    return appointment
+
+
+@transaction.atomic
 def change_appointment_status(*, appointment, actor, status, expected_updated, confirm=False, reason='', patient_portal=False, request=None):
     # Use the same ordered identity locks as booking/proposal services.
     original = Appointment.objects.select_related('patient').get(pk=appointment.pk, company_id=appointment.company_id)

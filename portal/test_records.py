@@ -334,7 +334,7 @@ class ClinicalRecordTests(TestCase):
         return self.client.get(reverse('portal:patient-list'), filters)
 
     def test_directory_defaults_current_and_all_includes_only_staff_memberships(self):
-        self.login(self.admin)
+        self.login(self.super_admin)
         self.assertEqual({patient.pk for patient in self.directory().context['patients']}, {self.patient.pk})
         response = self.directory(scope='all')
         self.assertEqual({patient.pk for patient in response.context['patients']}, {self.patient.pk, self.beta_patient.pk, self.other_patient.pk})

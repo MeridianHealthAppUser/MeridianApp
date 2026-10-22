@@ -1,0 +1,8 @@
+{% extends 'emails/base.txt' %}{% block content %}Hello{% if greeting %} {{ greeting }}{% endif %},
+
+Your subscription has been cancelled, and no more parcels will be sent.
+
+If it was side effects, slow progress or cost, there’s often something we can do: a different dose, a different medicine, or simply a straight conversation about whether this is still right for you. Talk to your care team:
+{{ url }}
+
+If you’re done, that’s completely fine. Your record stays with us if you ever want to pick it up again.{% endblock %}

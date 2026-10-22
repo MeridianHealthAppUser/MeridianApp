@@ -15,6 +15,7 @@ from django.utils.decorators import method_decorator
 from django.views import View
 from django.views.decorators.cache import never_cache
 
+from care.followups import request_help
 from care.models import AuditEvent, PatientClinicalSummary, PatientSubscription, Shipment, TreatmentAuthorization
 from care.treatment import (
     authorization_is_current, change_authorization_status, change_subscription_status,
@@ -25,7 +26,10 @@ from practices.models import CompanyMembership
 from .clinical_views import StaffClinicalView, _error, _listing
 from .filter_menus import TickedChoiceField, list_tools, ticked_sections, without_all
 from .patient_views import patient_page_context
-from .treatment_forms import AuthorizationForm, ConfirmTreatmentForm, EnrollmentForm, make_treatment_context, validate_treatment_context
+from .treatment_forms import (
+    AuthorizationForm, CancelSubscriptionForm, ConfirmTreatmentForm, EnrollmentForm, HelpRequestForm, make_treatment_context,
+    validate_treatment_context,
+)
 from .views import PatientPortalRequiredMixin, StaffCompanyRequiredMixin
 from .patient_action_context import patient_action_context, workspace_redirect
 
@@ -228,8 +232,11 @@ def _query_without(request, name):
     return query.urlencode()
 
 
-def patient_treatment_context(request, company, patient, *, enrollment_form=None, action_form=None, action_plan=None):
-    """My Treatment: tasks, the record the doctor has on file, and the care plan."""
+def patient_treatment_context(request, company, patient, *, enrollment_form=None, action_form=None, action_plan=None,
+                              cancel_form=None, help_form=None):
+    """My Treatment: tasks, the record the doctor has on file, and the care plan. Something is wrong and Cancel my
+    subscription each open a dialog, which opens again after a mistake (or from ?help=1 and ?cancel=1 without
+    scripts)."""
     from .patient_summary import (
         current_authorization, intake_answers, latest_weight, medical_information, medical_profile,
         next_consult, open_lab_requests, patient_tasks, treatment_overview, treatment_timeline,
@@ -256,7 +263,11 @@ def patient_treatment_context(request, company, patient, *, enrollment_form=None
                                              patient=patient).values_list('height_cm', flat=True).first()),
         medical_profile=profile,
         medical_change_url=_compose_url('Change to my medical information'),
-        treatment_help_url=_compose_url('Something is not working with my treatment'),
+        help_form=help_form if help_form is not None else HelpRequestForm(auto_id='help_%s'),
+        help_open=help_form is not None or request.GET.get('help') == '1',
+        help_context=request.POST.get('treatment_context', '') if help_form is not None else make_treatment_context(request, company, patient, 'help-request'),
+        cancel_form=cancel_form if cancel_form is not None else CancelSubscriptionForm(auto_id='cancel_%s'),
+        cancel_open=cancel_form is not None or request.GET.get('cancel') == '1',
         current_plan=current, current_authorization=authorization,
         plan_authorization=current.authorization if current and current.authorization_id else authorization,
         can_enroll=current is None and _eligible_authorizations(company, patient).exists(),
@@ -270,7 +281,7 @@ def patient_treatment_context(request, company, patient, *, enrollment_form=None
         action_form=action_form if action_form is not None else ConfirmTreatmentForm(),
         action_plan=action_plan or current,
         enrollment_context=_token(request, company, patient, 'subscription-enroll') if enrollment_form is not None else make_treatment_context(request, company, patient, 'subscription-enroll'),
-        action_context=_token(request, company, patient, 'subscription-status', action_plan or current) if action_form is not None else make_treatment_context(request, company, patient, 'subscription-status', current),
+        action_context=_token(request, company, patient, 'subscription-status', action_plan or current) if action_form is not None or cancel_form is not None else make_treatment_context(request, company, patient, 'subscription-status', current),
         # The plan costs what the dose in effect costs; before enrolling, what the current prescription's dose costs.
         plan_dose=dose_in_effect(current) if current else None,
         enroll_dose=authorization.dose if authorization is not None and authorization.dose_id else None,
@@ -298,9 +309,9 @@ class PatientSubscriptionView(LoginRequiredMixin, PatientPortalRequiredMixin, Vi
     def eligible(self):
         return _eligible_authorizations(self.patient_company, self.patient)
 
-    def display(self, request, enrollment_form=None, action_form=None, action_plan=None, status=200):
+    def display(self, request, enrollment_form=None, action_form=None, action_plan=None, status=200, **forms):
         context = patient_treatment_context(request, self.patient_company, self.patient, enrollment_form=enrollment_form,
-                                            action_form=action_form, action_plan=action_plan)
+                                            action_form=action_form, action_plan=action_plan, **forms)
         return render(request, 'portal/treatment_patient.html', context, status=status)
 
     def get(self, request):
@@ -330,15 +341,41 @@ class PatientSubscriptionStatusView(PatientSubscriptionView):
 
     def post(self, request, pk):
         plan = get_object_or_404(_plans(self.patient_company, self.patient), pk=pk)
-        form = ConfirmTreatmentForm(request.POST)
+        # Cancelling asks why, in its own dialog; pausing and resuming only need the tick.
+        cancelling = request.POST.get('action') == 'cancel'
+        form = CancelSubscriptionForm(request.POST, auto_id='cancel_%s') if cancelling else ConfirmTreatmentForm(request.POST)
         valid = form.is_valid()
         try:
             validate_treatment_context(request, self.patient_company, self.patient, 'subscription-status', plan)
             if valid:
                 change_subscription_status(subscription=plan, actor=request.user, action=request.POST.get('action'),
-                                           confirm=form.cleaned_data['confirm'], request=request)
-                messages.success(request, 'Local care plan status updated. No payment was processed.')
+                                           confirm=form.cleaned_data['confirm'], reasons=form.cleaned_data.get('reasons', ()),
+                                           note=form.cleaned_data.get('note', ''), request=request)
+                messages.success(request, 'Your subscription is cancelled. No payment was processed.' if cancelling
+                                 else 'Local care plan status updated. No payment was processed.')
                 return redirect(reverse('portal:patient-treatment') + '#treatment-plan')
         except ValidationError as error:
             _error(form, error)
+        if cancelling:
+            return self.display(request, action_plan=plan, cancel_form=form, status=400)
         return self.display(request, action_form=form, action_plan=plan, status=400)
+
+
+class PatientHelpRequestView(PatientSubscriptionView):
+    """Something is wrong, help me: a conversation with the patient's doctor and the practice, and a place on the
+    practice's Dropouts list."""
+
+    http_method_names = ('post', 'options')
+
+    def post(self, request):
+        form = HelpRequestForm(request.POST, auto_id='help_%s')
+        valid = form.is_valid()
+        try:
+            validate_treatment_context(request, self.patient_company, self.patient, 'help-request')
+            if valid:
+                help_request = request_help(patient=self.patient, actor=request.user, reason=form.cleaned_data['reason'], request=request)
+                messages.success(request, 'Thank you. Your doctor and the practice team have your message and will reply in My Messages.')
+                return redirect(f"{reverse('portal:patient-messages')}?{urlencode({'thread': help_request.thread_id})}#patient-conversation")
+        except ValidationError as error:
+            _error(form, error)
+        return self.display(request, help_form=form, status=400)

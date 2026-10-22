@@ -557,7 +557,7 @@ class TaskCompleteView(LoginRequiredMixin, StaffCompanyRequiredMixin, View):
         else:
             messages.success(request, 'Task marked complete. The data request is resolved and the patient can see it.'
                              if getattr(task, 'data_request', None) else 'Task marked complete.')
-        return _task_redirect(request, task)
+        return _task_redirect(request, task, self.membership)
 
 
 class StaffMessageCreateView(LoginRequiredMixin, StaffCompanyRequiredMixin, View):
@@ -573,8 +573,11 @@ class StaffMessageCreateView(LoginRequiredMixin, StaffCompanyRequiredMixin, View
         )
         # Replies are written on the record's Messages tab ("inbox" is its older name) or on Patient messages.
         return_to = request.POST.get('return_to')
-        from_record = return_to in ('record', 'inbox')
-        from_inbox = return_to == 'patient_messages'
+        from .record_access import no_records
+
+        # Practice administrators don't open records, so they always write, and come back, in Patient messages.
+        from_record = return_to in ('record', 'inbox') and not no_records(self.membership)
+        from_inbox = return_to == 'patient_messages' or no_records(self.membership)
         form = PatientMessageForm(request.POST, auto_id='record_message_%s' if from_record or from_inbox else 'id_%s')
         if form.is_valid():
             try:
@@ -743,7 +746,7 @@ class StaffInboxThreadCreateView(LoginRequiredMixin, StaffCompanyRequiredMixin, 
         return render_staff_inbox(request, self.company, self.membership, new_thread_form=form, failed_form='new_thread_form')
 
 
-def _task_redirect(request, task):
+def _task_redirect(request, task, membership):
     next_url = request.POST.get('next')
     if next_url and url_has_allowed_host_and_scheme(
         url=next_url,
@@ -751,7 +754,10 @@ def _task_redirect(request, task):
         require_https=request.is_secure(),
     ):
         return HttpResponseRedirect(next_url)
-    if task.patient_id:
+    from .record_access import no_records
+
+    # Practice administrators don't open records: back to My tasks.
+    if task.patient_id and not no_records(membership):
         from .patient_workspace import workspace_url
         return redirect(workspace_url(task.patient, 'tasks'))
     return redirect('portal:staff-tasks')

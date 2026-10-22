@@ -182,8 +182,12 @@ class TreatmentLifecycleTests(TestCase):
         plan = self.enroll(self.authorization())
         ready, dispatched = self.shipment(plan), self.shipment(plan, status='dispatched')
         original = Shipment.objects.filter(pk=dispatched.pk).values().get()
-        cancelled = change_subscription_status(subscription=plan, actor=self.patient_user, action='cancel', confirm=True)
+        with self.assertRaises(ValidationError):  # Cancelling needs a reason.
+            change_subscription_status(subscription=plan, actor=self.patient_user, action='cancel', confirm=True)
+        cancelled = change_subscription_status(subscription=plan, actor=self.patient_user, action='cancel', confirm=True,
+                                               reasons=['goal_reached', 'not-a-reason'])
         self.assertIsNotNone(cancelled.cancelled_at)
+        self.assertEqual(cancelled.cancellation_reasons, ['goal_reached'])
         ready.refresh_from_db()
         self.assertEqual(ready.status, Shipment.Status.HELD)
         self.assertEqual(Shipment.objects.filter(pk=dispatched.pk).values().get(), original)

@@ -15,9 +15,10 @@ from django.utils.decorators import method_decorator
 from django.views import View
 from django.views.decorators.cache import never_cache
 
-from care.availability import SAST, open_slots_for_day
+from care.availability import SAST, open_slots_for_day, start_slots
 from care.models import Appointment, PatientEvent, PatientMedicalProfile
 from care.patient_care import book_patient_appointment, clinician_answers, patient_busy_intervals, save_patient_medical_profile
+from .appointment_detail_views import labelled_slots
 from .clinical_forms import make_clinical_context, validate_clinical_context
 from .patient_care_forms import (
     PROFILE_FIELDS, BookingTimesQuery, PatientBookingForm, PatientMedicalProfileForm, PatientUpdatesFilterForm,
@@ -103,8 +104,10 @@ class PatientBookingTimesView(LoginRequiredMixin, PatientPortalRequiredMixin, Vi
         query = BookingTimesQuery(request.GET, company=self.patient_company)
         if not query.is_valid():
             return JsonResponse({'times': []}, status=400)
-        return JsonResponse({'times': patient_booking_times(
-            self.patient_company, self.patient, query.cleaned_data['clinician'], query.cleaned_data['date'])})
+        clinician, day = query.cleaned_data['clinician'], query.cleaned_data['date']
+        times = patient_booking_times(self.patient_company, self.patient, clinician, day)
+        return JsonResponse({'times': times, 'slots': labelled_slots(start_slots(
+            company=self.patient_company, clinician=clinician, day=day, duration_minutes=15, free_times=times), patient=True)})
 
 
 class PatientMedicalProfileView(PatientCarePage):

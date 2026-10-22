@@ -77,3 +77,9 @@
   .patient-timeline__cell--decision { grid-column: 1 / -1; }
   .patient-timeline__cell--decision:empty { display: none; }
 }
+
+/* Cancel my subscription: the reasons, one tick each. */
+.treatment-cancel-reasons { border: 0; display: grid; gap: .45rem; margin: 0; min-width: 0; padding: 0; }
+.treatment-cancel-reasons legend { color: var(--patient-text, #173b42); font-size: .86rem; font-weight: 700; margin-bottom: .2rem; padding: 0; }
+.treatment-cancel-reasons .patient-small { margin: 0 0 .2rem; }
+.treatment-cancel-reasons .errorlist { color: var(--console-red, #a33131); font-size: .78rem; list-style: none; margin: 0; padding: 0; }

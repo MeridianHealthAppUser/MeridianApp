@@ -3,6 +3,7 @@
 from datetime import date, datetime
 from uuid import UUID
 
+from django.conf import settings
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
 from django.db.models import Q
@@ -12,6 +13,7 @@ from practices.models import CompanyMembership
 
 from .clinical import _active_actor, _lock_context, _require_doctor
 from .models import AuditEvent, MedicationProduct, PatientEvent, PatientSubscription, Shipment, TreatmentAuthorization
+from .notifications import queue as notify
 from .services import record_audit
 
 
@@ -248,7 +250,9 @@ def enroll_local_subscription(*, company, patient, actor, authorization, confirm
 
 
 @transaction.atomic
-def change_subscription_status(*, subscription, actor, action, confirm=False, request=None):
+def change_subscription_status(*, subscription, actor, action, confirm=False, reasons=(), note='', request=None):
+    """Pause, resume or cancel, by the patient. Cancelling needs at least one of the plan's CANCELLATION_REASONS. It
+    takes the patient off the Dropouts list's open help requests, and sends one win-back email."""
     company, patient = _lock_context(subscription.company, subscription.patient, actor)
     _require_patient_owner(patient, actor)
     record = PatientSubscription.objects.select_for_update().for_company(company).get(pk=subscription.pk, patient=patient)
@@ -257,6 +261,14 @@ def change_subscription_status(*, subscription, actor, action, confirm=False, re
     statuses = {'pause': PatientSubscription.Status.PAUSED, 'cancel': PatientSubscription.Status.CANCELLED, 'resume': PatientSubscription.Status.ACTIVE}
     if action not in statuses:
         raise ValidationError('Choose pause, cancel or resume.')
+    if action == 'cancel' and record.status != PatientSubscription.Status.CANCELLED:
+        allowed = dict(PatientSubscription.CANCELLATION_REASONS)
+        reasons = [reason for reason in allowed if reason in set(reasons or ())]
+        note = note.strip() if isinstance(note, str) else ''
+        if not reasons:
+            raise ValidationError('Tick at least one reason for cancelling.')
+        if len(note) > 500:
+            raise ValidationError('Keep what you add to 500 characters or fewer.')
     if record.status == statuses[action]:
         return record
     if record.status == PatientSubscription.Status.CANCELLED:
@@ -268,12 +280,25 @@ def change_subscription_status(*, subscription, actor, action, confirm=False, re
             raise ValidationError('Your doctor must provide a current authorisation before you can resume.')
     record.status = statuses[action]
     record.next_debit_on = None
+    fields = ['status', 'next_debit_on', 'cancelled_at', 'updated_at']
     if action == 'cancel':
         record.cancelled_at = timezone.now()
-    record.save(update_fields=('status', 'next_debit_on', 'cancelled_at', 'updated_at'))
+        record.cancellation_reasons, record.cancellation_note = reasons, note
+        fields += ['cancellation_reasons', 'cancellation_note']
+        # One win-back email, once the cancellation is saved.
+        if settings.EMAIL_ENABLED and record.winback_sent_at is None and patient.user.email:
+            record.winback_sent_at = timezone.now()
+            fields.append('winback_sent_at')
+            notify('subscription_winback', record.pk)
+    record.save(update_fields=fields)
     if action in ('pause', 'cancel'):
         _hold_shipments(company, patient, [record.pk], 'Local care plan paused or cancelled by the patient.')
-    record_audit(company=company, actor=actor, patient=patient, action=f'subscription.{action}', target=record, request=request)
+    if action == 'cancel':
+        from .followups import close_help_requests
+
+        close_help_requests(record)
+    record_audit(company=company, actor=actor, patient=patient, action=f'subscription.{action}', target=record, request=request,
+                 metadata={'reasons': reasons} if action == 'cancel' else None)
     _event(record, f'Local care plan {"resumed" if action == "resume" else "paused" if action == "pause" else "cancelled"}',
            'The plan status was updated. No payment was processed. Dispatched parcels remain unchanged.')
     return record

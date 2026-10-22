@@ -177,6 +177,10 @@ class PrivateConversationTests(TestCase):
                 # Never Nadia's clinician: her record doesn't open for them at all.
                 self.assertRedirects(overview, reverse('portal:patient-list'), fetch_redirect_response=False)
                 continue
+            if user == practice_admin:
+                # Practice administrators don't open patient records.
+                self.assertRedirects(overview, reverse('portal:desktop-dashboard'), fetch_redirect_response=False)
+                continue
             # No one's Overview lists conversations.
             self.assertNotContains(overview, thread.subject)
         # A Super Admin (self.admin) reads it, in Patient messages and on Nadia's record, without joining it.

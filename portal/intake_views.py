@@ -4,6 +4,7 @@ import uuid
 from datetime import timedelta
 from urllib.parse import urlencode
 
+from django import forms
 from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth import login
@@ -24,7 +25,8 @@ from care.checkout import (
 )
 from care.forms import EligibilityQuestionnaireForm
 from care.intake import notice_fingerprint, practice_notices, save_intake
-from care.models import Lead, PracticeSettings, ScreeningQuestionnaire
+from care.followups import request_callback
+from care.models import CallbackRequest, Lead, PracticeSettings, ScreeningQuestionnaire
 from practices.services import ACTIVE_PATIENT_COMPANY_SESSION_KEY
 from practices.tenancy import enabled_companies, multi_practice_enabled, scope_queryset
 from .checkout_forms import CHECKOUT_SLOT_MAX_AGE, CheckoutDateForm, CheckoutForm, make_checkout_slot, read_checkout_slot
@@ -147,11 +149,14 @@ class QuestionnaireResultView(PrivateIntakeView):
     http_method_names = ('get', 'head', 'options')
     template_name = 'portal/questionnaire_result.html'
 
-    def get_context(self):
+    def get_context(self, callback_form=None):
         lead = self.owned_lead()
         questionnaire = ScreeningQuestionnaire.objects.for_company(lead.company).filter(lead=lead, stage=1).first()
         return {
             'lead': lead, 'company': lead.company, 'questionnaire': questionnaire,
+            # Please call me first: a call before booking, on the practice's Please call list.
+            'callback': CallbackRequest.objects.for_company(lead.company).filter(lead=lead, status=CallbackRequest.Status.OPEN).first(),
+            'callback_form': callback_form or CallbackForm(initial={'phone': lead.phone}),
             'screening_reasons': questionnaire.answers.get('screening_reasons', []) if questionnaire else [],
             'pricing': PracticeSettings.objects.for_company(lead.company).first(),
             **treatment_pricing(lead.company),
@@ -164,6 +169,33 @@ class QuestionnaireResultView(PrivateIntakeView):
         if context['lead'].converted_patient_id:
             return redirect('portal:patient-dashboard')
         return render(request, self.template_name, context)
+
+
+class CallbackForm(forms.Form):
+    phone = forms.CharField(label='Your phone number', max_length=32)
+    note = forms.CharField(label='What would you like to know? (optional)', max_length=1000, required=False,
+                           widget=forms.Textarea(attrs={'rows': 3}))
+
+
+class QuestionnaireCallbackView(QuestionnaireResultView):
+    """Please call me first, from the end of the questionnaire."""
+
+    http_method_names = ('post',)
+
+    def post(self, request, *args, **kwargs):
+        lead = self.owned_lead()
+        if lead.converted_patient_id:
+            return redirect('portal:patient-dashboard')
+        form = CallbackForm(request.POST)
+        if form.is_valid():
+            try:
+                request_callback(lead=lead, **form.cleaned_data)
+            except ValidationError as error:
+                form.add_error(None, error)
+            else:
+                messages.success(request, f'Thank you. {lead.company.name} will call you on {form.cleaned_data["phone"]}.')
+                return redirect(f"{reverse('portal:questionnaire-result')}#call-me-heading")
+        return render(request, self.template_name, self.get_context(callback_form=form), status=400)
 
 
 class QuestionnaireCheckoutView(QuestionnaireResultView):

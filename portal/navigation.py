@@ -9,8 +9,9 @@ from django.urls import reverse
 # Each tab: its nav_section key, label and page. Super Admins see the same pages listed in their sections.
 OPERATIONS_TABS = (
     ('subscriptions', 'Subscriptions', 'portal:treatment-subscriptions'),
-    ('orders', 'Supply requests', 'portal:ops-orders'),
+    ('orders', 'Non-prescription requests', 'portal:ops-orders'),
     ('shipping', 'Weekly shipping list', 'portal:ops-shipping'),
+    ('stock', 'Dispatch stock', 'portal:ops-stock'),
     ('history', 'Dispatch history', 'portal:ops-history'),
     ('catalogue', 'Catalogue', 'portal:ops-catalogue'),
 )
@@ -28,8 +29,8 @@ def _item(key, label, url_name, *, also=(), short_label=None, mobile_url_name=No
 
 
 def _set_badges(items, *, unread=0, data_requests=0):
-    """Patient Records & Messages counts unread messages; Data requests, and Administration that holds it, count
-    requests still waiting on the practice."""
+    """Patient Records & Messages (Messages for practice administrators) counts unread messages; Data requests, and
+    Administration that holds it, count requests still waiting on the practice."""
     for item in items:
         if item['key'] == 'records':
             item['badge'] = unread
@@ -69,26 +70,31 @@ def _group_item(group, short_label):
 
 
 RECORDS_TITLE = 'Patient Records & Messages'
+MESSAGES_TITLE = 'Messages'
 
 
 def messages_title(membership):
-    """Messages and the patient list are one page now, Patient Records & Messages, for every role."""
-    return RECORDS_TITLE
+    """Messages and the patient list are one page, Patient Records & Messages. Practice administrators don't browse
+    patient records, so theirs is just Messages: Patient messages and Team messages."""
+    return MESSAGES_TITLE if membership.role == 'practice_admin' else RECORDS_TITLE
 
 
-def _records_item():
+def _records_item(membership):
+    if membership.role == 'practice_admin':
+        return _item('records', MESSAGES_TITLE, 'portal:staff-inbox', also=('messages', 'team'))
     # All patients (the default tab), Patient messages and Team messages share one page; an open record belongs to it too.
     return _item('records', RECORDS_TITLE, 'portal:patient-list', also=('messages', 'patients', 'team', 'record'),
                  short_label='Records')
 
 
 def build_flat_menu(membership, *, nav_section='', unread=0, data_requests=0):
-    """Overview and the member's pages, each with an icon; Patient Records & Messages carries the unread count.
-    Practice administrators also get Operations and Administration, each one page of tabs."""
+    """Overview and the member's pages, each with an icon; Patient Records & Messages (Messages for practice
+    administrators) carries the unread count. Practice administrators also get Operations and Administration, each one
+    page of tabs."""
     items = [
         _item('overview', 'Overview', 'portal:desktop-dashboard', mobile_url_name='portal:mobile-dashboard'),
         _item('tasks', 'My tasks', 'portal:staff-tasks', short_label='Tasks'),
-        _records_item(),
+        _records_item(membership),
         _item('schedule', 'Calendar & Bookings', 'portal:staff-schedule', short_label='Calendar'),
     ]
     if membership.is_admin:
@@ -114,7 +120,7 @@ def build_staff_menu(membership, *, multi_practice=False, nav_section='', unread
     sections = [
         ('care', 'Care', 'Care', [
             _item('tasks', 'Tasks', 'portal:staff-tasks'),
-            _records_item(),
+            _records_item(membership),
             *([_item('consultations', 'Consultations', 'portal:clinical-consultations'),
                _item('labs', 'Blood tests', 'portal:clinical-labs'),
                _item('authorisations', 'Authorisations', 'portal:treatment-authorisations'),

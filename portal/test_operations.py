@@ -237,7 +237,8 @@ class OperationsPortalTests(OperationsPortalFixture):
         week = self.today - timedelta(days=self.today.weekday())
         draft = self.shipment(quantity=2, scheduled_for=week)
         page = self.page('ops-shipping', week=week)
-        self.assertContains(page, f'{self.product} × 2<small>{self.auth.max_dose}</small>', html=False)
+        self.assertContains(page, f'{self.product.name} <span class="ops-dose">{self.auth.max_dose}</span>', html=False)
+        self.assertContains(page, '<td data-label="Qty"><div>2</div></td>', html=False)
         response = self.client.post(reverse('portal:ops-shipping-prepare'), {
             'workflow_context': page.context['prepare_context'], 'week': week})
         self.assertRedirects(response, f"{reverse('portal:ops-shipping')}?week={week}", fetch_redirect_response=False)
@@ -320,10 +321,13 @@ class OperationsPortalTests(OperationsPortalFixture):
         foreign = self.shipment(company=self.beta, patient=self.beta_patient, product=self.beta_product, subscription=None,
                                 scheduled_for=week, status='ready')
         ShipmentItem.objects.filter(shipment=foreign).update(quantity=9)
-        page = self.page('ops-shipping', week=week)
+        # What to order is on Dispatch stock (22 Oct 2026), for the same week.
+        page = self.page('ops-stock', week=week)
         self.assertEqual([(line['product'].pk, line['pens']) for line in page.context['week_order']['lines']], [(self.product.pk, 3)])
-        self.assertContains(page, 'Pens to order')
-        self.assertContains(page, 'Not included: 1 draft parcel.')
+        self.assertEqual([(row['product'].pk, row['to_ship'], row['to_order']) for row in page.context['rows']],
+                         [(self.product.pk, 4, 3), (self.open_product.pk, 0, 0)])
+        self.assertContains(page, 'Not in To order yet: 1 draft parcel.')
+        self.assertContains(page, f'{reverse("portal:ops-week-order")}?week={week}')
         url = reverse('portal:ops-week-order')
         PracticeSettings.objects.update_or_create(company=self.company, defaults={'store_view_log': True})
         count = AuditEvent.objects.count()
@@ -348,7 +352,7 @@ class OperationsPortalTests(OperationsPortalFixture):
         self.assertContains(response, old_product_name)
         self.assertNotContains(response, 'Changed later')
         rows = list(csv.reader(io.StringIO(response.content.decode())))
-        self.assertEqual(rows[1][3][0], "'")
+        self.assertEqual(rows[1][rows[0].index('Patient')][0], "'")
         self.assertEqual(self.client.get(reverse('portal:ops-history-export'), {'start': 'bad'}).status_code, 400)
 
     def test_invalid_filters_are_validated_and_shipping_pagination_reaches_page_two(self):

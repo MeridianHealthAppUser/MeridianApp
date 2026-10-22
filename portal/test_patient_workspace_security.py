@@ -85,14 +85,13 @@ class PatientWorkspaceSecurityTests(TestCase):
         self.assertContains(response, 'Shared clinician note')
         self.assertIsNone(response.context['note_form'])
 
-    def test_practice_admin_cannot_access_clinical_tabs_by_direct_query(self):
+    def test_practice_admin_cannot_open_any_tab_by_direct_query(self):
+        # Practice administrators don't open patient records at all (22 Oct 2026).
         self.login(self.admin)
-        for tab in ('notes', 'consultations', 'blood-tests', 'treatment'):
-            self.assertEqual(self.get(tab).status_code, 403)
-        response = self.get('history')
-        self.assertEqual(response.status_code, 200)
-        for secret in ('Shared clinician note', 'OWN_PRIVATE_NOTE_SECRET', 'ALPHA_DOCTOR_ONLY_PROFILE', 'Signed consultation summary', 'Clinician reviewed the report.'):
-            self.assertNotContains(response, secret)
+        for tab in ('notes', 'consultations', 'blood-tests', 'treatment', 'history', 'overview'):
+            with self.subTest(tab=tab):
+                response = self.get(tab)
+                self.assertRedirects(response, reverse('portal:desktop-dashboard'), fetch_redirect_response=False)
 
     def test_consultations_only_include_current_doctor_drafts_or_signed_entries(self):
         own = ClinicalEncounter.objects.get(company=self.alpha, clinical_summary='OWN_DRAFT_SECRET')

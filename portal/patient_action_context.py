@@ -16,7 +16,10 @@ def uses_patient_workspace(request):
 
 
 def patient_action_context(view, patient, tab, *, content_template, stylesheets=(), title=None):
-    if not uses_patient_workspace(view.request) or patient is None:
+    from .record_access import no_records
+
+    # Practice administrators don't open patient records, so their pages never sit inside one.
+    if not uses_patient_workspace(view.request) or patient is None or no_records(view.membership):
         return {}
     if patient.company_id != view.company.pk or not patient.is_active:
         raise Http404

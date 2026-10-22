@@ -6,6 +6,7 @@
 .ops-panel h2 { color: #173b42; font-size: 1.05rem; line-height: 1.4; margin: 0 0 .9rem; }
 .ops-panel h3 { font-size: .95rem; margin: 1.25rem 0 .7rem; }
 .ops-panel p { color: #587580; line-height: 1.65; overflow-wrap: anywhere; }
+.ops-panel p a { color: #087e75; font-weight: 650; text-underline-offset: .18em; }
 .ops-grid { align-items: start; display: grid; gap: 1.2rem; grid-template-columns: minmax(0, 1.6fr) minmax(17rem, 1fr); }
 .ops-catalogue { display: grid; gap: 1.2rem; grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .ops-product-card { display: flex; flex-direction: column; }
@@ -20,10 +21,6 @@
 .ops-notice--warning { background: #fff6e4; border-color: #f0d9a8; }
 .ops-actions { align-items: center; display: flex; flex-wrap: wrap; gap: .65rem; }
 .ops-actions--spaced { margin-top: 1.1rem; }
-.ops-metrics { display: grid; gap: 1rem; grid-template-columns: repeat(3, minmax(0, 1fr)); }
-.ops-metric { background: #fff; border: 1px solid #e0eaec; border-radius: 1rem; padding: 1.25rem; }
-.ops-metric span { color: #79939d; display: block; font-size: .72rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
-.ops-metric strong { color: #173b42; display: block; font-size: 1.9rem; font-weight: 600; margin-top: .65rem; }
 .ops-form { display: grid; gap: 1rem; }
 .ops-form-field { display: grid; gap: .4rem; min-width: 0; }
 .ops-form label { color: #34565f; font-size: .875rem; font-weight: 650; line-height: 1.5; }
@@ -56,15 +53,33 @@
 .ops-address { font-style: normal; line-height: 1.65; overflow-wrap: anywhere; }
 .ops-note { overflow-wrap: anywhere; white-space: normal; }
 .ops-total { border-top: 1px solid #e5edef; display: flex; gap: 1rem; justify-content: space-between; padding: 1.2rem; }
+/* Weekly shipping list: a pen's dose beside its name, and the Notes column's small editor. */
+.ops-dose { color: #6b858e; white-space: nowrap; }
+.ops-table td > div + div { margin-top: .2rem; }
+.ops-table td .console-status + small { margin-top: .3rem; }
+.ops-note-editor summary { cursor: pointer; list-style: none; }
+.ops-note-editor summary::-webkit-details-marker { display: none; }
+.ops-note-editor__edit { color: #087e75; font-size: .78rem; font-weight: 700; white-space: nowrap; }
+.ops-note-editor form { display: grid; gap: .45rem; margin-top: .5rem; min-width: 12rem; }
+.ops-note-editor textarea { border: 1px solid #dce8eb; border-radius: .6rem; box-sizing: border-box; color: #173b42; font: inherit; font-size: .82rem; padding: .5rem .6rem; resize: vertical; width: 100%; }
+.ops-note-editor textarea:focus-visible { outline: 2px solid #0b958b; outline-offset: 2px; }
+.ops-note-editor .console-button { justify-self: start; }
+/* Dispatch stock and Dispatch history's Week view: one shipping week at a time, as Calendar & Bookings' Week view. */
+.ops-week-header { align-items: center; flex-wrap: wrap; gap: .75rem; }
+.ops-week-nav { align-items: center; display: flex; flex-wrap: wrap; gap: .45rem; min-width: 0; }
+.ops-week-nav h2 { color: #173b42; font-size: .98rem; margin: 0; }
+.ops-week-step { align-items: center; background: #fff; border: 1px solid #dce8eb; border-radius: .55rem; color: #173b42; display: inline-flex; font-size: 1.15rem; height: 2.1rem; justify-content: center; line-height: 1; text-decoration: none; width: 2.1rem; }
+.ops-week-step:hover, .ops-week-step:focus-visible { background: #e4f5f1; border-color: #a9d8cf; color: #056f69; outline: none; }
+.ops-week-today { color: #056f69; font-size: .74rem; font-weight: 750; text-underline-offset: .15em; }
+.ops-history-tools { align-items: center; display: flex; flex-wrap: wrap; gap: .65rem; justify-content: flex-end; }
+.ops-stock-table td:not(:first-child), .ops-stock-table th:not(:first-child) { text-align: right; }
+.ops-tbc { background: #f3f6f6; border: 1px solid #dce7e9; border-radius: 99rem; color: #79939d; font-size: .68rem; font-weight: 750; letter-spacing: .04em; padding: .15rem .5rem; }
+.ops-stock-note { color: #607c87; font-size: .82rem; line-height: 1.6; margin: 0; padding: .9rem 1rem 1.1rem; }
 @media (max-width: 67rem) { .ops-catalogue { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 55rem) { .ops-grid { grid-template-columns: 1fr; } .ops-filter { grid-template-columns: repeat(2, minmax(0, 1fr)); } .ops-filter > button { justify-self: start; } }
 @media (max-width: 42rem) {
   .ops-catalogue, .ops-filter { grid-template-columns: 1fr; }
   .ops-panel { padding: 1rem; }
-  .ops-metrics { gap: .55rem; }
-  .ops-metric { padding: .85rem .6rem; }
-  .ops-metric span { font-size: .62rem; letter-spacing: .03em; overflow-wrap: anywhere; }
-  .ops-metric strong { font-size: 1.45rem; }
   .ops-table-wrap { overflow: visible; }
   .ops-table, .ops-table tbody, .ops-table tr { display: block; }
   .ops-table thead { clip: rect(0 0 0 0); clip-path: inset(50%); height: 1px; overflow: hidden; position: absolute; white-space: nowrap; width: 1px; }

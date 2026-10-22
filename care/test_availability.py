@@ -206,19 +206,20 @@ class DoctorAvailabilityTests(AvailabilityTestData, TestCase):
         self.assertFalse(DoctorTimeOff.objects.exists())
         self.assertFalse(AuditEvent.objects.exists())
 
-    def test_only_the_doctor_or_a_practice_admin_can_add_or_cancel_days_off_and_cancellation_is_soft(self):
+    def test_only_the_doctor_or_a_super_admin_can_add_or_cancel_days_off_and_cancellation_is_soft(self):
         beta_admin = get_user_model().objects.create_user(email='availability-beta-admin@example.test')
-        CompanyMembership.objects.create(company=self.beta, user=beta_admin, role=CompanyMembership.Role.PRACTICE_ADMIN)
-        for actor in (self.colleague, self.patient_user, beta_admin):
+        CompanyMembership.objects.create(company=self.beta, user=beta_admin, role=CompanyMembership.Role.SUPER_ADMIN)
+        # Practice administrators only read leave (22 Oct 2026).
+        for actor in (self.colleague, self.patient_user, beta_admin, self.admin):
             with self.subTest(actor=actor.email):
                 with self.assertRaises(PermissionDenied):
                     self.leave(actor=actor)
         leave = self.leave()
-        for actor in (self.colleague, beta_admin):
+        for actor in (self.colleague, beta_admin, self.admin):
             with self.assertRaises(PermissionDenied):
                 cancel_time_off(time_off=leave, actor=actor)
-        # Practice administrators manage days off for any doctor in their practice.
-        for actor in (self.admin, self.super_admin):
+        # Super Admins manage days off for any doctor in their practice.
+        for actor in (self.super_admin,):
             with self.subTest(actor=actor.email):
                 period = self.leave(actor=actor, starts_at=self.at(13), ends_at=self.at(14))
                 self.assertEqual((period.company_id, period.clinician_id), (self.company.pk, self.doctor.pk))
@@ -372,13 +373,13 @@ class SpecialDayPrecedenceTests(AvailabilityTestData, TestCase):
             self.special(starts=time(10), ends=time(10))
         with self.assertRaises(ValidationError):
             self.special(day=timezone.localdate() - timedelta(days=1))
-        for actor in (self.colleague, self.patient_user):
+        for actor in (self.colleague, self.patient_user, self.admin):
             with self.subTest(actor=actor.email):
                 with self.assertRaises(PermissionDenied):
                     self.special(actor=actor)
         self.assertFalse(DoctorSpecialDay.objects.exists())
-        special = self.special(actor=self.admin)
-        self.assertEqual((special.clinician_id, special.created_by_id), (self.doctor.pk, self.admin.pk))
+        special = self.special(actor=self.super_admin)
+        self.assertEqual((special.clinician_id, special.created_by_id), (self.doctor.pk, self.super_admin.pk))
         with self.assertRaises(PermissionDenied):
             remove_special_day(special_day=special, actor=self.colleague)
         remove_special_day(special_day=special, actor=self.super_admin)
@@ -423,7 +424,7 @@ class SpecialDayPrecedenceTests(AvailabilityTestData, TestCase):
     def test_an_administrators_change_raises_no_task_and_a_clash_free_change_raises_none(self):
         self.pattern()
         self.appointment(starts_at=self.at(11))
-        self.special(starts=time(8), ends=time(10), actor=self.admin)
+        self.special(starts=time(8), ends=time(10), actor=self.super_admin)
         self.assertFalse(ClinicalTask.objects.exists())
         self.special(day=self.monday + timedelta(days=1), starts=time(8), ends=time(10))
         self.assertFalse(ClinicalTask.objects.exists())

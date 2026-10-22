@@ -69,7 +69,8 @@ class RecordEditsTests(TestCase):
         self.assertContains(page, 'record-log__entry--prescription record-log__entry--minor')
         # Practice administrators don't write clinical notes.
         self.login(self.admin)
-        self.assertEqual(self.client.post(url, {'return_to': 'overview', 'body': 'Admin note'}).status_code, 403)
+        self.assertRedirects(self.client.post(url, {'return_to': 'overview', 'body': 'Admin note'}),
+                             reverse('portal:desktop-dashboard'), fetch_redirect_response=False)
 
     def test_a_doctor_records_a_blood_result_with_its_report(self):
         url = reverse('portal:patient-blood-result-create', args=[self.patient.pk])

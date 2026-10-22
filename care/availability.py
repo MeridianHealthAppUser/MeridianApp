@@ -53,15 +53,16 @@ def _lock_own_doctor(company, clinician, actor):
 
 
 def _lock_diary(company, clinician, actor):
-    """Days off and special days: the doctor themselves, or a practice administrator for any doctor here."""
+    """Days off and special days: the doctor themselves, or a Super Admin for any doctor here. Practice
+    administrators only read them."""
     require_enabled_company(company)
     if not getattr(actor, 'is_active', False):
         raise PermissionDenied('An active practice staff account is required.')
     if actor.pk != clinician.pk and not CompanyMembership.objects.filter(
         company=company, company__is_active=True, user=actor, user__is_active=True, is_active=True,
-        role__in=(CompanyMembership.Role.PRACTICE_ADMIN, CompanyMembership.Role.SUPER_ADMIN),
+        role=CompanyMembership.Role.SUPER_ADMIN,
     ).exists():
-        raise PermissionDenied('Only the doctor or a practice administrator can change this diary.')
+        raise PermissionDenied('Only the doctor or a Super Admin can change this diary.')
     doctor = get_user_model().objects.select_for_update().get(pk=clinician.pk)
     if not doctor.is_active or not CompanyMembership.objects.filter(
         company=company, company__is_active=True, user=doctor,
@@ -435,6 +436,107 @@ def open_slots_for_day(*, company, clinicians, day, duration_minutes=30, limit=1
         if len(available) >= min(limit, 1000):
             break
     return available
+
+
+# Available time shows each clinician's day in slots of this length, the shortest booking.
+SLOT_MINUTES = 15
+
+
+def day_diaries(*, company, clinicians, day, exclude_appointment=None):
+    """Calendar & Bookings' Available time: each clinician's day, in SLOT_MINUTES slots across their working hours
+    (a special day's instead, when it has one). Each slot is free, booked, on leave or past. Bookings in any practice
+    take the time, but only this practice's say who. A whole day of leave, a day not worked or no working hours saved
+    has no slots; without working hours, any availability recorded by hand for the day is shown instead. An
+    appointment being moved (exclude_appointment) doesn't take its own time."""
+    start, end = day_bounds(day)
+    doctors = list(clinicians)
+    ids = [doctor.pk for doctor in doctors]
+    patterns, absences, bookings, manual = {}, {}, {}, {}
+    for row in DoctorWorkingPattern.objects.for_company(company).filter(clinician_id__in=ids):
+        patterns.setdefault(row.clinician_id, []).append(row)
+    specials = {row.clinician_id: row for row in DoctorSpecialDay.objects.for_company(company).filter(clinician_id__in=ids, date=day)}
+    for row in DoctorTimeOff.objects.filter(clinician_id__in=ids, is_active=True, starts_at__lt=end, ends_at__gt=start):
+        absences.setdefault(row.clinician_id, []).append((row.starts_at, row.ends_at))
+    for appointment in Appointment.objects.filter(clinician_id__in=ids, starts_at__lt=end).exclude(
+        status__in=(Appointment.Status.CANCELLED, Appointment.Status.NO_SHOW),
+    ).exclude(pk=getattr(exclude_appointment, 'pk', None)).annotate(availability_ends_at=_appointment_end()).filter(availability_ends_at__gt=start).select_related('patient'):
+        bookings.setdefault(appointment.clinician_id, []).append(appointment)
+    for slot in AvailabilitySlot.objects.for_company(company).filter(
+        clinician_id__in=ids, starts_at__gte=start, starts_at__lt=end,
+    ).order_by('starts_at', 'pk'):
+        manual.setdefault(slot.clinician_id, []).append((slot.starts_at, slot.ends_at, slot.is_booked or bool(slot.appointment_id)))
+    now = timezone.now()
+
+    def slot(begins, finishes, doctor_id, taken=False):
+        booking = next((item for item in bookings.get(doctor_id, ())
+                        if item.starts_at < finishes and item.availability_ends_at > begins), None)
+        if any(off_from < finishes and off_until > begins for off_from, off_until in absences.get(doctor_id, ())):
+            state = 'leave'
+        elif booking is not None or taken:
+            state = 'booked'
+        elif begins < now:
+            state = 'past'
+        else:
+            state = 'free'
+        return {'starts_at': begins, 'ends_at': finishes, 'state': state,
+                # Who it's booked with, only for this practice's bookings.
+                'appointment': booking if booking is not None and booking.company_id == company.pk else None}
+
+    diaries = []
+    for doctor in doctors:
+        rows = patterns.get(doctor.pk, [])
+        special = specials.get(doctor.pk)
+        if any(off_from <= start and off_until >= end for off_from, off_until in absences.get(doctor.pk, ())):
+            kind, hours = 'off', []
+        elif special is not None:
+            kind, hours = 'special', [(special.starts_at, special.ends_at)]
+        elif rows:
+            hours = sorted((row.starts_at, row.ends_at) for row in rows
+                           if row.weekday == day.weekday() and row.is_working and row.starts_at and row.ends_at)
+            kind = 'work' if hours else 'not_working'
+        else:
+            kind, hours = 'unset', []
+        periods = []
+        for opens, closes in hours:
+            cursor, finishes = datetime.combine(day, opens, tzinfo=SAST), datetime.combine(day, closes, tzinfo=SAST)
+            slots = []
+            while cursor + timedelta(minutes=SLOT_MINUTES) <= finishes:
+                slots.append(slot(cursor, cursor + timedelta(minutes=SLOT_MINUTES), doctor.pk))
+                cursor += timedelta(minutes=SLOT_MINUTES)
+            periods.append({'starts_at': opens, 'ends_at': closes, 'slots': slots})
+        if kind == 'unset' and manual.get(doctor.pk):
+            periods = [{'starts_at': None, 'ends_at': None,
+                        'slots': [slot(begins, finishes, doctor.pk, taken) for begins, finishes, taken in manual[doctor.pk]]}]
+        diaries.append({'clinician': doctor, 'kind': kind, 'hours': hours, 'periods': periods,
+                        'free': sum(item['state'] == 'free' for period in periods for item in period['slots'])})
+    return diaries
+
+
+def start_slots(*, company, clinician, day, duration_minutes, free_times, exclude_appointment=None):
+    """The booking forms' Time, as a grid of the clinician's day (day_diaries): a slot is free when a booking of this
+    length can start there (it's one of free_times), or says why not: booked, leave, past, short (the length doesn't
+    fit before the next booking or the end of the hours), clash (free for the clinician, but not for the patient), or
+    current (where the appointment being moved starts now). Without working hours, just the free times."""
+    free = set(free_times)
+    [diary] = day_diaries(company=company, clinicians=[clinician], day=day, exclude_appointment=exclude_appointment)
+    moving = timezone.localtime(exclude_appointment.starts_at, SAST) if exclude_appointment is not None else None
+    current = f'{moving:%H:%M}' if moving is not None and moving.date() == day else None
+    needed = max(1, -(-duration_minutes // SLOT_MINUTES))
+    slots = []
+    for period in diary['periods']:
+        for index, slot in enumerate(period['slots']):
+            at = f"{timezone.localtime(slot['starts_at'], SAST):%H:%M}"
+            if at == current:
+                state = 'current'
+            elif at in free:
+                state = 'free'
+            elif slot['state'] != 'free':
+                state = slot['state']
+            else:
+                run = period['slots'][index:index + needed]
+                state = 'short' if len(run) < needed or any(item['state'] != 'free' for item in run) else 'clash'
+            slots.append({'time': at, 'state': state})
+    return slots or [{'time': at, 'state': 'free'} for at in sorted(free)]
 
 
 def bookable_start_times(*, company, clinician, day, duration_minutes, patient=None, exclude_appointment=None):

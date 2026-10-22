@@ -71,8 +71,9 @@ class ViewLogSettingTests(TestCase):
         self.login(self.doctor)
         self.client.get(reverse('portal:patient-detail', args=[self.patient.pk]))
         self.assertTrue(AuditEvent.objects.filter(action='patient.record_viewed').exists())
-        # The record's History tab (administrators and Super Admins; doctors don't have it) leaves them out.
-        for user in (self.admin, self.super_admin):
+        # The record's History tab (Super Admins; doctors don't have it, and practice administrators don't open
+        # records) leaves them out.
+        for user in (self.super_admin,):
             with self.subTest(user=user.email):
                 self.login(user)
                 record = self.client.get(reverse('portal:patient-detail', args=[self.patient.pk]), {'tab': 'history'})

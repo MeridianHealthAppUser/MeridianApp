@@ -6,7 +6,7 @@ from django import forms
 from django.core import signing
 from django.core.exceptions import ValidationError
 
-from care.models import MedicationProduct, TreatmentAuthorization
+from care.models import MedicationProduct, PatientSubscription, TreatmentAuthorization
 
 
 TREATMENT_CONTEXT_SALT = 'portal.treatment-context.v1'
@@ -56,6 +56,24 @@ class AuthorizationForm(forms.Form):
 
 class ConfirmTreatmentForm(forms.Form):
     confirm = forms.BooleanField(label='I confirm this change and understand that undispatched parcels may be held.')
+
+
+class CancelSubscriptionForm(forms.Form):
+    """Cancel my subscription: why, at least one reason, and anything else the patient wants to say."""
+
+    reasons = forms.MultipleChoiceField(label='Why are you cancelling?', choices=PatientSubscription.CANCELLATION_REASONS,
+                                        widget=forms.CheckboxSelectMultiple, help_text='Tick all that apply.',
+                                        error_messages={'required': 'Tick at least one reason for cancelling.'})
+    note = forms.CharField(label='Tell us more (optional)', max_length=500, required=False,
+                           help_text='If you ticked Something else, tell us what it is.', widget=forms.Textarea(attrs={'rows': 3}))
+    confirm = forms.BooleanField(label='I want to cancel my subscription. Parcels that haven’t been sent yet are held.')
+
+
+class HelpRequestForm(forms.Form):
+    """Something is wrong, help me: what isn't working, sent to the patient's doctor and the practice."""
+
+    reason = forms.CharField(label='What isn’t working?', max_length=5000, widget=forms.Textarea(attrs={'rows': 5}),
+                             help_text='For example side effects, slow results or the cost. Your doctor and the practice team will reply in My Messages.')
 
 
 class EnrollmentForm(forms.Form):

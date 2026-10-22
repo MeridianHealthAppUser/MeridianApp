@@ -1,7 +1,6 @@
 /* The search above a list of conversations, the same on every Messages page and in My Messages. */
 .inbox-toolbar { align-items: center; display: flex; flex-wrap: wrap; gap: .6rem 1rem; justify-content: space-between; margin: 0 0 .85rem; }
 .inbox-toolbar--search-only { justify-content: flex-end; }
-.inbox-toolbar__new { margin-right: auto; }
 /* On a phone the search, wrapped under the button, takes the whole row. */
 @media (max-width: 42rem) { .inbox-toolbar .conversation-search { flex: 1 1 100%; } }
 .inbox-toolbar .inbox-filters { margin: 0; }

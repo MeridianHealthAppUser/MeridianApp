@@ -1,0 +1,7 @@
+{% extends 'emails/base.html' %}{% block content %}
+        <p style="margin:0 0 16px;">Hello{% if greeting %} {{ greeting }}{% endif %},</p>
+        <p style="margin:0 0 16px;">Your subscription has been cancelled, and no more parcels will be sent.</p>
+        <p style="margin:0 0 16px;">If it was side effects, slow progress or cost, there’s often something we can do: a different dose, a different medicine, or simply a straight conversation about whether this is still right for you.</p>
+        {% include 'emails/button.html' with label='Talk to your care team' %}
+        <p style="margin:0 0 16px;">If you’re done, that’s completely fine. Your record stays with us if you ever want to pick it up again.</p>
+{% endblock %}

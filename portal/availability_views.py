@@ -19,6 +19,7 @@ from care.availability import (
     diary_day_states, remove_special_day, save_working_pattern, set_special_day, undo_diary_change,
 )
 from care.models import Appointment, DoctorSpecialDay, DoctorTimeOff, DoctorWorkingPattern
+from practices.models import CompanyMembership
 
 from .availability_forms import (
     WORKING_PERIODS, SpecialDayForm, TimeOffForm, WEEKDAYS, WorkingPatternFormSet, make_schedule_context, period_names,
@@ -57,9 +58,10 @@ def _day_range(entry):
 
 def schedule_availability_context(request, company, membership, clinician, selected_date, mode, section='bookings'):
     """No mutations during a schedule GET, including availability generation."""
-    # The working pattern is the doctor's own; days off and special days may also be set by an administrator.
+    # The working pattern is the doctor's own; days off and special days may also be set by a Super Admin. Practice
+    # administrators only read them.
     can_manage = bool(clinician and clinician.pk == request.user.pk and membership.is_clinician)
-    can_manage_days = bool(clinician and (can_manage or membership.is_admin))
+    can_manage_days = bool(clinician and (can_manage or membership.role == membership.Role.SUPER_ADMIN))
     rows_by_day = {}
     for row in (DoctorWorkingPattern.objects.for_company(company).filter(clinician=clinician) if clinician else ()):
         rows_by_day.setdefault(row.weekday, []).append(row)
@@ -100,9 +102,12 @@ def schedule_availability_context(request, company, membership, clinician, selec
                 else appointments_requiring_attention(company=company, clinician=clinician))
     affected_page = Paginator(affected, 20).get_page(request.GET.get('affected_page'))
     affected_appointments = list(affected_page.object_list)
+    no_record = membership.role == membership.Role.PRACTICE_ADMIN
     for appointment in affected_appointments:
         appointment.attention_reason = ATTENTION_REASONS[attention_kind(appointment)]
-        appointment.attention_url = reverse('portal:patient-detail', args=[appointment.patient_id])
+        # Practice administrators don't open patient records: Review appointment opens the appointment, to move it.
+        appointment.attention_url = (reverse('portal:appointment-detail', args=[appointment.pk]) if no_record
+                                     else reverse('portal:patient-detail', args=[appointment.patient_id]))
 
     day_state = diary_day_states(company=company, clinician=clinician, first_day=selected_date,
                                  last_day=selected_date)[selected_date] if clinician and selected_date else None
@@ -150,7 +155,10 @@ class DoctorAvailabilityMixin(LoginRequiredMixin, StaffCompanyRequiredMixin):
         self.diary = self.request.user
 
     def require_diary(self):
-        """The doctor's own diary, or for an administrator the clinician chosen in the Clinician list."""
+        """The doctor's own diary, or for a Super Admin the clinician chosen in the Clinician list. Practice
+        administrators read leave and special days but don't change them."""
+        if self.membership.role == CompanyMembership.Role.PRACTICE_ADMIN:
+            raise PermissionDenied('Leave and special days are read-only for practice administrators.')
         if self.membership.is_admin:
             raw = self.request.GET.get('clinician', '')
             doctor = practice_doctors(self.company).filter(pk=int(raw)).first() if raw.isdigit() and len(raw) < 12 else None

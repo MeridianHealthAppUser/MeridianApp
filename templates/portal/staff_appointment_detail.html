@@ -1,0 +1,8 @@
+{% extends 'portal/staff_page_base.html' %}{% load static workspace_ui %}
+{% comment %}An appointment for a practice administrator, who doesn't open patient records: the same details and actions as
+on the record's Appointments tab, on a page of its own under Calendar & Bookings.{% endcomment %}
+{% block title %}Appointment details | {{ company.name }} | Meridian{% endblock %}
+{% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/backoffice.css' %}?v=20261022a"><link rel="stylesheet" href="{% static 'css/dialogs.css' %}?v=20261022a"><script src="{% static 'js/dialogs.js' %}?v=20261022a" defer></script><link rel="stylesheet" href="{% static 'css/time_slots.css' %}?v=20261022c"><script src="{% static 'js/appointment_booking.js' %}?v=20261022d" defer></script>{% endblock %}
+{% block breadcrumbs %}{% breadcrumbs 'Calendar & Bookings' 'portal:staff-schedule' 'Appointment details' %}{% endblock %}
+{% block page_heading %}<header class="staff-page-header"><div><h1>{{ appointment.patient }}</h1><p>{{ appointment.patient.phone|default:'No phone number' }}{% if appointment.patient.user.email %} · {{ appointment.patient.user.email }}{% endif %}</p></div><a class="console-button console-button--quiet" href="{% url 'portal:staff-schedule' %}?view=table&amp;date={{ appointment.starts_at|date:'Y-m-d' }}">Back to the day</a></header>{% endblock %}
+{% block page_content %}<div class="backoffice">{% include 'portal/includes/appointment_detail_content.html' with full_details=True %}</div>{% endblock %}

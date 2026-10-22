@@ -2,5 +2,43 @@
 {% load workspace_ui %}
 {% block title %}Dispatch history | Meridian{% endblock %}
 {% block breadcrumbs %}{% breadcrumbs 'Operations' %}{% endblock %}
-{% block page_heading %}<header class="staff-page-header"><div><h1>Operations</h1><p>Recorded dispatches at {{ company.name }}. Saved dispatch details stay unchanged.</p></div><a class="console-button console-button--secondary" data-no-loader href="{% url 'portal:ops-history-export' %}?{{ pagination_query }}">Export history CSV</a></header>{% page_tabs %}{% endblock %}
-{% block operations_content %}<section class="staff-page-card">{# The search at the top right of the table, with Filters before it; the table follows the search as you type. #}<header class="staff-page-card__header staff-list-header"><div><h2>Dispatched shipments</h2></div>{% include 'portal/includes/list_tools.html' with search_label='Search dispatches' %}</header><div data-search-region="list">{% if filter_form.errors %}<div class="staff-filter-error" role="alert">{% for error in filter_form.non_field_errors %}{{ error }} {% endfor %}Correct the filters to view dispatches.</div>{% else %}<div class="ops-table-wrap"><table class="ops-table"><thead><tr><th scope="col">Patient at dispatch</th><th scope="col">Dispatched</th><th scope="col">Tracking reference</th><th scope="col">Status</th><th scope="col">Action</th></tr></thead><tbody>{% for shipment in shipments %}<tr><td data-label="Patient at dispatch"><div>{{ shipment.dispatch_snapshot.patient_name|default:shipment.patient }}{% if not shipment.dispatch_snapshot %}<small>Legacy record; no saved dispatch snapshot</small>{% endif %}</div></td><td data-label="Dispatched">{{ shipment.dispatched_at|date:'j M Y, H:i' }} SAST</td><td data-label="Tracking reference">{{ shipment.tracking_number|default:'Not recorded' }}</td><td data-label="Status"><span class="console-status">{{ shipment.get_status_display }}</span></td><td data-label="Action"><a class="console-button console-button--secondary" href="{% url 'portal:ops-shipment-detail' shipment.pk %}">Open record</a></td></tr>{% empty %}<tr><td class="ops-empty" colspan="5">No dispatch history matches this view.</td></tr>{% endfor %}</tbody></table></div>{% endif %}</div></section><div data-search-region="pages">{% include 'portal/operations_pagination.html' with pagination_label='Dispatch history' %}</div>{% endblock %}
+{% block page_heading %}<header class="staff-page-header"><div><h1>Operations</h1><p>Recorded dispatches at {{ company.name }}. Saved dispatch details stay unchanged.</p></div><a class="console-button console-button--secondary" data-no-loader href="{% url 'portal:ops-history-export' %}?{{ export_query }}">{% if by_week %}Export week CSV{% else %}Export CSV{% endif %}</a></header>{% page_tabs %}{% endblock %}
+{% block operations_content %}<section class="staff-page-card">
+  {# List: every dispatch, with a date range in Filters. Week: one shipping week, as Calendar & Bookings' Week view. #}
+  {# Either way the search is at the top right, and Export takes what's shown. #}
+  <header class="staff-page-card__header staff-list-header">
+    {% if by_week %}
+      <div class="ops-week-nav">
+        <a class="ops-week-step" href="{{ prev_week_url }}" aria-label="Previous week">&lsaquo;</a>
+        <h2 id="history-week-heading">Week {{ week_number }} &middot; <span class="ops-week-range">{{ week_start|date:"j M Y" }} &ndash; {{ week_end|date:"j M Y" }}</span></h2>
+        <a class="ops-week-step" href="{{ next_week_url }}" aria-label="Next week">&rsaquo;</a>
+        {% if this_week_url %}<a class="ops-week-today" href="{{ this_week_url }}">This week</a>{% endif %}
+      </div>
+    {% else %}
+      <div><h2>Dispatched shipments</h2></div>
+    {% endif %}
+    <div class="ops-history-tools">
+      <nav class="staff-view-toggle" aria-label="Dispatch history view">
+        <a{% if not by_week %} class="is-active" aria-current="page"{% endif %} href="{{ list_view_url }}">List</a>
+        <a{% if by_week %} class="is-active" aria-current="page"{% endif %} href="{{ week_view_url }}">Week</a>
+      </nav>
+      {% include 'portal/includes/list_tools.html' with search_label='Search dispatches' %}
+    </div>
+  </header>
+  <div data-search-region="list">{% if filter_form.errors %}<div class="staff-filter-error" role="alert">{% for error in filter_form.non_field_errors %}{{ error }} {% endfor %}Correct the filters to view dispatches.</div>{% else %}
+    <div class="ops-table-wrap"><table class="ops-table">
+      <thead><tr><th scope="col">Patient at dispatch</th><th scope="col">Doctor</th><th scope="col">Parcel</th><th scope="col">Dispatched</th><th scope="col">Status</th><th scope="col">Note</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead>
+      <tbody>{% for shipment in shipments %}<tr>
+        <td data-label="Patient at dispatch"><div>{{ shipment.dispatch_snapshot.patient_name|default:shipment.patient }}{% if not shipment.dispatch_snapshot %}<small>Legacy record; no saved dispatch snapshot</small>{% endif %}</div></td>
+        <td data-label="Doctor">{{ shipment.doctor.titled_name|default:'—' }}</td>
+        {# What went out, as saved at dispatch. #}
+        <td data-label="Parcel">{% if shipment.dispatch_snapshot.items %}{% for item in shipment.dispatch_snapshot.items %}<div>{{ item.product }} × {{ item.quantity }}<small>{{ item.dose }}</small></div>{% endfor %}{% else %}{% for item in shipment.items.all %}<div>{{ item.product }} × {{ item.quantity }}<small>{{ item.dose }}</small></div>{% empty %}—{% endfor %}{% endif %}</td>
+        <td data-label="Dispatched">{{ shipment.dispatched_at|date:'j M Y, H:i' }} SAST</td>
+        <td data-label="Status"><span class="console-status console-status--{{ shipment.status }}">{{ shipment.get_status_display }}</span></td>
+        <td data-label="Note">{% if shipment.note %}<span class="ops-note">{{ shipment.note }}</span>{% else %}—{% endif %}</td>
+        <td data-label="Actions"><a class="console-button console-button--secondary" href="{% url 'portal:ops-shipment-detail' shipment.pk %}">Open record</a></td>
+      </tr>{% empty %}<tr><td class="ops-empty" colspan="7">{% if by_week %}Nothing was dispatched this week.{% else %}No dispatch history matches this view.{% endif %}</td></tr>{% endfor %}</tbody>
+    </table></div>
+  {% endif %}</div>
+</section>
+<div data-search-region="pages">{% include 'portal/operations_pagination.html' with pagination_label='Dispatch history' %}</div>{% endblock %}

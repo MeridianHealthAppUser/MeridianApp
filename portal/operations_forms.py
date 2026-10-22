@@ -126,7 +126,7 @@ class CatalogueFilterForm(forms.Form):
 
 
 class OrderFilterForm(forms.Form):
-    q = forms.CharField(label='Search supply requests', required=False, max_length=100)
+    q = forms.CharField(label='Search non-prescription requests', required=False, max_length=100)
     status = TickedChoiceField(label='Status', choices=[choice for choice in PharmacyOrder.Status.choices
                                                          if choice[0] != PharmacyOrder.Status.DRAFT])
 

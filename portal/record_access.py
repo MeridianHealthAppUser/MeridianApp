@@ -8,7 +8,8 @@ Clinicians (the Clinician role) are limited by their link to the patient:
 - READ: a clinician assigned to the patient before, or whose cover has ended, reads the record only.
 - None: anyone else can't open it.
 
-Practice administrators and Super Admins are not limited by this. Conversations stay open to the people in
+Practice administrators don't open patient records at all (22 Oct 2026): they work from Calendar & Bookings,
+Messages, Operations and Administration. Super Admins are not limited. Conversations stay open to the people in
 them either way: a past clinician can still read and reply in a conversation they are part of.
 """
 
@@ -25,6 +26,7 @@ from practices.models import CompanyMembership
 CHANGE, COVER, READ = 'change', 'cover', 'read'
 COVER_DAYS = 14
 NOT_ASSIGNED = 'You can only open the records of patients who are, or were, assigned to you.'
+NO_RECORDS = 'Patient records aren’t available to practice administrators.'
 
 
 class RecordAccessDenied(PermissionDenied):
@@ -54,7 +56,13 @@ def cover_appointment(patient, user):
     return booked.filter(starts_at__gte=timezone.now()).order_by('starts_at').first() or booked.order_by('-starts_at').first()
 
 
+def no_records(membership):
+    return membership is not None and membership.role == CompanyMembership.Role.PRACTICE_ADMIN
+
+
 def record_access(membership, user, patient):
+    if no_records(membership):
+        return None
     if not limited_by_assignment(membership) or patient.assigned_doctor_id == user.pk:
         return CHANGE
     if cover_appointment(patient, user) is not None:
@@ -104,16 +112,22 @@ def cover_message(patient):
     return f'As cover for {patient.first_name}’s appointment you can write notes; only {clinician} changes the rest of the record.'
 
 
+def _denied(membership):
+    """Never assigned or booked: back to All patients with an error toast. A practice administrator: to Overview."""
+    if no_records(membership):
+        return RecordAccessDenied(NO_RECORDS, reverse('portal:desktop-dashboard'))
+    return RecordAccessDenied(NOT_ASSIGNED, reverse('portal:patient-list'))
+
+
 def require_record_view(membership, user, patient):
-    """Never assigned or booked: back to All patients with an error toast."""
     if not can_view_record(membership, user, patient):
-        raise RecordAccessDenied(NOT_ASSIGNED, reverse('portal:patient-list'))
+        raise _denied(membership)
 
 
 def _refuse(membership, user, patient, allowed):
     access = record_access(membership, user, patient)
     if access is None:
-        raise RecordAccessDenied(NOT_ASSIGNED, reverse('portal:patient-list'))
+        raise _denied(membership)
     if access not in allowed:
         from .patient_workspace import workspace_url
         raise RecordAccessDenied(cover_message(patient) if access == COVER else read_only_message(patient),

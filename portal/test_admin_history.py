@@ -1,23 +1,24 @@
-"""Practice administrators see appointment status changes in the patient's History."""
+"""The administrative History (typed labels only, nothing clinical) shows appointment status changes. It's the
+History for staff without clinical access; practice administrators, the only such staff, no longer open records
+(22 Oct 2026), so it's built directly here."""
 
 from datetime import timedelta
 
-from django.test import override_settings
-from django.urls import reverse
+from django.test import RequestFactory, override_settings
 
 from care.test_appointment_lifecycle import AppointmentLifecycleFixture
-from practices.services import ACTIVE_COMPANY_SESSION_KEY
+from practices.models import CompanyMembership
+from .patient_workspace import workspace_tab_context
 
 
 @override_settings(MULTI_PRACTICE_ENABLED=True)
 class AdminHistoryTests(AppointmentLifecycleFixture):
     def history_labels(self):
-        self.client.force_login(self.admin)
-        session = self.client.session
-        session[ACTIVE_COMPANY_SESSION_KEY] = self.company.pk
-        session.save()
-        response = self.client.get(reverse('portal:patient-detail', args=[self.patient.pk]), {'tab': 'history'})
-        return [row.workspace_label for row in response.context['rows']]
+        request = RequestFactory().get('/', {'tab': 'history'})
+        request.user = self.admin
+        membership = CompanyMembership.objects.get(company=self.company, user=self.admin)
+        context = workspace_tab_context(request, self.company, membership, self.patient, 'history')
+        return [row.workspace_label for row in context['rows']]
 
     def test_cancelled_completed_and_missed_appointments_are_shown(self):
         self.change(self.appointment(), status='cancelled')

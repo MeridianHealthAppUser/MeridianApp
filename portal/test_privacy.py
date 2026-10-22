@@ -448,13 +448,13 @@ class PrivacyTests(TestCase):
         self.assertEqual(self.client.delete(self.url('patient-data-request-detail', self.request_record.pk)).status_code, 405)
 
     def test_access_history_only_actor_permitted_practices_and_sanitized_fields(self):
-        AuditEvent.objects.create(company=self.alpha, actor=self.admin, patient=self.patient, action='privacy.request_viewed',
+        AuditEvent.objects.create(company=self.alpha, actor=self.super_admin, patient=self.patient, action='privacy.request_viewed',
             target_type='care.patientdatarequest', target_id='PATIENT_IDENTIFIER_SECRET', metadata={'body': 'METADATA_SECRET'}, ip_address='192.0.2.90')
-        AuditEvent.objects.create(company=self.beta, actor=self.admin, action='privacy.preference_updated')
+        AuditEvent.objects.create(company=self.beta, actor=self.super_admin, action='privacy.preference_updated')
         AuditEvent.objects.create(company=self.alpha, actor=self.doctor, action='OTHER_ACTOR_ACTION_SECRET')
-        AuditEvent.objects.create(company=self.hidden, actor=self.admin, action='INACTIVE_PRACTICE_ACTION_SECRET')
-        AuditEvent.objects.create(company=self.alpha, actor=self.admin, action='UNKNOWN_ACTION_SECRET', target_type='UNKNOWN_TARGET_SECRET')
-        self.login(self.admin)
+        AuditEvent.objects.create(company=self.hidden, actor=self.super_admin, action='INACTIVE_PRACTICE_ACTION_SECRET')
+        AuditEvent.objects.create(company=self.alpha, actor=self.super_admin, action='UNKNOWN_ACTION_SECRET', target_type='UNKNOWN_TARGET_SECRET')
+        self.login(self.super_admin)
         response = self.get('account-access-history', scope='all')
         # View events are never listed, even when stored.
         self.assertEqual(len(response.context['access_rows']), 2)
@@ -463,9 +463,13 @@ class PrivacyTests(TestCase):
             self.assertNotContains(response, secret)
         self.assertNotContains(response, 'Privacy request viewed')
         self.assertEqual(len(self.get('account-access-history').context['access_rows']), 1)
+        # Only Super Admins have it (22 Oct 2026).
+        for actor in (self.admin, self.doctor):
+            self.login(actor)
+            self.assertEqual(self.client.get(self.url('account-access-history')).status_code, 403)
 
     def test_access_history_invalid_scope_no_data_and_no_incidental_writes(self):
-        self.login(self.admin)
+        self.login(self.super_admin)
         before = AuditEvent.objects.count()
         response = self.get('account-access-history', scope='everyone')
         self.assertTrue(response.context['filter_form'].errors)

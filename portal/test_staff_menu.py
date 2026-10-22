@@ -113,25 +113,25 @@ class StaffMenuTests(TestCase):
         self.assertIn('<span class="message-unread-dot" data-live-unread="total" aria-hidden="true">2</span>', mobile[:mobile.index('</nav>')])
         inbox = self.client.get(reverse('portal:staff-inbox'))
         self.assertContains(inbox, '<h1>Patient Records &amp; Messages</h1>', html=True)
-        # Practice admins get the same flat menu, with Operations and Administration after it. They sent the team
-        # message, so nothing is unread for them.
+        # Practice admins get a flat menu too, with Messages (no patient list), then Operations and Administration.
+        # They sent the team message, so nothing is unread for them.
         self.login('practice_admin')
         page = self.client.get(reverse('portal:desktop-dashboard')).content.decode()
         sidebar = page[page.index('class="console-nav'):]
         sidebar = sidebar[:sidebar.index('</nav>')]
         self.assertNotIn('<details', sidebar)
-        labels = ['Overview', 'My tasks', 'Patient Records &amp; Messages', 'Calendar &amp; Bookings', 'Operations', 'Administration']
+        labels = ['Overview', 'My tasks', 'Messages', 'Calendar &amp; Bookings', 'Operations', 'Administration']
         self.assertEqual(re.findall(r'<span class="console-nav__text">([^<]+)</span>', sidebar), labels)
         self.assertNotIn('Insights', sidebar)
         self.assertIn('data-live-unread="total" hidden', sidebar)
-        self.assertContains(self.client.get(reverse('portal:staff-inbox')), '<h1>Patient Records &amp; Messages</h1>', html=True)
+        self.assertContains(self.client.get(reverse('portal:staff-inbox')), '<h1>Messages</h1>', html=True)
 
     def test_practice_admins_open_operations_and_administration_as_pages_of_tabs_without_insights(self):
         self.login('practice_admin')
         tabs = {
-            'Operations': [('treatment-subscriptions', 'Subscriptions'), ('ops-orders', 'Supply requests'),
-                           ('ops-shipping', 'Weekly shipping list'), ('ops-history', 'Dispatch history'),
-                           ('ops-catalogue', 'Catalogue')],
+            'Operations': [('treatment-subscriptions', 'Subscriptions'), ('ops-orders', 'Non-prescription requests'),
+                           ('ops-shipping', 'Weekly shipping list'), ('ops-stock', 'Dispatch stock'),
+                           ('ops-history', 'Dispatch history'), ('ops-catalogue', 'Catalogue')],
             'Administration': [('staff-leads', 'Leads'), ('dropouts', 'Dropouts'), ('staff-data-requests', 'Data requests')],
         }
         for group, pages in tabs.items():
@@ -144,10 +144,14 @@ class StaffMenuTests(TestCase):
                     nav = nav[:nav.index('</nav>')]
                     self.assertEqual(re.findall(r'<a href="[^"]+"[^>]*>([^<]+)', nav), [tab for _, tab in pages])
                     self.assertIn(f'<a href="{reverse(f"portal:{name}")}" class="is-active" aria-current="page">{label}', nav)
-                    # Each tab's table has its search at the top right with the Filters menu before it.
-                    self.assertContains(response, 'class="staff-list-tools"')
-                    self.assertContains(response, 'data-conversation-search')
-                    self.assertTrue(response.context['filter_menu']['sections'])
+                    # Each tab's table has its search at the top right with the Filters menu before it, except
+                    # Dispatch stock (one row per catalogue item for a week, with nothing to search) and Dispatch
+                    # history, which opens on a week: its search only, the week being the dates.
+                    if name != 'ops-stock':
+                        self.assertContains(response, 'class="staff-list-tools"')
+                        self.assertContains(response, 'data-conversation-search')
+                        if name != 'ops-history':
+                            self.assertTrue(response.context['filter_menu']['sections'])
                     self.assertNotContains(response, 'Apply filters')
                     # The menu entry stays current on every tab.
                     sidebar = html[html.index('class="console-nav'):]

@@ -62,6 +62,21 @@
             <a class="questionnaire-button questionnaire-button--secondary" href="{% url 'portal:questionnaire' %}?edit=1">Change an answer</a>
           </div>
         </section>
+        {# Please call me first: the practice calls before they book, from Administration > Dropouts (Please call). #}
+        <section class="questionnaire-card" aria-labelledby="call-me-heading">
+          <h2 class="questionnaire-kicker" id="call-me-heading">Rather talk to us first?</h2>
+          {% if callback and not callback_form.errors %}
+            <p>Thank you. {{ lead.company.name }} will call you on {{ callback.phone }}{% if callback.note %} about “{{ callback.note|truncatechars:120 }}”{% endif %}. You can still book your consultation at any time.</p>
+          {% else %}
+            <p>Leave your number and we’ll call you with more information before you book.</p>
+            <form method="post" class="questionnaire-form" action="{% url 'portal:questionnaire-call-me' %}">{% csrf_token %}
+              {% if callback_form.non_field_errors %}<div class="form-errors" role="alert">{{ callback_form.non_field_errors }}</div>{% endif %}
+              <div class="question-field"><label for="{{ callback_form.phone.id_for_label }}">{{ callback_form.phone.label }}</label>{{ callback_form.phone }}{% if callback_form.phone.errors %}<span class="field-error">{{ callback_form.phone.errors|join:' ' }}</span>{% endif %}</div>
+              <div class="question-field"><label for="{{ callback_form.note.id_for_label }}">{{ callback_form.note.label }}</label>{{ callback_form.note }}{% if callback_form.note.errors %}<span class="field-error">{{ callback_form.note.errors|join:' ' }}</span>{% endif %}</div>
+              <div><button class="questionnaire-button questionnaire-button--secondary" type="submit">Please call me</button></div>
+            </form>
+          {% endif %}
+        </section>
         <section class="questionnaire-card" aria-labelledby="review-cycle-heading">
           <h2 class="questionnaire-kicker" id="review-cycle-heading">Your review cycle</h2>
           <dl class="questionnaire-review-list">

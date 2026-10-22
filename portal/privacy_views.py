@@ -292,9 +292,9 @@ class AccountAccessHistoryView(PrivacyStaffPage):
     http_method_names = ('get', 'head', 'options')
 
     def get(self, request):
-        # Clinicians don't have an access history page; administrators and Super Admins do.
-        if self.membership.role == 'doctor':
-            raise PermissionDenied('Your access history is not available to the Clinician role.')
+        # Only Super Admins have an access history page; clinicians and practice administrators don't.
+        if self.membership.role != 'super_admin':
+            raise PermissionDenied('Your access history is available to Super Admins only.')
         memberships = staff_memberships(request.user)
         data = request.GET.copy()
         data.setdefault('scope', 'current')

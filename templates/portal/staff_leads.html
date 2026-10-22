@@ -6,13 +6,14 @@
 
 {% block breadcrumbs %}{% breadcrumbs 'Administration' %}{% endblock %}
 {% block page_heading %}
-  <header class="staff-page-header"><div><h1>Administration</h1><p>Questionnaire submissions for {{ company.name }}. A lead is not a patient account; viewing an enquiry does not convert it.</p></div></header>{% page_tabs %}
+  {# Lead history at the top right: every enquiry, converted ones too. #}
+  <header class="staff-page-header"><div><h1>Administration</h1><p>{% if lead_history %}Every questionnaire submission for {{ company.name }}, including enquiries already converted to patients.{% else %}Questionnaire submissions for {{ company.name }} not yet converted to patients. A lead is not a patient account; viewing an enquiry does not convert it.{% endif %}</p></div>{% if lead_history %}<a class="console-button console-button--secondary" href="{% url 'portal:staff-leads' %}">Back to leads</a>{% else %}<a class="console-button console-button--secondary" href="{% url 'portal:staff-lead-history' %}"><svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg>Full Lead History</a>{% endif %}</header>{% page_tabs %}
 {% endblock %}
 
 {% block page_content %}
   <section class="staff-page-card staff-page-card--list" aria-labelledby="lead-list-heading">
     {# The search at the top right of the table, with Filters before it; the table follows the search as you type. #}
-    <header class="staff-page-card__header staff-list-header"><div><h2 id="lead-list-heading">Enquiries</h2><p>Screening status is separate from payment and account activation.</p></div>{% include 'portal/includes/list_tools.html' with search_label='Search leads' %}</header>
+    <header class="staff-page-card__header staff-list-header"><div><h2 id="lead-list-heading">{% if lead_history %}Lead history{% else %}Enquiries{% endif %}</h2><p>Screening status is separate from payment and account activation.</p></div>{% include 'portal/includes/list_tools.html' with search_label='Search leads' %}</header>
     <div data-search-region="list">
     {% if filter_form.errors %}<div class="staff-filter-error" role="alert">Correct the filters to view leads.</div>{% else %}
       <div class="staff-lead-table-wrap">

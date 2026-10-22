@@ -53,10 +53,6 @@
 .schedule-time-off-dates > span { color: #7b9093; }
 .schedule-time-off-list .console-button { font-size: .7rem; min-height: 2.25rem; padding: .45rem .6rem; }
 .schedule-time-off-empty { color: #657f82; font-size: .74rem; line-height: 1.55; }
-.schedule-diary-stack .staff-availability-list { display: grid; gap: .55rem; grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr)); margin-top: 1rem; }
-.schedule-diary-stack .staff-availability-list li { align-items: flex-start; background: #f9fcfb; border: 1px solid var(--console-line); border-radius: .6rem; flex-direction: column; gap: .3rem; padding: .7rem; }
-.schedule-diary-stack .staff-availability-list span { text-align: left; }
-.schedule-diary-stack .staff-availability-list__empty { background: none !important; border: none !important; grid-column: 1 / -1; }
 .schedule-attention-badge { background: #fff4df; border: 1px solid #eed8ac; border-radius: .5rem; color: #916111; display: inline-flex; font-size: .64rem; font-weight: 750; line-height: 1.4; margin-top: .4rem; max-width: 100%; padding: .3rem .4rem; white-space: normal; }
 .schedule-status-stack { align-items: start; display: flex; flex-direction: column; }
 .staff-schedule-table tr.schedule-appointment-attention td:first-child { box-shadow: inset .2rem 0 0 #d59c38; }
@@ -335,3 +331,20 @@ a.schedule-week__date:focus-visible { outline: 2px solid var(--console-teal); ou
 .schedule-clinician select:focus { border-color: var(--console-teal); box-shadow: 0 0 0 3px rgba(7, 135, 127, .12); outline: none; }
 .schedule-clinician ul.errorlist { color: var(--console-red); flex-basis: 100%; font-size: .7rem; list-style: none; margin: 0; padding: 0; text-align: right; }
 @media (max-width: 36rem) { .schedule-clinician select { flex: 1 1 auto; min-width: 0; } }
+/* Day view: a practice administrator's Cancel appointment reads as the one that undoes a booking. */
+.schedule-action--cancel.console-button { border-color: #efccc8; color: #a73f37; }
+.schedule-action--cancel.console-button:hover { background: #fcedeb; }
+
+/* Available time: each clinician's day, one under the other, in 15-minute slots. Free ones book; the rest are blocked. */
+.schedule-diary { border-top: 1px solid var(--console-soft-line, #edf3f4); padding: 1rem 1.15rem 1.15rem; }
+.schedule-diary:first-child { border-top: 0; }
+.schedule-diary__header { align-items: center; display: flex; flex-wrap: wrap; gap: .5rem .9rem; justify-content: space-between; margin-bottom: .75rem; }
+.schedule-diary__header h3 { color: var(--console-ink); font-size: .9rem; margin: 0; }
+.schedule-diary__summary { align-items: center; display: flex; flex-wrap: wrap; gap: .5rem; margin: 0; }
+.schedule-diary__hours { color: var(--console-ink); font-size: .74rem; font-weight: 700; }
+.schedule-diary__count { background: var(--console-teal-soft, #e4f5f1); border-radius: 99rem; color: var(--console-teal-dark, #056f69); font-size: .68rem; font-weight: 750; padding: .22rem .6rem; }
+.schedule-diary__count--none { background: #f3f6f6; color: #5b7175; }
+.schedule-diary__period { color: var(--console-muted); font-size: .66rem; font-weight: 750; letter-spacing: .05em; margin: .7rem 0 .4rem; text-transform: uppercase; }
+.schedule-diary__period:first-of-type { margin-top: 0; }
+.schedule-diary__slots { display: grid; gap: .4rem; grid-template-columns: repeat(auto-fill, minmax(4.5rem, 1fr)); list-style: none; margin: 0; padding: 0; }
+.schedule-free-time__key { align-items: center; border-top: 1px solid var(--console-soft-line, #edf3f4); color: var(--console-muted); display: flex; flex-wrap: wrap; font-size: .7rem; gap: .35rem; margin: 0; padding: .8rem 1.15rem; }

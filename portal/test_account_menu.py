@@ -46,8 +46,8 @@ class AccountMenuPresentationTests(TestCase):
             self.assertNotContains(response, 'class="account-name"')
             self.assertNotContains(response, 'class="header-signout"')
             self.assertIn(reverse('accounts:profile'), self.menu(response))
-            # Clinicians have no access history page; administrators and Super Admins do.
-            if user == self.doctor:
+            # Only Super Admins have an access history page; clinicians and practice administrators don't.
+            if user != self.super_admin:
                 self.assertNotIn(reverse('portal:account-access-history'), self.menu(response))
                 self.assertEqual(self.client.get(reverse('portal:account-access-history')).status_code, 403)
             else:

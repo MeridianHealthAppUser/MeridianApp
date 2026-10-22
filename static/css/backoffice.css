@@ -24,5 +24,18 @@
 .backoffice-metrics strong { display: block; font-size: 1.7rem; }
 .backoffice .console-button--primary { color: #fff; }
 .backoffice .errorlist { color: #a4302e; }
+/* Administration > Dropouts: help requests, the cancelled and paused subscriptions under them, then Please call. */
+.dropouts td small { color: #68828c; display: block; font-size: .75rem; margin-top: .2rem; }
+.dropouts td > strong, .dropouts-contact { white-space: nowrap; }
+.dropouts-reason { max-width: 22rem; overflow-wrap: anywhere; }
+.dropouts-actions { justify-content: flex-end; gap: .4rem; }
+.dropouts-actions .console-button { font-size: .72rem; min-height: 2.1rem; padding: .4rem .7rem; white-space: nowrap; }
+.dropouts-ended { border-top: 1px solid #e3ecee; }
+.dropouts-ended > summary { align-items: center; color: var(--console-ink, #12302f); cursor: pointer; display: flex; font-size: .9rem; font-weight: 700; gap: .55rem; padding: 1rem 1.15rem; }
+.dropouts-ended > summary::after { border-bottom: 2px solid currentColor; border-right: 2px solid currentColor; content: ''; height: .45rem; margin-left: auto; transform: rotate(45deg); transition: transform .15s; width: .45rem; }
+.dropouts-ended[open] > summary::after { transform: rotate(-135deg); }
+.dropouts-ended__count { background: #eef5f4; border-radius: 2rem; color: #4f6d70; font-size: .72rem; padding: .15rem .55rem; }
+.dropouts-ended > .staff-page-card__header { border-top: 1px solid #e3ecee; }
+.dropouts-ended > .staff-page-card__header p { color: #68828c; font-size: .8rem; margin: 0; }
 @media (max-width: 760px) { .backoffice-grid { grid-template-columns: 1fr; } .backoffice-panel { padding: 1rem; } }
 @media print { .console-sidebar, .console-topbar, .mobile-bottom-nav, .site-header, .site-footer, .backoffice-actions, .backoffice form { display: none !important; } .console-shell, .console-main { display: block; margin: 0; padding: 0; } }

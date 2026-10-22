@@ -62,7 +62,7 @@
               {% endfor %}
             </dl>
           {% endif %}
-          <p class="schedule-form-help">Read-only view. Doctors manage their own regular working hours.</p>
+          <p class="schedule-form-help">Read-only view. Doctors manage their own regular working hours{% if not can_manage_days %}, leave and special days{% endif %}.</p>
         {% endif %}
       </div>
     </section>
@@ -195,7 +195,7 @@
   {% else %}
     <section class="staff-page-card schedule-select-doctor" aria-labelledby="availability-doctor-heading">
       <header class="staff-page-card__header"><div><h2 id="availability-doctor-heading">Working hours, leave and special days</h2></div></header>
-      <div class="schedule-panel-body"><p class="schedule-panel-description">Choose a clinician in the Clinician list above to see their regular working hours, leave and special days at this practice.</p><p class="schedule-form-help">Doctors set their own regular working hours. Practice administrators and Super Admins can add or remove leave and special days for the doctor they choose.</p></div>
+      <div class="schedule-panel-body"><p class="schedule-panel-description">Choose a clinician in the Clinician list above to see their regular working hours, leave and special days at this practice.</p><p class="schedule-form-help">Doctors set their own regular working hours. Doctors and Super Admins add or remove leave and special days{% if active_membership.role == 'practice_admin' %}; here they are read-only{% endif %}.</p></div>
     </section>
   {% endif %}
 </div>

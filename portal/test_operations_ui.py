@@ -68,7 +68,7 @@ class OperationsTemplateTests(OperationsFixture):
             ('ops-product-detail', 'Explicit prescribed product', (self.product.pk,)),
             ('ops-shipping', 'id="create-shipment"', ()),
             ('ops-shipment-detail', 'Shipment record', (shipment.pk,)),
-            ('ops-history', 'Dispatch history', ()), ('ops-orders', f'<a href="{reverse("portal:ops-orders")}" class="is-active" aria-current="page">Supply requests</a>', ()),
+            ('ops-history', 'Dispatch history', ()), ('ops-orders', f'<a href="{reverse("portal:ops-orders")}" class="is-active" aria-current="page">Non-prescription requests</a>', ()),
             ('ops-order-detail', 'Review this request', (order.pk,)),
         ):
             with self.subTest(route=route):

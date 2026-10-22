@@ -140,9 +140,9 @@ class TreatmentPageTests(TestCase):
         with patch('django.core.signing.time.time', return_value=1):
             token = self.token('subscription-status', plan)
         response = self.client.post(reverse('portal:patient-subscription-status', args=[plan.pk]),
-                                    dict(treatment_context=token, confirm='on', action='cancel'))
+                                    dict(treatment_context=token, confirm='on', action='cancel', reasons='cost'))
         self.assertEqual(response.status_code, 400)
-        self.assertTrue(response.context['action_form'].non_field_errors())
+        self.assertTrue(response.context['cancel_form'].non_field_errors())
         plan.refresh_from_db()
         self.assertEqual(plan.status, 'active')
 

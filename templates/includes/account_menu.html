@@ -15,7 +15,7 @@
       {% else %}
         <a href="{% url 'accounts:profile' %}">My profile</a>
         <a href="{% url 'accounts:password-change' %}">Change password</a>
-        {% if active_company and active_membership.role != 'doctor' %}<a href="{% url 'portal:account-access-history' %}">My access history</a>{% endif %}
+        {# Super Admins only: clinicians and practice administrators don't need it. #}{% if active_company and active_membership.role == 'super_admin' %}<a href="{% url 'portal:account-access-history' %}">My access history</a>{% endif %}
       {% endif %}
     </nav>
     {% if user.is_superuser and user.is_staff %}<div class="account-menu__links account-menu__section"><a href="{% url 'admin:index' %}">Practice administration</a></div>{% endif %}

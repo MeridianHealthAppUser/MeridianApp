@@ -175,7 +175,11 @@ class StaffPagesTests(TestCase):
             self.login(user)
             for name in self.section_names:
                 with self.subTest(user=user.email, section=name):
-                    self.assertEqual(self.page(name).status_code, 200)
+                    if user == self.administrator and name == 'patient-list':
+                        # Practice administrators don't browse patient records: their Messages opens instead.
+                        self.assertRedirects(self.page(name), reverse('portal:staff-inbox'), fetch_redirect_response=False)
+                    else:
+                        self.assertEqual(self.page(name).status_code, 200)
 
     def test_new_list_sections_are_get_only(self):
         self.login()
@@ -184,7 +188,7 @@ class StaffPagesTests(TestCase):
                 self.assertEqual(self.client.post(reverse(f'portal:{name}'), {}).status_code, 405)
 
     def test_directory_lists_only_active_patients_in_current_practice(self):
-        self.login(self.administrator)
+        self.login(self.super_admin)
         response = self.page('patient-list')
         self.assertEqual({patient.pk for patient in response.context['patients']}, {self.patient.pk, self.second_patient.pk})
 
@@ -203,7 +207,7 @@ class StaffPagesTests(TestCase):
         self.assertNotIn('patients', overview.context)
 
     def test_directory_search_and_clinician_filter_work_within_practice(self):
-        self.login(self.administrator)
+        self.login(self.super_admin)
         response = self.page('patient-list', q='nEeDlE')
         self.assertEqual({patient.pk for patient in response.context['patients']}, {self.patient.pk})
         response = self.page('patient-list', clinician=self.second_doctor.pk)
@@ -212,7 +216,7 @@ class StaffPagesTests(TestCase):
         self.assertEqual(list(response.context['patients']), [])
 
     def test_directory_search_is_a_search_bar_with_filters_beside_it_for_administrators(self):
-        self.login(self.administrator)
+        self.login(self.super_admin)
         directory = reverse('portal:patient-list')
         response = self.page('patient-list', q='Alpha', clinician=self.doctor.pk)
         html = response.content.decode()
@@ -240,7 +244,7 @@ class StaffPagesTests(TestCase):
         self.assertNotContains(response, '<span class="filter-menu__label">Clinician</span>')
 
     def test_invalid_directory_filters_show_errors_without_falling_back_to_all_patients(self):
-        self.login(self.administrator)
+        self.login(self.super_admin)
         for params, field in (({'clinician': self.foreign_doctor.pk}, 'clinician'), ({'q': 'x' * 201}, 'q')):
             with self.subTest(field=field):
                 self.assert_invalid_filter(self.page('patient-list', **params), field, 'patients')
@@ -249,7 +253,7 @@ class StaffPagesTests(TestCase):
         additional = Patient.objects.bulk_create([
             Patient(company=self.company, first_name=f'Extra {number}', last_name='Directory') for number in range(22)
         ])
-        self.login(self.administrator)
+        self.login(self.super_admin)
         first = self.page('patient-list')
         second = self.page('patient-list', page=2)
         first_ids = {patient.pk for patient in first.context['patients']}
@@ -386,12 +390,17 @@ class StaffPagesTests(TestCase):
             company=self.other_company, clinician=self.doctor,
             starts_at=self.day_start + timedelta(hours=13), ends_at=self.day_start + timedelta(hours=13, minutes=30),
         )
-        # Open time is shown to the practice, who book patients in; a doctor's calendar doesn't list it.
+        # Open time is shown to the practice, who book patients in; a doctor's calendar doesn't list it. Without
+        # working hours saved, the doctor's day is the availability recorded for it in this practice.
         self.login(self.administrator)
         response = self.page('staff-schedule', date=self.day.isoformat(), clinician=self.doctor.pk)
-        self.assertEqual({slot.pk for slot in response.context['open_slots']}, {valid.pk})
+        [diary] = response.context['day_diaries']
+        states = {slot['starts_at']: slot['state'] for period in diary['periods'] for slot in period['slots']}
+        self.assertEqual({starts for starts, state in states.items() if state == 'free'}, {valid.starts_at})
+        self.assertEqual(states[self.day_start + timedelta(hours=11)], 'booked')
+        self.assertNotIn(self.day_start + timedelta(hours=13), states)  # Another practice's.
         self.login()
-        self.assertEqual(self.page('staff-schedule', date=self.day.isoformat()).context['open_slots'], [])
+        self.assertEqual(self.page('staff-schedule', date=self.day.isoformat()).context['day_diaries'], [])
 
     def test_primary_navigation_routes_to_real_sections_on_desktop_and_mobile(self):
         # Patient Records & Messages opens on its first tab, All patients.
@@ -439,7 +448,7 @@ class StaffPagesTests(TestCase):
         self.assertIn(self.midnight_appointment.pk, [item.pk for item in response.context['appointments']])
         for label in ('Offer a new time', 'Discuss rebooking', 'Start a conversation', 'appointment-proposals'):
             self.assertNotContains(response, label)
-        self.assertContains(response, 'Appointment details')
+        self.assertContains(response, '>Details<span class="sr-only"> of the appointment with')
         response = self.client.get(reverse('portal:patient-detail', args=[self.patient.pk]), {
             'tab': 'messages', 'thread': thread.pk, 'appointment': self.midnight_appointment.pk,
         })

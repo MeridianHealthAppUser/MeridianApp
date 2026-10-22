@@ -111,13 +111,13 @@ class PatientWorkspaceFormTests(TestCase):
         self.assertWorkspace(response, 'consultations', active='overview')
         self.assertEqual(response.redirect_chain, [(url, 302)])
 
-    def test_admin_appointment_workspace_does_not_add_clinical_permissions(self):
+    def test_admin_appointment_page_stands_alone_without_clinical_permissions(self):
+        # Practice administrators don't open patient records, so the appointment isn't inside one.
         self.login(self.admin)
         response = self.client.get(reverse('portal:appointment-detail', args=[self.appointment.pk]))
-        self.assertWorkspace(response, 'appointments')
-        tabs = {item['name'] for item in response.context['workspace_tabs']}
-        self.assertNotIn('consultations', tabs)
-        self.assertNotIn('blood-tests', tabs)
+        self.assertTemplateUsed(response, 'portal/staff_appointment_detail.html')
+        self.assertTemplateNotUsed(response, 'portal/patient_workspace_base.html')
+        self.assertNotIn('workspace_tabs', response.context)
         for _, tab, url in self.screens():
             if tab != 'appointments':
                 self.assertEqual(self.client.get(url).status_code, 403)
@@ -172,13 +172,13 @@ class SharedPatientActionTests(TestCase):
     assertWorkspace = PatientWorkspaceFormTests.assertWorkspace
 
     def screens(self):
-        # Delivery detail is an Operations page, so a practice admin opens it; the doctor opens the rest.
+        # Delivery detail is an Operations page, so a Super Admin opens it; the doctor opens the rest.
         return [
             ('task-editor', 'tasks', reverse('portal:task-edit', args=[self.task.pk]), None),
             ('authorisation-create', 'treatment', reverse('portal:treatment-authorisation-create', args=[self.patient.pk]), None),
             ('authorisation-detail', 'treatment', reverse('portal:treatment-authorisation-detail', args=[self.authorization.pk]), None),
             ('authorisation-renew', 'treatment', reverse('portal:treatment-authorisation-renew', args=[self.authorization.pk]), None),
-            ('shipment-detail', 'deliveries', reverse('portal:ops-shipment-detail', args=[self.shipment.pk]), self.admin),
+            ('shipment-detail', 'deliveries', reverse('portal:ops-shipment-detail', args=[self.shipment.pk]), self.super_admin),
             ('compounding-create', 'treatment', reverse('portal:compounding-create', args=[self.authorization.pk]), None),
             ('compounding-detail', 'treatment', reverse('portal:compounding-detail', args=[self.compounding.pk]), None),
         ]
@@ -191,7 +191,7 @@ class SharedPatientActionTests(TestCase):
                 self.assertEqual(global_page.status_code, 200)
                 self.assertNotContains(global_page, 'aria-label="Patient sections"')
                 patient_page = self.client.get(url, {'workspace': 'patient', 'patient': self.other_patient.pk})
-                # The practice admin keeps the tab; the doctor's pages sit under the Overview.
+                # The Super Admin keeps the tab; the doctor's pages sit under the Overview.
                 section = tab if actor else doctor_section(tab)
                 self.assertWorkspace(patient_page, tab, active=section)
                 self.assertContains(patient_page, f'href="{reverse("portal:patient-detail", args=[self.patient.pk])}?tab={section}"')
@@ -232,7 +232,10 @@ class SharedPatientActionTests(TestCase):
         self.login()
         self.assertEqual(self.client.get(url, {'workspace': 'patient'}).status_code, 403)
         self.assertEqual(self.client.post(url, {'workspace': 'patient', 'action': 'hold'}).status_code, 403)
+        # A practice administrator opens it, but never inside the patient's record.
         self.login(self.admin)
+        self.assertTemplateNotUsed(self.client.get(url, {'workspace': 'patient'}), 'portal/patient_workspace_base.html')
+        self.login(self.super_admin)
         page = self.client.get(url, {'workspace': 'patient'})
         rejected = self.client.post(url, {'workspace': 'patient', 'action': 'hold'})
         self.assertWorkspace(rejected, 'deliveries', status=400)
@@ -244,10 +247,10 @@ class SharedPatientActionTests(TestCase):
     def test_deliveries_tab_lists_rows_for_admins_and_sends_doctors_to_the_overview(self):
         record = reverse('portal:patient-detail', args=[self.patient.pk])
         link = reverse('portal:ops-shipment-detail', args=[self.shipment.pk])
-        # Doctors (the Clinician role) don't see Deliveries; the practice admin lists them and opens the Operations page.
+        # Doctors (the Clinician role) don't see Deliveries; a Super Admin lists them and opens the Operations page.
         self.login()
         self.assertRedirects(self.client.get(record, {'tab': 'deliveries'}), f'{record}?tab=overview', fetch_redirect_response=False)
-        self.login(self.admin)
+        self.login(self.super_admin)
         page = self.client.get(record, {'tab': 'deliveries'})
         self.assertEqual([row.pk for row in page.context['rows']], [self.shipment.pk])
         self.assertContains(page, link)

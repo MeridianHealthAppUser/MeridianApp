@@ -11,13 +11,14 @@ from unittest.mock import patch
 from urllib.parse import quote
 
 from django.conf import settings
+from django.core.exceptions import PermissionDenied
 from django.core import mail
-from django.test import Client
+from django.test import Client, override_settings
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.formats import date_format
 
-from care.appointment_lifecycle import change_appointment_status
+from care.appointment_lifecycle import change_appointment_status, reschedule_appointment
 from care.clinical import save_consultation
 from care.models import Appointment, AuditEvent, ClinicalTask, PatientMessage
 from care.services import post_patient_message
@@ -55,6 +56,68 @@ class AppointmentDetailPageTests(AppointmentLifecycleFixture):
         data = {'workflow_context': token, 'action': 'handover', 'doctor': self.colleague.pk, 'confirm': 'on'}
         data.update(overrides)
         return data
+
+    def time_data(self, page, starts_at):
+        local = timezone.localtime(starts_at)
+        return {'workflow_context': page.context['time_context'], 'date': local.date().isoformat(), 'time': f'{local:%H:%M}'}
+
+    @override_settings(EMAIL_ENABLED=True, EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend')
+    def test_an_administrator_changes_the_time_and_the_patient_and_clinician_are_emailed(self):
+        appointment = self.appointment(appointment_type='follow_up', reminder_sent_at=timezone.now())
+        new_start = self.starts_at + timedelta(days=1)
+        self.login(self.admin)
+        page = self.client.get(self.url('appointment-detail', appointment.pk))
+        self.assertContains(page, 'data-modal-open="appointment-time"')
+        # Its Time list leaves out only the clinician's other bookings, not this one.
+        self.assertContains(page, f'data-exclude-appointment="{appointment.pk}"')
+        data = self.time_data(page, new_start)
+        before = len(mail.outbox)
+        with self.captureOnCommitCallbacks(execute=True):
+            response = self.client.post(self.url('appointment-change-time', appointment.pk), data)
+        self.assertRedirects(response, self.url('appointment-detail', appointment.pk), fetch_redirect_response=False)
+        appointment.refresh_from_db()
+        self.assertEqual(appointment.starts_at, new_start)
+        self.assertIsNone(appointment.reminder_sent_at)  # Reminded again before the new time.
+        sent = {message.to[0]: message.subject for message in mail.outbox[before:]}
+        self.assertEqual(set(sent), {self.patient_user.email, self.doctor.email})
+        self.assertTrue(sent[self.patient_user.email].startswith('Your appointment has moved to'))
+        self.assertTrue(sent[self.doctor.email].startswith('Appointment moved: Alpha Patient on'))
+        self.assertTrue(AuditEvent.objects.filter(action='appointment.time_changed', target_id=str(appointment.pk)).exists())
+        # The same form again is out of date.
+        self.assertEqual(self.client.post(self.url('appointment-change-time', appointment.pk), data).status_code, 400)
+
+    @override_settings(EMAIL_ENABLED=True, EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend')
+    def test_a_doctor_moves_their_own_appointment_and_only_the_patient_is_emailed(self):
+        appointment = self.appointment()
+        self.login(self.doctor)
+        page = self.client.get(self.url('appointment-detail', appointment.pk))
+        before = len(mail.outbox)
+        with self.captureOnCommitCallbacks(execute=True):
+            self.client.post(self.url('appointment-change-time', appointment.pk), self.time_data(page, self.starts_at + timedelta(hours=2)))
+        appointment.refresh_from_db()
+        self.assertEqual(appointment.starts_at, self.starts_at + timedelta(hours=2))
+        self.assertEqual([message.to[0] for message in mail.outbox[before:]], [self.patient_user.email])
+        # Another doctor's appointment isn't theirs to move.
+        other = self.appointment(clinician=self.colleague, starts_at=self.starts_at + timedelta(days=2))
+        with self.assertRaises(PermissionDenied):
+            reschedule_appointment(appointment=other, actor=self.doctor, starts_at=self.starts_at + timedelta(days=4),
+                                   expected_updated=other.updated_at.isoformat())
+
+    def test_a_clash_or_a_cancelled_booking_cannot_be_moved_and_patients_ask_the_practice(self):
+        appointment = self.appointment()
+        self.appointment(starts_at=self.starts_at + timedelta(days=1))  # The doctor is busy then.
+        self.login(self.super_admin)
+        page = self.client.get(self.url('appointment-detail', appointment.pk))
+        response = self.client.post(self.url('appointment-change-time', appointment.pk),
+                                    self.time_data(page, self.starts_at + timedelta(days=1)))
+        self.assertEqual(response.status_code, 400)
+        self.assertContains(response, 'id="appointment-time" aria-labelledby="appointment-time-title" open', status_code=400)
+        appointment.refresh_from_db()
+        self.assertEqual(appointment.starts_at, self.starts_at)
+        cancelled = self.appointment(starts_at=self.starts_at + timedelta(days=5), status='cancelled')
+        self.assertNotContains(self.client.get(self.url('appointment-detail', cancelled.pk)), 'Change time')
+        self.login(self.patient_user)
+        self.assertNotContains(self.client.get(self.url('patient-appointment-detail', appointment.pk)), 'appointment-change-time')
 
     def test_booking_is_standalone_and_requires_signed_context(self):
         self.login(self.admin)
@@ -100,7 +163,7 @@ class AppointmentDetailPageTests(AppointmentLifecycleFixture):
         self.assertFalse(Appointment.objects.exists())
 
     def test_old_patient_bound_booking_handler_uses_service_without_type_error(self):
-        self.login(self.admin)
+        self.login(self.super_admin)
         token = self.client.get(self.url('patient-detail', self.patient.pk)).context['legacy_appointment_context']
         data = self.booking_data(workflow_context=token)
         data.pop('patient')
@@ -115,7 +178,7 @@ class AppointmentDetailPageTests(AppointmentLifecycleFixture):
         self.assertEqual(Appointment.objects.count(), 1)
 
     def test_legacy_booking_missing_expired_stale_or_other_patient_signature_preserves_draft(self):
-        self.login(self.admin)
+        self.login(self.super_admin)
         url = self.url('patient-appointment-create', self.patient.pk)
         detail_url = self.url('patient-detail', self.patient.pk)
         with patch('django.core.signing.time.time', return_value=1):
@@ -135,9 +198,10 @@ class AppointmentDetailPageTests(AppointmentLifecycleFixture):
         self.assertFalse(Appointment.objects.exists())
 
     def test_legacy_booking_signature_cannot_be_reused_in_other_practice(self):
-        self.login(self.admin)
+        CompanyMembership.objects.create(company=self.beta, user=self.super_admin, role='super_admin')
+        self.login(self.super_admin)
         token = self.client.get(self.url('patient-detail', self.patient.pk)).context['legacy_appointment_context']
-        self.login(self.admin, self.beta)
+        self.login(self.super_admin, self.beta)
         response = self.client.post(self.url('patient-appointment-create', self.beta_patient.pk),
             self.booking_data(patient=self.beta_patient.pk, workflow_context=token))
         self.assertTrue(response.context['appointment_form'].non_field_errors())
@@ -145,7 +209,7 @@ class AppointmentDetailPageTests(AppointmentLifecycleFixture):
 
     def test_rejected_legacy_booking_does_not_mark_conversation_read(self):
         message = post_patient_message(thread=self.thread, sender=self.patient_user, body='Unread patient question')
-        self.login(self.admin)
+        self.login(self.super_admin)
         before = AuditEvent.objects.count()
         response = self.client.post(self.url('patient-appointment-create', self.patient.pk), self.booking_data())
         self.assertTrue(response.context['appointment_form'].non_field_errors())
@@ -275,7 +339,7 @@ class AppointmentDetailPageTests(AppointmentLifecycleFixture):
         theirs = self.appointment(clinician=self.colleague, appointment_type='follow_up', starts_at=self.starts_at + timedelta(hours=1))
         cancelled = self.appointment(appointment_type='follow_up', status='cancelled', starts_at=self.starts_at + timedelta(hours=2))
         record = self.url('patient-detail', self.patient.pk)
-        self.login(self.admin)
+        self.login(self.super_admin)
 
         def rows(**query):
             return {row.pk for row in self.client.get(record, {'tab': 'appointments', **query}).context['rows']}
@@ -316,7 +380,7 @@ class AppointmentDetailPageTests(AppointmentLifecycleFixture):
     def test_book_an_appointment_is_a_button_beside_the_filters_that_opens_a_modal(self):
         self.appointment(clinician=self.colleague)
         record = self.url('patient-detail', self.patient.pk)
-        self.login(self.admin)
+        self.login(self.super_admin)
         response = self.client.get(record, {'tab': 'appointments'})
         html = response.content.decode()
         button = f'href="{self.url("appointment-book")}?patient={self.patient.pk}" data-modal-open="book-appointment" aria-haspopup="dialog">Book an appointment</a>'
@@ -436,7 +500,7 @@ class AppointmentDetailPageTests(AppointmentLifecycleFixture):
         self.assertEqual(appointment.status, 'cancelled')
 
     def test_legacy_staff_patient_detail_does_not_render_external_video_links_or_mutate_them(self):
-        self.login(self.admin)
+        self.login(self.super_admin)
         unsafe = self.appointment(video_link='javascript:alert(1)')
         self.appointment(video_link='https://[', starts_at=self.starts_at + timedelta(hours=1))
         self.appointment(video_link='https://example.test/valid-video', starts_at=self.starts_at + timedelta(hours=2))

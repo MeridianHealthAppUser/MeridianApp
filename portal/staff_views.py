@@ -5,6 +5,7 @@ from urllib.parse import urlencode
 
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.paginator import Paginator
+from django.shortcuts import redirect
 from django.db.models import Case, F, IntegerField, Q, Value, When
 from django.urls import reverse
 from django.utils import timezone
@@ -13,7 +14,7 @@ from django.views.decorators.cache import never_cache
 from django.views.generic import TemplateView
 
 from care.models import Appointment, ClinicalTask
-from care.availability import appointments_requiring_attention, attention_kind, diary_day_states, open_slots_for_day
+from care.availability import appointments_requiring_attention, attention_kind, day_diaries, diary_day_states
 from care.task_services import visible_tasks
 from practices.models import CompanyMembership, Patient
 
@@ -56,6 +57,12 @@ class PatientListView(StaffPageView):
     template_name = 'portal/patient_list.html'
     nav_section = 'patients'
     page_title = 'Patient Records & Messages'
+
+    def get(self, request, *args, **kwargs):
+        # Practice administrators don't browse patient records: their Messages opens on Patient messages.
+        if self.membership.role == CompanyMembership.Role.PRACTICE_ADMIN:
+            return redirect('portal:staff-inbox')
+        return super().get(request, *args, **kwargs)
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -191,7 +198,7 @@ class StaffScheduleView(StaffPageView):
             queryset = queryset.filter(clinician=self.request.user)
         selected_date = selected_clinician = None
         next_appointment_url = next_appointment_date = None
-        slots = []
+        diaries = []
         filters = {}
         if form.is_valid():
             selected_date = form.cleaned_data['date']
@@ -234,8 +241,8 @@ class StaffScheduleView(StaffPageView):
                 )
             queryset = queryset.filter(starts_at__gte=start, starts_at__lt=end)
             filters = {'date': selected_date.isoformat(), 'clinician': selected_clinician.pk if selected_clinician else '', 'view': schedule_view}
-            # Doctors don't see open time: booking someone in is the practice's job.
-            slots = [] if context['is_doctor'] else open_slots_for_day(
+            # Doctors don't see open time: booking someone in is the practice's job. It's one day's, so Day view only.
+            diaries = [] if context['is_doctor'] or schedule_view != 'table' else day_diaries(
                 company=self.company,
                 clinicians=[selected_clinician] if selected_clinician else practice_doctors(self.company),
                 day=selected_date,
@@ -254,12 +261,23 @@ class StaffScheduleView(StaffPageView):
         attention = {} if context['is_doctor'] else {appointment.pk: attention_kind(appointment) for appointment in appointments_requiring_attention(
             company=self.company, clinician=selected_clinician,
         ).filter(pk__in=[appointment.pk for appointment in appointments])}
-        # A new time is arranged by the practice, when the patient contacts support; the diary only shows bookings.
+        # A new time is arranged by the practice, when the patient contacts support. Practice administrators move or
+        # cancel a booking from its row in Day view, each in a dialog; everyone else opens its details.
+        manage_bookings = self.membership.role == CompanyMembership.Role.PRACTICE_ADMIN and schedule_view == 'table'
+        if manage_bookings:
+            from .appointment_detail_views import AppointmentTimeForm
         for appointment in appointments:
             appointment.attention = attention.get(appointment.pk)
             appointment.needs_attention = appointment.attention is not None
+            if manage_bookings and appointment.status == Appointment.Status.BOOKED:
+                local = timezone.localtime(appointment.starts_at)
+                appointment.time_form = AppointmentTimeForm(initial={'date': local.date(), 'time': f'{local:%H:%M}'},
+                                                            auto_id=f'time_{appointment.pk}_%s')
+                appointment.time_context = make_workflow_context(self.request, self.company, 'appointment-time', appointment)
+                appointment.cancel_context = make_workflow_context(self.request, self.company, 'appointment-status', appointment)
+        context['manage_bookings'] = manage_bookings
         context.update(
-            filter_form=form, appointments=appointments, open_slots=slots,
+            filter_form=form, appointments=appointments, day_diaries=diaries,
             selected_date=selected_date, selected_clinician=selected_clinician,
             next_appointment_date=next_appointment_date, next_appointment_url=next_appointment_url,
             table_view_url=schedule_url(day=selected_date or data.get('date', '')[:32], clinician=selected_clinician or data.get('clinician', '')[:32], view='table'),

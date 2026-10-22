@@ -21,6 +21,7 @@ from practices.models import CompanyMembership, Patient
 from practices.tenancy import company_is_enabled
 
 from .availability import SAST, open_slots_for_day
+from .followups import close_callbacks
 from .models import (
     Appointment, AvailabilitySlot, ConsentRecord, Invoice, InvoiceLine, Lead, Payment, PatientEvent,
     PracticeSettings, ScreeningQuestionnaire,
@@ -247,6 +248,8 @@ def complete_checkout(*, lead, user, password, clinician_id, starts_at, code, re
     lead.stage = Lead.Stage.CONVERTED
     lead.full_clean()
     lead.save(update_fields=('converted_patient', 'stage', 'updated_at'))
+    # Booked, so they no longer need a call: off the Please call list.
+    close_callbacks(lead)
 
     record_audit(company=company, actor=account, patient=patient, target=patient, request=request,
                  action='patient.account_created' if account_created else 'patient.record_created',

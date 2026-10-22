@@ -71,7 +71,8 @@
                   {% if task.due_at %}<p class="staff-task-table__due{% if task.is_overdue %} is-overdue{% endif %}">Due <time datetime="{{ task.due_at|date:'c' }}">{{ task.due_at|date:"j M Y, H:i" }} SAST</time>{% if task.is_overdue %} · Overdue{% endif %}</p>{% endif %}
                 </td>
                 <td data-label="Patient / general">
-                  {% if task.patient %}<a class="staff-task-table__patient" href="{% url 'portal:patient-detail' task.patient_id %}">{% include 'portal/includes/person_tag.html' with tag=task.patient_tag %}</a>{% else %}<span class="staff-task-table__general">General practice</span>{% endif %}
+                  {# Practice administrators don't open patient records, so theirs is the name only. #}
+                  {% if task.patient and active_membership.role == 'practice_admin' %}<span class="staff-task-table__patient">{% include 'portal/includes/person_tag.html' with tag=task.patient_tag %}</span>{% elif task.patient %}<a class="staff-task-table__patient" href="{% url 'portal:patient-detail' task.patient_id %}">{% include 'portal/includes/person_tag.html' with tag=task.patient_tag %}</a>{% else %}<span class="staff-task-table__general">General practice</span>{% endif %}
                 </td>
                 <td data-label="Assigned to">{% if task.assigned_to %}{{ task.assigned_to.full_name }}{% else %}Unassigned{% endif %}</td>
                 <td data-label="Raised" class="staff-task-table__raised">
@@ -82,7 +83,7 @@
                 <td class="staff-task-table__actions-cell" data-label="Actions">
                   <div class="staff-task-table__actions">
                     {% if task.workflow_url %}<a class="console-button console-button--secondary" href="{{ task.workflow_url }}">{{ task.workflow_label }}</a>{% if task.also_editable %}<a class="console-button console-button--secondary" href="{% url 'portal:task-edit' task.pk %}">Edit task</a>{% endif %}{% elif task.is_clinical_workflow %}<span class="staff-task-table__due">Completed by the responsible doctor in the clinical workflow.</span>{% else %}<a class="console-button console-button--secondary" href="{% url 'portal:task-edit' task.pk %}">Edit task</a>{% endif %}
-                    {% if task.patient %}<a class="console-button console-button--secondary" href="{% url 'portal:patient-detail' task.patient_id %}">Open record<span class="sr-only"> for {{ task.patient }}</span></a>{% endif %}
+                    {% if task.patient and active_membership.role != 'practice_admin' %}<a class="console-button console-button--secondary" href="{% url 'portal:patient-detail' task.patient_id %}">Open record<span class="sr-only"> for {{ task.patient }}</span></a>{% endif %}
                     {% if task.is_actionable %}
                       <form method="post" action="{% url 'portal:task-complete' task.pk %}">
                         {% csrf_token %}

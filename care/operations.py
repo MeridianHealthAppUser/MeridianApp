@@ -298,6 +298,58 @@ def week_order(company, week_start):
     }
 
 
+# Dispatch stock's average looks back over this many full weeks of dispatched parcels.
+AVERAGE_WEEKS = 8
+
+
+def _pens_by_product(items):
+    return {row['product']: row['pens'] for row in items.values('product').annotate(pens=Sum('quantity'))}
+
+
+def week_stock(company, week_start):
+    """Each active catalogue item for a shipping week (Dispatch stock): the pens going out in its parcels that aren't
+    cancelled, and the pens to order, which are those in its ready parcels (as week_order). Pens aren't kept in stock,
+    so there is nothing on hand to take off. For Super Admins, how To order is worked out: the pens still in draft or
+    held parcels, the average dispatched a week over the AVERAGE_WEEKS before this one, and next week's parcels."""
+    week = (week_start, week_start + timedelta(days=6))
+    items = ShipmentItem.objects.filter(company=company, shipment__patient__company=company)
+    in_week = items.filter(shipment__scheduled_for__range=week).exclude(shipment__status=Shipment.Status.CANCELLED)
+    counts = {
+        'to_ship': _pens_by_product(in_week),
+        'to_order': _pens_by_product(in_week.filter(shipment__status=Shipment.Status.READY)),
+        'draft': _pens_by_product(in_week.filter(shipment__status=Shipment.Status.DRAFT)),
+        'held': _pens_by_product(in_week.filter(shipment__status=Shipment.Status.HELD)),
+        'next_week': _pens_by_product(items.filter(
+            shipment__scheduled_for__range=(week[0] + timedelta(days=7), week[1] + timedelta(days=7)),
+        ).exclude(shipment__status=Shipment.Status.CANCELLED)),
+        'dispatched': _pens_by_product(items.filter(
+            shipment__status__in=(Shipment.Status.DISPATCHED, Shipment.Status.DELIVERED),
+            shipment__dispatched_at__date__range=(week_start - timedelta(weeks=AVERAGE_WEEKS), week_start - timedelta(days=1)),
+        )),
+    }
+    rows = []
+    for product in MedicationProduct.objects.filter(company=company, is_active=True).order_by('name', 'strength', 'pk'):
+        row = {name: values.get(product.pk, 0) for name, values in counts.items()}
+        row['average'] = row.pop('dispatched') / AVERAGE_WEEKS
+        rows.append(dict(row, product=product))
+    return rows
+
+
+@transaction.atomic
+def set_shipment_note(*, shipment, actor, note, request=None):
+    """The practice's note on a parcel, from the Weekly shipping list. Blank clears it."""
+    company, shipment = _locked_shipment(shipment, actor)
+    note = ' '.join(note.split()) if isinstance(note, str) else ''
+    if len(note) > 500:
+        raise ValidationError('Keep the note to 500 characters or fewer.')
+    if note != shipment.note:
+        shipment.note = note
+        shipment.save(update_fields=('note', 'updated_at'))
+        record_audit(company=company, actor=actor, patient=shipment.patient, action='shipment.note_updated',
+                     target=shipment, request=request, metadata={'cleared': not note})
+    return shipment
+
+
 @transaction.atomic
 def dispatch_shipment(*, shipment, actor, tracking_number, confirm=False, batch_notes=None, request=None):
     """Record a parcel's actual dispatch. batch_notes ({item pk: 'SG-2604, expiry 04/2027'}) note what went into it."""

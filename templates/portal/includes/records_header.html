@@ -1,12 +1,13 @@
 {% load workspace_ui %}{% message_counts as counts %}
 {# Patient Records & Messages: one page with All patients (the default), Patient messages and Team messages tabs. #}
+{# Practice administrators don't browse patient records: theirs is Messages, without All patients. #}
 <header class="records-header">
   <div class="records-header__title">
-    <h1>Patient Records &amp; Messages</h1>
+    <h1>{% if active_membership.role == 'practice_admin' %}Messages{% else %}Patient Records &amp; Messages{% endif %}</h1>
     {% if action_url %}<a class="console-button console-button--primary" href="{{ action_url }}">{{ action_label }}</a>{% endif %}
   </div>
-  <nav class="records-tabs" aria-label="Patient Records &amp; Messages">
-    <a href="{% url 'portal:patient-list' %}"{% if records_tab == 'patients' %} class="is-active" aria-current="page"{% endif %}>All patients</a>
+  <nav class="records-tabs" aria-label="{% if active_membership.role == 'practice_admin' %}Messages{% else %}Patient Records &amp; Messages{% endif %}">
+    {% if active_membership.role != 'practice_admin' %}<a href="{% url 'portal:patient-list' %}"{% if records_tab == 'patients' %} class="is-active" aria-current="page"{% endif %}>All patients</a>{% endif %}
     <a href="{% url 'portal:staff-inbox' %}"{% if records_tab == 'messages' %} class="is-active" aria-current="page"{% endif %}>Patient messages{% include 'portal/includes/live_message_badge.html' with kind='patient' count=counts.patient_unread_total %}</a>
     <a href="{% url 'portal:team-inbox' %}"{% if records_tab == 'team' %} class="is-active" aria-current="page"{% endif %}>Team messages{% include 'portal/includes/live_message_badge.html' with kind='team' count=counts.team_unread_total %}</a>
   </nav>

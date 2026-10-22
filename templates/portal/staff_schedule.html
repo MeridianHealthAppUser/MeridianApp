@@ -2,7 +2,7 @@
 {% load static workspace_ui %}
 
 {% block title %}{{ title|default:page_title }} | {{ company.name }} | Meridian{% endblock %}
-{% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/schedule_availability.css' %}?v=20261017a"><link rel="stylesheet" href="{% static 'css/dialogs.css' %}?v=20261008b"><script src="{% static 'js/dialogs.js' %}?v=20261015a" defer></script><script src="{% static 'js/appointment_booking.js' %}?v=20261010b" defer></script><script src="{% static 'js/time_ranges.js' %}?v=20261011a" defer></script><script src="{% static 'js/working_hours.js' %}?v=20261012a" defer></script><script src="{% static 'js/submit_on_change.js' %}?v=20261017a" defer></script>{% endblock %}
+{% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/schedule_availability.css' %}?v=20261022c"><link rel="stylesheet" href="{% static 'css/dialogs.css' %}?v=20261022a"><script src="{% static 'js/dialogs.js' %}?v=20261022a" defer></script><link rel="stylesheet" href="{% static 'css/time_slots.css' %}?v=20261022c"><script src="{% static 'js/appointment_booking.js' %}?v=20261022d" defer></script><script src="{% static 'js/time_ranges.js' %}?v=20261011a" defer></script><script src="{% static 'js/working_hours.js' %}?v=20261012a" defer></script><script src="{% static 'js/submit_on_change.js' %}?v=20261017a" defer></script>{% endblock %}
 
 
 {% block breadcrumbs %}{% breadcrumbs page_title %}{% endblock %}
@@ -153,15 +153,24 @@
                 {% for appointment in appointments %}
                   <tr{% if appointment.needs_attention %} class="schedule-appointment-attention"{% endif %}>
                     <td data-label="Time"><time class="staff-schedule-table__time" datetime="{{ appointment.starts_at|date:'c' }}">{{ appointment.starts_at|date:"H:i" }}</time></td>
-                    <td data-label="Patient"><a class="staff-schedule-table__patient" href="{% url 'portal:patient-detail' appointment.patient_id %}">{{ appointment.patient }}</a></td>
+                    <td data-label="Patient">{% if manage_bookings %}<span class="staff-schedule-table__patient">{{ appointment.patient }}</span>{% else %}<a class="staff-schedule-table__patient" href="{% url 'portal:patient-detail' appointment.patient_id %}">{{ appointment.patient }}</a>{% endif %}</td>
                     <td data-label="Type">{{ appointment.get_appointment_type_display }} &middot; {{ appointment.duration_minutes }} min</td>
                     {% if not is_doctor %}<td data-label="Clinician">{% if appointment.clinician %}{{ appointment.clinician.full_name }}{% else %}Clinician pending{% endif %}</td>{% endif %}
                     <td data-label="Status">{% include 'portal/includes/schedule_appointment_status.html' %}</td>
                     <td data-label="Room">{% if appointment.attention == 'day_off' or appointment.attention == 'special_hours' %}<span class="schedule-room-closed">Not open</span>{% elif appointment.video_room_url %}<a class="console-button console-button--secondary schedule-join" href="{{ appointment.video_room_url }}">Join<span class="sr-only"> video consultation with {{ appointment.patient }}</span></a>{% elif appointment.video_join_message %}<span class="schedule-room-closed" title="{{ appointment.video_join_message }}">Not open</span>{% else %}<span class="schedule-room-closed">&mdash;</span>{% endif %}</td>
                     <td class="staff-schedule-table__actions-cell" data-label="Actions">
                       <div class="staff-schedule-table__actions">
-                        <a class="console-button console-button--secondary schedule-action" href="{% url 'portal:appointment-detail' appointment.pk %}">Appointment details</a>
-                        <a class="console-button console-button--primary schedule-action" href="{% url 'portal:patient-detail' appointment.patient_id %}">Open record<span class="sr-only"> for {{ appointment.patient }}</span></a>
+                        <a class="console-button console-button--secondary schedule-action" href="{% url 'portal:appointment-detail' appointment.pk %}">Details<span class="sr-only"> of the appointment with {{ appointment.patient }}</span></a>
+                        {% if manage_bookings %}
+                          {# Practice administrators move or cancel a booking here, each in a dialog below; without scripts the #}
+                          {# links open the same dialogs on the appointment's page. #}
+                          {% if appointment.time_form %}
+                            <a class="console-button console-button--secondary schedule-action" href="{% url 'portal:appointment-detail' appointment.pk %}?update=time" data-modal-open="edit-appointment-{{ appointment.pk }}" aria-haspopup="dialog">Edit<span class="sr-only"> the appointment with {{ appointment.patient }}</span></a>
+                            <a class="console-button console-button--secondary schedule-action schedule-action--cancel" href="{% url 'portal:appointment-detail' appointment.pk %}?update=status" data-modal-open="cancel-appointment-{{ appointment.pk }}" aria-haspopup="dialog">Cancel<span class="sr-only"> the appointment with {{ appointment.patient }}</span></a>
+                          {% endif %}
+                        {% else %}
+                          <a class="console-button console-button--primary schedule-action" href="{% url 'portal:patient-detail' appointment.patient_id %}">Open record<span class="sr-only"> for {{ appointment.patient }}</span></a>
+                        {% endif %}
                       </div>
                     </td>
                   </tr>
@@ -182,24 +191,7 @@
         </nav>
       {% endif %}
 
-      {% if not is_doctor %}
-        <section class="staff-page-card staff-availability-card" aria-labelledby="availability-heading">
-          <header class="staff-page-card__header">
-            <div><h2 id="availability-heading">Available time</h2><p>Open availability for the selected day, after appointments and leave.</p></div>
-          </header>
-          <ul class="staff-availability-list">
-            {% for slot in open_slots %}
-              <li>
-                <time datetime="{{ slot.starts_at|date:'c' }}">{{ slot.starts_at|date:"H:i" }}–{{ slot.ends_at|date:"H:i" }}</time>
-                <span>{% if slot.clinician %}{{ slot.clinician.full_name }}{% else %}Clinician pending{% endif %}</span>
-              </li>
-            {% empty %}
-              <li class="staff-availability-list__empty">No available times for this date.</li>
-            {% endfor %}
-          </ul>
-          <p class="staff-availability-card__note">Where regular working hours are saved, these are 30-minute consultation windows with start times every 15 minutes. Up to 100 available windows are shown. These times are not bookings or reservations.</p>
-        </section>
-      {% endif %}
+      {# One day's free time, so Day view only. #}{% if not is_doctor and schedule_view == 'table' %}{% include 'portal/includes/schedule_day_diaries.html' %}{% endif %}
 
       {# The practice's list for moving bookings; clinicians see each booking's status only. #}{% if not is_doctor %}
         <section class="staff-page-card schedule-attention-card" aria-labelledby="affected-appointments-heading">
@@ -229,6 +221,43 @@
       {% endif %}
       </div>
     {% endif %}
+  {% endif %}
+
+  {% if manage_bookings %}
+    {% for appointment in appointments %}{% if appointment.time_form %}
+      {# Edit appointment: a new date and one of the clinician's free times, same clinician and length. A mistake #}
+      {# opens the dialog again on the appointment's page; a change made here comes back to this day. #}
+      <dialog class="app-dialog" id="edit-appointment-{{ appointment.pk }}" aria-labelledby="edit-appointment-{{ appointment.pk }}-title">
+        <div class="app-dialog__body">
+          <h2 id="edit-appointment-{{ appointment.pk }}-title">Edit appointment</h2>
+          <p class="app-dialog__sub">{{ appointment.patient }} · {{ appointment.get_appointment_type_display }} with {{ appointment.clinician.titled_name }}, {{ appointment.duration_minutes }} minutes. Now {{ appointment.starts_at|date:'D j M Y, H:i' }} SAST.</p>
+          <form class="console-form" method="post" action="{% url 'portal:appointment-change-time' appointment.pk %}">{% csrf_token %}<input type="hidden" name="workflow_context" value="{{ appointment.time_context }}"><input type="hidden" name="next" value="{{ request.get_full_path }}">
+            <div class="booking-fields" data-booking-form data-times-url="{% url 'portal:appointment-book-times' %}" data-exclude-appointment="{{ appointment.pk }}">
+              <input type="hidden" name="clinician" value="{{ appointment.clinician_id }}"><input type="hidden" name="patient" value="{{ appointment.patient_id }}"><input type="hidden" name="duration_minutes" value="{{ appointment.duration_minutes }}">
+              {% include 'portal/includes/form_field.html' with field=appointment.time_form.date %}
+              {% include 'portal/includes/form_field.html' with field=appointment.time_form.time %}
+            </div>
+            <p class="app-dialog__sub">{{ appointment.patient.first_name }} and {{ appointment.clinician.titled_name }} are emailed the new time.</p>
+            <div class="app-dialog__actions"><button class="console-button console-button--secondary" type="button" data-dialog-close>Back</button><button class="console-button console-button--primary" type="submit">Save new time</button></div>
+          </form>
+        </div>
+      </dialog>
+      {# Cancel appointment: the reason is shown to the patient and sent in their cancellation email. #}
+      <dialog class="app-dialog" id="cancel-appointment-{{ appointment.pk }}" aria-labelledby="cancel-appointment-{{ appointment.pk }}-title">
+        <div class="app-dialog__body">
+          <h2 id="cancel-appointment-{{ appointment.pk }}-title">Cancel appointment</h2>
+          <p class="app-dialog__sub">{{ appointment.patient }} · {{ appointment.get_appointment_type_display }} with {{ appointment.clinician.titled_name }} on {{ appointment.starts_at|date:'D j M Y, H:i' }} SAST.</p>
+          <form class="console-form" method="post" action="{% url 'portal:appointment-detail' appointment.pk %}">{% csrf_token %}<input type="hidden" name="workflow_context" value="{{ appointment.cancel_context }}"><input type="hidden" name="next" value="{{ request.get_full_path }}"><input type="hidden" name="status" value="cancelled"><input type="hidden" name="confirm" value="on">
+            <div class="console-form__field">
+              <label for="cancel_{{ appointment.pk }}_reason">Reason</label>
+              <textarea id="cancel_{{ appointment.pk }}_reason" name="reason" rows="3" maxlength="500" required aria-describedby="cancel_{{ appointment.pk }}_reason_help"></textarea>
+              <span class="helptext" id="cancel_{{ appointment.pk }}_reason_help">{{ appointment.patient.first_name }} sees this in the app and in their cancellation email. {{ appointment.clinician.titled_name }} is emailed too.</span>
+            </div>
+            <div class="app-dialog__actions"><button class="console-button console-button--secondary" type="button" data-dialog-close>Back</button><button class="console-button console-button--primary" type="submit">Cancel appointment</button></div>
+          </form>
+        </div>
+      </dialog>
+    {% endif %}{% endfor %}
   {% endif %}
 
   {# Opened by Create appointment above; without scripts that link opens the booking page, which also shows any mistake. #}

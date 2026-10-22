@@ -51,8 +51,11 @@ class PatientDoctorAssignmentTests(TestCase):
         return self.client.post(reverse('portal:patient-doctor-assign', args=[patient.pk]),
                                 {'doctor': doctor.pk if doctor else '', 'workflow_context': token})
 
-    def test_administrators_choose_only_active_clinicians_in_this_practice(self):
-        for actor in (self.admin, self.super_admin):
+    def test_super_admins_choose_only_active_clinicians_in_this_practice(self):
+        # Practice administrators don't open patient records (22 Oct 2026), so they don't change it.
+        self.login(self.admin)
+        self.assertRedirects(self.overview(), reverse('portal:desktop-dashboard'), fetch_redirect_response=False)
+        for actor in (self.super_admin,):
             with self.subTest(actor=actor.email):
                 self.login(actor)
                 response = self.overview()
@@ -86,7 +89,7 @@ class PatientDoctorAssignmentTests(TestCase):
         self.assertFalse(AuditEvent.objects.filter(action='patient.doctor_assigned').exists())
         # An administrator hands the patient to a colleague. The record is then read-only to the doctor: a change
         # is refused before the role is even checked.
-        self.login(self.admin)
+        self.login(self.super_admin)
         self.assign(self.second_doctor)
         self.patient.refresh_from_db()
         self.assertEqual(self.patient.assigned_doctor, self.second_doctor)
@@ -100,7 +103,7 @@ class PatientDoctorAssignmentTests(TestCase):
         self.assertEqual(self.patient.assigned_doctor, self.second_doctor)
 
     def test_admin_assigns_changes_and_clears_the_doctor_with_an_audit_trail(self):
-        self.login(self.admin)
+        self.login(self.super_admin)
         response = self.assign(self.doctor)
         self.assertRedirects(response, reverse('portal:patient-detail', args=[self.patient.pk]) + '?tab=overview', fetch_redirect_response=False)
         self.patient.refresh_from_db()
@@ -113,15 +116,15 @@ class PatientDoctorAssignmentTests(TestCase):
         self.assertIsNone(self.patient.assigned_doctor)
         events = AuditEvent.objects.filter(company=self.company, patient=self.patient, action='patient.doctor_assigned').order_by('pk')
         self.assertEqual([(event.actor, event.metadata) for event in events], [
-            (self.admin, {'previous_doctor_id': None, 'doctor_id': self.doctor.pk}),
-            (self.admin, {'previous_doctor_id': self.doctor.pk, 'doctor_id': self.second_doctor.pk}),
-            (self.admin, {'previous_doctor_id': self.second_doctor.pk, 'doctor_id': None}),
+            (self.super_admin, {'previous_doctor_id': None, 'doctor_id': self.doctor.pk}),
+            (self.super_admin, {'previous_doctor_id': self.doctor.pk, 'doctor_id': self.second_doctor.pk}),
+            (self.super_admin, {'previous_doctor_id': self.second_doctor.pk, 'doctor_id': None}),
         ])
         history = self.client.get(reverse('portal:patient-detail', args=[self.patient.pk]), {'tab': 'history'})
         self.assertContains(history, 'Prescribing doctor changed', count=3)
 
     def test_saving_the_same_doctor_records_nothing(self):
-        self.login(self.admin)
+        self.login(self.super_admin)
         self.assign(self.doctor)
         self.assign(self.doctor)
         self.assertEqual(AuditEvent.objects.filter(action='patient.doctor_assigned').count(), 1)
@@ -149,7 +152,7 @@ class PatientDoctorAssignmentTests(TestCase):
         task = ClinicalTask.objects.create(company=self.company, patient=self.patient, title='PREVIOUS_TASK',
             assigned_to=self.doctor, created_by=self.doctor)
 
-        self.login(self.admin)
+        self.login(self.super_admin)
         self.assign(self.second_doctor)
         self.login(self.second_doctor)
         detail = reverse('portal:patient-detail', args=[self.patient.pk])
@@ -176,7 +179,7 @@ class PatientDoctorAssignmentTests(TestCase):
             self.assertEqual(getattr(record, field), self.doctor)
 
     def test_inactive_and_other_practice_doctors_are_rejected(self):
-        self.login(self.admin)
+        self.login(self.super_admin)
         for doctor in (self.inactive_doctor, self.foreign_doctor):
             with self.subTest(doctor=doctor.email):
                 response = self.assign(doctor)
@@ -187,13 +190,13 @@ class PatientDoctorAssignmentTests(TestCase):
         self.assertIsNone(self.patient.assigned_doctor)
 
     def test_patient_in_another_practice_is_not_found(self):
-        self.login(self.admin)
+        self.login(self.super_admin)
         response = self.client.post(reverse('portal:patient-doctor-assign', args=[self.foreign_patient.pk]),
                                     {'doctor': self.doctor.pk, 'workflow_context': 'x'})
         self.assertEqual(response.status_code, 404)
 
     def test_stale_form_does_not_overwrite_a_newer_assignment(self):
-        self.login(self.admin)
+        self.login(self.super_admin)
         stale = self.overview().context['doctor_assignment_context']
         self.assign(self.doctor)
         response = self.assign(self.second_doctor, token=stale)
@@ -203,7 +206,7 @@ class PatientDoctorAssignmentTests(TestCase):
         self.assertEqual(self.patient.assigned_doctor, self.doctor)
 
     def test_missing_or_tampered_context_is_rejected(self):
-        self.login(self.admin)
+        self.login(self.super_admin)
         response = self.assign(self.doctor, token='tampered')
         self.assertEqual(response.status_code, 400)
         self.patient.refresh_from_db()

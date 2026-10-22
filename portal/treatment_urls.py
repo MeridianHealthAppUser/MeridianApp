@@ -19,4 +19,5 @@ urlpatterns = [
     path('patient/subscription/', views.PatientSubscriptionView.as_view(), name='patient-subscription'),
     path('patient/subscription/enroll/', views.PatientEnrollmentView.as_view(), name='patient-subscription-enroll'),
     path('patient/subscription/<int:pk>/status/', views.PatientSubscriptionStatusView.as_view(), name='patient-subscription-status'),
+    path('patient/treatment/help/', views.PatientHelpRequestView.as_view(), name='patient-help-request'),
 ]

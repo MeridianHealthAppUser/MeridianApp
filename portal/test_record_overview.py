@@ -131,21 +131,12 @@ class RecordOverviewTests(TestCase):
         history = self.page(tab='history')
         self.assertNotContains(history, 'Current consent')
 
-    def test_practice_administrators_get_the_overview_layout_without_anything_clinical(self):
+    def test_practice_administrators_never_open_the_record(self):
+        # Practice administrators don't open patient records (22 Oct 2026); their Overview layout is gone.
         self.login(self.admin)
-        response = self.page()
-        self.assertTrue(response.context['record_overview_admin'])
-        self.assertContains(response, 'data-record-overview')
-        # The doctor's header: the prescription's status (not the medicine) and the quick facts.
-        self.assertContains(response, 'Renewal due')
-        for fact in ('<dt>Title</dt>', '<dt>Age</dt><dd>34</dd>', '<dt>Prescribing doctor</dt>', '<dt>ID number</dt><dd>9201015800087</dd>'):
-            self.assertContains(response, fact, html=False)
-        # Shipments and contact details on the left; appointments and payments on the right.
-        for card in ('courier MER-438-771-ZA', 'Contact and delivery', 'Upcoming appointments', 'id="record-payments-heading"'):
-            self.assertContains(response, card)
-        for clinical in ('Nausea settled', 'Summary data', 'id="record-weight"', 'Current prescription', 'Request blood tests',
-                         'Create note', 'data-log-filter="clinical"', 'Export record', 'HbA1c'):
-            self.assertNotContains(response, clinical)
+        for tab in ('overview', 'weights', 'notes', 'payments'):
+            with self.subTest(tab=tab):
+                self.assertRedirects(self.page(tab=tab), reverse('portal:desktop-dashboard'), fetch_redirect_response=False)
 
     def test_doctor_renews_from_the_dialog_and_it_is_logged(self):
         self.login(self.doctor)
@@ -265,16 +256,12 @@ class RecordOverviewTests(TestCase):
         self.assertContains(response, 'js/record_overview.js')
         self.assertNotContains(response, 'DRAFT_NOT_FOR_THE_LOG')
 
-    def test_super_admins_see_the_weight_tab_and_practice_administrators_do_not(self):
+    def test_super_admins_see_the_weight_tab(self):
         summary = get_summary(self.company, self.patient)
         summary.goal_weight_kg = 75
         summary.save()
         self.login(self.owner)
         self.assertTrue(self.page(tab='weights').context['weight_chart']['goal_pill'].startswith('Goal 75 kg · around '))
-        # Practice administrators keep Overview, Appointments, Messages, Payments, Dispatch history and History.
-        self.login(self.admin)
-        self.assertRedirects(self.page(tab='weights'), f'{reverse("portal:patient-detail", args=[self.patient.pk])}?tab=overview',
-                             fetch_redirect_response=False)
 
     def test_an_open_conversation_shows_the_patients_notes_to_clinical_staff_only(self):
         from care.messaging import add_participant
@@ -338,6 +325,6 @@ class RecordOverviewTests(TestCase):
         self.assertContains(response, 'Nausea settled. Increased dose to 1.0 mg weekly.')
         self.assertContains(response, f'href="{reverse("portal:clinical-consultation-detail", args=[self.consult.pk])}">Open consultation</a>')
         self.assertNotContains(response, 'DRAFT_NOT_FOR_THE_LOG')
-        # A practice administrator still can't open the Notes tab.
+        # A practice administrator can't open the record at all.
         self.login(self.admin)
-        self.assertEqual(self.page(tab='notes').status_code, 403)
+        self.assertRedirects(self.page(tab='notes'), reverse('portal:desktop-dashboard'), fetch_redirect_response=False)

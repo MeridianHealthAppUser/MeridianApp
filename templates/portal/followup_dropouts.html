@@ -1,8 +1,84 @@
 {% extends 'portal/staff_page_base.html' %}{% load static workspace_ui %}
-{% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/backoffice.css' %}"><link rel="stylesheet" href="{% static 'css/filter_menu.css' %}?v=20261017a"><script src="{% static 'js/filter_menu.js' %}?v=20261008b" defer></script><link rel="stylesheet" href="{% static 'css/conversation_search.css' %}?v=20261005b"><script src="{% static 'js/conversation_search.js' %}?v=20261005" defer></script>{% endblock %}
+{% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/backoffice.css' %}?v=20261022a"><link rel="stylesheet" href="{% static 'css/filter_menu.css' %}?v=20261017a"><script src="{% static 'js/filter_menu.js' %}?v=20261008b" defer></script><link rel="stylesheet" href="{% static 'css/conversation_search.css' %}?v=20261005b"><script src="{% static 'js/conversation_search.js' %}?v=20261005" defer></script><link rel="stylesheet" href="{% static 'css/dialogs.css' %}?v=20261022a"><script src="{% static 'js/dialogs.js' %}?v=20261022a" defer></script>{% endblock %}
 {% block breadcrumbs %}{% breadcrumbs 'Administration' %}{% endblock %}
-{% block page_heading %}<header class="staff-page-header"><div><h1>Administration</h1><p>Record reasons, assign a follow-up and keep its history. Treatment and payments are not restarted here.</p></div></header>{% page_tabs %}{% endblock %}
-{% block page_content %}<div class="backoffice"><section class="staff-page-card staff-page-card--list" aria-labelledby="dropout-list-heading">
-  {# The search at the top right of the table, with Filters before it; the table follows the search as you type. #}
-  <header class="staff-page-card__header staff-list-header"><div><h2 id="dropout-list-heading">Paused and cancelled care plans</h2><p>Each with its latest follow-up.</p></div>{% include 'portal/includes/list_tools.html' with search_label='Search dropouts' %}</header>
-  <div data-search-region="list">{% if filter_form.errors %}<div class="staff-filter-error" role="alert">Correct the filters to view care plans.</div>{% else %}<div class="backoffice-table-wrap"><table><thead><tr><th>Patient</th><th>Plan</th><th>Status</th><th>Ended</th><th>Follow-up</th><th>Next contact</th><th>Action</th></tr></thead><tbody>{% for item in page_obj %}<tr><td>{{ item.patient }}</td><td>{{ item.plan_name }}</td><td>{{ item.get_status_display }}</td><td>{{ item.cancelled_at|date:'j M Y'|default:'Paused' }}</td><td>{{ item.follow_up_status|default:'Not recorded'|capfirst }}</td><td>{{ item.next_contact_on|date:'j M Y'|default:'Not scheduled' }}</td><td><a href="{% url 'portal:dropout-detail' item.pk %}">Open follow-up</a></td></tr>{% empty %}<tr><td colspan="7">No care plans match these filters.</td></tr>{% endfor %}</tbody></table></div>{% endif %}</div></section><div data-search-region="pages">{% include 'portal/includes/patient_pagination.html' with pagination_label='Care plan' %}</div></div>{% endblock %}
+{% block page_heading %}<header class="staff-page-header"><div><h1>Administration</h1><p>Patients who need help or have cancelled, and people waiting for a call. Treatment and payments are not restarted here.</p></div></header>{% page_tabs %}{% endblock %}
+{% block page_content %}<div class="backoffice dropouts">
+  <section class="staff-page-card staff-page-card--list" aria-labelledby="dropout-list-heading">
+    {# Patients who pressed "Something is wrong, help me", until Confirm resolved; one who cancels moves to the list below. #}
+    <header class="staff-page-card__header"><div><h2 id="dropout-list-heading">Dropouts</h2><p>Patients who told us something isn’t working. Message their doctor and them until it’s sorted, then confirm it’s resolved. If they cancel, they move to Cancelled and paused subscriptions below.</p></div><span class="staff-page-card__count">{{ help_page.paginator.count }} waiting</span></header>
+    <div class="backoffice-table-wrap"><table>
+      <thead><tr><th scope="col">Patient</th><th scope="col">Doctor</th><th scope="col">Reason</th><th scope="col">Contact</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead>
+      <tbody>{% for item in help_page %}<tr>
+        <td><strong>{{ item.patient }}</strong><small>Asked {{ item.created_at|date:'j M Y' }}</small></td>
+        <td>{{ item.doctor.titled_name|default:'—' }}</td>
+        <td class="dropouts-reason">{{ item.reason|truncatechars:160 }}</td>
+        <td class="dropouts-contact">{{ item.patient.phone|default:'No phone number' }}{% if item.patient.user.email %}<small>{{ item.patient.user.email }}</small>{% endif %}</td>
+        <td><div class="backoffice-actions dropouts-actions">
+          {% if item.doctor %}<a class="console-button console-button--secondary" href="{{ item.message_doctor_url }}">Message doctor<span class="sr-only"> about {{ item.patient }}</span></a>{% endif %}
+          <a class="console-button console-button--secondary" href="{{ item.message_patient_url }}">Message patient<span class="sr-only">: {{ item.patient }}</span></a>
+          <button class="console-button console-button--primary" type="button" data-modal-open="resolve-{{ item.pk }}" aria-haspopup="dialog">Confirm resolved<span class="sr-only"> for {{ item.patient }}</span></button>
+        </div></td>
+      </tr>{% empty %}<tr><td colspan="5">No one is waiting for help. Patients appear here when they press “Something is wrong, help me” on My Treatment.</td></tr>{% endfor %}</tbody>
+    </table></div>
+    {% include 'portal/includes/patient_pager.html' with pager=help_page param='help_page' query=help_query anchor='dropout-list-heading' label='Dropouts' %}
+
+    {# Cancelled (with the reasons they ticked) and paused plans, each with its latest follow-up. Open while searching. #}
+    <details class="dropouts-ended"{% if ended_open %} open{% endif %}>
+      <summary><span>Cancelled and paused subscriptions</span> <span class="dropouts-ended__count">{{ page_obj.paginator.count }}</span></summary>
+      <header class="staff-page-card__header staff-list-header"><div><p>Each patient who cancels is sent one email offering help. Open a follow-up to record what happened next.</p></div>{% include 'portal/includes/list_tools.html' with search_label='Search cancelled and paused subscriptions' %}</header>
+      <div data-search-region="list">{% if filter_form.errors %}<div class="staff-filter-error" role="alert">Correct the filters to view subscriptions.</div>{% else %}<div class="backoffice-table-wrap"><table>
+        <thead><tr><th scope="col">Patient</th><th scope="col">Doctor</th><th scope="col">Status</th><th scope="col">Reasons</th><th scope="col">Contact</th><th scope="col">Follow-up</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead>
+        <tbody>{% for item in page_obj %}<tr>
+          <td><strong>{{ item.patient }}</strong><small>{{ item.plan_name }}</small></td>
+          <td>{{ item.patient.assigned_doctor.titled_name|default:'—' }}</td>
+          <td>{{ item.get_status_display }}<small>{% if item.cancelled_at %}{{ item.cancelled_at|date:'j M Y' }}{% if item.winback_sent_at %} · email sent{% endif %}{% else %}Paused{% endif %}</small></td>
+          <td>{% for label in item.cancellation_reason_labels %}{{ label }}{% if not forloop.last %}, {% endif %}{% empty %}—{% endfor %}{% if item.cancellation_note %}<small>“{{ item.cancellation_note|truncatechars:120 }}”</small>{% endif %}</td>
+          <td class="dropouts-contact">{{ item.patient.phone|default:'No phone number' }}{% if item.patient.user.email %}<small>{{ item.patient.user.email }}</small>{% endif %}</td>
+          <td>{{ item.follow_up_status|default:'Not recorded'|capfirst }}{% if item.next_contact_on %}<small>Next contact {{ item.next_contact_on|date:'j M Y' }}</small>{% endif %}</td>
+          <td><a href="{% url 'portal:dropout-detail' item.pk %}">Open follow-up<span class="sr-only"> for {{ item.patient }}</span></a></td>
+        </tr>{% empty %}<tr><td colspan="7">No subscriptions match these filters.</td></tr>{% endfor %}</tbody>
+      </table></div>{% endif %}</div>
+      <div data-search-region="pages">{% include 'portal/includes/patient_pagination.html' with pagination_label='Cancelled and paused subscriptions' %}</div>
+    </details>
+  </section>
+
+  <section class="staff-page-card staff-page-card--list" aria-labelledby="please-call-heading">
+    {# People who asked for a call at the end of the questionnaire, until Confirm called or until they book. #}
+    <header class="staff-page-card__header"><div><h2 id="please-call-heading">Please call</h2><p>People who asked for a call before booking, at the end of the questionnaire. Confirm called takes them off the list and keeps your note; booking their consultation takes them off too.</p></div><span class="staff-page-card__count">{{ call_page.paginator.count }} waiting</span></header>
+    <div class="backoffice-table-wrap"><table>
+      <thead><tr><th scope="col">Name</th><th scope="col">Contact</th><th scope="col">Notes</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead>
+      <tbody>{% for item in call_page %}<tr>
+        <td><strong>{{ item.name }}</strong><small>Asked {{ item.created_at|date:'j M Y, H:i' }}</small></td>
+        <td class="dropouts-contact">{{ item.phone }}{% if item.email %}<small>{{ item.email }}</small>{% endif %}</td>
+        <td class="dropouts-reason">{{ item.note|default:'—' }}</td>
+        <td><button class="console-button console-button--primary" type="button" data-modal-open="called-{{ item.pk }}" aria-haspopup="dialog">Confirm called<span class="sr-only"> {{ item.name }}</span></button></td>
+      </tr>{% empty %}<tr><td colspan="4">No one is waiting for a call.</td></tr>{% endfor %}</tbody>
+    </table></div>
+    {% include 'portal/includes/patient_pager.html' with pager=call_page param='call_page' query=call_query anchor='please-call-heading' label='Please call' %}
+  </section>
+
+  {% for item in help_page %}
+    <dialog class="app-dialog" id="resolve-{{ item.pk }}" aria-labelledby="resolve-{{ item.pk }}-title">
+      <div class="app-dialog__body">
+        <h2 id="resolve-{{ item.pk }}-title">Confirm resolved</h2>
+        <p class="app-dialog__sub">{{ item.patient }} comes off the Dropouts list. Your note is kept with their request.</p>
+        <form class="console-form" method="post" action="{% url 'portal:help-request-resolve' item.pk %}">{% csrf_token %}<input type="hidden" name="workflow_context" value="{{ item.resolve_context }}">
+          <div class="console-form__field"><label for="resolve-{{ item.pk }}-note">Note (optional)</label><textarea id="resolve-{{ item.pk }}-note" name="note" rows="3" maxlength="1000" placeholder="For example: dose lowered, patient happy to continue"></textarea></div>
+          <div class="app-dialog__actions"><button class="console-button console-button--secondary" type="button" data-dialog-close>Back</button><button class="console-button console-button--primary" type="submit">Confirm resolved</button></div>
+        </form>
+      </div>
+    </dialog>
+  {% endfor %}
+  {% for item in call_page %}
+    <dialog class="app-dialog" id="called-{{ item.pk }}" aria-labelledby="called-{{ item.pk }}-title">
+      <div class="app-dialog__body">
+        <h2 id="called-{{ item.pk }}-title">Confirm called</h2>
+        <p class="app-dialog__sub">{{ item.name }} comes off the Please call list. Your note is kept with their request.</p>
+        <form class="console-form" method="post" action="{% url 'portal:callback-called' item.pk %}">{% csrf_token %}<input type="hidden" name="workflow_context" value="{{ item.called_context }}">
+          <div class="console-form__field"><label for="called-{{ item.pk }}-note">Note (optional)</label><textarea id="called-{{ item.pk }}-note" name="note" rows="3" maxlength="1000" placeholder="For example: explained prices, will book this week"></textarea></div>
+          <div class="app-dialog__actions"><button class="console-button console-button--secondary" type="button" data-dialog-close>Back</button><button class="console-button console-button--primary" type="submit">Confirm called</button></div>
+        </form>
+      </div>
+    </dialog>
+  {% endfor %}
+</div>{% endblock %}

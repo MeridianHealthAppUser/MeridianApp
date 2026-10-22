@@ -166,10 +166,11 @@ class PortalWorkflowTests(TestCase):
     def test_only_active_practice_doctor_can_create_clinical_notes(self):
         url = reverse('portal:patient-note-create', args=[self.patient.pk])
         data = {'note_type': ClinicalNote.NoteType.CONSULT, 'body': 'Clinical assessment preserved.'}
-        for user in (self.administrator, self.super_admin):
-            with self.subTest(user=user.email):
-                self.login(user)
-                self.assertEqual(self.client.post(url, data).status_code, 403)
+        # Practice administrators don't open records at all; a Super Admin isn't a clinician.
+        self.login(self.administrator)
+        self.assertRedirects(self.client.post(url, data), reverse('portal:desktop-dashboard'), fetch_redirect_response=False)
+        self.login(self.super_admin)
+        self.assertEqual(self.client.post(url, data).status_code, 403)
         self.assertFalse(ClinicalNote.objects.exists())
         self.login(self.doctor)
         self.assertRedirects(self.client.post(url, data), self.patient_url() + '?tab=notes', fetch_redirect_response=False)
@@ -190,7 +191,7 @@ class PortalWorkflowTests(TestCase):
         # The second doctor looked after Alice before, so still reads her record.
         ClinicianAssignment.objects.create(company=self.company, patient=self.patient, clinician=self.second_doctor,
                                            ended_at=timezone.now())
-        for user in (self.doctor, self.second_doctor, self.super_admin, self.administrator):
+        for user in (self.doctor, self.second_doctor, self.super_admin):
             with self.subTest(user=user.email):
                 self.login(user)
                 # Doctors (the Clinician role) read notes in the Overview's log, as they have no Notes tab.
@@ -198,25 +199,29 @@ class PortalWorkflowTests(TestCase):
                 if doctor:
                     self.assertRedirects(self.client.get(self.patient_url(), {'tab': 'notes'}), self.patient_url() + '?tab=overview',
                                          fetch_redirect_response=False)
-                response = self.client.get(self.patient_url(), {'tab': 'overview' if doctor or user == self.administrator else 'notes'})
+                response = self.client.get(self.patient_url(), {'tab': 'overview' if doctor else 'notes'})
                 self.assertEqual(response.status_code, 200)
                 if user == self.doctor:
                     self.assertContains(response, private_body)
                 else:
                     self.assertNotContains(response, private_body)
-                if user == self.administrator:
-                    self.assertNotContains(response, shared_body)
-                    self.assertEqual(self.client.get(self.patient_url(), {'tab': 'notes'}).status_code, 403)
-                else:
-                    self.assertContains(response, shared_body)
-
-    def test_administrator_can_create_task_in_active_practice(self):
+                self.assertContains(response, shared_body)
+        # Practice administrators don't open records, so see neither.
         self.login(self.administrator)
-        response = self.client.post(reverse('portal:patient-task-create', args=[self.patient.pk]), {
-            'patient': self.patient.pk, 'company': self.other_company.pk,
-            'title': 'Arrange follow-up', 'description': 'Contact about appointment availability.',
-            'assigned_to': self.administrator.pk, 'priority': ClinicalTask.Priority.NORMAL,
-        })
+        for tab in ('overview', 'notes'):
+            self.assertRedirects(self.client.get(self.patient_url(), {'tab': tab}), reverse('portal:desktop-dashboard'),
+                                 fetch_redirect_response=False)
+
+    def test_super_admin_can_create_task_in_active_practice(self):
+        data = {'patient': self.patient.pk, 'company': self.other_company.pk,
+                'title': 'Arrange follow-up', 'description': 'Contact about appointment availability.',
+                'assigned_to': self.super_admin.pk, 'priority': ClinicalTask.Priority.NORMAL}
+        # A record's Tasks tab isn't a practice administrator's: they create tasks from My tasks.
+        self.login(self.administrator)
+        self.assertRedirects(self.client.post(reverse('portal:patient-task-create', args=[self.patient.pk]), data),
+                             reverse('portal:desktop-dashboard'), fetch_redirect_response=False)
+        self.login(self.super_admin)
+        response = self.client.post(reverse('portal:patient-task-create', args=[self.patient.pk]), data)
         self.assertRedirects(response, self.patient_url() + '?tab=tasks', fetch_redirect_response=False)
         task = ClinicalTask.objects.get(title='Arrange follow-up')
         self.assertEqual((task.company_id, task.patient_id), (self.company.pk, self.patient.pk))
@@ -247,8 +252,8 @@ class PortalWorkflowTests(TestCase):
         self.assertEqual(form['priority'].value(), ClinicalTask.Priority.HIGH)
         self.assertContains(response, 'Keep this task draft.')
 
-    def test_administrator_can_book_appointment_with_practice_doctor(self):
-        self.login(self.administrator)
+    def test_super_admin_can_book_appointment_with_practice_doctor(self):
+        self.login(self.super_admin)
         token = self.client.get(self.patient_url()).context['legacy_appointment_context']
         response = self.client.post(reverse('portal:patient-appointment-create', args=[self.patient.pk]), {
             'workflow_context': token,
@@ -263,7 +268,7 @@ class PortalWorkflowTests(TestCase):
                          (self.company.pk, self.patient.pk, self.doctor.pk))
 
     def test_invalid_appointment_form_preserves_input_and_rejects_non_doctor(self):
-        self.login(self.administrator)
+        self.login(self.super_admin)
         token = self.client.get(self.patient_url()).context['legacy_appointment_context']
         response = self.client.post(reverse('portal:patient-appointment-create', args=[self.patient.pk]), {
             'workflow_context': token,
@@ -388,23 +393,25 @@ class PortalWorkflowTests(TestCase):
         # The doctor's conversation with the patient is private to them.
         self.assertEqual(self.client.post(reverse('portal:staff-message-create', args=[self.thread.pk]), {'body': 'Not mine'}).status_code, 404)
         self.assertFalse(PatientMessage.objects.exists())
-        self.client.post(reverse('portal:staff-thread-create', args=[self.patient.pk]),
-                         {'subject': 'Delivery details', 'body': 'Your delivery is booked.'})
+        # They start their own from Patient messages, and come back there after replying.
+        self.client.post(reverse('portal:staff-inbox-thread-create'),
+                         {'patient': self.patient.pk, 'subject': 'Delivery details', 'body': 'Your delivery is booked.'})
         own = MessageThread.objects.get(subject='Delivery details')
         self.assertEqual(list(own.participants.all()), [self.administrator])
         PatientMessage.objects.all().delete()
         url = reverse('portal:staff-message-create', args=[own.pk])
         self.assertRedirects(
             self.client.post(url, {'body': 'Your appointment details are ready.'}),
-            self.patient_url() + f'?tab=messages&thread={own.pk}', fetch_redirect_response=False,
+            reverse('portal:staff-inbox') + f'?thread={own.pk}', fetch_redirect_response=False,
         )
         message = PatientMessage.objects.get()
         self.assertEqual((message.company_id, message.sender_id), (self.company.pk, self.administrator.pk))
         draft = 'y' * 5001
         response = self.client.post(url, {'body': draft})
-        self.assertEqual(response.status_code, 200)
-        self.assertIn('body', response.context['message_form'].errors)
-        self.assertEqual(response.context['message_form']['body'].value(), draft)
+        # Shown again in Patient messages, with the draft kept.
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('body', response.context['inbox_message_form'].errors)
+        self.assertEqual(response.context['inbox_message_form']['body'].value(), draft)
         self.assertEqual(PatientMessage.objects.count(), 1)
 
     def test_unread_count_covers_only_the_staff_members_own_conversations(self):

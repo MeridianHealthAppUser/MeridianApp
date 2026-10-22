@@ -2,7 +2,7 @@
 {% load static workspace_ui %}
 
 {% block title %}My Treatment | Meridian{% endblock %}
-{% block patient_extra_css %}<link rel="stylesheet" href="{% static 'css/treatment.css' %}?v=20261017a"><link rel="stylesheet" href="{% static 'css/dialogs.css' %}?v=20261008b"><script src="{% static 'js/dialogs.js' %}?v=20261015a" defer></script>{% endblock %}
+{% block patient_extra_css %}<link rel="stylesheet" href="{% static 'css/treatment.css' %}?v=20261022a"><link rel="stylesheet" href="{% static 'css/dialogs.css' %}?v=20261022a"><script src="{% static 'js/dialogs.js' %}?v=20261022a" defer></script>{% endblock %}
 {% block patient_content_class %}patient-treatment{% endblock %}
 {% block patient_breadcrumbs %}{% breadcrumbs 'My Treatment' %}{% endblock %}
 {% block patient_heading %}<header class="patient-page-heading"><div><h1>My Treatment</h1></div></header>{% endblock %}
@@ -93,9 +93,10 @@
                 <label class="patient-check" for="{{ action_form.confirm.id_for_label }}">{{ action_form.confirm }}<span>{{ action_form.confirm.label }}</span></label>
                 {{ action_form.confirm.errors }}
                 <div class="patient-card-actions patient-card-actions--split">
-                  <a class="console-button console-button--secondary patient-card-actions__wide" href="{{ treatment_help_url }}">Something is wrong, help me</a>
+                  {# Something is wrong and Cancel each open a dialog below; without scripts their links open it on this page. #}
+                  <a class="console-button console-button--secondary patient-card-actions__wide" href="?help=1#treatment-help" data-modal-open="treatment-help" aria-haspopup="dialog">Something is wrong, help me</a>
                   {% if action_plan.status == 'paused' %}<button type="submit" name="action" value="resume" class="console-button console-button--primary">Resume my subscription</button>{% elif action_plan.status != 'cancelled' %}<button type="submit" name="action" value="pause" class="console-button console-button--secondary">Pause my subscription</button>{% endif %}
-                  {% if action_plan.status != 'cancelled' %}<button type="submit" name="action" value="cancel" class="console-button console-button--secondary patient-button--rose">Cancel my subscription</button>{% endif %}
+                  {% if action_plan.status != 'cancelled' %}<a class="console-button console-button--secondary patient-button--rose" href="?cancel=1#cancel-subscription" data-modal-open="cancel-subscription" aria-haspopup="dialog">Cancel my subscription</a>{% endif %}
                 </div>
               </form>
             {% endif %}
@@ -210,4 +211,40 @@
   </details>
 </div>
 {% if timeline %}{% include 'portal/includes/patient_treatment_timeline.html' %}{% endif %}
+{% if action_plan %}
+  {# Something is wrong, help me: what isn't working goes to the patient's doctor and the practice team as a message. #}
+  <dialog class="app-dialog" id="treatment-help" aria-labelledby="treatment-help-title"{% if help_open %} open{% endif %}>
+    <div class="app-dialog__body">
+      <h2 id="treatment-help-title">Something is wrong?</h2>
+      <p class="app-dialog__sub">Most things can be sorted out: a different dose, a different medicine, or a conversation about whether this is still right for you.</p>
+      <form class="console-form" method="post" action="{% url 'portal:patient-help-request' %}">{% csrf_token %}<input type="hidden" name="treatment_context" value="{{ help_context }}">
+        {% if help_form.non_field_errors %}<div role="alert">{{ help_form.non_field_errors }}</div>{% endif %}
+        {% include 'portal/includes/form_field.html' with field=help_form.reason %}
+        <div class="app-dialog__actions"><a class="console-button console-button--secondary" href="{{ request.path }}#treatment-plan" data-dialog-close>Back</a><button class="console-button console-button--primary" type="submit">Send to my care team</button></div>
+      </form>
+    </div>
+  </dialog>
+  {% if action_plan.status != 'cancelled' %}
+    {# Cancel my subscription: at least one reason, then one email from the practice afterwards. #}
+    <dialog class="app-dialog" id="cancel-subscription" aria-labelledby="cancel-subscription-title"{% if cancel_open %} open{% endif %}>
+      <div class="app-dialog__body">
+        <h2 id="cancel-subscription-title">Cancel my subscription</h2>
+        <p class="app-dialog__sub">If something isn’t working, <a class="patient-inline-link" href="?help=1#treatment-help" data-modal-open="treatment-help">tell us first</a>: most of it can be sorted out.</p>
+        <form class="console-form" method="post" action="{% url 'portal:patient-subscription-status' action_plan.pk %}">{% csrf_token %}<input type="hidden" name="treatment_context" value="{{ action_context }}"><input type="hidden" name="action" value="cancel">
+          {% if cancel_form.non_field_errors %}<div role="alert">{{ cancel_form.non_field_errors }}</div>{% endif %}
+          <fieldset class="treatment-cancel-reasons">
+            <legend>{{ cancel_form.reasons.label }}</legend>
+            <p class="patient-small">{{ cancel_form.reasons.help_text }}</p>
+            {% for choice in cancel_form.reasons %}<label class="patient-check" for="{{ choice.id_for_label }}">{{ choice.tag }}<span>{{ choice.choice_label }}</span></label>{% endfor %}
+            {{ cancel_form.reasons.errors }}
+          </fieldset>
+          {% include 'portal/includes/form_field.html' with field=cancel_form.note %}
+          <label class="patient-check" for="{{ cancel_form.confirm.id_for_label }}">{{ cancel_form.confirm }}<span>{{ cancel_form.confirm.label }}</span></label>
+          {{ cancel_form.confirm.errors }}
+          <div class="app-dialog__actions"><a class="console-button console-button--secondary" href="{{ request.path }}#treatment-plan" data-dialog-close>Keep my subscription</a><button class="console-button console-button--secondary patient-button--rose" type="submit">Cancel my subscription</button></div>
+        </form>
+      </div>
+    </dialog>
+  {% endif %}
+{% endif %}
 {% endblock %}

@@ -17,8 +17,8 @@ from care.clinical_summary import (
     ANSWER_LABELS, FIELDS, FLAG_CHOICES, flag_level, get_summary, screening, summary_safety_flags,
 )
 from care.models import (
-    Appointment, BloodResult, ClinicalEncounter, ClinicalNote, LabRequest, MedicationDose, MedicationProduct,
-    PatientSummaryEdit, Payment, Shipment, TreatmentAuthorization, WeightEntry,
+    BloodResult, ClinicalEncounter, ClinicalNote, LabRequest, MedicationDose, MedicationProduct, PatientSummaryEdit,
+    Shipment, TreatmentAuthorization, WeightEntry,
 )
 from care.prescriptions import (
     DEFAULT_WEEKS, WEEK_CHOICES, current_prescription, dose_mg, expiry_preview, prescription_label, prescription_options,
@@ -167,24 +167,6 @@ def summary_context(company, patient, summary):
         'summary_edit_count': PatientSummaryEdit.objects.for_company(company).filter(patient=patient).count() if summary.pk else 0,
         'summary_seeded_from': seeded,
         'summary_has_flag': any(flag['level'] for flag in flags),
-    }
-
-
-def admin_overview_context(company, patient):
-    """A practice administrator's Overview: the clinical Overview's layout and header, with only what they work with.
-    No clinical log, Summary data, weight or blood tests; the prescription is just its status pill in the header."""
-    from care.pathcare import patient_address
-
-    prescription = current_prescription(company, patient)
-    return {
-        'record_overview_admin': True,
-        'prescription': prescription, 'prescription_state': prescription_state(prescription, timezone.localdate()),
-        'dispensed_log': dispensed(company, patient),
-        'upcoming_appointments': list(Appointment.objects.for_company(company).filter(
-            patient=patient, starts_at__gte=timezone.now(), status=Appointment.Status.BOOKED,
-        ).select_related('clinician').order_by('starts_at', 'pk')[:5]),
-        'recent_payments': list(Payment.objects.for_company(company).filter(patient=patient).order_by('-due_on', '-pk')[:5]),
-        'delivery_address': ', '.join(part for part in patient_address(company, patient) if part),
     }
 
 

@@ -14,11 +14,15 @@ from django.utils.decorators import method_decorator
 from django.views import View
 from django.views.decorators.cache import never_cache
 
-from care.followups import append_follow_up
-from care.models import AdministrativeFollowUp, Lead, PatientSubscription
+from urllib.parse import urlencode
+
+from care.followups import append_follow_up, confirm_called, resolve_help_request
+from care.messaging import is_participant
+from care.models import AdministrativeFollowUp, CallbackRequest, HelpRequest, Lead, PatientSubscription
 from care.services import record_audit
 from practices.models import Company, CompanyMembership
 from .filter_menus import TickedChoiceField, list_tools, ticked_sections
+from .inbox import staff_inbox_url
 from .views import StaffCompanyRequiredMixin
 from .workflow_context import make_workflow_context, validate_workflow_context
 
@@ -81,14 +85,43 @@ class AdminFollowUpView(LoginRequiredMixin, StaffCompanyRequiredMixin, View):
         return dict(company=self.company, active_membership=self.membership, nav_section=self.nav_section, **kwargs)
 
 
+class ResolveForm(forms.Form):
+    note = forms.CharField(label='Note (optional)', max_length=1000, required=False, widget=forms.Textarea(attrs={'rows': 3}))
+
+
 class DropoutListView(AdminFollowUpView):
+    """Dropouts: patients who said something is wrong, until someone confirms it's resolved, then the cancelled and
+    paused subscriptions (expandable). Please call: people who asked for a call at the end of the questionnaire."""
+
     nav_section = 'dropouts'
     http_method_names = ('get', 'head', 'options')
+
+    def help_requests(self, request):
+        page = Paginator(HelpRequest.objects.for_company(self.company).filter(
+            patient__company=self.company, status=HelpRequest.Status.OPEN,
+        ).select_related('patient__assigned_doctor', 'patient__user', 'thread'), 20).get_page(request.GET.get('help_page'))
+        for item in page:
+            patient, doctor = item.patient, item.patient.assigned_doctor
+            item.doctor = doctor
+            # Message doctor starts a team conversation about the patient; Message patient opens the conversation the
+            # request started, when you're in it.
+            item.message_doctor_url = f"{reverse('portal:team-inbox')}?{urlencode({'compose': 1, 'patient': patient.pk, **({'members': doctor.pk} if doctor else {}), 'subject': f'{patient}: something is not working'})}"
+            item.message_patient_url = (staff_inbox_url(item.thread) if item.thread_id and is_participant(item.thread, request.user)
+                                        else f"{reverse('portal:staff-inbox')}?{urlencode({'compose': 1, 'patient': patient.pk})}")
+            item.resolve_context = make_workflow_context(request, self.company, 'help-request-resolve', item)
+        return page
+
+    def callbacks(self, request):
+        page = Paginator(CallbackRequest.objects.for_company(self.company).filter(status=CallbackRequest.Status.OPEN),
+                         20).get_page(request.GET.get('call_page'))
+        for item in page:
+            item.called_context = make_workflow_context(request, self.company, 'callback-called', item)
+        return page
 
     def get(self, request):
         self.require_admin()
         form = FollowUpFilter(request.GET)
-        queryset = with_follow_up(PatientSubscription.objects.for_company(self.company).filter(patient__company=self.company, status__in=('paused', 'cancelled')).select_related('patient').order_by('-updated_at', '-pk'), 'subscription')
+        queryset = with_follow_up(PatientSubscription.objects.for_company(self.company).filter(patient__company=self.company, status__in=('paused', 'cancelled')).select_related('patient__assigned_doctor', 'patient__user').order_by('-updated_at', '-pk'), 'subscription')
         if form.is_valid():
             for term in form.cleaned_data['q'].split():
                 queryset = queryset.filter(Q(patient__first_name__icontains=term) | Q(patient__last_name__icontains=term) | Q(plan_name__icontains=term))
@@ -105,9 +138,56 @@ class DropoutListView(AdminFollowUpView):
                            sections=ticked_sections(form, request.GET, ('status', 'follow_up'), icons={'follow_up': 'list'}),
                            placeholder='Patient or plan')
         count = page.paginator.count
+        searching = any(request.GET.get(name) for name in ('q', 'status', 'follow_up', 'page'))
+        # Each list pages on its own; its links keep the others where they were.
+        others = {name: request.GET.copy() for name in ('help_page', 'call_page')}
+        for name, kept in others.items():
+            kept.pop(name, None)
         return render(request, 'portal/followup_dropouts.html', self.context(
-            filter_form=form, page_obj=page, pagination_query=query.urlencode(),
-            count_label=f'{count} care plan{pluralize(count)}', **tools))
+            filter_form=form, page_obj=page, pagination_query=query.urlencode(), ended_open=searching,
+            count_label=f'{count} subscription{pluralize(count)}', help_page=self.help_requests(request),
+            call_page=self.callbacks(request), resolve_form=ResolveForm(), help_query=others['help_page'].urlencode(),
+            call_query=others['call_page'].urlencode(), **tools))
+
+
+class HelpRequestResolveView(AdminFollowUpView):
+    """Confirm resolved, on a Dropouts row: off the list, with the note kept."""
+
+    http_method_names = ('post',)
+
+    def post(self, request, pk):
+        self.require_admin()
+        item = get_object_or_404(HelpRequest.objects.for_company(self.company).filter(patient__company=self.company), pk=pk)
+        form = ResolveForm(request.POST)
+        try:
+            validate_workflow_context(request, self.company, 'help-request-resolve', item)
+            if not form.is_valid():
+                raise ValidationError('Keep the note to 1,000 characters or fewer.')
+            resolve_help_request(help_request=item, actor=request.user, note=form.cleaned_data['note'], request=request)
+            messages.success(request, f'{item.patient} marked resolved and taken off the Dropouts list.')
+        except ValidationError as error:
+            messages.error(request, ' '.join(error.messages))
+        return redirect('portal:dropouts')
+
+
+class CallbackCalledView(AdminFollowUpView):
+    """Confirm called, on a Please call row: off the list, with the note kept."""
+
+    http_method_names = ('post',)
+
+    def post(self, request, pk):
+        self.require_admin()
+        item = get_object_or_404(CallbackRequest.objects.for_company(self.company), pk=pk)
+        form = ResolveForm(request.POST)
+        try:
+            validate_workflow_context(request, self.company, 'callback-called', item)
+            if not form.is_valid():
+                raise ValidationError('Keep the note to 1,000 characters or fewer.')
+            confirm_called(callback=item, actor=request.user, note=form.cleaned_data['note'], request=request)
+            messages.success(request, f'Call to {item.name} confirmed and taken off the Please call list.')
+        except ValidationError as error:
+            messages.error(request, ' '.join(error.messages))
+        return redirect(f"{reverse('portal:dropouts')}#please-call-heading")
 
 
 class FollowUpDetailView(AdminFollowUpView):

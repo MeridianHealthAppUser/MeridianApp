@@ -1,0 +1,46 @@
+{% comment %}Available time (care.availability.day_diaries): each clinician's day on its own, one under the other, in
+15-minute slots across their working hours. A free slot opens Create appointment with the clinician, date and time
+filled in (static/js/appointment_booking.js); without scripts its link opens the booking page the same way. Booked,
+leave and past slots can't be chosen.{% endcomment %}
+<section class="staff-page-card schedule-free-time" aria-labelledby="availability-heading">
+  <header class="staff-page-card__header">
+    <div><h2 id="availability-heading">Available time</h2><p>Each clinician’s working hours on {{ selected_date|date:'l j F' }}, in 15-minute slots. Choose a free slot to book it.</p></div>
+  </header>
+  <div class="schedule-free-time__body">
+    {% for diary in day_diaries %}
+      <section class="schedule-diary" aria-labelledby="diary-{{ diary.clinician.pk }}-heading">
+        <header class="schedule-diary__header">
+          <h3 id="diary-{{ diary.clinician.pk }}-heading">{{ diary.clinician.titled_name }}</h3>
+          <p class="schedule-diary__summary">
+            {% if diary.kind == 'off' %}<span class="schedule-pill schedule-pill--leave">On leave</span>
+            {% elif diary.kind == 'not_working' %}<span class="schedule-pill schedule-pill--grey">Not working</span>
+            {% elif not diary.periods %}<span class="schedule-pill schedule-pill--grey">No working hours saved</span>
+            {% else %}
+              {% if diary.kind == 'special' %}<span class="schedule-pill schedule-pill--blue">{% include 'portal/includes/special_hours_icon.html' %}Special hours</span>{% endif %}
+              {% for opens, closes in diary.hours %}<span class="schedule-diary__hours">{{ opens|time:'H:i' }}–{{ closes|time:'H:i' }}</span>{% endfor %}
+              <span class="schedule-diary__count{% if not diary.free %} schedule-diary__count--none{% endif %}">{% if diary.free %}{{ diary.free }} free{% else %}Fully booked{% endif %}</span>
+            {% endif %}
+          </p>
+        </header>
+        {% for period in diary.periods %}
+          {# A day worked in more than one period shows each, so the break between them is clear. #}
+          {% if diary.periods|length > 1 and period.starts_at %}<p class="schedule-diary__period">{{ period.starts_at|time:'H:i' }}–{{ period.ends_at|time:'H:i' }}</p>{% endif %}
+          <ol class="schedule-diary__slots" aria-label="{{ diary.clinician.titled_name }}{% if period.starts_at %}, {{ period.starts_at|time:'H:i' }} to {{ period.ends_at|time:'H:i' }}{% endif %}">
+            {% for slot in period.slots %}
+              <li>
+                {% if slot.state == 'free' %}
+                  <a class="schedule-slot schedule-slot--free" href="{% url 'portal:appointment-book' %}?clinician={{ diary.clinician.pk }}&amp;date={{ selected_date|date:'Y-m-d' }}&amp;time={{ slot.starts_at|time:'H:i' }}" data-modal-open="create-appointment" aria-haspopup="dialog" data-book-slot data-clinician="{{ diary.clinician.pk }}" data-date="{{ selected_date|date:'Y-m-d' }}" data-time="{{ slot.starts_at|time:'H:i' }}"><time datetime="{{ slot.starts_at|date:'c' }}">{{ slot.starts_at|time:'H:i' }}</time><small>Free<span class="sr-only">: book with {{ diary.clinician.titled_name }}</span></small></a>
+                {% else %}
+                  <span class="schedule-slot schedule-slot--{{ slot.state }}" aria-disabled="true"{% if slot.appointment %} title="{{ slot.appointment.patient }} · {{ slot.appointment.get_appointment_type_display }}, {{ slot.appointment.duration_minutes }} min"{% endif %}><time datetime="{{ slot.starts_at|date:'c' }}">{{ slot.starts_at|time:'H:i' }}</time><small>{% if slot.state == 'booked' %}Booked{% elif slot.state == 'leave' %}Leave{% else %}Past{% endif %}{% if slot.appointment %}<span class="sr-only">: {{ slot.appointment.patient }}</span>{% endif %}</small></span>
+                {% endif %}
+              </li>
+            {% endfor %}
+          </ol>
+        {% endfor %}
+      </section>
+    {% empty %}
+      <p class="schedule-panel-empty">No clinicians at this practice yet.</p>
+    {% endfor %}
+  </div>
+  <p class="schedule-free-time__key"><span class="schedule-slot-key schedule-slot-key--free"></span>Free <span class="schedule-slot-key schedule-slot-key--booked"></span>Booked <span class="schedule-slot-key schedule-slot-key--leave"></span>Leave <span class="schedule-slot-key schedule-slot-key--past"></span>Past · Slots aren’t held until a booking is saved.</p>
+</section>

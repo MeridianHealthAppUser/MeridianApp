@@ -1,7 +1,7 @@
 {% extends 'portal/patient_workspace_base.html' %}
 {% load static %}
-{% block extra_css %}{{ block.super }}{% if filter_menu %}<link rel="stylesheet" href="{% static 'css/filter_menu.css' %}?v=20261017a"><script src="{% static 'js/filter_menu.js' %}?v=20261008b" defer></script>{% endif %}{% if workspace_tab == 'appointments' %}<link rel="stylesheet" href="{% static 'css/info_tips.css' %}?v=20261008a"><script src="{% static 'js/info_tips.js' %}?v=20261008a" defer></script><script src="{% static 'js/appointment_booking.js' %}?v=20261010b" defer></script>{% endif %}{% if workspace_tab == 'appointments' or workspace_tab == 'notes' or workspace_tab == 'tasks' or workspace_tab == 'blood-tests' %}<link rel="stylesheet" href="{% static 'css/dialogs.css' %}?v=20261008b"><script src="{% static 'js/dialogs.js' %}?v=20261015a" defer></script>{% endif %}{% if workspace_tab == 'weights' %}<link rel="stylesheet" href="{% static 'css/record_weight.css' %}?v=20261007b">{% endif %}{% if workspace_tab == 'overview' or workspace_tab == 'messages' or workspace_tab == 'weights' %}<link rel="stylesheet" href="{% static 'css/record_overview.css' %}?v=20261017a"><script src="{% static 'js/record_overview.js' %}?v=20261014b" defer></script>{% endif %}{% if workspace_tab == 'messages' %}<link rel="stylesheet" href="{% static 'css/conversations.css' %}?v=20261009d"><link rel="stylesheet" href="{% static 'css/person_tags.css' %}?v=20261009e"><link rel="stylesheet" href="{% static 'css/message_tones.css' %}?v=20261008a"><link rel="stylesheet" href="{% static 'css/conversation_search.css' %}?v=20261005b"><script src="{% static 'js/conversations.js' %}?v=20261007b" defer></script><script src="{% static 'js/conversation_search.js' %}?v=20261005" defer></script><link rel="stylesheet" href="{% static 'css/dialogs.css' %}?v=20261008b"><script src="{% static 'js/dialogs.js' %}?v=20261015a" defer></script><script src="{% static 'js/conversation_management.js' %}?v=20261008b" defer></script>{% endif %}{% endblock %}
-{% block patient_workspace_heading_actions %}{% if record_overview or record_overview_admin %}
+{% block extra_css %}{{ block.super }}{% if filter_menu %}<link rel="stylesheet" href="{% static 'css/filter_menu.css' %}?v=20261017a"><script src="{% static 'js/filter_menu.js' %}?v=20261008b" defer></script>{% endif %}{% if workspace_tab == 'appointments' %}<link rel="stylesheet" href="{% static 'css/info_tips.css' %}?v=20261008a"><script src="{% static 'js/info_tips.js' %}?v=20261008a" defer></script><link rel="stylesheet" href="{% static 'css/time_slots.css' %}?v=20261022c"><script src="{% static 'js/appointment_booking.js' %}?v=20261022d" defer></script>{% endif %}{% if workspace_tab == 'appointments' or workspace_tab == 'notes' or workspace_tab == 'tasks' or workspace_tab == 'blood-tests' %}<link rel="stylesheet" href="{% static 'css/dialogs.css' %}?v=20261022a"><script src="{% static 'js/dialogs.js' %}?v=20261022a" defer></script>{% endif %}{% if workspace_tab == 'weights' %}<link rel="stylesheet" href="{% static 'css/record_weight.css' %}?v=20261007b">{% endif %}{% if workspace_tab == 'overview' or workspace_tab == 'messages' or workspace_tab == 'weights' %}<link rel="stylesheet" href="{% static 'css/record_overview.css' %}?v=20261017a"><script src="{% static 'js/record_overview.js' %}?v=20261014b" defer></script>{% endif %}{% if workspace_tab == 'messages' %}<link rel="stylesheet" href="{% static 'css/conversations.css' %}?v=20261009d"><link rel="stylesheet" href="{% static 'css/person_tags.css' %}?v=20261009e"><link rel="stylesheet" href="{% static 'css/message_tones.css' %}?v=20261008a"><link rel="stylesheet" href="{% static 'css/conversation_search.css' %}?v=20261005b"><script src="{% static 'js/conversations.js' %}?v=20261007b" defer></script><script src="{% static 'js/conversation_search.js' %}?v=20261005" defer></script><link rel="stylesheet" href="{% static 'css/dialogs.css' %}?v=20261022a"><script src="{% static 'js/dialogs.js' %}?v=20261022a" defer></script><script src="{% static 'js/conversation_management.js' %}?v=20261008b" defer></script>{% endif %}{% endblock %}
+{% block patient_workspace_heading_actions %}{% if record_overview %}
   <span class="record-badges">
     {% if prescription_state == 'none' %}<span class="record-pill record-pill--grey">No prescription</span>
     {% elif prescription_state == 'expired' %}<span class="record-pill record-pill--rose">Prescription expired {{ prescription.ends_on|date:'j M' }}</span>
@@ -10,7 +10,7 @@
   </span>
   {% if export_url %}<a class="console-button console-button--quiet" data-no-loader href="{{ export_url }}">Export record</a>{% endif %}
 {% endif %}{% endblock %}
-{% block patient_workspace_heading_details %}{% if record_overview or record_overview_admin %}
+{% block patient_workspace_heading_details %}{% if record_overview %}
   <dl class="record-quickfacts">
     <div><dt>Title</dt>{% include 'portal/includes/patient_title_editor.html' %}</div>
     <div><dt>Age</dt><dd>{% if patient_age is not None %}{{ patient_age }}{% else %}Not recorded{% endif %}</dd></div>
@@ -22,8 +22,6 @@
 {% block patient_workspace_content %}
   {% if workspace_tab == 'overview' and record_overview %}
     {% include 'portal/includes/record_overview.html' %}
-  {% elif workspace_tab == 'overview' and record_overview_admin %}
-    {% include 'portal/includes/record_overview_admin.html' %}
   {% elif workspace_tab == 'weights' %}
     {% include 'portal/includes/record_weight_tab.html' %}
   {% elif workspace_tab == 'messages' %}

@@ -19,6 +19,8 @@ urlpatterns = [
     path('shipping/<int:pk>/', views.ShipmentDetailView.as_view(), name='ops-shipment-detail'),
     path('shipping/<int:pk>/change/', views.ShipmentChangeView.as_view(), name='ops-shipment-change'),
     path('shipping/<int:pk>/ready/', views.ShipmentReadyView.as_view(), name='ops-shipment-ready'),
+    path('shipping/<int:pk>/note/', views.ShipmentNoteView.as_view(), name='ops-shipment-note'),
+    path('dispatch-stock/', views.DispatchStockView.as_view(), name='ops-stock'),
     path('dispatch-history/', views.DispatchHistoryView.as_view(), name='ops-history'),
     path('dispatch-history/export.csv', views.ManifestDownloadView.as_view(history=True), name='ops-history-export'),
     path('supply-requests/', views.StaffOrderListView.as_view(), name='ops-orders'),

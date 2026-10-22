@@ -283,10 +283,10 @@ class RecordsAndMessagesTests(TestCase):
         untitled = get_user_model().objects.create_user(email='rm-untitled@example.test', first_name='Ana', last_name='Silva')
         CompanyMembership.objects.create(company=self.company, user=untitled, role='doctor', clinician_type='doctor')
         for user, subject in ((self.doctor, 'Message from Dr Marchant'), (self.dietitian, 'Message from Ms Titian'),
-                              (untitled, 'Message from Ana Silva'), (self.admin, 'Message from the practice')):
+                              (untitled, 'Message from Ana Silva')):
             with self.subTest(user=user.email):
                 # A clinician starts conversations with their own patients only.
-                Patient.objects.filter(pk=beth.pk).update(assigned_doctor=None if user == self.admin else user)
+                Patient.objects.filter(pk=beth.pk).update(assigned_doctor=user)
                 self.login(user)
                 page = self.client.get(reverse('portal:patient-detail', args=[beth.pk]), {'tab': 'messages'})
                 self.assertContains(page, 'No messages with Beth yet.')
@@ -297,19 +297,21 @@ class RecordsAndMessagesTests(TestCase):
                 self.assertEqual(thread.subject, subject)
                 self.assertRedirects(response, f'{reverse("portal:patient-detail", args=[beth.pk])}?tab=messages&thread={thread.pk}',
                                      fetch_redirect_response=False)
+        # Practice administrators start theirs from Patient messages: they don't open records.
+        self.login(self.admin)
+        self.assertRedirects(self.client.get(reverse('portal:patient-detail', args=[beth.pk]), {'tab': 'messages'}),
+                             reverse('portal:desktop-dashboard'), fetch_redirect_response=False)
 
-    def test_administrators_see_the_messages_block_but_cannot_request_blood_tests(self):
+    def test_administrators_cannot_open_the_record_or_request_blood_tests(self):
         add_participant(self.awaiting, self.admin)
         self.login(self.admin)
-        page = self.record()
-        self.assertContains(page, 'id="record-messages"')
-        self.assertNotContains(page, '#record-bloods')
-        self.assertNotContains(page, 'id="record-bloods"')
+        self.assertRedirects(self.record(), reverse('portal:desktop-dashboard'), fetch_redirect_response=False)
         for name in ('patient-blood-tests', 'patient-blood-tests-preview', 'patient-blood-tests-preview-pdf'):
             with self.subTest(name=name):
                 response = self.client.post(reverse(f'portal:{name}', args=[self.patient.pk]),
                                             {'workflow_context': self.token(self.admin, 'patient-bloods'), 'tests': 'FBC'})
-                self.assertEqual(response.status_code, 403)
+                self.assertIn(response.status_code, (302, 403))
+                self.assertNotEqual(response.get('Content-Type', ''), 'application/pdf')
         # Even as Nadia's clinician, a dietitian doesn't request blood tests.
         Patient.objects.filter(pk=self.patient.pk).update(assigned_doctor=self.dietitian)
         self.login(self.dietitian)
@@ -451,10 +453,16 @@ class RecordsAndMessagesTests(TestCase):
         self.assertNotContains(self.client.get(reverse('portal:patient-labs')), form_url)
 
     def test_the_care_team_sets_the_title_printed_on_the_form(self):
-        self.login(self.admin)
+        self.login(self.doctor)
         response = self.client.post(reverse('portal:patient-title', args=[self.patient.pk]),
-                                    {'workflow_context': self.token(self.admin, 'patient-title'), 'title': 'MS'})
+                                    {'workflow_context': self.token(self.doctor, 'patient-title'), 'title': 'MS'})
         self.assertEqual(response.status_code, 302)
+        self.patient.refresh_from_db()
+        self.assertEqual(self.patient.title, 'MS')
+        # Practice administrators don't open records, so not this either.
+        self.login(self.admin)
+        self.client.post(reverse('portal:patient-title', args=[self.patient.pk]),
+                         {'workflow_context': self.token(self.admin, 'patient-title'), 'title': 'DR'})
         self.patient.refresh_from_db()
         self.assertEqual(self.patient.title, 'MS')
         self.login(self.patient_user)

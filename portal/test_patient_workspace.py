@@ -5,14 +5,14 @@ from datetime import timedelta
 from urllib.parse import parse_qs, urlsplit
 
 from django.contrib.auth import get_user_model
-from django.test import TestCase
+from django.test import RequestFactory, TestCase
 from django.urls import reverse
 from django.utils import timezone
 
 from care.models import Appointment, AuditEvent, BloodResult, ClinicalNote, ClinicalTask, MessageThread, PatientMessage, Payment
 from practices.models import CompanyMembership
 from . import test_workflows
-from .patient_workspace import ADMIN_TABS, CLINICAL_TABS, TABS
+from .patient_workspace import TABS, workspace_tab_context
 
 # The tabs a doctor in the Clinician role sees on their own patient's record.
 DOCTOR_TABS = [('overview', 'Overview'), ('blood-tests', 'Blood results'), ('messages', 'Messages')]
@@ -42,12 +42,14 @@ class PatientWorkspaceTests(TestCase):
         for actor in (self.doctor, self.administrator, self.super_admin):
             self.login(actor)
             for tab, _ in TABS:
-                if actor == self.administrator and tab in CLINICAL_TABS:
-                    continue
                 with self.subTest(actor=actor.pk, tab=tab):
                     response = self.page(tab)
-                    if (actor == self.doctor and tab not in dict(DOCTOR_TABS)) or (actor == self.administrator and tab not in ADMIN_TABS):
-                        # Doctors and practice administrators: the tabs they don't see send them to the Overview.
+                    if actor == self.administrator:
+                        # Practice administrators don't open patient records (22 Oct 2026): back to their Overview.
+                        self.assertRedirects(response, reverse('portal:desktop-dashboard'), fetch_redirect_response=False)
+                        continue
+                    if actor == self.doctor and tab not in dict(DOCTOR_TABS):
+                        # Doctors: the tabs they don't see send them to the Overview.
                         self.assertRedirects(response, self.overview(), fetch_redirect_response=False)
                         continue
                     self.assertEqual(response.status_code, 200)
@@ -62,9 +64,6 @@ class PatientWorkspaceTests(TestCase):
                     self.assertEqual([link['name'] for link in response.context['workspace_tabs'] if link['active']], [tab])
                     if actor == self.doctor:
                         self.assertEqual([(link['name'], link['label']) for link in response.context['workspace_tabs']], DOCTOR_TABS)
-                    if actor == self.administrator:
-                        self.assertEqual([link['label'] for link in response.context['workspace_tabs']],
-                                         ['Overview', 'Appointments', 'Messages', 'Payments', 'Dispatch history', 'History'])
 
     def test_overview_logs_general_notes_and_blood_results_but_no_conversations_and_the_messages_tab_waits_for_a_choice(self):
         self.login(self.doctor)
@@ -92,7 +91,7 @@ class PatientWorkspaceTests(TestCase):
         self.assertIsNotNone(incoming.staff_read_at)
 
     def test_local_payments_tab_is_readonly_and_does_not_expose_provider_metadata(self):
-        self.login(self.administrator)
+        self.login(self.super_admin)
         Payment.objects.create(company=self.company, patient=self.patient, amount='630.00', due_on=timezone.localdate(),
                                status='paid', provider_reference='PRIVATE_PROVIDER_REFERENCE', failure_reason='PRIVATE_PROVIDER_DIAGNOSTIC')
         Payment.objects.create(company=self.other_company, patient=self.other_practice_patient, amount='8888.88', due_on=timezone.localdate())
@@ -107,16 +106,17 @@ class PatientWorkspaceTests(TestCase):
         self.assertEqual(get_user_model().objects.count(), before_users)
 
     def test_administrative_history_exposes_only_fixed_operational_labels(self):
-        self.login(self.administrator)
+        # The History for staff without clinical access, built directly: practice administrators, the only such staff,
+        # no longer open records.
         AuditEvent.objects.create(company=self.company, patient=self.patient, action='shipment.dispatched',
                                   metadata={'private': 'PRIVATE_AUDIT_META'}, ip_address='192.0.2.25')
         AuditEvent.objects.create(company=self.company, patient=self.patient, action='consultation.signed')
-        response = self.page('history')
-        self.assertContains(response, 'Delivery dispatched')
-        self.assertContains(response, 'Administrative activity only')
-        self.assertNotContains(response, 'PRIVATE_AUDIT_META')
-        self.assertNotContains(response, '192.0.2.25')
-        self.assertEqual(response.context['workspace_row_count'], 1)
+        request = RequestFactory().get(self.path(), {'tab': 'history'})
+        request.user = self.administrator
+        context = workspace_tab_context(request, self.company, CompanyMembership.objects.get(company=self.company, user=self.administrator),
+                                        self.patient, 'history')
+        self.assertEqual([row.workspace_label for row in context['rows']], ['Delivery dispatched'])
+        self.assertEqual(context['workspace_row_count'], 1)
 
     def test_appointments_are_paginated_without_changing_patient_or_tab(self):
         self.login_doctor_super_admin()
@@ -136,16 +136,18 @@ class PatientWorkspaceTests(TestCase):
         self.login(self.doctor)
         response = self.client.post(reverse('portal:staff-message-create', args=[self.thread.pk]), {'body': 'Clinician reply'})
         self.assertRedirects(response, self.path() + f'?tab=messages&thread={self.thread.pk}', fetch_redirect_response=False)
+        # Practice administrators start conversations from Patient messages, not a record.
         self.login(self.administrator)
-        response = self.client.post(reverse('portal:staff-thread-create', args=[self.patient.pk]), {'subject': 'A new thread', 'body': 'New administrative message'})
+        data = {'subject': 'A new thread', 'body': 'New administrative message'}
+        self.assertRedirects(self.client.post(reverse('portal:staff-thread-create', args=[self.patient.pk]), data),
+                             reverse('portal:desktop-dashboard'), fetch_redirect_response=False)
+        self.assertFalse(MessageThread.objects.filter(subject='A new thread').exists())
+        self.login(self.super_admin)
+        response = self.client.post(reverse('portal:staff-thread-create', args=[self.patient.pk]), data)
         new_thread = MessageThread.objects.get(subject='A new thread')
         self.assertRedirects(response, self.path() + f'?tab=messages&thread={new_thread.pk}', fetch_redirect_response=False)
         self.assertEqual(new_thread.patient_id, self.patient.pk)
-        # The administrator sees their own conversation, never the doctor's.
-        threads = self.page('messages').context['record_threads']
-        self.assertEqual([thread.pk for thread in threads], [new_thread.pk])
         # A Super Admin sees every conversation with the patient.
-        self.login(self.super_admin)
         threads = self.page('messages').context['record_threads']
         self.assertEqual({thread.pk for thread in threads}, {self.thread.pk, new_thread.pk})
 
