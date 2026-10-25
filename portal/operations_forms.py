@@ -5,7 +5,7 @@ from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.utils import timezone
 
-from care.models import MedicationDose, MedicationProduct, PatientSubscription, PharmacyOrder, Shipment
+from care.models import PROVINCES, MedicationDose, MedicationProduct, PatientSubscription, PharmacyOrder, Shipment
 from practices.models import Patient
 
 from .filter_menus import TickedChoiceField
@@ -205,6 +205,41 @@ class ShipmentActionForm(forms.Form):
         return {item.pk: self.cleaned_data.get(f'batch_{item.pk}', '') for item in self.items}
 
 
+class DeliveryAddressForm(forms.Form):
+    """Where parcels go and the number the courier calls (care.addresses checks it again when it's saved)."""
+
+    recipient = forms.CharField(label='Recipient', required=False, max_length=150,
+                                help_text='Leave blank to use the patient’s name.')
+    business = forms.CharField(label='Business or complex name', required=False, max_length=150,
+                               help_text='For an office, or a complex with a unit number.')
+    street = forms.CharField(label='Street address', max_length=200)
+    suburb = forms.CharField(label='Suburb', max_length=120)
+    city = forms.CharField(label='City or town', max_length=120)
+    province = forms.ChoiceField(label='Province', choices=(('', 'Choose a province'), *PROVINCES))
+    postal_code = forms.CharField(label='Postal code', max_length=4, min_length=4)
+    phone = forms.CharField(label='Contact number', max_length=32, help_text='The courier calls this number.')
+    instructions = forms.CharField(label='Delivery instructions', required=False, max_length=300,
+                                   widget=forms.Textarea(attrs={'rows': 2}), help_text='Optional, such as a gate code.')
+
+    def __init__(self, *args, instance_address=None, patient=None, for_patient=False, **kwargs):
+        from care.addresses import FIELDS
+
+        # The address on file, else what the patient record has; anything passed in initial wins.
+        if instance_address is not None:
+            known = {name: getattr(instance_address, name) for name in FIELDS}
+        else:
+            known = {'phone': patient.phone, 'city': patient.city} if patient is not None else {}
+        kwargs['initial'] = {**known, **(kwargs.get('initial') or {})}
+        super().__init__(*args, **kwargs)
+        if for_patient:
+            self.fields['recipient'].help_text = 'Leave blank to use your own name.'
+
+    def address(self):
+        from care.addresses import FIELDS
+
+        return {name: self.cleaned_data.get(name, '') for name in FIELDS}
+
+
 class BasketQuantityForm(forms.Form):
     quantity = forms.IntegerField(min_value=0, max_value=100, initial=1, label='Quantity (0 removes the item)')
 
@@ -217,7 +252,7 @@ class SupplyRequestForm(forms.Form):
     postal_code = forms.CharField(max_length=20)
     phone = forms.CharField(label='Delivery contact number', max_length=32)
     note = forms.CharField(required=False, max_length=1000, widget=forms.Textarea(attrs={'rows': 3}))
-    confirm = forms.BooleanField(label='Request these items for practice review; no payment is collected')
+    confirm = forms.BooleanField(label='Request these items for practice review. You pay for them next.')
 
 
 class OrderReviewForm(forms.Form):

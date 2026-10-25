@@ -1,0 +1,114 @@
+{% extends 'portal/patient_page_base.html' %}
+{% load static workspace_ui %}
+{% block title %}Billing and payments | Meridian{% endblock %}
+{% block patient_extra_css %}<link rel="stylesheet" href="{% static 'css/patient_billing.css' %}?v=20261025d">{% endblock %}
+{% block patient_breadcrumbs %}{% breadcrumbs 'My Treatment' 'portal:patient-treatment' 'Billing and payments' %}{% endblock %}
+{% block patient_heading %}
+  <header class="patient-page-heading">
+    <div>
+      <h1>Billing and payments</h1>
+      <p>Your subscription payments, the debit order they’re collected with, and your invoices. Your parcels go out once each payment is in.</p>
+    </div>
+  </header>
+{% endblock %}
+
+{% block patient_content %}
+  {% if due %}
+    {# Payments that didn't go through, with Pay now by card; a new debit order also collects them. #}
+    <section class="console-card patient-page-section billing-due" aria-labelledby="billing-due-heading">
+      <div class="console-card__body">
+        <h2 class="patient-eyebrow" id="billing-due-heading">Payment needed</h2>
+        {% for cycle in due %}
+          <div class="billing-due__row">
+            <div><strong>R{{ cycle.amount|floatformat:"-2" }}</strong> due {{ cycle.due_on|date:"j F" }}<small>{% if cycle.status == 'failed' %}We tried {{ cycle.attempts }} time{{ cycle.attempts|pluralize }}. Your next parcel waits until it’s paid.{% elif cycle.next_attempt_on %}It didn’t go through. We’ll try again on {{ cycle.next_attempt_on|date:"j F" }}.{% else %}{{ cycle.failure_reason }}{% endif %}</small></div>
+            {% if provider %}<form method="post" action="{% url 'portal:patient-cycle-pay' cycle.pk %}">{% csrf_token %}<input type="hidden" name="workflow_context" value="{{ cycle.pay_context }}"><button class="console-button console-button--primary" type="submit">Pay now by card</button></form>{% endif %}
+          </div>
+        {% endfor %}
+      </div>
+    </section>
+  {% endif %}
+
+  <div class="patient-two-up">
+    <section class="console-card" id="debit-order" aria-labelledby="billing-mandate-heading">
+      <div class="console-card__body">
+        <h2 class="patient-eyebrow" id="billing-mandate-heading">How you pay</h2>
+        {% if not plan %}
+          <p class="patient-plan__empty-title">No subscription yet</p>
+          <p class="patient-small">Once your doctor has prescribed your treatment, start your subscription on My Treatment. You set up how you pay there.</p>
+          <div class="patient-card-actions"><a class="console-button console-button--secondary" href="{% url 'portal:patient-treatment' %}#treatment-plan">Go to My Treatment</a></div>
+        {% else %}
+          {% if summary %}<p class="billing-state billing-state--{{ summary.state }}">{{ summary.text }}</p>{% endif %}
+          {% if mandate %}
+            <dl class="patient-kv">
+              <div><dt>Method</dt><dd>{{ mandate.get_method_display }}</dd></div>
+              {% if mandate.account_label %}<div><dt>Account</dt><dd>{{ mandate.account_label }}</dd></div>{% endif %}
+              <div><dt>Up to</dt><dd>R{{ mandate.amount|floatformat:"-2" }} every {{ mandate.interval_weeks }} weeks</dd></div>
+              <div><dt>Status</dt><dd>{{ mandate.get_status_display }}</dd></div>
+              <div><dt>Reference</dt><dd>{{ mandate.reference }}</dd></div>
+              {% if plan.next_debit_on %}<div><dt>Next payment</dt><dd>{{ plan.next_debit_on|date:"j F Y" }}</dd></div>{% endif %}
+            </dl>
+          {% endif %}
+          {% if provider %}
+            <form method="post" action="{% url 'portal:patient-debit-order' %}" class="console-form billing-method">{% csrf_token %}
+              <input type="hidden" name="workflow_context" value="{{ debit_context }}">
+              <fieldset class="patient-fieldset">
+                <legend>{% if mandate and mandate.status == 'active' %}Change how you pay{% else %}Set up how you pay{% endif %}</legend>
+                {% for choice in debit_form.method %}<label class="patient-check" for="{{ choice.id_for_label }}">{{ choice.tag }}<span>{{ choice.choice_label }}</span></label>{% endfor %}
+              </fieldset>
+              <div class="patient-card-actions"><button class="console-button console-button--primary" type="submit">{% if summary.action %}{{ summary.action }}{% else %}Change my payment details{% endif %}</button></div>
+            </form>
+            <p class="patient-small">You approve it with your bank or card provider; your card and bank details stay with them. A new debit order replaces the old one once it’s approved.</p>
+          {% else %}
+            <p class="patient-small">Online payment isn’t connected yet. {{ patient_company.name }} will tell you how to pay.</p>
+          {% endif %}
+        {% endif %}
+      </div>
+    </section>
+
+    <section class="console-card" aria-labelledby="billing-address-heading">
+      <div class="console-card__body">
+        <h2 class="patient-eyebrow" id="billing-address-heading">Where your parcels go</h2>
+        {% if address %}
+          <address class="billing-address">{{ address.recipient|default:patient }}<br>{% for line in address.lines %}{{ line }}<br>{% endfor %}{{ address.phone }}</address>
+        {% else %}
+          <p class="patient-small">No delivery address yet. Your parcels can’t go out without one.</p>
+        {% endif %}
+        <div class="patient-card-actions"><a class="console-button console-button--secondary" href="{% url 'portal:patient-delivery-address' %}">{% if address %}Change my delivery address{% else %}Add my delivery address{% endif %}</a></div>
+      </div>
+    </section>
+  </div>
+
+  <section class="console-card patient-page-section" id="billing-history" aria-labelledby="billing-history-heading">
+    <header class="console-card__header"><div class="console-card__heading"><h2 id="billing-history-heading">Subscription payments</h2><p>Every payment period, newest first, with its invoice.</p></div></header>
+    <div class="patient-table-wrap">
+      <table class="patient-table" aria-labelledby="billing-history-heading">
+        <thead><tr><th scope="col">Period</th><th scope="col">Amount</th><th scope="col">Status</th><th class="patient-table__fit" scope="col">Invoice</th></tr></thead>
+        <tbody>
+          {% for cycle in page_obj %}
+            <tr>
+              <td data-label="Period">{{ cycle.starts_on|date:"j M" }} – {{ cycle.ends_on|default:cycle.starts_on|date:"j M Y" }}</td>
+              <td data-label="Amount">R{{ cycle.amount|floatformat:"-2" }}</td>
+              <td data-label="Status">{% if cycle.status == 'paid' %}<span class="billing-pill billing-pill--paid">Paid {{ cycle.paid_at|date:"j M" }}</span>{% elif cycle.status == 'failed' %}<span class="billing-pill billing-pill--failed">Not paid</span>{% elif cycle.attempts %}<span class="billing-pill billing-pill--retrying">Retrying</span>{% elif cycle.status == 'cancelled' %}<span class="billing-pill">Cancelled</span>{% else %}<span class="billing-pill">Due {{ cycle.due_on|date:"j M" }}</span>{% endif %}</td>
+              <td class="patient-table__fit" data-label="Invoice">{% if cycle.invoice %}<a class="patient-inline-link billing-invoice-link" href="{% url 'portal:patient-invoice' cycle.invoice.pk %}">{{ cycle.invoice.invoice_number }}</a>{% else %}—{% endif %}</td>
+            </tr>
+          {% empty %}
+            <tr><td class="patient-table__empty" colspan="4">No subscription payments yet. Your first is collected once your debit order is approved.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+  {% include 'portal/includes/patient_pagination.html' with pagination_label='Payment' pagination_fragment='billing-history' %}
+
+  {% if once_off %}
+    <section class="console-card patient-page-section" aria-labelledby="billing-other-heading">
+      <header class="console-card__header"><div class="console-card__heading"><h2 id="billing-other-heading">Other payments</h2><p>Consultations, requests and payments the practice recorded for you.</p></div></header>
+      <div class="patient-table-wrap">
+        <table class="patient-table" aria-labelledby="billing-other-heading">
+          <thead><tr><th scope="col">Date</th><th scope="col">For</th><th scope="col">Amount</th><th scope="col">Status</th></tr></thead>
+          <tbody>{% for payment in once_off %}<tr><td data-label="Date">{{ payment.paid_at|default:payment.created_at|date:"j M Y" }}</td><td data-label="For">{{ payment.get_kind_display }}</td><td data-label="Amount">R{{ payment.amount|floatformat:"-2" }}</td><td data-label="Status">{{ payment.get_status_display }}</td></tr>{% endfor %}</tbody>
+        </table>
+      </div>
+    </section>
+  {% endif %}
+{% endblock %}

@@ -1,12 +1,12 @@
 /* Modal dialogs (static/js/dialogs.js): Update booking status, Message action, Write consultation note. The body carries the padding so
    a click on the dialog's edge isn't taken for one on the backdrop. */
-.app-dialog { border: 0; border-radius: 1rem; box-shadow: 0 24px 60px rgba(18, 56, 60, .22); color: var(--console-ink, #12302f); max-height: calc(100vh - 2rem); max-width: min(40rem, calc(100vw - 2rem)); overflow: auto; padding: 0; width: 100%; }
+.app-dialog { border: 0; border-radius: 1rem; box-shadow: 0 24px 60px var(--c-12383c-220); color: var(--console-ink, var(--c-12302f)); max-height: calc(100vh - 2rem); max-width: min(40rem, calc(100vw - 2rem)); overflow: auto; padding: 0; width: 100%; }
 .app-dialog--wide { max-width: min(48rem, calc(100vw - 2rem)); }
 .app-dialog[open]:not(:modal) { inset: 0; margin: auto; position: fixed; z-index: 60; }
-.app-dialog::backdrop { background: rgba(18, 56, 60, .35); }
+.app-dialog::backdrop { background: var(--c-12383c-350); }
 .app-dialog__body { padding: 1.5rem; }
-.app-dialog h2 { color: var(--console-ink, #12302f); font-size: 1.35rem; margin: 0 0 1rem; }
-.app-dialog__sub { color: var(--console-muted, #5f7a7d); font-size: .82rem; line-height: 1.55; margin: -.5rem 0 1rem; }
+.app-dialog h2 { color: var(--console-ink, var(--c-12302f)); font-size: 1.35rem; margin: 0 0 1rem; }
+.app-dialog__sub { color: var(--console-muted, var(--c-5f7a7d)); font-size: .82rem; line-height: 1.55; margin: -.5rem 0 1rem; }
 .app-dialog .console-form { display: grid; gap: .9rem; margin: 0; }
 .app-dialog .console-form textarea { resize: vertical; width: 100%; }
 .app-dialog__actions { display: flex; flex-wrap: wrap; gap: .6rem; justify-content: flex-end; }

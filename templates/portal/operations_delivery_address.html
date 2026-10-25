@@ -1,0 +1,19 @@
+{% extends 'portal/operations_base.html' %}
+{% load workspace_ui %}
+{% block title %}Delivery address · {{ patient }} | Meridian{% endblock %}
+{% block breadcrumbs %}{% breadcrumbs 'Weekly shipping' 'portal:ops-shipping' 'Delivery address' %}{% endblock %}
+{% block page_heading %}<header class="staff-page-header"><div><h1>{{ patient }}</h1><p>{{ company.name }} · Where this patient’s parcels go and the number the courier calls.</p></div></header>{% endblock %}
+{% block operations_content %}<div class="ops-grid">
+  <section class="staff-page-card ops-panel" aria-labelledby="delivery-address-heading">
+    <h2 id="delivery-address-heading">{% if address %}Change the delivery address{% else %}Add a delivery address{% endif %}</h2>
+    <form method="post" action="{{ request.path }}" class="ops-form">{% csrf_token %}<input type="hidden" name="next" value="{{ next_url }}">
+      {% include 'portal/operations_fields.html' %}
+      <div class="ops-actions"><button class="console-button console-button--primary" type="submit">Save address</button><a class="console-button console-button--secondary" href="{{ next_url }}">Back</a></div>
+    </form>
+  </section>
+  <section class="staff-page-card ops-panel" aria-labelledby="delivery-current-heading">
+    <h2 id="delivery-current-heading">On file</h2>
+    {% if address %}<address class="ops-address">{{ address.recipient|default:patient }}<br>{% for line in address.lines %}{{ line }}<br>{% endfor %}{{ address.phone }}</address>{% if address.instructions %}<p>{{ address.instructions }}</p>{% endif %}<p>Last changed {{ address.updated_at|date:'j M Y, H:i' }} SAST{% if address.updated_by %} by {% if address.updated_by_id == patient.user_id %}the patient{% else %}{{ address.updated_by.full_name }}{% endif %}{% endif %}.</p>{% else %}<p>No delivery address yet. The patient gives one when they start their subscription, or on My profile.</p>{% endif %}
+    <p>The patient sees the change on My profile. It’s recorded in the practice’s audit log.</p>
+  </section>
+</div>{% endblock %}

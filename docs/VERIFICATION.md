@@ -135,6 +135,17 @@ Cancelling an unknown history traversal cannot preserve both the entire browser 
 
 The separate shell access predicates and per-controller compatibility adapters remain deliberate maintenance items. The source-build hash remains cached once per process when a static manifest is absent; production continues to prefer the collected manifest. Rebuilding lazy querysets does not itself issue duplicate SQL.
 
+## Branch integration — 25 October 2026
+
+Merged the navigation fixes from `7273ad9` with the billing, email journey, shipping and theme changes from `b51d358`. The combined navigation registry classifies all 133 portal GET routes: 101 HTML destinations (24 patient and 77 staff) and 32 native/API routes. Provider card preparation, payment settlement and courier labels reject content/section requests before executing their views. The old stock URL retains its shipping redirect, and the 40 remaining shell routes match full-view permissions in 160 role comparisons.
+
+- Fresh full SQLite regression: **1,579 tests run, no failures, 18 expected skips**, in 142.443 seconds. The focused navigation suite ran 37 tests with one optional browser skip.
+- **110 Chrome/WebKit navigation scenarios** and **six lifecycle scenarios** passed against the merged tree.
+- **Six actual rendered desktop/mobile journeys** and **12 rendered fallback checks** passed. Existing layout overflow remained identical to full-page rendering.
+- Django system checks, migration consistency and production static collection into a temporary directory passed, including hashed navigation and theme assets.
+
+These checks used disposable data and simulated browser/network fixtures; no production deployment or live payment, email or courier action was performed.
+
 ## Limits
 
 Passing tests is not a clinical, regulatory or penetration-test certification. Payment collection, outbound email, live prescribing, third-party Zoom integration and courier APIs remain excluded. Native appointment video is provided instead. The questionnaire remains lead-only; the checkout creates a patient login only with the checkout test code. File uploads have basic PDF checks, not malware scanning. Review the live-use prerequisites in [USER_GUIDE.md](USER_GUIDE.md) and [DEPLOYMENT.md](DEPLOYMENT.md) before handling real patient data.

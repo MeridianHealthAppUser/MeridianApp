@@ -201,10 +201,13 @@ class SubscriptionFilterForm(forms.Form):
 
 
 def _enrollment_form(company, patient):
-    """Start your subscription. With one current authorisation, it starts chosen."""
+    """Start your subscription. With one current authorisation, it starts chosen; the address is the one on file."""
+    from care.addresses import address_for
+
     eligible = _eligible_authorizations(company, patient)
     only = list(eligible[:2])
-    return EnrollmentForm(authorizations=eligible, initial={'authorization': only[0].pk} if len(only) == 1 else None)
+    return EnrollmentForm(authorizations=eligible, initial={'authorization': only[0].pk} if len(only) == 1 else None,
+                          instance_address=address_for(patient), patient=patient, for_patient=True)
 
 
 def _eligible_authorizations(company, patient):
@@ -238,9 +241,11 @@ def patient_treatment_context(request, company, patient, *, enrollment_form=None
     subscription each open a dialog, which opens again after a mistake (or from ?help=1 and ?cancel=1 without
     scripts)."""
     from .patient_summary import (
-        current_authorization, intake_answers, latest_weight, medical_information, medical_profile,
+        billing_tasks, current_authorization, intake_answers, latest_weight, medical_information, medical_profile,
         next_consult, open_lab_requests, patient_tasks, treatment_overview, treatment_timeline,
     )
+
+    from care.billing import patient_summary as billing_summary, prescription_amount
 
     context = patient_page_context(request, company, patient, 'treatment', 'My Treatment')
     current = _plans(company, patient).exclude(status=PatientSubscription.Status.CANCELLED).first()
@@ -254,7 +259,7 @@ def patient_treatment_context(request, company, patient, *, enrollment_form=None
         item.is_current = authorization_is_current(item)
     context.update(
         next_consult=consult,
-        tasks=patient_tasks(
+        tasks=billing_tasks(current) + patient_tasks(
             authorization=authorization, plan=current, consult=consult, weight=weight, profile=profile,
             labs=open_lab_requests(company, patient),
         ),
@@ -285,6 +290,8 @@ def patient_treatment_context(request, company, patient, *, enrollment_form=None
         # The plan costs what the dose in effect costs; before enrolling, what the current prescription's dose costs.
         plan_dose=dose_in_effect(current) if current else None,
         enroll_dose=authorization.dose if authorization is not None and authorization.dose_id else None,
+        enroll_amount=prescription_amount(authorization) if authorization is not None else None,
+        plan_billing=billing_summary(current) if current and current.status != PatientSubscription.Status.CANCELLED else None,
         # The prescription in detail: dose, pens, week of treatment, a starting plan's steps and the next parcel.
         treatment=treatment_overview(company, patient, treatment_authorization),
         # Week by week: the dose, the pens sent and the payments due.
@@ -319,18 +326,37 @@ class PatientSubscriptionView(LoginRequiredMixin, PatientPortalRequiredMixin, Vi
 
 
 class PatientEnrollmentView(PatientSubscriptionView):
+    """Start my subscription: the delivery address is saved, the subscription starts, and the patient goes on to
+    approve their debit order (or card) with the payment provider. The first debit is collected once it's approved."""
+
     http_method_names = ('post', 'options')
 
     def post(self, request):
-        form = EnrollmentForm(request.POST, authorizations=self.eligible())
+        from care.addresses import save_delivery_address
+        from care.billing import start_debit_order
+        from care.payment_providers import current_provider
+
+        form = EnrollmentForm(request.POST, authorizations=self.eligible(), patient=self.patient, for_patient=True)
         valid = form.is_valid()
         try:
             token = validate_treatment_context(request, self.patient_company, self.patient, 'subscription-enroll')
             if valid:
-                enroll_local_subscription(company=self.patient_company, patient=self.patient, actor=request.user,
-                                          submission_key=token['submission_key'], request=request, **form.cleaned_data)
-                messages.success(request, 'Local care plan enrolled. No payment was collected.')
-                return redirect(reverse('portal:patient-treatment') + '#treatment-plan')
+                save_delivery_address(company=self.patient_company, patient=self.patient, actor=request.user,
+                                      data=form.address(), request=request)
+                plan = enroll_local_subscription(company=self.patient_company, patient=self.patient, actor=request.user,
+                                                 authorization=form.cleaned_data['authorization'],
+                                                 confirm=form.cleaned_data['confirm'],
+                                                 submission_key=token['submission_key'], request=request)
+                if current_provider() is None:
+                    messages.success(request, 'Your subscription has started. The practice will be in touch about how to pay.')
+                    return redirect(reverse('portal:patient-treatment') + '#treatment-plan')
+                try:
+                    _, url = start_debit_order(subscription=plan, actor=request.user, method=form.cleaned_data['method'],
+                                               request=request)
+                except ValidationError as error:
+                    messages.error(request, f'Your subscription has started, but your debit order couldn’t be set up: {" ".join(error.messages)}')
+                    return redirect('portal:patient-billing')
+                return redirect(url)
         except ValidationError as error:
             _error(form, error)
         return self.display(request, enrollment_form=form, status=400)

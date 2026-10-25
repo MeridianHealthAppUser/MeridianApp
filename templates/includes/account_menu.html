@@ -12,12 +12,18 @@
       {# Patients keep everything on My profile: password, preferences, consents and data requests. #}
       {% if identity.is_patient %}
         <a href="{% url 'portal:patient-profile' %}">My profile</a>
+        <a href="{% url 'portal:patient-billing' %}">Billing and payments</a>
       {% else %}
         <a href="{% url 'accounts:profile' %}">My profile</a>
         <a href="{% url 'accounts:password-change' %}">Change password</a>
         {# Super Admins only: clinicians and practice administrators don't need it. #}{% if active_company and active_membership.role == 'super_admin' %}<a href="{% url 'portal:account-access-history' %}">My access history</a>{% endif %}
       {% endif %}
     </nav>
+    {# Light, dark, or as the device is set (static/js/theme.js); saved in this browser. #}
+    <div class="account-menu__theme account-menu__section" role="group" aria-label="Appearance">
+      <span>Appearance</span>
+      <div class="account-menu__theme-choices"><button type="button" data-theme-choice="system" aria-pressed="true">Device</button><button type="button" data-theme-choice="light" aria-pressed="false">Light</button><button type="button" data-theme-choice="dark" aria-pressed="false">Dark</button></div>
+    </div>
     {% if user.is_superuser and user.is_staff %}<div class="account-menu__links account-menu__section"><a href="{% url 'admin:index' %}">Practice administration</a></div>{% endif %}
     {% include 'includes/practice_role_switcher.html' %}
     {% if identity.is_patient and active_company %}<div class="account-menu__links account-menu__section"><a href="{% url 'portal:desktop-dashboard' %}">Switch to workspace</a></div>{% elif not identity.is_patient and active_patient %}<div class="account-menu__links account-menu__section"><a href="{% url 'portal:patient-dashboard' %}">Switch to my care</a></div>{% endif %}

@@ -357,6 +357,27 @@ def _task(title, body, actions, *, urgent=False):
             'actions': [{'label': label, 'url': url, 'primary': primary} for label, url, primary in actions]}
 
 
+def billing_tasks(plan):
+    """What a subscription's billing needs from the patient: a debit order to set up or approve, or a payment that
+    didn't go through. Most urgent first, like the rest."""
+    from care.billing import patient_summary
+
+    if plan is None or plan.status not in ('active', 'payment_retry'):
+        return []
+    summary = patient_summary(plan)
+    if not summary['action']:
+        return []
+    details = {
+        'no_mandate': 'Your parcels go out once each payment is in. Set up a DebiCheck debit order or a card to start.',
+        'pending': 'Your debit order is set up but not approved yet. Approve it in your banking app, or set it up again.',
+        'update': 'Your treatment or its price changed. Approve your debit order for the new amount so your parcels keep going out.',
+        'failed': 'Your next parcel waits until it’s paid. Pay now, or set up your debit order again if your details changed.',
+        'retrying': 'We’ll try again soon. If your bank details or card changed, update them so it goes through.',
+    }
+    return [_task(summary['text'], details.get(summary['state'], ''),
+                  [(summary['action'], reverse('portal:patient-billing'), True)], urgent=summary['state'] != 'pending')]
+
+
 def patient_tasks(*, authorization, plan, consult, weight, profile, labs):
     """What needs doing, most urgent first. Each task disappears once its record changes."""
     today = timezone.localdate()

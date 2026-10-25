@@ -5,13 +5,13 @@
 .person-tags { display: flex; flex-wrap: wrap; gap: .3rem; min-width: 0; }
 span.person-tag, .message-list__copy span.person-tag { align-items: center; border: 1px solid; border-radius: 99rem; display: inline-flex; font-size: .7rem; font-weight: 500; gap: .3rem; line-height: 1.25; margin: 0; max-width: 100%; overflow: visible; overflow-wrap: anywhere; padding: .16rem .55rem .16rem .45rem; white-space: normal; }
 .person-tag svg { flex: 0 0 auto; }
-.person-tag.person-tag--patient { background: #fff; border-color: var(--console-teal, #07877f); color: var(--console-teal-dark, #056f69); }
-.person-tag.person-tag--doctor { background: var(--console-teal-soft, #e4f5f1); border-color: var(--console-teal, #07877f); color: var(--console-teal-dark, #056f69); }
-.person-tag.person-tag--dietitian { background: #e8f5ea; border-color: #b9dfc0; color: #2f6b3d; }
-.person-tag.person-tag--admin { background: #e8f1fc; border-color: #c4d9f3; color: #2c5a8a; }
-.person-tag.person-tag--other { background: #f3f5f5; border-color: #dfe5e5; color: #5f7376; }
+.person-tag.person-tag--patient { background: var(--c-ffffff); border-color: var(--console-teal, var(--c-07877f)); color: var(--console-teal-dark, var(--c-056f69)); }
+.person-tag.person-tag--doctor { background: var(--console-teal-soft, var(--c-e4f5f1)); border-color: var(--console-teal, var(--c-07877f)); color: var(--console-teal-dark, var(--c-056f69)); }
+.person-tag.person-tag--dietitian { background: var(--c-e8f5ea); border-color: var(--c-b9dfc0); color: var(--c-2f6b3d); }
+.person-tag.person-tag--admin { background: var(--c-e8f1fc); border-color: var(--c-c4d9f3); color: var(--c-2c5a8a); }
+.person-tag.person-tag--other { background: var(--c-f3f5f5); border-color: var(--c-dfe5e5); color: var(--c-5f7376); }
 /* "Patient:" before the patient a team conversation is about. */
-.person-tags__label { align-self: center; color: var(--console-muted, #6e8588); font-size: .7rem; margin-right: .35rem; }
+.person-tags__label { align-self: center; color: var(--console-muted, var(--c-6e8588)); font-size: .7rem; margin-right: .35rem; }
 
 /* On the Overview: the tags under the subject, and a closed conversation's "Closed" tag (as in Patient messages)
    to the left of View conversation. */
@@ -19,4 +19,4 @@ span.person-tag, .message-list__copy span.person-tag { align-items: center; bord
 .message-list__actions { align-items: center; display: flex; gap: .55rem; justify-content: flex-end; }
 .message-list__copy > .message-list__actions { flex-wrap: wrap; gap: .4rem .55rem; justify-content: flex-start; margin-top: .45rem; }
 .message-list__actions .console-button { white-space: nowrap; }
-span.record-inbox-pill, .message-list__copy span.record-inbox-pill { background: var(--console-canvas, #f4f8f7); border: 1px solid var(--console-line, #deebe8); border-radius: 99rem; color: #526f74; display: inline-block; font-size: .64rem; font-weight: 500; line-height: 1.35; margin: 0; overflow: visible; padding: .1rem .45rem; white-space: nowrap; }
+span.record-inbox-pill, .message-list__copy span.record-inbox-pill { background: var(--console-canvas, var(--c-f4f8f7)); border: 1px solid var(--console-line, var(--c-deebe8)); border-radius: 99rem; color: var(--c-526f74); display: inline-block; font-size: .64rem; font-weight: 500; line-height: 1.35; margin: 0; overflow: visible; padding: .1rem .45rem; white-space: nowrap; }

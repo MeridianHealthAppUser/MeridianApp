@@ -16,7 +16,6 @@ from .models import (
     ConsentRecord,
     DoctorPayoutLine,
     EmailDelivery,
-    EmailJourney,
     Invoice,
     InvoiceLine,
     LabRequest,
@@ -27,6 +26,7 @@ from .models import (
     PatientEvent,
     PatientSubscription,
     PayoutRun,
+    DeliveryAddress,
     PracticeSettings,
     ReviewRule,
     ScreeningQuestionnaire,
@@ -38,6 +38,7 @@ from .models import (
     TreatmentAuthorization,
     WeightEntry,
 )
+from .journeys import default_journeys
 from .parcels import schedule_parcels
 from .services import post_patient_message
 
@@ -186,16 +187,6 @@ def seed_demo_care(*, meridian, orion, users, nadia):
                 'is_active': True,
             },
         )
-        journey, _ = EmailJourney.objects.update_or_create(
-            company=company,
-            name='Consult booking confirmation',
-            defaults={
-                'trigger': EmailJourney.Trigger.CONSULT_BOOKED,
-                'subject_template': 'Your Meridian consultation',
-                'body_template': 'Your consultation is booked for {{ appointment_time }}.',
-                'is_active': True,
-            },
-        )
 
         if company == meridian:
             patient = nadia
@@ -223,6 +214,11 @@ def seed_demo_care(*, meridian, orion, users, nadia):
             assigned_doctor=sam,
         )
         patient.refresh_from_db()
+        # Where Nadia's parcels go, and the practice's journey emails (switched off) to rewrite and switch on.
+        DeliveryAddress.objects.update_or_create(company=company, patient=patient, defaults={
+            'street': '12 Kloof Street', 'suburb': 'Gardens', 'city': 'Cape Town', 'province': 'WC',
+            'postal_code': '8001', 'phone': '+27 82 555 0100'})
+        default_journeys(company)
 
         for document in (service_document, telehealth_document):
             ConsentRecord.objects.get_or_create(
@@ -393,10 +389,10 @@ def seed_demo_care(*, meridian, orion, users, nadia):
         schedule_parcels(authorization)
         EmailDelivery.objects.get_or_create(
             company=company,
-            journey=journey,
+            kind='appointment_booked',
             patient=patient,
             recipient_email=patient.user.email,
-            defaults={'sent_at': timezone.now() - timedelta(days=1), 'status': 'sent'},
+            defaults={'subject': 'Your appointment is booked', 'sent_at': timezone.now() - timedelta(days=1), 'status': 'sent'},
         )
         _event(company=company, patient=patient, category=PatientEvent.Category.APPOINTMENT, title='Follow-up booked', source=appointment)
         _event(company=company, patient=patient, category=PatientEvent.Category.MEDICATION, title='Treatment approved', source=authorization)

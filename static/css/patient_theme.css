@@ -5,24 +5,24 @@
    text, links and a button's hover (about 6:1 against white). The logo keeps its own blues. */
 
 .patient-app {
-  --patient-teal: #07877f;
-  --patient-teal-dark: #056f69;
+  --patient-teal: var(--c-07877f);
+  --patient-teal-dark: var(--c-056f69);
   --patient-font: 'Roboto', -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
-  --patient-ink: #12383c;
-  --patient-ink-2: #4c6567;
-  --patient-ink-3: #6e8588;
-  --patient-bg: #f4f8f7;
-  --patient-line: #deebe8;
-  --patient-line-2: #edf3f1;
-  --patient-field-line: #d0e0dc;
-  --patient-accent-hover: #056f69;
-  --patient-accent-soft: #e4f5f1;
-  --patient-accent-line: #b9d9d3;
-  --patient-focus-ring: rgba(7, 135, 127, .16);
-  --patient-rose: #a73f37;
-  --patient-rose-soft: #fbedeb;
-  --patient-rose-line: #efccc8;
-  --patient-shadow: 0 1px 2px rgba(18, 56, 60, .05), 0 8px 24px -12px rgba(18, 56, 60, .12);
+  --patient-ink: var(--c-12383c);
+  --patient-ink-2: var(--c-4c6567);
+  --patient-ink-3: var(--c-6e8588);
+  --patient-bg: var(--c-f4f8f7);
+  --patient-line: var(--c-deebe8);
+  --patient-line-2: var(--c-edf3f1);
+  --patient-field-line: var(--c-d0e0dc);
+  --patient-accent-hover: var(--c-056f69);
+  --patient-accent-soft: var(--c-e4f5f1);
+  --patient-accent-line: var(--c-b9d9d3);
+  --patient-focus-ring: var(--c-07877f-160);
+  --patient-rose: var(--c-a73f37);
+  --patient-rose-soft: var(--c-fbedeb);
+  --patient-rose-line: var(--c-efccc8);
+  --patient-shadow: 0 1px 2px var(--c-12383c-050), 0 8px 24px -12px var(--c-12383c-120);
   background: var(--patient-bg);
   color: var(--patient-ink);
   font-family: var(--patient-font);
@@ -36,32 +36,32 @@
   --console-line: var(--patient-line);
   --console-soft-line: var(--patient-line-2);
   --console-canvas: var(--patient-bg);
-  --console-card: #fff;
+  --console-card: var(--c-ffffff);
   --console-teal: var(--patient-teal);
   --console-teal-dark: var(--patient-teal-dark);
   --console-teal-soft: var(--patient-accent-soft);
-  --console-sand: #fcf3e2;
-  --console-amber: #9a6414;
+  --console-sand: var(--c-fcf3e2);
+  --console-amber: var(--c-9a6414);
   --console-red: var(--patient-rose);
   --console-shadow: var(--patient-shadow);
   --patient-text: var(--patient-ink-2);
   --patient-teal-line: var(--patient-accent-line);
-  --patient-amber-soft: #fcf3e2;
-  --patient-amber-line: #ebd5ac;
+  --patient-amber-soft: var(--c-fcf3e2);
+  --patient-amber-line: var(--c-ebd5ac);
   /* "To do" and other informational marks, once blue, are teal too. */
   --patient-blue: var(--patient-teal-dark);
   --patient-blue-soft: var(--patient-accent-soft);
   --patient-blue-line: var(--patient-accent-line);
-  --patient-ok: #1a7a52;
-  --patient-ok-soft: #e8f5ee;
-  --patient-ok-line: #bfe0ce;
+  --patient-ok: var(--c-1a7a52);
+  --patient-ok-soft: var(--c-e8f5ee);
+  --patient-ok-line: var(--c-bfe0ce);
   background: var(--patient-bg);
   color: var(--patient-ink);
   font-family: var(--patient-font);
 }
 
 /* Header, practice selector and account menu. */
-.patient-app .site-header { background: #fff; border-bottom-color: var(--patient-line); }
+.patient-app .site-header { background: var(--c-ffffff); border-bottom-color: var(--patient-line); }
 .patient-app .company-switcher label { color: var(--patient-ink-2); }
 .patient-app .site-header select { border-color: var(--patient-field-line); color: var(--patient-ink); font-family: inherit; }
 .patient-app .workspace-skip-link { background: var(--patient-teal-dark); }
@@ -81,7 +81,7 @@
 .patient-app .flash-message.error { background: var(--patient-rose-soft); border-color: var(--patient-rose-line); color: var(--patient-rose); }
 
 /* Sidebar: labels in Roboto medium, the current section tinted. */
-.patient-app .meridian-console .patient-navigation { background: #fff; }
+.patient-app .meridian-console .patient-navigation { background: var(--c-ffffff); }
 .patient-app .meridian-console .patient-navigation__heading { color: var(--patient-ink-3); font-weight: 500; }
 .patient-app .meridian-console .patient-navigation a { color: var(--patient-ink-2); font-weight: 500; }
 .patient-app .meridian-console .patient-navigation a:hover { background: var(--patient-bg); color: var(--patient-teal-dark); }
@@ -90,11 +90,11 @@
 
 /* Buttons, as on the practice console: solid teal, or white with a thin border. */
 .patient-app .meridian-console .console-button { border-radius: .625rem; font-weight: 500; }
-.patient-app .meridian-console .console-button--primary { background: var(--patient-teal); border-color: var(--patient-teal); color: #fff; }
+.patient-app .meridian-console .console-button--primary { background: var(--patient-teal); border-color: var(--patient-teal); color: var(--c-ffffff); }
 .patient-app .meridian-console .console-button--primary:hover { background: var(--patient-accent-hover); border-color: var(--patient-accent-hover); }
-.patient-app .meridian-console .console-button--secondary { background: #fff; border-color: var(--patient-line); color: var(--patient-ink); }
+.patient-app .meridian-console .console-button--secondary { background: var(--c-ffffff); border-color: var(--patient-line); color: var(--patient-ink); }
 .patient-app .meridian-console .console-button--secondary:hover { background: var(--patient-accent-soft); border-color: var(--patient-accent-line); }
-.patient-app .meridian-console .console-button--quiet { background: #fff; border-color: var(--patient-line); color: var(--patient-teal-dark); }
+.patient-app .meridian-console .console-button--quiet { background: var(--c-ffffff); border-color: var(--patient-line); color: var(--patient-teal-dark); }
 .patient-app .meridian-console .console-button--quiet:hover { background: var(--patient-accent-soft); color: var(--patient-teal-dark); }
 .patient-app .meridian-console .console-button.patient-button--rose { border-color: var(--patient-rose-line); color: var(--patient-rose); }
 .patient-app .meridian-console .console-button.patient-button--rose:hover { background: var(--patient-rose-soft); }
@@ -107,14 +107,14 @@
 .patient-app .meridian-console :is(.console-status, .console-priority) { background: var(--patient-bg); border: 1px solid var(--patient-line); color: var(--patient-ink-2); font-size: .72rem; font-weight: 500; padding: .22rem .62rem; }
 .patient-app .meridian-console :is(.console-status--booked, .console-status--active, .console-status--open) { background: var(--patient-accent-soft); border-color: var(--patient-accent-line); color: var(--patient-teal-dark); }
 .patient-app .meridian-console :is(.console-status--cancelled, .console-status--urgent) { background: var(--patient-rose-soft); border-color: var(--patient-rose-line); color: var(--patient-rose); }
-.patient-app .meridian-console .console-priority { background: #fcf3e2; border-color: #ebd5ac; color: #9a6414; }
+.patient-app .meridian-console .console-priority { background: var(--c-fcf3e2); border-color: var(--c-ebd5ac); color: var(--c-9a6414); }
 
 /* Cards, tables and form fields. */
 .patient-app .meridian-console :is(.console-card, .staff-page-card, .privacy-card, .metric-card) { border-color: var(--patient-line); border-radius: .875rem; box-shadow: var(--patient-shadow); }
 .patient-app .meridian-console .console-card__heading h2 { font-weight: 500; }
 .patient-app .meridian-console table thead { background: var(--patient-bg); }
 .patient-app .meridian-console table th { color: var(--patient-ink-3); font-weight: 500; }
-.patient-app .meridian-console table tbody tr:hover td { background: #f8fafb; }
+.patient-app .meridian-console table tbody tr:hover td { background: var(--c-f8fafb); }
 .patient-app .meridian-console .console-form label { font-weight: 500; }
 .patient-app .meridian-console input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]),
 .patient-app .meridian-console :is(select, textarea) { border-color: var(--patient-field-line); color: var(--patient-ink); }
@@ -148,7 +148,7 @@
 .patient-app :is(.clinical-panel-description, .clinical-table td) { color: var(--patient-ink-2); }
 .patient-app :is(.clinical-workflow .helptext, .clinical-facts dt, .clinical-table__empty, .clinical-file-card p, .clinical-file-help, .clinical-pagination > span) { color: var(--patient-ink-3); }
 .patient-app .clinical-table th, .patient-app .clinical-table td::before { color: var(--patient-ink-3); font-weight: 500; }
-.patient-app .clinical-table tbody tr:hover { background: #f8fafb; }
+.patient-app .clinical-table tbody tr:hover { background: var(--c-f8fafb); }
 .patient-app .clinical-file-card { background: var(--patient-bg); }
 .patient-app .clinical-workflow input[type='file']::file-selector-button { background: var(--patient-accent-soft); border-color: var(--patient-accent-line); color: var(--patient-teal-dark); }
 
@@ -189,9 +189,9 @@
 .patient-app .account-profile__practice-list > li { border-color: var(--patient-line-2); }
 .patient-app .account-profile__role { background: var(--patient-accent-soft); border-color: var(--patient-accent-line); color: var(--patient-teal-dark); }
 .patient-app :is(.account-profile, .management-password) .button { border-color: var(--patient-line); font-weight: 500; }
-.patient-app :is(.account-profile, .management-password) .button-primary { background: var(--patient-teal); border-color: var(--patient-teal); color: #fff; }
+.patient-app :is(.account-profile, .management-password) .button-primary { background: var(--patient-teal); border-color: var(--patient-teal); color: var(--c-ffffff); }
 .patient-app :is(.account-profile, .management-password) .button-primary:hover { background: var(--patient-accent-hover); border-color: var(--patient-accent-hover); }
-.patient-app :is(.account-profile, .management-password) .button-secondary { background: #fff; color: var(--patient-ink); }
+.patient-app :is(.account-profile, .management-password) .button-secondary { background: var(--c-ffffff); color: var(--patient-ink); }
 .patient-app :is(.account-profile, .management-password) .button-secondary:hover { background: var(--patient-accent-soft); border-color: var(--patient-accent-line); }
 .patient-app :is(.account-profile, .management-password) :is(a, button):focus-visible { outline: 2px solid var(--patient-teal); outline-offset: 2px; }
 .patient-app .management-field label { color: var(--patient-ink); font-weight: 500; }

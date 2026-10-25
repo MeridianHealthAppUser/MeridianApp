@@ -1,0 +1,28 @@
+{% extends 'portal/patient_page_base.html' %}
+{% load static workspace_ui %}
+{% block title %}Invoice {{ invoice.invoice_number }} | Meridian{% endblock %}
+{% block patient_extra_css %}<link rel="stylesheet" href="{% static 'css/patient_billing.css' %}?v=20261025d">{% endblock %}
+{% block patient_breadcrumbs %}{% breadcrumbs 'Billing and payments' 'portal:patient-billing' invoice.invoice_number %}{% endblock %}
+{% block patient_heading %}
+  <header class="patient-page-heading"><div><h1>Invoice {{ invoice.invoice_number }}</h1><p>{{ patient_company.name }} · Issued {{ invoice.issued_on|date:"j F Y" }}</p></div><button class="console-button console-button--secondary" type="button" onclick="window.print()">Print or save as PDF</button></header>
+{% endblock %}
+{% block patient_content %}
+  <section class="console-card billing-invoice" aria-label="Invoice">
+    <div class="console-card__body">
+      <dl class="patient-kv">
+        <div><dt>Billed to</dt><dd>{% if patient.title %}{{ patient.get_title_display }} {% endif %}{{ patient.first_name }} {{ patient.last_name }}</dd></div>
+        {% if patient.id_number %}<div><dt>ID / passport</dt><dd>{{ patient.id_number }}</dd></div>{% endif %}
+        {% with cycle=invoice.subscription_cycle %}{% if cycle %}<div><dt>Period</dt><dd>{{ cycle.starts_on|date:"j M Y" }} – {{ cycle.ends_on|default:cycle.starts_on|date:"j M Y" }}</dd></div>{% endif %}{% endwith %}
+        <div><dt>Status</dt><dd>{% if paid %}Paid{% else %}{{ invoice.get_status_display }}, due {{ invoice.due_on|date:"j F Y" }}{% endif %}</dd></div>
+      </dl>
+      <table class="patient-table billing-invoice__lines">
+        <thead><tr><th scope="col">Description</th><th scope="col">Amount</th></tr></thead>
+        <tbody>
+          {% for line in lines %}<tr><td>{{ line.description }}{% if line.quantity > 1 %} × {{ line.quantity }}{% endif %}</td><td>R{{ line.line_total|floatformat:"-2" }}</td></tr>
+          {% empty %}<tr><td>{% if invoice.subscription_cycle %}Subscription, cycle {{ invoice.subscription_cycle.cycle_number }}{% else %}Services{% endif %}</td><td>R{{ invoice.subtotal|floatformat:"-2" }}</td></tr>{% endfor %}
+        </tbody>
+        <tfoot><tr><th scope="row">Total</th><td><strong>R{{ invoice.total|floatformat:"-2" }}</strong></td></tr></tfoot>
+      </table>
+    </div>
+  </section>
+{% endblock %}

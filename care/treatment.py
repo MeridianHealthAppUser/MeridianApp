@@ -64,7 +64,9 @@ def subscription_hold_reason(subscription, on_date=None):
         return 'A local care plan is required.'
     if not subscription.company.is_active or not subscription.patient.is_active or subscription.patient.company_id != subscription.company_id:
         return 'The patient or practice is inactive.'
-    if subscription.status != PatientSubscription.Status.ACTIVE:
+    # A plan whose debit is being retried stays eligible: whether its parcels are paid for is checked on its own
+    # (care.billing.parcel_payment) when the week is locked.
+    if subscription.status not in (PatientSubscription.Status.ACTIVE, PatientSubscription.Status.PAYMENT_RETRY):
         return 'The local care plan is not active.'
     authorization = step_in_effect(subscription.authorization, on_date)
     if authorization is None or authorization.company_id != subscription.company_id or authorization.patient_id != subscription.patient_id:
@@ -216,7 +218,7 @@ def enroll_local_subscription(*, company, patient, actor, authorization, confirm
     company, patient = _lock_context(company, patient, actor)
     _require_patient_owner(patient, actor)
     if confirm is not True:
-        raise ValidationError('Confirm that this is local plan enrollment with no payment collection.')
+        raise ValidationError('Tick to agree to your subscription and how it’s collected.')
     key = _key(submission_key)
     duplicate = _duplicate(company, patient, actor, key, 'subscription.enrolled_local', PatientSubscription)
     if duplicate is not None:
@@ -245,7 +247,7 @@ def enroll_local_subscription(*, company, patient, actor, authorization, confirm
         company=company, actor=actor, patient=patient, action='subscription.enrolled_local', target=plan, request=request,
         metadata={'submission_key': key, 'authorization_id': authorization.pk},
     )
-    _event(plan, 'Local care plan enrolled', 'Your plan is recorded. No payment was collected and no parcel was automatically dispatched.')
+    _event(plan, 'Subscription started', 'Your first payment is collected once your debit order is approved, and your parcels go out once it’s paid.')
     return plan
 
 
@@ -279,7 +281,14 @@ def change_subscription_status(*, subscription, actor, action, confirm=False, re
         if record.authorization is None or record.authorization.company_id != company.pk or record.authorization.patient_id != patient.pk or not authorization_is_current(record.authorization):
             raise ValidationError('Your doctor must provide a current authorisation before you can resume.')
     record.status = statuses[action]
-    record.next_debit_on = None
+    # Billing (care.billing): a paused plan isn't debited; resuming carries on after the last period paid for, and
+    # cancelling stops it and its debit order.
+    if action == 'resume':
+        from .billing import resume_debit_date
+
+        record.next_debit_on = resume_debit_date(record)
+    elif action == 'cancel':
+        record.next_debit_on = None
     fields = ['status', 'next_debit_on', 'cancelled_at', 'updated_at']
     if action == 'cancel':
         record.cancelled_at = timezone.now()
@@ -294,9 +303,15 @@ def change_subscription_status(*, subscription, actor, action, confirm=False, re
     if action in ('pause', 'cancel'):
         _hold_shipments(company, patient, [record.pk], 'Local care plan paused or cancelled by the patient.')
     if action == 'cancel':
+        from .billing import release_mandates
         from .followups import close_help_requests
+        from .models import DebitMandate
 
         close_help_requests(record)
+        ending = DebitMandate.objects.filter(subscription=record).exclude(
+            status__in=(DebitMandate.Status.CANCELLED, DebitMandate.Status.FAILED))
+        release_mandates(ending)
+        ending.update(status=DebitMandate.Status.CANCELLED, cancelled_at=timezone.now(), updated_at=timezone.now())
     record_audit(company=company, actor=actor, patient=patient, action=f'subscription.{action}', target=record, request=request,
                  metadata={'reasons': reasons} if action == 'cancel' else None)
     _event(record, f'Local care plan {"resumed" if action == "resume" else "paused" if action == "pause" else "cancelled"}',

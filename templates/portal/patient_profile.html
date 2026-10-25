@@ -25,13 +25,13 @@
           <div><dt>ID / passport</dt><dd{% if not patient.id_number %} class="patient-kv__quiet"{% endif %}>{{ patient.id_number|default:"Not recorded" }}</dd></div>
           <div><dt>Date of birth</dt><dd{% if not patient.date_of_birth %} class="patient-kv__quiet"{% endif %}>{{ patient.date_of_birth|date:"j F Y"|default:"Not recorded" }}</dd></div>
           <div><dt>City</dt><dd{% if not patient.city %} class="patient-kv__quiet"{% endif %}>{{ patient.city|default:"Not recorded" }}</dd></div>
-          <div><dt>Shipping address</dt><dd{% if not shipping_address %} class="patient-kv__quiet"{% endif %}>{{ shipping_address|default:"Not recorded" }}</dd></div>
+          <div id="profile-delivery"><dt>Delivery address</dt><dd{% if not shipping_address %} class="patient-kv__quiet"{% endif %}>{{ shipping_address|default:"Not recorded" }} <a class="patient-inline-link" href="{% url 'portal:patient-delivery-address' %}">{% if shipping_address %}Change{% else %}Add{% endif %}<span class="sr-only"> my delivery address</span></a></dd></div>
           <div><dt>Practice</dt><dd>{{ patient_company.name }}</dd></div>
           <div><dt>Your clinician</dt><dd>{% if patient.assigned_doctor %}{{ patient.assigned_doctor.full_name }}{% else %}Your practice will assign a clinician{% endif %}</dd></div>
           {% if patient.medical_record_number %}<div><dt>Record number</dt><dd>{{ patient.medical_record_number }}</dd></div>{% endif %}
         </dl>
         <div class="patient-card-actions"><a class="console-button console-button--secondary patient-card-actions__wide" href="{{ details_change_url }}">Request a change</a></div>
-        <p class="patient-small">Your care team keeps these details, so your record stays matched to your ID. Request a change emails {{ support_email }}. Your shipping address is the one on your latest supply request.</p>
+        <p class="patient-small">Your care team keeps these details, so your record stays matched to your ID. Request a change emails {{ support_email }}. You can change your delivery address yourself.</p>
       </div>
     </section>
 
@@ -95,6 +95,22 @@
           <li><div class="patient-empty">No consent records available here yet.</div></li>
         {% endfor %}
       </ul>
+    </div>
+  </section>
+
+  <section class="console-card patient-page-section" id="profile-journeys" aria-labelledby="profile-journeys-heading">
+    <header class="console-card__header"><div class="console-card__heading"><h2 id="profile-journeys-heading">Emails about your care</h2><p>Guidance and reminders as your treatment goes on: what to expect, check-ins and your reviews. Emails about appointments, messages and payments always come.</p></div></header>
+    <div class="console-card__body">
+      <form class="console-form" method="post" action="{% url 'portal:patient-profile' %}">
+        {% csrf_token %}<input type="hidden" name="section" value="journeys">
+        <div class="patient-preference">
+          <div class="console-form__field">
+            <input type="checkbox" name="journey_emails" id="journey-emails"{% if journey_emails %} checked{% endif %}>
+            <label for="journey-emails">Send me emails about my care</label>
+          </div>
+          <button class="console-button console-button--primary" type="submit">Save preferences</button>
+        </div>
+      </form>
     </div>
   </section>
 

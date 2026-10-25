@@ -6,16 +6,19 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="theme-color" content="#0d4d4f">
-    <meta name="color-scheme" content="light">
+    <meta name="color-scheme" content="light dark">
+    {# Light or dark as the person chose in their account menu, set before anything is drawn; else the device's. #}
+    <script>try { var theme = localStorage.getItem('meridian-theme'); if (theme === 'light' || theme === 'dark') document.documentElement.setAttribute('data-theme', theme); } catch (error) {}</script>
     <title>{% block title %}Meridian Health{% endblock %}</title>
     {# Roboto, Meridian's typeface, on every page. #}
     <link rel="preload" href="{% static 'fonts/roboto/roboto-latin.woff2' %}" as="font" type="font/woff2" crossorigin>
     <link rel="stylesheet" href="{% static 'css/fonts.css' %}?v=20261007">
+    <link rel="stylesheet" href="{% static 'css/theme.css' %}?v=20261025a">
     <link rel="stylesheet" href="{% static 'css/base.css' %}?v=20261011a">
     {% if page_navigation_config %}<link rel="stylesheet" href="{% static 'css/page_navigation.css' %}"><script src="{% static 'js/page_lifecycle.js' %}" defer></script>{% endif %}
     {% block extra_css %}{% endblock %}
     {% if is_workspace_page %}<link rel="stylesheet" href="{% static 'css/workspace_polish.css' %}?v=20261007"><script src="{% static 'js/workspace_polish.js' %}" defer></script>{% endif %}
-    {% if user.is_authenticated %}<link rel="stylesheet" href="{% static 'css/account_menu.css' %}"><script src="{% static 'js/account_menu.js' %}" defer></script>{% endif %}
+    {% if user.is_authenticated %}<link rel="stylesheet" href="{% static 'css/account_menu.css' %}?v=20261024a"><script src="{% static 'js/account_menu.js' %}" defer></script><script src="{% static 'js/theme.js' %}?v=20261024a" defer></script>{% endif %}
     {% if can_switch_practice_role %}<link rel="stylesheet" href="{% static 'css/practice_role_switcher.css' %}">{% endif %}
     {% if video_notifications_enabled %}<link rel="stylesheet" href="{% static 'css/call_notifications.css' %}"><script src="{% static 'js/call_notifications.js' %}" defer></script>{% endif %}
     {% if request.realtime_scope %}<link rel="stylesheet" href="{% static 'css/live_messages.css' %}?v=20261018"><script src="{% static 'js/live_messages.js' %}?v=20261018" defer></script>{% endif %}

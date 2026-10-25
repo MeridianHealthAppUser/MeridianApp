@@ -1,0 +1,5 @@
+{% extends 'emails/base.html' %}{% block content %}
+        <p style="margin:0 0 16px;">Hello{% if greeting %} {{ greeting }}{% endif %},</p>
+        {% for paragraph in paragraphs %}<p style="margin:0 0 16px;">{{ paragraph|linebreaksbr }}</p>{% endfor %}
+        {% if url %}{% include 'emails/button.html' %}{% endif %}
+{% endblock %}

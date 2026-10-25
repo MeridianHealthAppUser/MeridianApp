@@ -1,0 +1,10 @@
+{% comment %}The delivery address fields of a form built on DeliveryAddressForm, two to a row where they fit.{% endcomment %}<div class="patient-address-fields">
+  {% for field in form %}{% if field.name in 'recipient business street suburb city province postal_code phone instructions' %}
+    <div class="console-form__field patient-address-fields__{{ field.name }}">
+      <label for="{{ field.id_for_label }}">{{ field.label }}{% if not field.field.required %} <span class="patient-optional">(optional)</span>{% endif %}</label>
+      {{ field }}
+      {{ field.errors }}
+      {% if field.help_text %}<span class="patient-small">{{ field.help_text }}</span>{% endif %}
+    </div>
+  {% endif %}{% endfor %}
+</div>

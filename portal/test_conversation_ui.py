@@ -150,10 +150,11 @@ class ConversationListPreviewTests(GroupConversationTestCase):
         for url in (reverse('portal:staff-inbox'), record):
             with self.subTest(url=url):
                 self.assertContains(self.client.get(url), self.preview('Happy to help with meal plans.', 'Lerato'))
-        PatientMessage.objects.create(company=self.company, thread=self.thread, sender=self.patient_user, body='Thanks both!')
-        self.assertContains(self.client.get(reverse('portal:staff-inbox')), self.preview('Thanks both!'))
-        PatientMessage.objects.create(company=self.company, thread=self.thread, sender=self.doctor, body='Speak soon')
-        self.assertContains(self.client.get(reverse('portal:staff-inbox')), self.preview('Speak soon', 'You'))
+        # Sent after the fixture's 06:00 messages, whatever the time the tests run (before 06:00 too).
+        for minutes, sender, body, shown in ((1, self.patient_user, 'Thanks both!', ''), (2, self.doctor, 'Speak soon', 'You')):
+            message = PatientMessage.objects.create(company=self.company, thread=self.thread, sender=sender, body=body)
+            PatientMessage.objects.filter(pk=message.pk).update(created_at=max(timezone.now(), self.today + timedelta(minutes=minutes)))
+            self.assertContains(self.client.get(reverse('portal:staff-inbox')), self.preview(body, shown))
 
     def test_the_patient_sees_a_clinician_named_when_more_than_one_is_in_the_conversation(self):
         self.login(self.patient_user, ACTIVE_PATIENT_COMPANY_SESSION_KEY)

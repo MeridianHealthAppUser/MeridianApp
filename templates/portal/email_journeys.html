@@ -1,0 +1,23 @@
+{% extends 'portal/staff_page_base.html' %}{% load static workspace_ui %}
+{% block title %}Email journeys | Meridian{% endblock %}
+{% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/operations.css' %}?v=20261025a">{% endblock %}
+{% block breadcrumbs %}{% breadcrumbs 'Email journeys' %}{% endblock %}
+{% block page_heading %}<header class="staff-page-header"><div><h1>Email journeys</h1><p>{{ company.name }} · Emails that follow each person through their care. Someone moves from one track to the next as their care changes, so a track’s emails stop once it no longer applies. {{ active_count }} email{{ active_count|pluralize }} switched on.</p></div></header>{% endblock %}
+{% block page_content %}<div class="ops-workspace">
+  <div class="ops-notice ops-notice--warning"><strong>The wording is a starting point.</strong><p>Each email starts switched off. Rewrite it with the practice’s own words, check it with Dr Czech, then switch it on. Journey emails go out once a day (<code>manage.py send_journey_emails</code>), carry an unsubscribe link, and never include clinical details. Payment reminders still go to someone who unsubscribed.</p></div>
+  {% for track in tracks %}
+    <section class="staff-page-card" aria-labelledby="track-{{ track.value }}">
+      <header class="staff-page-card__header"><div><h2 id="track-{{ track.value }}">{{ forloop.counter }}. {{ track.label }}</h2></div><a class="console-button console-button--secondary" href="{% url 'portal:email-journey-create' %}?track={{ track.value }}">Add an email</a></header>
+      <div class="ops-table-wrap"><table class="ops-table">
+        <thead><tr><th scope="col">Sent</th><th scope="col">Email</th><th scope="col">Subject</th><th scope="col">Status</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead>
+        <tbody>{% for email in track.emails %}<tr>
+          <td data-label="Sent">{% if email.delay_days %}Day {{ email.delay_days }}{% else %}The day they join{% endif %}</td>
+          <td data-label="Email"><strong>{{ email.name }}</strong></td>
+          <td data-label="Subject">{{ email.subject_template }}</td>
+          <td data-label="Status"><span class="ops-paid ops-paid--{% if email.is_active %}paid{% else %}due{% endif %}">{% if email.is_active %}On{% else %}Off{% endif %}</span></td>
+          <td data-label="Actions"><a class="console-button console-button--secondary" href="{% url 'portal:email-journey-edit' email.pk %}">Edit<span class="sr-only"> {{ email.name }}</span></a></td>
+        </tr>{% empty %}<tr><td colspan="5" class="ops-empty">No emails in this track.</td></tr>{% endfor %}</tbody>
+      </table></div>
+    </section>
+  {% endfor %}
+</div>{% endblock %}

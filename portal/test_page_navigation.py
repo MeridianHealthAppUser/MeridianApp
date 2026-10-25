@@ -125,6 +125,15 @@ class PageNavigationTests(TestCase):
         self.assertEqual(self.client.get(url, {'thread': '', '__shell': '1'}).status_code, 404)
         self.assertEqual(self.client.get(url, {'thread': '', '__full': '1'}).status_code, 404)
 
+    def test_doctor_shipping_shells_follow_the_practice_setting_like_the_full_view(self):
+        self.login()
+        for name in ('ops-shipping', 'ops-history'):
+            self.assertEqual(self.client.get(reverse(f'portal:{name}'), HTTP_ACCEPT='text/html').status_code, 200)
+        PracticeSettings.objects.filter(company=self.company).update(doctors_ship=False)
+        for name in ('ops-shipping', 'ops-history'):
+            self.assertEqual(self.client.get(reverse(f'portal:{name}'), HTTP_ACCEPT='text/html').status_code, 403)
+            self.assertEqual(self.client.get(reverse(f'portal:{name}'), {'__full': '1'}).status_code, 403)
+
     def test_realtime_snapshots_remain_rendered_html_even_with_browser_accept_header(self):
         self.login(self.patient_user, patient=True)
         response = self.client.get(reverse('portal:patient-messages'), {'thread': self.thread.pk},
@@ -372,6 +381,60 @@ class PageNavigationTests(TestCase):
         self.assertEqual(section.status_code, 404)
         self.assertFalse(AuditEvent.objects.filter(action='lab_result.downloaded').exists())
 
+    def test_payment_and_courier_native_gets_run_only_for_full_page_requests(self):
+        from django.http import HttpResponse
+
+        cases = (
+            (self.patient_user, True, 'patient-card-form', ['mandate', 17],
+             'portal.billing_views.PatientCardFormView.get'),
+            (self.patient_user, True, 'patient-payment-return', ['payment', 17],
+             'portal.billing_views.PatientPaymentReturnView.get'),
+            (self.admin, False, 'ops-shipment-label', [17],
+             'portal.operations_views.ShipmentLabelView.get'),
+        )
+        for user, patient, route, args, handler in cases:
+            with self.subTest(route=route):
+                self.login(user, patient=patient)
+                url = reverse(f'portal:{route}', args=args)
+                with patch(handler, return_value=HttpResponse('Native provider response')) as get:
+                    content = self.content(url)
+                    self.assertEqual(content.status_code, 409)
+                    self.assertEqual(content.json()['full_navigation'], url)
+                    section = self.client.get(url, HTTP_X_MERIDIAN_NAVIGATION='section',
+                                              HTTP_X_MERIDIAN_SECTION='dashboard-metrics')
+                    self.assertEqual(section.status_code, 404)
+                    get.assert_not_called()
+                    self.assertContains(self.client.get(url), 'Native provider response')
+                    get.assert_called_once()
+
+    def test_new_billing_and_journey_pages_use_content_transport_with_original_permissions(self):
+        for user, patient, route, text in (
+            (self.patient_user, True, 'patient-billing', 'Billing and payments'),
+            (self.patient_user, True, 'patient-delivery-address', 'Delivery address'),
+            (self.admin, False, 'ops-billing', 'Billing'),
+            (self.admin, False, 'email-log', 'Emails'),
+        ):
+            with self.subTest(route=route):
+                self.login(user, patient=patient)
+                content = self.content(reverse(f'portal:{route}'))
+                self.assertEqual(content.status_code, 200)
+                self.assertIn(text, content.json()['html'])
+                self.assertEqual(content.json()['layout'], 'patient' if patient else 'staff')
+        self.login()
+        for route in ('ops-billing', 'email-log', 'email-journeys', 'email-journey-create'):
+            with self.subTest(denied_route=route):
+                self.assertEqual(self.content(reverse(f'portal:{route}')).status_code, 403)
+
+    def test_legacy_stock_route_redirects_to_shipping_instead_of_rendering_an_obsolete_shell(self):
+        self.login(self.admin)
+        url = reverse('portal:ops-stock')
+        response = self.client.get(url, {'__shell': '1'})
+        self.assertEqual(response.status_code, 302)
+        content = self.content(url)
+        self.assertEqual(content.status_code, 200)
+        self.assertEqual(content.json()['redirect_url'], response['Location'])
+        self.assertEqual(urlsplit(response['Location']).path, reverse('portal:ops-shipping'))
+
     def test_all_registered_shells_retain_full_view_access_results_for_each_role(self):
         from .page_navigation import PATIENT_PAGES, STAFF_PAGES
 
@@ -431,6 +494,23 @@ class RenderedNavigationFragmentTests(SimpleTestCase):
         parser.feed(f'<html><head><title>Care</title></head><body><main id="workspace-content">{content}</main><footer>Outside</footer></body></html>')
         self.assertEqual(''.join(parser.parts), content)
         self.assertEqual(parser.depth, 0)
+
+    def test_a_page_running_another_sites_script_opens_as_a_full_page(self):
+        from django.http import HttpResponse
+        from django.test import RequestFactory
+        from .page_navigation import PageNavigationMiddleware
+
+        # Peach's card form: its widget script can't be added to a swapped-in page, so the browser loads it fully.
+        widget = '<script src="https://eu-test.oppwa.com/v1/paymentWidgets.js?checkoutId=x"></script>'
+        for script, status in ((widget, 409), ('<script src="/static/js/dialogs.js"></script>', 200)):
+            request = RequestFactory().get('/patient/billing/card/mandate/1/', HTTP_X_MERIDIAN_NAVIGATION='content')
+            request._page_navigation = {'scope': 'patient:1:1:1', 'layout': 'patient'}
+            page = HttpResponse(f'<html><head><title>Card</title>{script}</head><body><main id="workspace-content">'
+                                '<form class="paymentWidgets"></form></main></body></html>')
+            response = PageNavigationMiddleware(lambda request: page)(request)
+            self.assertEqual(response.status_code, status)
+            if status == 409:
+                self.assertEqual(json.loads(response.content)['full_navigation'], '/patient/billing/card/mandate/1/')
 
     def test_shared_metrics_preserve_mobile_and_desktop_empty_copy(self):
         mobile = render_to_string('portal/includes/dashboard_metrics.html', {
@@ -522,6 +602,8 @@ class NavigationRouteRegistryTests(SimpleTestCase):
             '/patient/appointments/book/times/', '/schedule/book/times/',
             '/patients/23/messages/search/', '/tasks/23/complete/', '/messages/23/seen/',
             '/messages/new/', '/patient/messages/new/', '/schedule/appointments/23/time/',
+            '/patient/billing/card/mandate/23/', '/patient/billing/return/payment/23/',
+            '/shipping/23/label/', '/email/unsubscribe/token/',
         )
         for path in excluded:
             with self.subTest(path=path):

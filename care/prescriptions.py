@@ -263,6 +263,7 @@ def renew_prescription(*, company, patient, actor, current, weeks, acknowledge_f
                  request=request, metadata={'previous_authorization_id': previous.pk, 'weeks': weeks,
                                             'safety_flags_acknowledged': bool(flags)})
     _event(renewal, 'Treatment authorisation renewed', 'Your doctor recorded a treatment decision. Open your treatment page to see its details.')
+    _review_debit_orders(company, patient, changed=False)
     return renewal
 
 
@@ -311,7 +312,16 @@ def change_prescription(*, company, patient, actor, current, dose, weeks, reason
                  request=request, metadata={'previous_authorization_id': previous.pk if previous else None,
                                             'weeks': weeks, 'safety_flags_acknowledged': bool(flags)})
     _event(prescription, 'Treatment authorised', 'Your doctor recorded a treatment decision. Open your treatment page to see its details.')
+    _review_debit_orders(company, patient, changed=True)
     return prescription
+
+
+def _review_debit_orders(company, patient, *, changed):
+    """A new or changed prescription (changed), or one that now costs more, asks the patient to approve a new debit
+    order (care.billing.review_mandates, as Practice settings say)."""
+    from .billing import review_mandates
+
+    review_mandates(company, patient, prescription_changed=changed)
 
 
 def renewal_expiry(authorization, weeks, today=None):

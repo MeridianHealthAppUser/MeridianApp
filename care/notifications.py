@@ -13,8 +13,11 @@
   reminder; the 15-minute reminder records successful delivery separately for each recipient.
 - Welcome: to a patient who made their account at checkout.
 - Win-back: once, to a patient who cancels their subscription.
+- Billing (care.billing): a debit that failed (the first time, and when its retries run out); a debit order that
+  needs a new amount approved after a prescription or price change; and the practice asking for a new debit order.
 
-Patients are emailed only with an active login, and staff only while active in the practice.
+Patients are emailed only with an active login, and staff only while active in the practice. Every email a patient
+is sent is logged against them (EmailDelivery), which the communications log lists.
 """
 
 import logging
@@ -33,8 +36,8 @@ from practices.models import CompanyMembership
 from practices.tenancy import enabled_companies
 from .emails import appointment_details, build_email, greeting_name, person_name, site_link
 from .models import (
-    Appointment, AppointmentStartReminder, MessageThread, MessageThreadParticipant,
-    PatientMessage, PatientSubscription, TeamMessage, TeamThreadMember,
+    Appointment, AppointmentStartReminder, DebitMandate, EmailDelivery, MessageThread, MessageThreadParticipant,
+    PatientMessage, PatientSubscription, SubscriptionCycle, TeamMessage, TeamThreadMember,
 )
 
 logger = logging.getLogger(__name__)
@@ -73,7 +76,32 @@ def recipients(kind, object_id, actor_id=None):
 
 def deliver(kind, object_id, recipient_id, actor_id=None):
     load, _, build = KINDS[kind]
-    build(load(object_id), get_user_model().objects.get(pk=recipient_id), actor_id).send(fail_silently=False)
+    obj, recipient = load(object_id), get_user_model().objects.get(pk=recipient_id)
+    message = build(obj, recipient, actor_id)
+    message.send(fail_silently=False)
+    log_delivery(kind, obj, recipient, message.subject)
+
+
+def _about_patient(obj):
+    """The patient an email's object is about, if any."""
+    from practices.models import Patient
+
+    if isinstance(obj, PatientMessage):
+        return obj.thread.patient
+    if hasattr(obj, 'patient_id') and getattr(obj, 'patient_id', None):
+        return obj.patient
+    if isinstance(obj, get_user_model()):
+        return Patient.objects.filter(user=obj, is_active=True).order_by('-pk').first()
+    return None
+
+
+def log_delivery(kind, obj, recipient, subject):
+    """Log an email sent to a patient against their record. Staff emails and anything not about a patient aren't."""
+    patient = _about_patient(obj)
+    if patient is None or patient.user_id != recipient.pk:
+        return None
+    return EmailDelivery.objects.create(company_id=patient.company_id, patient=patient, recipient_email=recipient.email,
+                                        kind=kind, subject=subject[:255], sent_at=timezone.now(), status='sent')
 
 
 def send_due_reminders(*, retry_delays=()):
@@ -157,7 +185,8 @@ def _send_start_reminder(appointment_id):
         try:
             # Send in this job even when ordinary notification emails use Celery:
             # the success record must reflect SMTP acceptance, not queue insertion.
-            accepted = _appointment_email(appointment, user, reminder=True, starting=True).send(fail_silently=False)
+            message = _appointment_email(appointment, user, reminder=True, starting=True)
+            accepted = message.send(fail_silently=False)
             if not accepted:
                 raise RuntimeError('The email backend did not accept the reminder.')
         except Exception as error:
@@ -168,6 +197,7 @@ def _send_start_reminder(appointment_id):
             company_id=appointment.company_id, appointment=appointment,
             starts_at=appointment.starts_at, recipient=user, sent_at=timezone.now(),
         )
+        log_delivery('appointment_reminder', appointment, user, message.subject)
         delivered = True
     return delivered, failed
 
@@ -392,6 +422,45 @@ def _winback_email(subscription, user, actor_id):
     })
 
 
+# Billing: a failed debit, a debit order to approve again
+
+def _cycle(pk):
+    return SubscriptionCycle.objects.select_related('patient__user', 'subscription').get(pk=pk)
+
+
+def _mandate(pk):
+    return DebitMandate.objects.select_related('patient__user').get(pk=pk)
+
+
+def _patient_only(obj, actor_id):
+    user = _patient_login(obj.patient)
+    return [user.pk] if user is not None else []
+
+
+def _payment_failed_email(cycle, user, actor_id):
+    from .billing import money
+
+    return build_email(to=user.email, subject='We couldn’t collect your payment', template='payment_failed', context={
+        'greeting': cycle.patient.first_name, 'amount': money(cycle.amount), 'retry_on': cycle.next_attempt_on,
+        'final': cycle.status == SubscriptionCycle.Status.FAILED, 'url': site_link('portal:patient-billing'),
+    })
+
+
+def _debit_order_update_email(mandate, user, actor_id):
+    from .billing import mandate_amount, money
+
+    needed = mandate_amount(mandate.subscription) if mandate.subscription_id else None
+    return build_email(to=user.email, subject='Please approve your new debit order', template='debit_order_update', context={
+        'greeting': mandate.patient.first_name, 'amount': money(needed) if needed else '',
+        'weeks': mandate.interval_weeks, 'url': site_link('portal:patient-billing'),
+    })
+
+
+def _debit_order_request_email(subscription, user, actor_id):
+    return build_email(to=user.email, subject='Please set up your debit order again', template='debit_order_request',
+                       context={'greeting': subscription.patient.first_name, 'url': site_link('portal:patient-billing')})
+
+
 # kind: (load the object, who to email, build one person's email)
 KINDS = {
     'patient_message': (_patient_message, _patient_message_recipients, _patient_message_email),
@@ -405,4 +474,7 @@ KINDS = {
                              lambda appointment, user, actor_id: _appointment_email(appointment, user, reminder=True)),
     'welcome': (_user, _welcome_recipients, _welcome_email),
     'subscription_winback': (_subscription, _winback_recipients, _winback_email),
+    'payment_failed': (_cycle, _patient_only, _payment_failed_email),
+    'debit_order_update': (_mandate, _patient_only, _debit_order_update_email),
+    'debit_order_request': (_subscription, _patient_only, _debit_order_request_email),
 }

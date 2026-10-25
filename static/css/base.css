@@ -1,6 +1,6 @@
 :root {
-  color: #183638;
-  background: #f5f8f7;
+  color: var(--c-183638);
+  background: var(--c-f5f8f7);
   color-scheme: light;
   font-family: var(--meridian-font);
 }
@@ -14,34 +14,34 @@ button, input, select, textarea { font-family: inherit; }
 @view-transition { navigation: auto; }
 ::view-transition-old(root), ::view-transition-new(root) { animation: none; }
 body { margin: 0; }
-.site-header { align-items: center; background: #fff; border-bottom: 1px solid #dde8e5; display: flex; justify-content: space-between; min-height: 4rem; padding: 0 2rem; }
-.brand { color: #0d4d4f; font-size: 1.25rem; font-weight: 750; letter-spacing: -.02em; text-decoration: none; }
+.site-header { align-items: center; background: var(--c-ffffff); border-bottom: 1px solid var(--c-dde8e5); display: flex; justify-content: space-between; min-height: 4rem; padding: 0 2rem; }
+.brand { color: var(--c-0d4d4f); font-size: 1.25rem; font-weight: 750; letter-spacing: -.02em; text-decoration: none; }
 .page-shell { margin: 0 auto; max-width: 72rem; padding: 3rem 2rem; }
 .company-switcher { align-items: center; display: flex; gap: .5rem; }
-.company-switcher label { color: #5b6f70; font-size: .8rem; font-weight: 600; }
-.company-switcher select { background: white; border: 1px solid #aebfbd; border-radius: .4rem; color: #183638; padding: .45rem .6rem; }
+.company-switcher label { color: var(--c-5b6f70); font-size: .8rem; font-weight: 600; }
+.company-switcher select { background: var(--c-ffffff); border: 1px solid var(--c-aebfbd); border-radius: .4rem; color: var(--c-183638); padding: .45rem .6rem; }
 .header-actions { align-items: center; display: flex; gap: 1rem; }
-.account-name { color: #5b6f70; font-size: .82rem; font-weight: 600; }
-.header-signout { background: transparent; border: 0; color: #0d7773; cursor: pointer; font: inherit; font-size: .82rem; font-weight: 700; padding: .25rem; }
+.account-name { color: var(--c-5b6f70); font-size: .82rem; font-weight: 600; }
+.header-signout { background: transparent; border: 0; color: var(--c-0d7773); cursor: pointer; font: inherit; font-size: .82rem; font-weight: 700; padding: .25rem; }
 .header-signout:hover { text-decoration: underline; }
 /* Breadcrumbs sit above each page heading: Overview or Home first, with a back arrow one level up. */
 .page-breadcrumbs { align-items: center; display: flex; gap: .65rem; margin: 0 0 1.1rem; min-width: 0; }
-.page-breadcrumbs ol { align-items: center; color: var(--console-muted, #6e8588); display: flex; flex-wrap: wrap; font-size: .81rem; font-weight: 650; gap: .25rem .55rem; list-style: none; margin: 0; min-width: 0; padding: 0; }
+.page-breadcrumbs ol { align-items: center; color: var(--console-muted, var(--c-6e8588)); display: flex; flex-wrap: wrap; font-size: .81rem; font-weight: 650; gap: .25rem .55rem; list-style: none; margin: 0; min-width: 0; padding: 0; }
 .page-breadcrumbs li { align-items: center; display: inline-flex; gap: .55rem; min-width: 0; }
-.page-breadcrumbs li + li::before { background: #c2d4d1; border-radius: 50%; content: ''; flex: 0 0 auto; height: .24rem; width: .24rem; }
-.page-breadcrumbs ol a { color: var(--console-teal-dark, #056f69); text-decoration: none; }
+.page-breadcrumbs li + li::before { background: var(--c-c2d4d1); border-radius: 50%; content: ''; flex: 0 0 auto; height: .24rem; width: .24rem; }
+.page-breadcrumbs ol a { color: var(--console-teal-dark, var(--c-056f69)); text-decoration: none; }
 .page-breadcrumbs ol a:hover { text-decoration: underline; }
 .page-breadcrumbs [aria-current] { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.page-breadcrumbs__back { align-items: center; border: 1px solid var(--console-line, #deebe8); border-radius: 50%; color: var(--console-teal-dark, #056f69); display: inline-flex; flex: 0 0 auto; height: 1.75rem; justify-content: center; width: 1.75rem; }
-.page-breadcrumbs__back:hover { background: var(--console-teal-soft, #e4f5f1); }
-.page-breadcrumbs__back:focus-visible { outline: 2px solid var(--console-teal, #07877f); outline-offset: 2px; }
+.page-breadcrumbs__back { align-items: center; border: 1px solid var(--console-line, var(--c-deebe8)); border-radius: 50%; color: var(--console-teal-dark, var(--c-056f69)); display: inline-flex; flex: 0 0 auto; height: 1.75rem; justify-content: center; width: 1.75rem; }
+.page-breadcrumbs__back:hover { background: var(--console-teal-soft, var(--c-e4f5f1)); }
+.page-breadcrumbs__back:focus-visible { outline: 2px solid var(--console-teal, var(--c-07877f)); outline-offset: 2px; }
 .page-breadcrumbs__back svg { fill: none; height: .9rem; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 2.2; width: .9rem; }
 /* The same back button on its own at the top of a public page, e.g. sign in and the questionnaire. */
 .page-breadcrumbs__back--large { height: 2.25rem; width: 2.25rem; }
 .page-breadcrumbs__back--large svg { height: 1.05rem; width: 1.05rem; }
 /* Messages after an action show as toasts at the top right, above the header and every page. */
 .toast-stack { display: grid; gap: .5rem; max-width: min(24rem, calc(100vw - 2rem)); pointer-events: none; position: fixed; right: 1rem; top: .75rem; z-index: 1000; }
-.toast { align-items: flex-start; animation: toast-in .2s ease-out, toast-out .3s ease-in 5s forwards; box-shadow: 0 12px 32px rgba(16, 61, 59, .16); display: flex; gap: .75rem; justify-content: space-between; line-height: 1.45; pointer-events: auto; }
+.toast { align-items: flex-start; animation: toast-in .2s ease-out, toast-out .3s ease-in 5s forwards; box-shadow: 0 12px 32px var(--c-103d3b-160); display: flex; gap: .75rem; justify-content: space-between; line-height: 1.45; pointer-events: auto; }
 .toast:hover, .toast:focus-within { animation-play-state: paused; }
 .toast.error { animation: toast-in .2s ease-out; }
 /* Shown above a modal dialog, the stack is a popover: keep it looking like the plain stack. */
@@ -52,11 +52,11 @@ body { margin: 0; }
 @keyframes toast-in { from { opacity: 0; transform: translateY(-.5rem); } }
 @keyframes toast-out { to { opacity: 0; transform: translateY(-.5rem); visibility: hidden; } }
 @media (prefers-reduced-motion: reduce) { .toast { animation: toast-out 0s linear 3s forwards; } .toast.error { animation: none; } }
-.flash-message { background: #eef8f5; border: 1px solid #b9ddd6; border-radius: .6rem; color: #1b635d; font-size: .9rem; padding: .75rem 1rem; }
-.flash-message.error { background: #fff4f2; border-color: #efc9c4; color: #8e3e36; }
-.eyebrow { color: #0d7773; font-size: .8rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+.flash-message { background: var(--c-eef8f5); border: 1px solid var(--c-b9ddd6); border-radius: .6rem; color: var(--c-1b635d); font-size: .9rem; padding: .75rem 1rem; }
+.flash-message.error { background: var(--c-fff4f2); border-color: var(--c-efc9c4); color: var(--c-8e3e36); }
+.eyebrow { color: var(--c-0d7773); font-size: .8rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
 h1 { font-size: clamp(2rem, 4vw, 3rem); letter-spacing: -.02em; margin: .2rem 0 .75rem; }
-.empty-state { background: white; border: 1px solid #dde8e5; border-radius: .75rem; margin-top: 2.5rem; padding: 2rem; }
+.empty-state { background: var(--c-ffffff); border: 1px solid var(--c-dde8e5); border-radius: .75rem; margin-top: 2.5rem; padding: 2rem; }
 
 @media (max-width: 44rem) {
   .site-header { gap: .75rem; min-height: auto; padding: .8rem 1rem; }
@@ -74,5 +74,5 @@ h1 { font-size: clamp(2rem, 4vw, 3rem); letter-spacing: -.02em; margin: .2rem 0 
 .booking-fields__when { display: grid; gap: .75rem; grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .booking-fields__when .console-form__field { min-width: 0; }
 .booking-fields__when--pair { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-.booking-fields select:disabled, [data-time-range] select:disabled { background: #f3f6f6; color: #8a9b9d; cursor: not-allowed; }
+.booking-fields select:disabled, [data-time-range] select:disabled { background: var(--c-f3f6f6); color: var(--c-8a9b9d); cursor: not-allowed; }
 @media (max-width: 34rem) { .booking-fields__when { grid-template-columns: minmax(0, 1fr); } }

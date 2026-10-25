@@ -185,4 +185,7 @@ def initiate_prescription(*, company, patient, actor, current, plan, weeks, reas
                                             'previous_authorization_id': previous.pk if previous else None,
                                             'steps': [step.pk for step in steps], 'safety_flags_acknowledged': bool(flags)})
     _event(steps[0], 'Treatment authorised', 'Your doctor recorded a treatment decision. Open your treatment page to see its details.')
+    from .billing import review_mandates
+
+    review_mandates(company, patient, prescription_changed=True)
     return steps[0]

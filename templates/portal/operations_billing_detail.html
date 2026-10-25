@@ -1,0 +1,56 @@
+{% extends 'portal/operations_base.html' %}
+{% load workspace_ui %}
+{% block title %}Billing · {{ plan.patient }} | Meridian{% endblock %}
+{% block breadcrumbs %}{% breadcrumbs 'Billing' 'portal:ops-billing' plan.patient %}{% endblock %}
+{% block page_heading %}<header class="staff-page-header"><div><h1>{{ plan.patient }}</h1><p>{{ company.name }} · Subscription since {{ plan.starts_on|date:'j M Y' }} ({{ plan.get_status_display|lower }}){% if plan.authorization and plan.authorization.dose %} · {{ plan.authorization.dose }}{% endif %}</p></div></header>{% endblock %}
+{% block operations_content %}
+<section class="staff-page-card ops-panel" aria-labelledby="billing-cycles-heading">
+    <h2 id="billing-cycles-heading">Payments</h2>
+    <p><span class="ops-paid ops-paid--{% if state == 'paid' %}paid{% elif state == 'failed' %}failed{% elif state == 'due' %}due{% else %}retrying{% endif %}">{{ state_text }}</span>{% if owed %} · R{{ owed|floatformat:"-2" }} outstanding{% endif %}</p>
+    <div class="ops-table-wrap"><table class="ops-table">
+      <thead><tr><th scope="col">Cycle</th><th scope="col">Period</th><th scope="col">Amount</th><th scope="col">Status</th><th scope="col">Attempts</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead>
+      <tbody>{% for cycle in cycles %}<tr>
+        <td data-label="Cycle">{{ cycle.cycle_number }}{% if cycle.invoice %}<small>{{ cycle.invoice.invoice_number }}</small>{% endif %}</td>
+        <td data-label="Period">{{ cycle.starts_on|date:'j M' }} – {{ cycle.ends_on|default:cycle.starts_on|date:'j M Y' }}</td>
+        <td data-label="Amount">R{{ cycle.amount|floatformat:"-2" }}</td>
+        <td data-label="Status">{% if cycle.status == 'paid' %}<span class="ops-paid ops-paid--paid">Paid</span><small>{{ cycle.paid_at|date:'j M Y' }}</small>{% elif cycle.status == 'failed' %}<span class="ops-paid ops-paid--failed">Failed</span><small>In the failure queue</small>{% elif cycle.attempts %}<span class="ops-paid ops-paid--retrying">Retrying</span>{% if cycle.next_attempt_on %}<small>Next try {{ cycle.next_attempt_on|date:'j M' }}</small>{% endif %}{% elif cycle.status == 'cancelled' %}<span class="ops-paid ops-paid--due">Cancelled</span>{% else %}<span class="ops-paid ops-paid--due">Due</span>{% if cycle.failure_reason %}<small class="ops-problem">{{ cycle.failure_reason }}</small>{% endif %}{% endif %}</td>
+        <td data-label="Attempts">{% for payment in cycle.attempt_rows %}<small>{{ payment.attempt }}. {{ payment.get_method_display|default:payment.get_kind_display }} · {{ payment.get_status_display }}{% if payment.failure_reason %}: {{ payment.failure_reason }}{% endif %}{% if payment.recorded_by %} · by {{ payment.recorded_by.full_name }}{% endif %}</small>{% empty %}—{% endfor %}</td>
+        <td data-label="Actions">{% if cycle.retry_context %}<div class="ops-row-actions">
+          {% if provider %}<form method="post" action="{{ request.path }}">{% csrf_token %}<input type="hidden" name="action" value="retry"><input type="hidden" name="cycle" value="{{ cycle.pk }}"><input type="hidden" name="workflow_context" value="{{ cycle.retry_context }}"><button class="console-button console-button--secondary" type="submit">Retry now</button></form>{% endif %}
+          <a class="console-button console-button--secondary" href="?record={{ cycle.pk }}#record-payment">Record payment</a>
+        </div>{% endif %}</td>
+      </tr>{% empty %}<tr><td colspan="6" class="ops-empty">No payments yet. The first is collected when the patient’s debit order is approved.</td></tr>{% endfor %}</tbody>
+    </table></div>
+</section>
+<div class="ops-billing-cards">
+    <section class="staff-page-card ops-panel" aria-labelledby="billing-mandate-heading">
+      <h2 id="billing-mandate-heading">Debit order</h2>
+      {% for mandate in mandates %}<dl class="ops-facts"><div><dt>{{ mandate.get_method_display }}</dt><dd>{{ mandate.get_status_display }}</dd></div><div><dt>Up to</dt><dd>R{{ mandate.amount|floatformat:"-2" }} every {{ mandate.interval_weeks }} weeks</dd></div>{% if mandate.account_label %}<div><dt>Account</dt><dd>{{ mandate.account_label }}</dd></div>{% endif %}<div><dt>Reference</dt><dd>{{ mandate.reference }}</dd></div><div><dt>Set up</dt><dd>{{ mandate.created_at|date:'j M Y' }}{% if mandate.approved_at %}, approved {{ mandate.approved_at|date:'j M Y' }}{% endif %}</dd></div></dl>{% if not forloop.last %}<hr class="ops-rule">{% endif %}{% empty %}<p>No debit order yet. The patient sets one up when they start their subscription, or on Billing and payments.</p>{% endfor %}
+      {% if can_edit %}<form method="post" action="{{ request.path }}" class="ops-actions ops-actions--spaced">{% csrf_token %}<input type="hidden" name="action" value="ask"><input type="hidden" name="workflow_context" value="{{ ask_context }}"><button class="console-button console-button--secondary" type="submit">Ask for a new debit order</button></form>{% endif %}
+    </section>
+    {% if can_edit %}
+      <section class="staff-page-card ops-panel" aria-labelledby="billing-next-heading">
+        <h2 id="billing-next-heading">Next debit</h2>
+        <p>{% if plan.next_debit_on %}The next payment is collected on {{ plan.next_debit_on|date:'l j F Y' }}.{% else %}Set once the debit order is approved.{% endif %} Move it to match a moved patient’s existing debit date, or a pause agreed with them.</p>
+        <form method="post" action="{{ request.path }}" class="ops-form">{% csrf_token %}<input type="hidden" name="action" value="next_debit"><input type="hidden" name="workflow_context" value="{{ next_context }}">{% include 'portal/operations_fields.html' with form=next_form %}<div><button class="console-button console-button--secondary" type="submit">Move next debit</button></div></form>
+      </section>
+    {% endif %}
+    <section class="staff-page-card ops-panel" aria-labelledby="billing-address-heading">
+      <h2 id="billing-address-heading">Delivery address</h2>
+      {% if address %}<address class="ops-address">{{ address.recipient|default:plan.patient }}<br>{% for line in address.lines %}{{ line }}<br>{% endfor %}{{ address.phone }}</address>{% else %}<p>No delivery address yet.</p>{% endif %}
+      {% if can_edit %}<a class="ops-inline-link" href="{% url 'portal:ops-delivery-address' plan.patient_id %}?next={{ request.path|urlencode }}">{% if address %}Change{% else %}Add{% endif %} the delivery address</a>{% endif %}
+    </section>
+</div>
+{% if can_edit and request.GET.record or payment_cycle %}
+  <section class="staff-page-card ops-panel" id="record-payment" aria-labelledby="record-payment-heading">
+    <h2 id="record-payment-heading">Record a payment received another way</h2>
+    <p>For an EFT, cash, or the old debit order while patients move over. It marks the cycle paid, so its parcels can go out. The patient isn’t charged again.</p>
+    <form method="post" action="{{ request.path }}" class="ops-form">{% csrf_token %}<input type="hidden" name="action" value="record">
+      {% for cycle in cycles %}{% if cycle.record_context %}{% if payment_cycle and payment_cycle.pk == cycle.pk or not payment_cycle and request.GET.record == cycle.pk|stringformat:'s' %}<input type="hidden" name="cycle" value="{{ cycle.pk }}"><input type="hidden" name="workflow_context" value="{{ cycle.record_context }}"><p><strong>Cycle {{ cycle.cycle_number }}</strong>: R{{ cycle.amount|floatformat:"-2" }} due {{ cycle.due_on|date:'j M Y' }}</p>{% endif %}{% endif %}{% endfor %}
+      {% include 'portal/operations_fields.html' with form=payment_form %}
+      <div><button class="console-button console-button--primary" type="submit">Record payment</button></div>
+    </form>
+  </section>
+{% endif %}
+{% if other_payments %}<section class="staff-page-card"><header class="staff-page-card__header"><h2>Other payments</h2></header><div class="ops-table-wrap"><table class="ops-table"><thead><tr><th scope="col">Date</th><th scope="col">For</th><th scope="col">Amount</th><th scope="col">Status</th></tr></thead><tbody>{% for payment in other_payments %}<tr><td data-label="Date">{{ payment.paid_at|default:payment.created_at|date:'j M Y' }}</td><td data-label="For">{{ payment.get_kind_display|default:'Payment' }}{% if payment.note %}<small>{{ payment.note }}</small>{% endif %}</td><td data-label="Amount">R{{ payment.amount|floatformat:"-2" }}</td><td data-label="Status">{{ payment.get_status_display }}</td></tr>{% endfor %}</tbody></table></div></section>{% endif %}
+{% endblock %}

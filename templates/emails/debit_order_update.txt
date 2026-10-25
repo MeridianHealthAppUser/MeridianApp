@@ -1,0 +1,6 @@
+{% extends 'emails/base.txt' %}{% block content %}Hello{% if greeting %} {{ greeting }}{% endif %},
+
+Your treatment or its price has changed, so your debit order needs your approval for the new amount{% if amount %}: up to {{ amount }} every {{ weeks }} weeks{% endif %}. Nothing more is collected, and your next parcel waits, until you approve it.
+
+Approve your new debit order:
+{{ url }}{% endblock %}

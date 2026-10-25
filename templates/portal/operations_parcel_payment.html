@@ -1,0 +1,13 @@
+{% extends 'portal/operations_base.html' %}
+{% load workspace_ui %}
+{% block title %}Record a payment · {{ shipment.patient }} | Meridian{% endblock %}
+{% block breadcrumbs %}{% breadcrumbs 'Weekly shipping' 'portal:ops-shipping' 'Record a payment' %}{% endblock %}
+{% block page_heading %}<header class="staff-page-header"><div><h1>{{ shipment.patient }}</h1><p>{{ company.name }} · Parcel for {{ shipment.scheduled_for|date:'l j F' }}: {{ payment_text }}</p></div></header>{% endblock %}
+{% block operations_content %}<section class="staff-page-card ops-panel" aria-labelledby="parcel-payment-heading">
+  <h2 id="parcel-payment-heading">Record a payment received another way</h2>
+  <p>For this parcel{% if shipment.pharmacy_order %} and its non-prescription request{% endif %}: an EFT, cash, or a payment taken outside the platform. Subscription payments are better recorded against their cycle on Operations > Billing{% if shipment.subscription_id %} (<a href="{% url 'portal:ops-billing-detail' shipment.subscription_id %}">open billing</a>){% endif %}, so the patient’s next parcels count it too.</p>
+  <form method="post" action="{{ request.path }}" class="ops-form">{% csrf_token %}<input type="hidden" name="next" value="{{ next_url }}">
+    {% include 'portal/operations_fields.html' %}
+    <div class="ops-actions"><button class="console-button console-button--primary" type="submit">Record payment</button><a class="console-button console-button--secondary" href="{{ next_url }}">Back</a></div>
+  </form>
+</section>{% endblock %}

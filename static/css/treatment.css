@@ -2,32 +2,32 @@
 .treatment-workspace .staff-page-card { min-width: 0; }
 .treatment-panel { padding: 1.5rem; }
 .treatment-grid { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(17rem, 1fr); gap: 1.25rem; align-items: start; }
-.treatment-notice { background: #e7f5f3; border: 1px solid #bfe7e2; border-radius: 1rem; color: #345b60; padding: 1.1rem 1.35rem; line-height: 1.6; }
+.treatment-notice { background: var(--c-e7f5f3); border: 1px solid var(--c-bfe7e2); border-radius: 1rem; color: var(--c-345b60); padding: 1.1rem 1.35rem; line-height: 1.6; }
 .treatment-notice p { margin: .25rem 0; }
-.treatment-notice--warning { background: #fff6e4; border-color: #f0d9a8; }
+.treatment-notice--warning { background: var(--c-fff6e4); border-color: var(--c-f0d9a8); }
 .treatment-actions { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem; margin-top: 1rem; }
 .treatment-workspace .console-form { display: grid; gap: 1.15rem; }
 .treatment-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
 .treatment-workspace .console-form__field { display: grid; gap: .45rem; min-width: 0; }
 .treatment-workspace label, .treatment-workspace legend { font-weight: 600; }
-.treatment-workspace input:not([type=checkbox]):not([type=radio]):not([type=search]), .treatment-workspace select, .treatment-workspace textarea { width: 100%; min-height: 2.75rem; padding: .7rem .85rem; background: #fff; color: #12383c; border: 1px solid #deebe8; border-radius: .7rem; font: inherit; box-sizing: border-box; }
+.treatment-workspace input:not([type=checkbox]):not([type=radio]):not([type=search]), .treatment-workspace select, .treatment-workspace textarea { width: 100%; min-height: 2.75rem; padding: .7rem .85rem; background: var(--c-ffffff); color: var(--c-12383c); border: 1px solid var(--c-deebe8); border-radius: .7rem; font: inherit; box-sizing: border-box; }
 .treatment-workspace textarea { resize: vertical; }
-.treatment-workspace input:focus-visible, .treatment-workspace select:focus-visible, .treatment-workspace textarea:focus-visible { outline: 2px solid #0b958b; outline-offset: 2px; }
-.treatment-workspace .helptext { font-size: .875rem; color: #6e8588; }
+.treatment-workspace input:focus-visible, .treatment-workspace select:focus-visible, .treatment-workspace textarea:focus-visible { outline: 2px solid var(--c-0b958b); outline-offset: 2px; }
+.treatment-workspace .helptext { font-size: .875rem; color: var(--c-6e8588); }
 .treatment-check { display: flex; align-items: flex-start; gap: .7rem; line-height: 1.5; }
-.treatment-check input { flex: 0 0 auto; width: 1.15rem; height: 1.15rem; margin-top: .15rem; accent-color: #0b958b; }
+.treatment-check input { flex: 0 0 auto; width: 1.15rem; height: 1.15rem; margin-top: .15rem; accent-color: var(--c-0b958b); }
 .treatment-facts { display: grid; gap: 0; margin: 0; }
-.treatment-facts > div { display: flex; justify-content: space-between; gap: 1.25rem; padding: .8rem 0; border-bottom: 1px solid #edf3f1; }
-.treatment-facts dt { color: #6e8588; }
+.treatment-facts > div { display: flex; justify-content: space-between; gap: 1.25rem; padding: .8rem 0; border-bottom: 1px solid var(--c-edf3f1); }
+.treatment-facts dt { color: var(--c-6e8588); }
 .treatment-facts dd { margin: 0; text-align: right; font-weight: 600; overflow-wrap: anywhere; }
 .treatment-table-wrap { overflow-x: auto; }
 .treatment-table { width: 100%; border-collapse: collapse; font-size: .9rem; }
-.treatment-table th { padding: .85rem 1rem; text-align: left; color: #7d9294; font-size: .73rem; text-transform: uppercase; letter-spacing: .07em; }
-.treatment-table td { padding: 1rem; border-top: 1px solid #edf3f1; vertical-align: top; }
+.treatment-table th { padding: .85rem 1rem; text-align: left; color: var(--c-7d9294); font-size: .73rem; text-transform: uppercase; letter-spacing: .07em; }
+.treatment-table td { padding: 1rem; border-top: 1px solid var(--c-edf3f1); vertical-align: top; }
 .treatment-table .console-button { white-space: nowrap; }
 .treatment-instructions { white-space: normal; overflow-wrap: anywhere; line-height: 1.65; }
-.treatment-empty { padding: 1.5rem; color: #6e8588; }
-.treatment-workspace .errorlist { margin: .4rem 0; padding-left: 1.25rem; color: #a33131; }
+.treatment-empty { padding: 1.5rem; color: var(--c-6e8588); }
+.treatment-workspace .errorlist { margin: .4rem 0; padding-left: 1.25rem; color: var(--c-a33131); }
 .treatment-pagination { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 1rem; margin-top: 1rem; }
 .treatment-workspace details > summary { padding: 1rem 1.5rem; cursor: pointer; font-weight: 600; }
 @media (max-width: 58rem) { .treatment-grid { grid-template-columns: 1fr; } .treatment-table { min-width: 42rem; } }
@@ -45,7 +45,7 @@
 .patient-timeline__weeks { display: grid; gap: .35rem; list-style: none; margin: .9rem 0 1rem; padding: 0; }
 /* Five equal columns: the week, then Prescription, Shipment, Dosage and Payment, each centred in the row. */
 .patient-timeline.app-dialog { max-width: min(62rem, calc(100vw - 2rem)); }
-.patient-timeline__week { align-items: center; background: #fff; border: 1px solid var(--console-soft-line); border-radius: .75rem; display: grid; gap: .45rem .7rem; grid-template-columns: repeat(5, minmax(0, 1fr)); padding: .6rem .8rem; position: relative; }
+.patient-timeline__week { align-items: center; background: var(--c-ffffff); border: 1px solid var(--console-soft-line); border-radius: .75rem; display: grid; gap: .45rem .7rem; grid-template-columns: repeat(5, minmax(0, 1fr)); padding: .6rem .8rem; position: relative; }
 .patient-timeline__week.is-past { opacity: .6; }
 /* Where the patient is (or, before week 1, what is next): a teal border, with a small label above it. */
 .patient-timeline__week.is-current, .patient-timeline__week.is-next { border-color: var(--console-teal); box-shadow: 0 0 0 1px var(--console-teal); margin-top: 1.1rem; }
@@ -57,11 +57,11 @@
 .patient-timeline__cell .patient-timeline__chip { display: grid; }
 .patient-timeline__chip { border: 1px solid transparent; border-radius: .55rem; color: var(--console-ink); display: inline-grid; font-size: .8rem; font-weight: 500; line-height: 1.35; padding: .3rem .55rem; }
 .patient-timeline__chip small { color: var(--console-muted); font-size: .72rem; font-weight: 400; }
-.patient-timeline__chip--dose { background: #e9f6f3; border-color: #cfe9e3; }
+.patient-timeline__chip--dose { background: var(--c-e9f6f3); border-color: var(--c-cfe9e3); }
 .patient-timeline__chip--dose.is-empty { background: transparent; border-style: dashed; color: var(--console-muted); }
-.patient-timeline__chip--parcel { background: #ecf3fb; border-color: #d3e3f5; }
-.patient-timeline__chip--payment { background: #fbf4e6; border-color: #f0e1bf; }
-.patient-timeline__chip--event { background: #f4eefb; border-color: #e2d6f3; }
+.patient-timeline__chip--parcel { background: var(--c-ecf3fb); border-color: var(--c-d3e3f5); }
+.patient-timeline__chip--payment { background: var(--c-fbf4e6); border-color: var(--c-f0e1bf); }
+.patient-timeline__chip--event { background: var(--c-f4eefb); border-color: var(--c-e2d6f3); }
 @media (max-width: 480px) {
   .patient-timeline__when { align-items: baseline; grid-auto-flow: column; justify-content: start; gap: .5rem; }
 }
@@ -80,6 +80,6 @@
 
 /* Cancel my subscription: the reasons, one tick each. */
 .treatment-cancel-reasons { border: 0; display: grid; gap: .45rem; margin: 0; min-width: 0; padding: 0; }
-.treatment-cancel-reasons legend { color: var(--patient-text, #173b42); font-size: .86rem; font-weight: 700; margin-bottom: .2rem; padding: 0; }
+.treatment-cancel-reasons legend { color: var(--patient-text, var(--c-173b42)); font-size: .86rem; font-weight: 700; margin-bottom: .2rem; padding: 0; }
 .treatment-cancel-reasons .patient-small { margin: 0 0 .2rem; }
-.treatment-cancel-reasons .errorlist { color: var(--console-red, #a33131); font-size: .78rem; list-style: none; margin: 0; padding: 0; }
+.treatment-cancel-reasons .errorlist { color: var(--console-red, var(--c-a33131)); font-size: .78rem; list-style: none; margin: 0; padding: 0; }

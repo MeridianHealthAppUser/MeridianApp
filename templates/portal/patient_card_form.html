@@ -1,0 +1,27 @@
+{% extends 'portal/patient_page_base.html' %}
+{% load static workspace_ui %}
+{% block title %}{{ page_title }} | Meridian{% endblock %}
+{% block patient_extra_css %}<link rel="stylesheet" href="{% static 'css/patient_billing.css' %}?v=20261025d">{% endblock %}
+{% block patient_breadcrumbs %}{% breadcrumbs 'Billing and payments' 'portal:patient-billing' page_title %}{% endblock %}
+{% block patient_heading %}
+  <header class="patient-page-heading"><div><h1>{{ page_title }}</h1><p>Your card details go straight to {{ provider.label }}, our payment provider. {{ patient_company.name }} never sees them.</p></div></header>
+{% endblock %}
+{% block patient_content %}
+  {# Peach's card form (COPYandPAY): its script fills the form below, then sends the patient back to form.action. #}
+  <section class="console-card billing-card-form" aria-labelledby="card-form-heading">
+    <div class="console-card__body">
+      <h2 class="patient-eyebrow" id="card-form-heading">{% if mandate %}Your card for your subscription{% else %}Pay by card{% endif %}</h2>
+      {% if mandate %}
+        <p>We’ll charge this card up to <strong>{{ amount }}</strong> every {{ mandate.interval_weeks }} weeks for your subscription, reference {{ mandate.reference }}. You can change or cancel it on Billing and payments.</p>
+      {% else %}
+        <p>Pay <strong>{{ amount }}</strong>{% if payment.pharmacy_order_id %} for your request{% else %} for your subscription{% endif %}.</p>
+      {% endif %}
+      {# Peach's script replaces this form with its own, so the styling goes on the wrapper. #}
+      <div class="billing-card-form__widget"><form action="{{ form.action }}" class="paymentWidgets" data-brands="{{ form.brands }}"></form></div>
+      <noscript><p class="patient-small">The card form needs JavaScript. Turn it on, or pay another way: message your care team.</p></noscript>
+      <div class="patient-card-actions"><a class="console-button console-button--secondary" href="{% url 'portal:patient-billing' %}">Cancel</a></div>
+    </div>
+  </section>
+  <script>var wpwlOptions = {style: "card", locale: "en"{% if mandate %}, registrations: {requireCvv: true}{% endif %}};</script>
+  <script src="{{ form.script }}"{% if form.integrity %} integrity="{{ form.integrity }}"{% endif %} crossorigin="anonymous"></script>
+{% endblock %}

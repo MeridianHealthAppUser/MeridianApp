@@ -61,7 +61,8 @@ def page_tabs(context):
     """The Operations or Administration tabs for this page, styled as a patient record's tabs."""
     from portal.navigation import page_tabs as tabs_for
 
-    return {'group': tabs_for(context.get('nav_section') or '', data_requests=_open_data_requests(context))}
+    return {'group': tabs_for(context.get('nav_section') or '', data_requests=_open_data_requests(context),
+                              membership=context.get('active_membership'))}
 
 
 @register.inclusion_tag('includes/breadcrumbs.html', takes_context=True)

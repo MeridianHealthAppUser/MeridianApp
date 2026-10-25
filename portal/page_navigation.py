@@ -54,9 +54,8 @@ STAFF_PAGES = {
     'compounding-list': Page('Compounding records', 'compounding', 'clinical'),
     'treatment-subscriptions': Page('Subscriptions', 'subscriptions', 'admin'),
     'ops-catalogue': Page('Catalogue', 'catalogue', 'admin'),
-    'ops-shipping': Page('Weekly shipping list', 'shipping', 'admin'),
-    'ops-stock': Page('Dispatch stock', 'stock', 'admin'),
-    'ops-history': Page('Dispatch history', 'history', 'admin'),
+    'ops-shipping': Page('Weekly shipping', 'shipping', 'shipping'),
+    'ops-history': Page('Dispatch history', 'history', 'shipping'),
     'ops-orders': Page('Non-prescription requests', 'orders', 'admin'),
     'staff-leads': Page('Leads and enquiries', 'leads', 'admin'),
     'staff-lead-history': Page('Lead history', 'leads', 'admin'),
@@ -99,14 +98,18 @@ HTML_PAGE_ROUTES = frozenset(STAFF_PAGES) | frozenset(PATIENT_PAGES) | frozenset
     'compounding-create', 'compounding-detail',
     'conversation-manage', 'team-conversation-manage',
     'dropout-detail', 'lead-detail', 'lead-follow-up',
+    'email-journeys', 'email-journey-create', 'email-journey-edit', 'email-log',
     'management-user-create', 'management-membership-edit',
     'management-practice-create', 'management-practice-edit',
     'ops-product-create', 'ops-product-detail', 'ops-dose-create', 'ops-dose-detail',
     'ops-starting-plan-create', 'ops-starting-plan-detail',
-    'ops-shipping-create', 'ops-shipment-detail', 'ops-order-detail',
+    'ops-shipping-create', 'ops-shipment-detail', 'ops-order-detail', 'ops-stock',
+    'ops-billing', 'ops-billing-detail', 'ops-delivery-address', 'ops-parcel-payment',
     'patient-appointment-detail', 'patient-book-appointment',
     'patient-data-request-create', 'patient-data-request-detail',
     'patient-lab-detail', 'patient-basket', 'patient-order-detail', 'patient-subscription',
+    'patient-billing', 'patient-invoice', 'patient-delivery-address',
+    'patient-billing-sandbox-mandate', 'patient-billing-sandbox-checkout',
     'policy-create', 'staff-data-request-detail', 'staff-menu-section',
     'staff-patient-record', 'task-create', 'task-edit',
     'treatment-authorisation-create', 'treatment-authorisation-detail', 'treatment-authorisation-renew',
@@ -117,6 +120,8 @@ PATIENT_HTML_PAGE_ROUTES = frozenset(PATIENT_PAGES) | frozenset((
     'patient-appointment-detail', 'patient-book-appointment',
     'patient-data-request-create', 'patient-data-request-detail',
     'patient-lab-detail', 'patient-basket', 'patient-order-detail', 'patient-subscription',
+    'patient-billing', 'patient-invoice', 'patient-delivery-address',
+    'patient-billing-sandbox-mandate', 'patient-billing-sandbox-checkout',
 ))
 STAFF_HTML_PAGE_ROUTES = HTML_PAGE_ROUTES - PATIENT_HTML_PAGE_ROUTES
 
@@ -133,6 +138,10 @@ NATIVE_GET_ROUTES = frozenset((
     'ops-manifest', 'ops-week-order', 'ops-history-export',
     'clinical-lab-result-download', 'patient-lab-result-download', 'patient-lab-form',
     'record-conversation-search', 'patient-blood-test-form', 'patient-blood-result-report',
+    'email-unsubscribe', 'ops-shipment-label',
+    # Preparing a provider card form or settling its return has GET side effects;
+    # a content request must be rejected before either view runs.
+    'patient-card-form', 'patient-payment-return',
 ))
 
 
@@ -299,6 +308,10 @@ def _check_page_access(view, request, page):
     access = page.access
     if access == 'admin' and not membership.is_admin:
         raise PermissionDenied('This page is for practice administrators.')
+    if access == 'shipping':
+        from care.operations import can_ship
+        if not can_ship(company, membership):
+            raise PermissionDenied('This page is for practice administrators.')
     if access == 'super_admin' and membership.role != 'super_admin':
         raise PermissionDenied('This page is for practice Super Admins.')
     if access == 'clinical' and not membership.has_clinical_access:
@@ -537,6 +550,9 @@ class PageNavigationMiddleware:
         page = _RenderedPage()
         page.feed(response.content.decode(response.charset))
         if not page.found or page.depth:
+            return _json(request, {'full_navigation': canonical_url(request)}, status=409)
+        # Another site's script (Peach's card form) is never added to a swapped-in page, so that page loads fully.
+        if any(_local_url(request, value) is None for value in page.scripts):
             return _json(request, {'full_navigation': canonical_url(request)}, status=409)
         def assets(values):
             return list(dict.fromkeys(url for value in values if (url := _local_url(request, value))))

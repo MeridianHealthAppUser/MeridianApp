@@ -4,38 +4,38 @@
 .backoffice-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; }
 .backoffice .console-form textarea { width: 100%; resize: vertical; }
 .backoffice table { width: 100%; border-collapse: collapse; text-align: left; }
-.backoffice th, .backoffice td { padding: 1rem; border-bottom: 1px solid var(--border, #e3ecee); vertical-align: top; }
-.backoffice th { font-size: .72rem; text-transform: uppercase; letter-spacing: .08em; color: #78909a; }
-.backoffice td a { font-weight: 600; color: #0b7e76; }
+.backoffice th, .backoffice td { padding: 1rem; border-bottom: 1px solid var(--border, var(--c-e3ecee)); vertical-align: top; }
+.backoffice th { font-size: .72rem; text-transform: uppercase; letter-spacing: .08em; color: var(--c-78909a); }
+.backoffice td a { font-weight: 600; color: var(--c-0b7e76); }
 .backoffice-table-wrap { overflow-x: auto; }
 .backoffice-table-wrap table { min-width: 660px; }
-.backoffice-note { padding: 1.2rem; border-bottom: 1px solid #e3ecee; overflow-wrap: anywhere; }
+.backoffice-note { padding: 1.2rem; border-bottom: 1px solid var(--c-e3ecee); overflow-wrap: anywhere; }
 .backoffice-note p { white-space: normal; margin: .5rem 0; }
-.backoffice-note small, .backoffice-muted { color: #68828c; }
+.backoffice-note small, .backoffice-muted { color: var(--c-68828c); }
 .backoffice-actions { display: flex; flex-wrap: wrap; gap: .6rem; align-items: center; }
 /* Appointment details: when and the type, then status, length and clinician with the actions on the right. */
-.appointment-summary__when { color: var(--console-ink, #12302f); font-size: 1rem; font-weight: 650; margin: 0 0 .45rem; }
-.appointment-summary__when span { color: #657f82; font-weight: 500; }
+.appointment-summary__when { color: var(--console-ink, var(--c-12302f)); font-size: 1rem; font-weight: 650; margin: 0 0 .45rem; }
+.appointment-summary__when span { color: var(--c-657f82); font-weight: 500; }
 .appointment-summary__row { align-items: center; display: flex; flex-wrap: wrap; gap: .75rem 1.2rem; justify-content: space-between; }
 .appointment-summary__row > p { margin: 0; }
 .appointment-summary__row .backoffice-actions { margin-left: auto; }
 @media (max-width: 40rem) { .appointment-summary__row .backoffice-actions { margin-left: 0; } }
 .backoffice-metrics { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(165px, 1fr)); }
 .backoffice-metrics strong { display: block; font-size: 1.7rem; }
-.backoffice .console-button--primary { color: #fff; }
-.backoffice .errorlist { color: #a4302e; }
+.backoffice .console-button--primary { color: var(--c-ffffff); }
+.backoffice .errorlist { color: var(--c-a4302e); }
 /* Administration > Dropouts: help requests, the cancelled and paused subscriptions under them, then Please call. */
-.dropouts td small { color: #68828c; display: block; font-size: .75rem; margin-top: .2rem; }
+.dropouts td small { color: var(--c-68828c); display: block; font-size: .75rem; margin-top: .2rem; }
 .dropouts td > strong, .dropouts-contact { white-space: nowrap; }
 .dropouts-reason { max-width: 22rem; overflow-wrap: anywhere; }
 .dropouts-actions { justify-content: flex-end; gap: .4rem; }
 .dropouts-actions .console-button { font-size: .72rem; min-height: 2.1rem; padding: .4rem .7rem; white-space: nowrap; }
-.dropouts-ended { border-top: 1px solid #e3ecee; }
-.dropouts-ended > summary { align-items: center; color: var(--console-ink, #12302f); cursor: pointer; display: flex; font-size: .9rem; font-weight: 700; gap: .55rem; padding: 1rem 1.15rem; }
+.dropouts-ended { border-top: 1px solid var(--c-e3ecee); }
+.dropouts-ended > summary { align-items: center; color: var(--console-ink, var(--c-12302f)); cursor: pointer; display: flex; font-size: .9rem; font-weight: 700; gap: .55rem; padding: 1rem 1.15rem; }
 .dropouts-ended > summary::after { border-bottom: 2px solid currentColor; border-right: 2px solid currentColor; content: ''; height: .45rem; margin-left: auto; transform: rotate(45deg); transition: transform .15s; width: .45rem; }
 .dropouts-ended[open] > summary::after { transform: rotate(-135deg); }
-.dropouts-ended__count { background: #eef5f4; border-radius: 2rem; color: #4f6d70; font-size: .72rem; padding: .15rem .55rem; }
-.dropouts-ended > .staff-page-card__header { border-top: 1px solid #e3ecee; }
-.dropouts-ended > .staff-page-card__header p { color: #68828c; font-size: .8rem; margin: 0; }
+.dropouts-ended__count { background: var(--c-eef5f4); border-radius: 2rem; color: var(--c-4f6d70); font-size: .72rem; padding: .15rem .55rem; }
+.dropouts-ended > .staff-page-card__header { border-top: 1px solid var(--c-e3ecee); }
+.dropouts-ended > .staff-page-card__header p { color: var(--c-68828c); font-size: .8rem; margin: 0; }
 @media (max-width: 760px) { .backoffice-grid { grid-template-columns: 1fr; } .backoffice-panel { padding: 1rem; } }
 @media print { .console-sidebar, .console-topbar, .mobile-bottom-nav, .site-header, .site-footer, .backoffice-actions, .backoffice form { display: none !important; } .console-shell, .console-main { display: block; margin: 0; padding: 0; } }

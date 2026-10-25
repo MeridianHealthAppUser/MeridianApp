@@ -430,10 +430,12 @@ class PatientStandalonePagesTests(TestCase):
         self.login()
         response = self.page('patient-profile')
         for label, value in (('Title', 'Ms'), ('Name', 'Alice Alpha Patient'), ('Email', 'pages-patient@example.test'),
-                             ('Contact number', '082 000 0001'), ('ID / passport', 'ALPHA-IDENTITY'), ('City', 'Cape Town'),
-                             ('Shipping address', '12 Main Road, Gardens, Cape Town, 8001')):
+                             ('Contact number', '082 000 0001'), ('ID / passport', 'ALPHA-IDENTITY'), ('City', 'Cape Town')):
             with self.subTest(label=label):
                 self.assertContains(response, f'<div><dt>{label}</dt><dd>{value}</dd></div>', html=True)
+        # The delivery address (from the latest supply request until the patient saves one) is theirs to change.
+        self.assertContains(response, '<dt>Delivery address</dt><dd>12 Main Road, Gardens, Cape Town, 8001 '
+                                      f'<a class="patient-inline-link" href="{reverse("portal:patient-delivery-address")}">Change')
         for field in ('title', 'phone', 'city', 'first_name', 'last_name'):
             self.assertNotContains(response, f'name="{field}"')
         self.assertContains(response, '<a class="console-button console-button--secondary patient-card-actions__wide" '

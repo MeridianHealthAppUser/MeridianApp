@@ -118,15 +118,20 @@ class TreatmentPageTests(TestCase):
         url = reverse('portal:patient-subscription-enroll')
         response = self.client.get(reverse('portal:patient-treatment'))
         self.assertContains(response, 'Selected treatment product')
-        self.assertContains(response, 'No payment is collected in this app')
-        data = dict(authorization=auth.pk, confirm='on')
+        self.assertContains(response, 'Where should we send your parcels?')
+        # Starting asks for the delivery address and how to pay (24 Oct 2026).
+        data = dict(authorization=auth.pk, confirm='on', street='1 Long Street', suburb='Gardens', city='Cape Town',
+                    province='WC', postal_code='8001', phone='082 555 0114', method='debicheck')
         self.assertEqual(self.client.post(url, data).status_code, 400)
         self.assertFalse(PatientSubscription.objects.exists())
         data['treatment_context'] = response.context['enrollment_context']
-        self.assertEqual(self.client.post(url, data).status_code, 302)
+        with override_settings(PAYMENT_PROVIDER=''):
+            self.assertEqual(self.client.post(url, data).status_code, 302)
         plan = PatientSubscription.objects.get()
         self.assertEqual(plan.patient_id, self.patient.pk)
+        # Without a payment provider nothing is collected: the next debit waits for a debit order.
         self.assertIsNone(plan.next_debit_on)
+        self.assertEqual(self.patient.delivery_address.street, '1 Long Street')
         self.login(self.patient_user, self.beta)
         rejected = self.client.post(url, data)
         self.assertEqual(rejected.status_code, 400)

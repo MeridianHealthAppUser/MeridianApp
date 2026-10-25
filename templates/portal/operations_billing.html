@@ -1,0 +1,37 @@
+{% extends 'portal/operations_base.html' %}
+{% load workspace_ui %}
+{% block title %}Billing | Meridian{% endblock %}
+{% block breadcrumbs %}{% breadcrumbs 'Operations' %}{% endblock %}
+{% block page_heading %}<header class="staff-page-header"><div><h1>Operations</h1><p>{{ company.name }} · Each subscription’s payments: paid up, due, being retried, or failed and waiting in the failure queue.</p></div>{% if run_context and provider %}<form method="post" action="{% url 'portal:ops-billing-run' %}">{% csrf_token %}<input type="hidden" name="workflow_context" value="{{ run_context }}"><button class="console-button console-button--secondary" type="submit">Run today’s debits</button></form>{% endif %}</header>{% page_tabs %}{% endblock %}
+{% block operations_content %}
+{% if not provider %}<div class="ops-notice ops-notice--warning"><strong>No payment provider is connected.</strong><p>Debit orders can’t be set up or collected in the app yet. Record payments received another way on each subscription.</p></div>{% endif %}
+<section class="staff-page-card">
+  <header class="staff-page-card__header staff-list-header"><div><h2>Subscriptions</h2>{% if failed_count %}<p>{{ failed_count }} in the failure queue{% if show_totals %} · R{{ total_owed|floatformat:"-2" }} outstanding{% endif %}</p>{% elif show_totals %}<p>R{{ total_owed|floatformat:"-2" }} outstanding</p>{% endif %}</div>{% include 'portal/includes/list_tools.html' with search_label='Search billing' %}</header>
+  <div data-search-region="list">{% if filter_form.errors %}<div class="staff-filter-error" role="alert">Correct the filters to view billing.</div>{% else %}
+    <div class="ops-table-wrap"><table class="ops-table ops-billing-table">
+      <thead><tr><th scope="col">Patient</th><th scope="col">Billing</th><th scope="col">Debit order</th><th scope="col">Last paid</th><th scope="col">Next debit</th><th scope="col">Outstanding</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead>
+      <tbody>{% for plan in page_obj %}<tr>
+        <td data-label="Patient"><strong>{{ plan.patient }}</strong><small>{{ plan.get_status_display }}</small></td>
+        <td data-label="Billing"><span class="ops-paid ops-paid--{% if plan.state == 'paid' %}paid{% elif plan.state == 'failed' %}failed{% elif plan.state == 'due' %}due{% else %}retrying{% endif %}">{% if plan.state == 'paid' %}Paid up{% elif plan.state == 'failed' %}Failed{% elif plan.state == 'retrying' %}Retrying{% elif plan.state == 'due' %}Due{% elif plan.state == 'update' %}New amount{% elif plan.state == 'pending' %}Awaiting approval{% else %}No debit order{% endif %}</span><small>{{ plan.state_text }}</small></td>
+        <td data-label="Debit order">{% if plan.mandate %}{{ plan.mandate.get_method_display }}<small>{{ plan.mandate.get_status_display }}{% if plan.mandate.account_label %} · {{ plan.mandate.account_label }}{% endif %} · up to R{{ plan.mandate.amount|floatformat:"-2" }}</small>{% else %}—{% endif %}</td>
+        <td data-label="Last paid">{% if plan.last_paid %}R{{ plan.last_paid.amount|floatformat:"-2" }}<small>{{ plan.last_paid.paid_at|date:'j M Y' }}</small>{% else %}—{% endif %}</td>
+        <td data-label="Next debit">{{ plan.next_debit_on|date:'j M Y'|default:'—' }}</td>
+        <td data-label="Outstanding">{% if plan.owed %}<strong>R{{ plan.owed|floatformat:"-2" }}</strong>{% else %}—{% endif %}</td>
+        <td data-label="Actions"><a class="console-button console-button--secondary" href="{% url 'portal:ops-billing-detail' plan.pk %}">Open<span class="sr-only"> billing for {{ plan.patient }}</span></a></td>
+      </tr>{% empty %}<tr><td colspan="7" class="ops-empty">No subscriptions match. A subscription appears here once a patient starts one on My Treatment.</td></tr>{% endfor %}</tbody>
+    </table></div>
+  {% endif %}</div>
+</section>
+<div data-search-region="pages">{% include 'portal/operations_pagination.html' with pagination_label='Billing' %}</div>
+{% if debicheck %}
+  {# Stitch collects DebiCheck debit orders from files: sent here by hand until Stitch gives the practice SFTP access. #}
+  <section class="staff-page-card ops-debicheck" aria-labelledby="debicheck-heading">
+    <header class="staff-page-card__header"><div><h2 id="debicheck-heading">DebiCheck collection files</h2><p>{{ debicheck.waiting }} DebiCheck debit{{ debicheck.waiting|pluralize }} waiting to be sent to Stitch. Send each day’s file at least three days before its collections are due, then upload the REPLY and OUTPUT files Stitch sends back.</p></div></header>
+    <div class="ops-debicheck__actions">
+      <form method="post" action="{% url 'portal:ops-billing-debicheck' %}">{% csrf_token %}<input type="hidden" name="workflow_context" value="{{ debicheck.context }}"><button class="console-button console-button--primary" type="submit" name="action" value="download" data-no-loader{% if not debicheck.waiting %} disabled{% endif %}>Download collection file</button></form>
+      <form method="post" action="{% url 'portal:ops-billing-debicheck' %}" enctype="multipart/form-data" class="ops-debicheck__upload">{% csrf_token %}<input type="hidden" name="workflow_context" value="{{ debicheck.context }}"><label for="debicheck-results">Stitch’s REPLY or OUTPUT file</label><input id="debicheck-results" type="file" name="results" accept=".csv,text/csv" required><button class="console-button console-button--secondary" type="submit" name="action" value="upload">Upload</button></form>
+    </div>
+  </section>
+{% endif %}
+<div class="ops-notice">Debits run every morning (<code>manage.py run_debits</code>). A failed debit is retried on the days set in Practice settings; after the last retry it waits here, with a task for the practice, until it’s paid or a payment is recorded.</div>
+{% endblock %}

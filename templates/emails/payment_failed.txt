@@ -1,0 +1,6 @@
+{% extends 'emails/base.txt' %}{% block content %}Hello{% if greeting %} {{ greeting }}{% endif %},
+
+We couldn’t collect {{ amount }} for your Meridian Health subscription.{% if final %} We’ve tried a few times now, so your next parcel waits until it’s paid.{% elif retry_on %} We’ll try again on {{ retry_on|date:"l j F" }}.{% endif %}
+
+If your bank details or card have changed, set up your debit order again. If you’d rather pay another way, message your care team in the app and they will help.
+{{ url }}{% endblock %}

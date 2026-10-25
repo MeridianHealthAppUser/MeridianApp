@@ -52,6 +52,38 @@ if not MULTI_PRACTICE_ENABLED and not SINGLE_PRACTICE_SLUG:
 # to disable; it is off by default when DEBUG is false.
 CHECKOUT_TEST_CODE = os.getenv('CHECKOUT_TEST_CODE', 'devtest' if DEBUG else '').strip()
 
+# Who takes new debit orders and card payments (care/payment_providers.py): sandbox, peach or stitch. "sandbox" approves
+# and collects inside the app, for local testing only; empty means no provider is connected and nothing is collected.
+# A debit order already set up stays with the provider that holds it, so keep the old provider's settings when switching.
+PAYMENT_PROVIDER = os.getenv('PAYMENT_PROVIDER', 'sandbox' if DEBUG else '').strip().lower()
+if PAYMENT_PROVIDER == 'sandbox' and not DEBUG and os.getenv('PAYMENT_SANDBOX_IN_PRODUCTION', '').lower() != 'true':
+    raise ImproperlyConfigured('PAYMENT_PROVIDER=sandbox takes no real money. Use it with DJANGO_DEBUG=true only.')
+# Each provider's webhook secret: Peach's 64-character hex key and Stitch's whsec_ signing secret. Webhooks are refused
+# without it. PAYMENT_WEBHOOK_SECRET is the secret of the provider in PAYMENT_PROVIDER when its own isn't set.
+PAYMENT_WEBHOOK_SECRET = os.getenv('PAYMENT_WEBHOOK_SECRET', '').strip()
+PEACH_WEBHOOK_SECRET = os.getenv('PEACH_WEBHOOK_SECRET', '').strip()
+STITCH_WEBHOOK_SECRET = os.getenv('STITCH_WEBHOOK_SECRET', '').strip()
+# Peach Payments (care/peach.py): the card API's host (https://card.peachpayments.com live), the 3-D Secure entity and
+# its access token for cards patients enter, and the recurring entity and token Peach issues for charging kept cards.
+PEACH_API_URL = os.getenv('PEACH_API_URL', 'https://sandbox-card.peachpayments.com' if DEBUG else 'https://card.peachpayments.com').strip().rstrip('/')
+PEACH_ENTITY_ID = os.getenv('PEACH_ENTITY_ID', '').strip()
+PEACH_ACCESS_TOKEN = os.getenv('PEACH_ACCESS_TOKEN', '').strip()
+PEACH_RECURRING_ENTITY_ID = os.getenv('PEACH_RECURRING_ENTITY_ID', '').strip() or PEACH_ENTITY_ID
+PEACH_RECURRING_ACCESS_TOKEN = os.getenv('PEACH_RECURRING_ACCESS_TOKEN', '').strip() or PEACH_ACCESS_TOKEN
+# Stitch (care/stitch.py): the client's id and secret from Stitch (test-… for a test client), and the client id that
+# goes in DebiCheck collection files when it differs.
+STITCH_CLIENT_ID = os.getenv('STITCH_CLIENT_ID', '').strip()
+STITCH_CLIENT_SECRET = os.getenv('STITCH_CLIENT_SECRET', '').strip()
+STITCH_FILES_CLIENT_ID = os.getenv('STITCH_FILES_CLIENT_ID', '').strip() or STITCH_CLIENT_ID
+
+# The Courier Guy, through its ShipLogic API (care/courier.py). Without a key, waybills are not booked from the app.
+# The URL is the live account's host; a sandbox account (tcg-sandbox.shiplogic.com) uses https://api.shiplogic.com.
+TCG_API_URL = os.getenv('TCG_API_URL', 'https://api.portal.thecourierguy.co.za').strip().rstrip('/')
+TCG_API_KEY = os.getenv('TCG_API_KEY', '').strip()
+# The secret in the tracking webhook's address (https://<site>/courier/webhooks/<token>/), set up on The Courier Guy's
+# portal under Settings > Webhook subscriptions (Tracking event). The Courier Guy doesn't sign its webhooks.
+TCG_WEBHOOK_TOKEN = os.getenv('TCG_WEBHOOK_TOKEN', '').strip()
+
 
 # Application definition
 

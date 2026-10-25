@@ -1,64 +1,64 @@
-.account-profile { margin: 1.5rem auto 3rem; max-width: 68rem; color: #24464d; }
+.account-profile { margin: 1.5rem auto 3rem; max-width: 68rem; color: var(--c-24464d); }
 .account-profile__heading { margin-bottom: 1.4rem; }
-.account-profile h1 { color: #11383e; font: 500 clamp(1.9rem, 4vw, 2.4rem)/1.2 var(--meridian-font); letter-spacing: -.02em; margin: .5rem 0; }
-.account-profile__heading > p:last-child { color: #67828a; line-height: 1.6; }
+.account-profile h1 { color: var(--c-11383e); font: 500 clamp(1.9rem, 4vw, 2.4rem)/1.2 var(--meridian-font); letter-spacing: -.02em; margin: .5rem 0; }
+.account-profile__heading > p:last-child { color: var(--c-67828a); line-height: 1.6; }
 .account-profile__grid { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 1rem; }
-.account-profile__card { background: #fff; border: 1px solid #dfeaec; border-radius: 1rem; min-width: 0; padding: clamp(1rem, 2.5vw, 1.6rem); }
-.account-profile__card h2 { color: #193e45; font-size: 1.1rem; margin: 0 0 .7rem; }
+.account-profile__card { background: var(--c-ffffff); border: 1px solid var(--c-dfeaec); border-radius: 1rem; min-width: 0; padding: clamp(1rem, 2.5vw, 1.6rem); }
+.account-profile__card h2 { color: var(--c-193e45); font-size: 1.1rem; margin: 0 0 .7rem; }
 .account-profile__card > .management-help { margin: 0 0 1.2rem; }
-.account-profile__readonly { background: #f3f8f8; border: 1px solid #e2ecee; border-radius: .7rem; padding: .85rem 1rem; }
+.account-profile__readonly { background: var(--c-f3f8f8); border: 1px solid var(--c-e2ecee); border-radius: .7rem; padding: .85rem 1rem; }
 .account-profile__readonly > span { display: block; font-size: .8rem; margin-bottom: .35rem; }
 .account-profile__readonly strong { font-size: .9rem; overflow-wrap: anywhere; }
 .account-profile__readonly p { margin: .4rem 0 0; }
-.account-profile__link { display: grid; gap: .3rem; padding: .85rem 0; color: #147b76; border-bottom: 1px solid #e6eff0; text-decoration: none; }
+.account-profile__link { display: grid; gap: .3rem; padding: .85rem 0; color: var(--c-147b76); border-bottom: 1px solid var(--c-e6eff0); text-decoration: none; }
 .account-profile__link:hover strong { text-decoration: underline; }
-.account-profile__link span { color: #68828a; font-size: .85rem; line-height: 1.5; }
+.account-profile__link span { color: var(--c-68828a); font-size: .85rem; line-height: 1.5; }
 .account-profile__facts { margin: 1.1rem 0; font-size: .85rem; }
 .account-profile__facts > div { display: flex; flex-wrap: wrap; justify-content: space-between; gap: .4rem 1rem; padding: .4rem 0; }
-.account-profile__facts dt { color: #68828a; }
+.account-profile__facts dt { color: var(--c-68828a); }
 .account-profile__facts dd { margin: 0; }
 .account-profile__practices { margin-top: 1rem; }
 .account-profile__practice-list { list-style: none; margin: 0; padding: 0; }
-.account-profile__practice-list > li { align-items: center; border-top: 1px solid #e6eff0; display: flex; flex-wrap: wrap; gap: .65rem 1rem; justify-content: space-between; overflow-wrap: anywhere; padding: 1rem 0; }
+.account-profile__practice-list > li { align-items: center; border-top: 1px solid var(--c-e6eff0); display: flex; flex-wrap: wrap; gap: .65rem 1rem; justify-content: space-between; overflow-wrap: anywhere; padding: 1rem 0; }
 .account-profile__roles { display: flex; flex-wrap: wrap; gap: .4rem; }
-.account-profile__role { background: #e6f5f3; border: 1px solid #cde9e5; border-radius: 2rem; color: #14756e; font-size: .78rem; padding: .35rem .65rem; }
+.account-profile__role { background: var(--c-e6f5f3); border: 1px solid var(--c-cde9e5); border-radius: 2rem; color: var(--c-14756e); font-size: .78rem; padding: .35rem .65rem; }
 .account-profile__pagination { align-items: center; display: flex; flex-wrap: wrap; gap: .7rem; justify-content: flex-end; font-size: .85rem; }
-.account-profile .button { align-items: center; border: 1px solid #dbe7e8; border-radius: .65rem; cursor: pointer; display: inline-flex; font: inherit; font-size: .9rem; font-weight: 700; justify-content: center; line-height: 1.4; min-height: 2.8rem; padding: .7rem 1rem; text-align: center; text-decoration: none; }
-.account-profile .button-primary { background: #0b958a; border-color: #0b958a; color: #fff; }
-.account-profile .button-primary:hover { background: #087d74; }
-.account-profile .button-secondary { background: #fff; color: #23464e; }
-.account-profile a:focus-visible, .account-profile button:focus-visible { outline: 3px solid #99d8d4; outline-offset: 3px; }
+.account-profile .button { align-items: center; border: 1px solid var(--c-dbe7e8); border-radius: .65rem; cursor: pointer; display: inline-flex; font: inherit; font-size: .9rem; font-weight: 700; justify-content: center; line-height: 1.4; min-height: 2.8rem; padding: .7rem 1rem; text-align: center; text-decoration: none; }
+.account-profile .button-primary { background: var(--c-0b958a); border-color: var(--c-0b958a); color: var(--c-ffffff); }
+.account-profile .button-primary:hover { background: var(--c-087d74); }
+.account-profile .button-secondary { background: var(--c-ffffff); color: var(--c-23464e); }
+.account-profile a:focus-visible, .account-profile button:focus-visible { outline: 3px solid var(--c-99d8d4); outline-offset: 3px; }
 @media (max-width: 700px) { .account-profile__grid { grid-template-columns: minmax(0, 1fr); } .account-profile { margin-top: 1rem; } }
 @media (max-width: 380px) { .account-profile .management-actions > .button { width: 100%; } }
 /* Staff: details are read-only; security and the month so far sit beside them. */
 .account-profile__identity { align-items: center; display: flex; gap: 1rem; margin-bottom: 1rem; }
 .account-profile__identity > div { display: grid; gap: .3rem; min-width: 0; }
-.account-profile__identity strong { color: #11383e; font-size: 1.15rem; }
-.account-profile__identity span { color: #67828a; font-size: .9rem; overflow-wrap: anywhere; }
+.account-profile__identity strong { color: var(--c-11383e); font-size: 1.15rem; }
+.account-profile__identity span { color: var(--c-67828a); font-size: .9rem; overflow-wrap: anywhere; }
 .account-profile__identity .account-profile__roles { margin-top: .25rem; }
-.account-profile__avatar { align-items: center; background: #e6f5f3; border: 1px solid #cde9e5; border-radius: 50%; color: #14756e; display: inline-flex; flex: 0 0 auto; font-size: 1.15rem; font-weight: 700; height: 3.6rem; justify-content: center; width: 3.6rem; }
+.account-profile__avatar { align-items: center; background: var(--c-e6f5f3); border: 1px solid var(--c-cde9e5); border-radius: 50%; color: var(--c-14756e); display: inline-flex; flex: 0 0 auto; font-size: 1.15rem; font-weight: 700; height: 3.6rem; justify-content: center; width: 3.6rem; }
 .account-profile__card-heading { align-items: center; display: flex; flex-wrap: wrap; gap: .6rem; justify-content: space-between; margin-bottom: .7rem; }
 .account-profile__card-heading h2 { margin: 0; }
-.account-profile__identity .account-profile__role, .account-profile__card-heading .account-profile__role { color: #14756e; font-size: .74rem; padding: .25rem .6rem; }
-.account-profile__role--plain { background: #f3f8f8; border-color: #e2ecee; color: #4e6a70; }
-.account-profile__identity .account-profile__role--plain, .account-profile__card-heading .account-profile__role--plain { color: #4e6a70; }
-.account-profile__role--ok { background: #e8f5ee; border-color: #bfe0ce; }
-.account-profile__identity .account-profile__role--ok { color: #1a7a52; }
+.account-profile__identity .account-profile__role, .account-profile__card-heading .account-profile__role { color: var(--c-14756e); font-size: .74rem; padding: .25rem .6rem; }
+.account-profile__role--plain { background: var(--c-f3f8f8); border-color: var(--c-e2ecee); color: var(--c-4e6a70); }
+.account-profile__identity .account-profile__role--plain, .account-profile__card-heading .account-profile__role--plain { color: var(--c-4e6a70); }
+.account-profile__role--ok { background: var(--c-e8f5ee); border-color: var(--c-bfe0ce); }
+.account-profile__identity .account-profile__role--ok { color: var(--c-1a7a52); }
 .account-profile__details { margin: 0; }
-.account-profile__details > div { border-top: 1px solid #e6eff0; padding: .65rem 0; }
+.account-profile__details > div { border-top: 1px solid var(--c-e6eff0); padding: .65rem 0; }
 .account-profile__details > div:first-child { border-top: 0; }
 .account-profile__details dd { font-weight: 600; overflow-wrap: anywhere; text-align: right; }
-.account-profile__note { background: #f3f8f8; border: 1px dashed #d4e3e5; border-radius: .7rem; color: #67828a; font-size: .82rem; line-height: 1.55; margin: 1rem 0 0; padding: .75rem .9rem; }
+.account-profile__note { background: var(--c-f3f8f8); border: 1px dashed var(--c-d4e3e5); border-radius: .7rem; color: var(--c-67828a); font-size: .82rem; line-height: 1.55; margin: 1rem 0 0; padding: .75rem .9rem; }
 .account-profile__stack { display: grid; gap: 1rem; min-width: 0; align-content: start; }
-.account-profile__row { align-items: center; border-top: 1px solid #e6eff0; display: flex; flex-wrap: wrap; gap: .6rem 1rem; justify-content: space-between; padding: .8rem 0; }
+.account-profile__row { align-items: center; border-top: 1px solid var(--c-e6eff0); display: flex; flex-wrap: wrap; gap: .6rem 1rem; justify-content: space-between; padding: .8rem 0; }
 .account-profile__row:first-of-type { border-top: 0; }
 .account-profile__row > div { display: grid; gap: .2rem; }
-.account-profile__row span { color: #68828a; font-size: .82rem; }
+.account-profile__row span { color: var(--c-68828a); font-size: .82rem; }
 .account-profile__row form { margin: 0; }
 .account-profile__row .button { min-height: 2.5rem; padding: .5rem .9rem; }
 
 /* The month so far ends with its provisional total in rand. */
 .account-profile__details > .account-profile__total { align-items: baseline; }
-.account-profile__total dt { color: #11383e; font-weight: 600; }
-.account-profile__details .account-profile__total dd { color: #14756e; font-size: 1rem; font-variant-numeric: tabular-nums; font-weight: 700; white-space: nowrap; }
-.account-profile__details .account-profile__total dd span { color: #68828a; font-size: .8rem; font-weight: 500; white-space: normal; }
+.account-profile__total dt { color: var(--c-11383e); font-weight: 600; }
+.account-profile__details .account-profile__total dd { color: var(--c-14756e); font-size: 1rem; font-variant-numeric: tabular-nums; font-weight: 700; white-space: nowrap; }
+.account-profile__details .account-profile__total dd span { color: var(--c-68828a); font-size: .8rem; font-weight: 500; white-space: normal; }

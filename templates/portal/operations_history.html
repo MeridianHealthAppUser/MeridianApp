@@ -12,7 +12,7 @@
         <a class="ops-week-step" href="{{ prev_week_url }}" aria-label="Previous week">&lsaquo;</a>
         <h2 id="history-week-heading">Week {{ week_number }} &middot; <span class="ops-week-range">{{ week_start|date:"j M Y" }} &ndash; {{ week_end|date:"j M Y" }}</span></h2>
         <a class="ops-week-step" href="{{ next_week_url }}" aria-label="Next week">&rsaquo;</a>
-        {% if this_week_url %}<a class="ops-week-today" href="{{ this_week_url }}">This week</a>{% endif %}
+        {% if this_week_url %}<a class="ops-week-today" href="{{ this_week_url }}">{{ this_week_label|default:"This week" }}</a>{% endif %}
       </div>
     {% else %}
       <div><h2>Dispatched shipments</h2></div>
@@ -34,7 +34,7 @@
         {# What went out, as saved at dispatch. #}
         <td data-label="Parcel">{% if shipment.dispatch_snapshot.items %}{% for item in shipment.dispatch_snapshot.items %}<div>{{ item.product }} × {{ item.quantity }}<small>{{ item.dose }}</small></div>{% endfor %}{% else %}{% for item in shipment.items.all %}<div>{{ item.product }} × {{ item.quantity }}<small>{{ item.dose }}</small></div>{% empty %}—{% endfor %}{% endif %}</td>
         <td data-label="Dispatched">{{ shipment.dispatched_at|date:'j M Y, H:i' }} SAST</td>
-        <td data-label="Status"><span class="console-status console-status--{{ shipment.status }}">{{ shipment.get_status_display }}</span></td>
+        <td data-label="Status"><span class="console-status console-status--{{ shipment.status }}">{{ shipment.get_status_display }}</span>{% if shipment.courier_status_label %}<small>The Courier Guy: {{ shipment.courier_status_label }}</small>{% endif %}</td>
         <td data-label="Note">{% if shipment.note %}<span class="ops-note">{{ shipment.note }}</span>{% else %}—{% endif %}</td>
         <td data-label="Actions"><a class="console-button console-button--secondary" href="{% url 'portal:ops-shipment-detail' shipment.pk %}">Open record</a></td>
       </tr>{% empty %}<tr><td class="ops-empty" colspan="7">{% if by_week %}Nothing was dispatched this week.{% else %}No dispatch history matches this view.{% endif %}</td></tr>{% endfor %}</tbody>

@@ -8,6 +8,7 @@ from django.test import TestCase, override_settings
 from django.urls import reverse
 
 from care.messaging import start_conversation
+from care.models import PracticeSettings
 from care.team_messaging import start_team_conversation
 from practices.models import Company, CompanyMembership, Patient
 from practices.services import ACTIVE_COMPANY_SESSION_KEY
@@ -20,6 +21,8 @@ class StaffMenuTests(TestCase):
     def setUpTestData(cls):
         User = get_user_model()
         cls.company = Company.objects.create(name='Menu Practice', slug='menu-practice')
+        # Doctors don't ship here (test_doctors_who_ship_get_weekly_shipping switches it on).
+        PracticeSettings.objects.create(company=cls.company, doctors_ship=False)
         cls.people = {}
         for role in ('doctor', 'practice_admin', 'super_admin'):
             user = User.objects.create_user(email=f'{role}@menu.test')
@@ -93,6 +96,25 @@ class StaffMenuTests(TestCase):
                 self.assertIn(reverse(f'portal:{name}'), paths)
                 self.assertEqual(self.client.get(reverse(f'portal:{name}')).status_code, 200)
 
+    def test_doctors_who_ship_get_weekly_shipping_and_dispatch_history_only(self):
+        PracticeSettings.objects.filter(company=self.company).update(doctors_ship=True)
+        self.login('doctor')
+        overview = self.client.get(reverse('portal:desktop-dashboard')).content.decode()
+        sidebar = overview[overview.index('class="console-nav'):]
+        sidebar = sidebar[:sidebar.index('</nav>')]
+        self.assertIn(f'href="{reverse("portal:ops-shipping")}"', sidebar)
+        self.assertIn('<span class="console-nav__text">Weekly shipping</span>', sidebar)
+        page = self.client.get(reverse('portal:ops-shipping'))
+        self.assertEqual(page.status_code, 200)
+        tabs = page.content.decode()
+        tabs = tabs[tabs.index('class="patient-workspace-tabs"'):]
+        tabs = tabs[:tabs.index('</nav>')]
+        self.assertEqual(re.findall(r'<a href="[^"]+"[^>]*>([^<]+)', tabs), ['Weekly shipping', 'Dispatch history'])
+        self.assertEqual(self.client.get(reverse('portal:ops-history')).status_code, 200)
+        for name in ('treatment-subscriptions', 'ops-orders', 'ops-catalogue', 'ops-billing', 'staff-leads'):
+            with self.subTest(page=name):
+                self.assertEqual(self.client.get(reverse(f'portal:{name}')).status_code, 403)
+
     def test_clinicians_get_a_flat_menu_with_patient_records_and_messages_and_its_red_unread_count(self):
         doctor, admin = self.people['doctor'], self.people['practice_admin']
         patient_user = get_user_model().objects.create_user(email='patient@menu.test')
@@ -133,9 +155,10 @@ class StaffMenuTests(TestCase):
         self.login('practice_admin')
         tabs = {
             'Operations': [('treatment-subscriptions', 'Subscriptions'), ('ops-orders', 'Non-prescription requests'),
-                           ('ops-shipping', 'Weekly shipping list'), ('ops-stock', 'Dispatch stock'),
-                           ('ops-history', 'Dispatch history'), ('ops-catalogue', 'Catalogue')],
-            'Administration': [('staff-leads', 'Leads'), ('dropouts', 'Dropouts'), ('staff-data-requests', 'Data requests')],
+                           ('ops-shipping', 'Weekly shipping'), ('ops-history', 'Dispatch history'),
+                           ('ops-catalogue', 'Catalogue'), ('ops-billing', 'Billing')],
+            'Administration': [('staff-leads', 'Leads'), ('dropouts', 'Dropouts'), ('staff-data-requests', 'Data requests'),
+                               ('email-log', 'Emails')],
         }
         for group, pages in tabs.items():
             for name, label in pages:
@@ -148,13 +171,11 @@ class StaffMenuTests(TestCase):
                     self.assertEqual(re.findall(r'<a href="[^"]+"[^>]*>([^<]+)', nav), [tab for _, tab in pages])
                     self.assertIn(f'<a href="{reverse(f"portal:{name}")}" class="is-active" aria-current="page">{label}', nav)
                     # Each tab's table has its search at the top right with the Filters menu before it, except
-                    # Dispatch stock (one row per catalogue item for a week, with nothing to search) and Dispatch
-                    # history, which opens on a week: its search only, the week being the dates.
-                    if name != 'ops-stock':
-                        self.assertContains(response, 'class="staff-list-tools"')
-                        self.assertContains(response, 'data-conversation-search')
-                        if name != 'ops-history':
-                            self.assertTrue(response.context['filter_menu']['sections'])
+                    # Dispatch history, which opens on a week: its search only, the week being the dates.
+                    self.assertContains(response, 'class="staff-list-tools"')
+                    self.assertContains(response, 'data-conversation-search')
+                    if name != 'ops-history':
+                        self.assertTrue(response.context['filter_menu']['sections'])
                     self.assertNotContains(response, 'Apply filters')
                     # The menu entry stays current on every tab.
                     sidebar = html[html.index('class="console-nav'):]

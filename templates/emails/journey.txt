@@ -1,0 +1,5 @@
+{% extends 'emails/base.txt' %}{% block content %}Hello{% if greeting %} {{ greeting }}{% endif %},
+{% for paragraph in paragraphs %}
+{{ paragraph }}
+{% endfor %}{% if url %}
+{{ label }}: {{ url }}{% endif %}{% endblock %}

@@ -163,7 +163,7 @@ class PatientProfileView(PatientCarePage):
             shipping_address=', '.join(part for part in patient_address(self.patient_company, self.patient) if part),
             support_email=settings.SUPPORT_EMAIL,
             details_change_url=f"mailto:{settings.SUPPORT_EMAIL}?{urlencode({'subject': subject}, quote_via=quote)}",
-            consents=self.consents(),
+            consents=self.consents(), journey_emails=not (preference and preference.journey_emails_off_at),
             **patient_data_requests(request, self.patient_company, self.patient))
         return render(request, 'portal/patient_profile.html', context)
 
@@ -171,6 +171,8 @@ class PatientProfileView(PatientCarePage):
         return self.display(request)
 
     def post(self, request):
+        if request.POST.get('section') == 'journeys':
+            return self.save_journey_emails(request)
         form = CommunicationPreferenceForm(request.POST)
         valid = form.is_valid()
         try:
@@ -188,6 +190,23 @@ class PatientProfileView(PatientCarePage):
                 messages.success(request, 'Your preferences have been saved. Recorded consent is unchanged.' if changed else 'Your preferences are already up to date.')
                 return redirect(f"{reverse('portal:patient-profile')}#profile-marketing")
         return self.display(request, form)
+
+
+    def save_journey_emails(self, request):
+        """Emails about your care (care.journeys): on unless the patient turned them off, here or from a link."""
+        from care.models import PatientCommunicationPreference
+
+        wanted = request.POST.get('journey_emails') == 'on'
+        preference, _ = PatientCommunicationPreference.objects.get_or_create(company=self.patient_company, patient=self.patient)
+        if wanted == (preference.journey_emails_off_at is None):
+            messages.success(request, 'Your preferences are already up to date.')
+        else:
+            preference.journey_emails_off_at = None if wanted else timezone.now()
+            preference.save(update_fields=('journey_emails_off_at', 'updated_at'))
+            record_audit(company=self.patient_company, actor=request.user, patient=self.patient, target=preference,
+                         action='privacy.preference_updated', request=request, metadata={'journey_emails': wanted})
+            messages.success(request, 'Your email preferences have been saved.')
+        return redirect(f"{reverse('portal:patient-profile')}#profile-journeys")
 
 
 class PatientDataRequestCreateView(PatientProfileView):

@@ -3,21 +3,21 @@
    in patient_theme.css (the practice console's teal); these are the same values,
    for pages without it. */
 .patient-pages-console {
-  --patient-amber-soft: #fcf3e2;
-  --patient-amber-line: #ebd5ac;
-  --patient-blue: #056f69;
-  --patient-blue-soft: #e4f5f1;
-  --patient-blue-line: #b9d9d3;
-  --patient-teal-line: #b9d9d3;
-  --patient-rose-soft: #fbedeb;
-  --patient-rose-line: #efccc8;
-  --patient-badge: #d92d20;
+  --patient-amber-soft: var(--c-fcf3e2);
+  --patient-amber-line: var(--c-ebd5ac);
+  --patient-blue: var(--c-056f69);
+  --patient-blue-soft: var(--c-e4f5f1);
+  --patient-blue-line: var(--c-b9d9d3);
+  --patient-teal-line: var(--c-b9d9d3);
+  --patient-rose-soft: var(--c-fbedeb);
+  --patient-rose-line: var(--c-efccc8);
+  --patient-badge: var(--c-d92d20);
 }
 
 /* Sidebar: five destinations, with the unread count after My Messages. */
 .patient-navigation a { position: relative; }
 .patient-navigation a .patient-navigation__badge {
-  align-items: center; background: var(--patient-badge); border-radius: 999px; color: #fff; display: inline-flex; flex: 0 0 auto;
+  align-items: center; background: var(--patient-badge); border-radius: 999px; color: var(--c-ffffff); display: inline-flex; flex: 0 0 auto;
   font-size: .68rem; font-variant-numeric: tabular-nums; font-weight: 700; height: 1.15rem; justify-content: center; line-height: 1;
   margin-left: -.15rem; min-width: 1.15rem; padding: 0 .35rem; white-space: nowrap;
 }
@@ -59,7 +59,7 @@
 
 /* One task, or the next consult. */
 .patient-bar {
-  align-items: flex-start; background: #fff; border: 1px solid var(--console-line); border-radius: .9rem;
+  align-items: flex-start; background: var(--c-ffffff); border: 1px solid var(--console-line); border-radius: .9rem;
   display: flex; gap: .85rem; padding: 1rem 1.1rem;
 }
 .patient-bar > .patient-pill { flex: 0 0 auto; justify-content: center; min-width: 6.6rem; }
@@ -100,8 +100,8 @@
 .patient-card-actions--split > .patient-card-actions__wide { grid-column: 1 / -1; }
 .workspace-page .meridian-console .console-button.patient-button--rose { border-color: var(--patient-rose-line); color: var(--console-red); }
 /* A filled red button, such as Sign out. */
-.workspace-page .meridian-console .console-button.patient-button--red { background: var(--console-red); border-color: var(--console-red); color: #fff; }
-.workspace-page .meridian-console .console-button.patient-button--red:hover { background: color-mix(in srgb, var(--console-red) 86%, #000); border-color: color-mix(in srgb, var(--console-red) 86%, #000); }
+.workspace-page .meridian-console .console-button.patient-button--red { background: var(--console-red); border-color: var(--console-red); color: var(--c-ffffff); }
+.workspace-page .meridian-console .console-button.patient-button--red:hover { background: color-mix(in srgb, var(--console-red) 86%, var(--c-000000)); border-color: color-mix(in srgb, var(--console-red) 86%, var(--c-000000)); }
 /* Buttons one above the other, each the full width of the card. */
 .patient-card-actions--stack { flex-direction: column; }
 .patient-card-actions--stack > form { margin: 0; }
@@ -117,11 +117,11 @@
 .patient-chip-row { display: flex; flex-wrap: wrap; gap: .4rem; }
 .patient-chip-row[hidden] { display: none; }
 .patient-chip {
-  background: #fff; border: 1px solid var(--console-line); border-radius: 999px; color: var(--patient-text); cursor: pointer;
+  background: var(--c-ffffff); border: 1px solid var(--console-line); border-radius: 999px; color: var(--patient-text); cursor: pointer;
   font: inherit; font-size: .76rem; font-weight: 500; padding: .32rem .75rem;
 }
 .patient-chip:hover { border-color: var(--patient-teal-line); color: var(--console-teal-dark); }
-.patient-chip[aria-pressed="true"], a.patient-chip.is-active { background: var(--console-ink); border-color: var(--console-ink); color: #fff; }
+.patient-chip[aria-pressed="true"], a.patient-chip.is-active { background: var(--console-ink); border-color: var(--console-ink); color: var(--c-ffffff); }
 .patient-chip:focus-visible { outline: 3px solid var(--console-teal); outline-offset: 2px; }
 a.patient-chip { display: inline-block; text-decoration: none; }
 
@@ -164,20 +164,20 @@ a.patient-chip { display: inline-block; text-decoration: none; }
 .patient-slots { border: 0; margin: 0; min-width: 0; padding: 0; }
 .patient-slots legend { color: var(--console-ink); font-size: .88rem; font-weight: 500; margin-bottom: .65rem; padding: 0; }
 .patient-slots__grid { display: grid; gap: .5rem; grid-template-columns: repeat(auto-fill, minmax(7.2rem, 1fr)); max-height: 22rem; overflow-y: auto; overscroll-behavior-y: contain; padding: .2rem; }
-.patient-slot { background: #fff; border: 1px solid var(--console-line); border-radius: .65rem; cursor: pointer; display: block; min-width: 0; padding: .6rem .4rem; position: relative; text-align: center; }
+.patient-slot { background: var(--c-ffffff); border: 1px solid var(--console-line); border-radius: .65rem; cursor: pointer; display: block; min-width: 0; padding: .6rem .4rem; position: relative; text-align: center; }
 .patient-pages-console .patient-slot input { height: 1px; margin: 0; opacity: 0; padding: 0; position: absolute; width: 1px; }
 .patient-slot > span { display: grid; gap: .12rem; }
 .patient-slot strong { color: var(--console-ink); font-size: .95rem; font-variant-numeric: tabular-nums; font-weight: 500; }
 .patient-slot small { color: var(--console-muted); font-size: .7rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .patient-slot:hover { border-color: var(--patient-teal-line); }
 .patient-slot:has(input:checked) { background: var(--console-teal-dark); border-color: var(--console-teal-dark); }
-.patient-slot:has(input:checked) strong, .patient-slot:has(input:checked) small { color: #fff; }
+.patient-slot:has(input:checked) strong, .patient-slot:has(input:checked) small { color: var(--c-ffffff); }
 .patient-slot:focus-within { outline: 3px solid var(--console-teal); outline-offset: 2px; }
 .patient-book__actions { align-items: center; display: flex; flex-wrap: wrap; gap: .5rem 1rem; }
 .patient-book__actions .patient-small { margin: 0; }
 
 /* Collapsed history kept below the main content. */
-.patient-history { background: #fff; border: 1px solid var(--console-line); border-radius: .9rem; margin-top: 1.4rem; }
+.patient-history { background: var(--c-ffffff); border: 1px solid var(--console-line); border-radius: .9rem; margin-top: 1.4rem; }
 .patient-history > summary { color: var(--console-teal-dark); cursor: pointer; font-size: .88rem; font-weight: 500; list-style: none; padding: .95rem 1.15rem; }
 .patient-history > summary::-webkit-details-marker { display: none; }
 .patient-history > summary::after { content: '+'; float: right; font-weight: 500; }
@@ -195,7 +195,7 @@ a.patient-chip { display: inline-block; text-decoration: none; }
   .patient-navigation__prefix { display: none; }
   .patient-navigation a { flex: 1 0 4.2rem; }
   /* The tab bar puts each label under its icon, so the count sits beside the icon instead. */
-  .patient-navigation a .patient-navigation__badge { box-shadow: 0 0 0 2px #fff; left: calc(50% + .65rem); margin: 0; position: absolute; top: .3rem; }
+  .patient-navigation a .patient-navigation__badge { box-shadow: 0 0 0 2px var(--c-ffffff); left: calc(50% + .65rem); margin: 0; position: absolute; top: .3rem; }
   .patient-navigation a.is-active .patient-navigation__badge { box-shadow: 0 0 0 2px var(--console-teal-soft); }
 }
 

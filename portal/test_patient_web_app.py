@@ -150,7 +150,8 @@ class PatientWebAppTests(TestCase):
         self.assertContains(response, 'My active subscription')
         self.assertContains(response, 'Inject once a week.')
         self.assertContains(response, 'Cancel my subscription')
-        self.assertContains(response, 'Reference amount only. No payment is collected in this app.')
+        # Payments are on Billing and payments (24 Oct 2026).
+        self.assertContains(response, 'Billing and payments')
         self.assertContains(response, '<details class="patient-history" id="treatment-history">')
         self.assertContains(self.page('patient-treatment', page=1), '<details class="patient-history" id="treatment-history" open>')
         self.assertContains(response, 'Height')
@@ -222,13 +223,14 @@ class PatientWebAppTests(TestCase):
 
     def test_brand_theme_fonts_are_served_from_the_app(self):
         theme = Path(finders.find('css/patient_theme.css')).read_text()
-        # The practice console's teal (console.css), not the brand blues the logo keeps.
+        # The practice console's teal (console.css), not the brand blues the logo keeps. Colours are theme tokens
+        # (scripts/theme_tokens.py): var(--c-07877f) is #07877f in light mode.
         console = Path(finders.find('css/console.css')).read_text()
         for colour in ('#07877f', '#056f69', '#e4f5f1'):
-            self.assertIn(colour, theme)
-            self.assertIn(colour, console)
+            self.assertIn(f'var(--c-{colour[1:]})', theme)
+            self.assertIn(f'var(--c-{colour[1:]})', console)
         for colour in ('#29698b', '#0097b2', '#1599de', '#1072aa'):
-            self.assertNotIn(colour, theme)
+            self.assertNotIn(f'--c-{colour[1:]}', theme)
         # Roboto is self-hosted and loaded on every page, the practice console's included.
         faces = Path(finders.find('css/fonts.css')).read_text()
         fonts = re.findall(r"url\('\.\./(fonts/[^']+)'\)", faces)
