@@ -1,3 +1,8 @@
+(window.MeridianPages?.register || ((_name, initialize) => initialize(null)))('conversation_search', (lifecycle) => {
+  const replaceUrl = value => window.MeridianNavigation?.replaceUrl ? window.MeridianNavigation.replaceUrl(value) : window.history.replaceState(window.history.state, '', value);
+  const listen = lifecycle ? lifecycle.on : (target, ...args) => target?.addEventListener(...args);
+  const setTimeout = lifecycle ? lifecycle.timeout : window.setTimeout.bind(window);
+  const fetch = lifecycle ? lifecycle.fetch : (...args) => window.fetch(...args);
 /* Conversation search (Patient messages, Team messages, the record's Messages tab and My Messages):
    the list follows the search as you type. Each part of the page marked data-search-region is
    refreshed from the same part of the result. The result never includes the open conversation, so
@@ -16,7 +21,7 @@
   let suspended = false;
   let needsSearch = false;
 
-  document.addEventListener('messages:stopped', () => {
+  listen(document, 'messages:stopped', () => {
     stopped = true;
     window.clearTimeout(timer);
     pending?.abort();
@@ -81,24 +86,24 @@
     const address = new URL(window.location.href);
     if (query) address.searchParams.set('q', query); else address.searchParams.delete('q');
     address.searchParams.delete('page');
-    window.history.replaceState(null, '', address);
+    replaceUrl(address);
     needsSearch = false;
     document.dispatchEvent(new CustomEvent('messages:searched'));
   }
 
-  input.addEventListener('input', () => {
+  listen(input, 'input', () => {
     if (stopped || suspended) return;
     needsSearch = true;
     if (clear) clear.hidden = !input.value;
     window.clearTimeout(timer);
-    timer = window.setTimeout(search, 200);
+    timer = setTimeout(search, 200);
   });
-  form.addEventListener('submit', (event) => {
+  listen(form, 'submit', (event) => {
     event.preventDefault();
     window.clearTimeout(timer);
     search();
   });
-  if (clear) clear.addEventListener('click', (event) => {
+  if (clear) listen(clear, 'click', (event) => {
     event.preventDefault();
     input.value = '';
     clear.hidden = true;
@@ -122,8 +127,12 @@
     if (needsSearch) search();
   }
 
-  document.addEventListener('workspace:navigating', suspend);
-  document.addEventListener('workspace:navigation-cancelled', resume);
-  window.addEventListener('pagehide', suspend);
-  window.addEventListener('pageshow', resume);
+  lifecycle?.cleanup(() => { stopped = true; suspend(); });
+
+  listen(document, 'workspace:navigating', suspend);
+  listen(document, 'workspace:navigation-cancelled', resume);
+  listen(window, 'pagehide', suspend);
+  listen(window, 'pageshow', resume);
 })();
+
+});

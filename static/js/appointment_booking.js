@@ -1,3 +1,6 @@
+(window.MeridianPages?.register || ((_name, initialize) => initialize(null)))('appointment_booking', (lifecycle) => {
+  const listen = lifecycle ? lifecycle.on : (target, ...args) => target?.addEventListener(...args);
+  const fetch = lifecycle ? lifecycle.fetch : (...args) => window.fetch(...args);
 /* Booking an appointment (templates/portal/includes/appointment_booking_fields.html), and moving one: Time is a grid
    of the clinician's day in 15-minute slots (static/css/time_slots.css, as Available time shows it). It waits for a
    date and a clinician, then shows every slot in their hours: the ones a booking of the chosen length can start in
@@ -18,11 +21,13 @@
     if (!clinician || !date || !time || !window.fetch) return;
     const submit = fields.closest('form')?.querySelector('button[type="submit"]');
     const everyQuarterHour = [...time.options].map((option) => new Option(option.text, option.value));
+    const originallyDisabled = time.disabled;
     let chosen = time.value;
     let pending = null;
 
     // The grid takes the Time field's place, with its label and any error from the last try.
     const field = time.closest('.console-form__field') || time.parentElement;
+    const originallyHidden = field.hidden;
     const picker = document.createElement('div');
     picker.className = 'slot-picker';
     picker.setAttribute('role', 'group');
@@ -39,6 +44,15 @@
     picker.append(heading, status, grid, ...field.querySelectorAll('.errorlist'));
     field.after(picker);
     field.hidden = true;
+    lifecycle?.cleanup(() => {
+      pending?.abort();
+      const selected = time.value || chosen;
+      time.replaceChildren(...everyQuarterHour.map(option => new Option(option.text, option.value, false, option.value === selected)));
+      time.disabled = originallyDisabled;
+      field.append(...picker.querySelectorAll('.errorlist'));
+      field.hidden = originallyHidden;
+      picker.remove();
+    });
 
     function ready() {
       if (submit) submit.disabled = [patient, clinician, appointmentType, date, duration, time].some((input) => input && (!input.value || input.disabled));
@@ -73,7 +87,7 @@
         element.type = 'button';
         element.dataset.time = slot.time;
         element.setAttribute('aria-pressed', String(slot.time === chosen));
-        element.addEventListener('click', () => choose(slot.time));
+        listen(element, 'click', () => choose(slot.time));
       } else {
         element.setAttribute('aria-disabled', 'true');
       }
@@ -113,15 +127,15 @@
       }
     }
 
-    time.addEventListener('change', () => { chosen = time.value; });
-    fields.addEventListener('change', ready);
-    fields.addEventListener('input', ready);
-    [clinician, date, duration, patient].filter(Boolean).forEach((input) => input.addEventListener('change', refresh));
+    listen(time, 'change', () => { chosen = time.value; });
+    listen(fields, 'change', ready);
+    listen(fields, 'input', ready);
+    [clinician, date, duration, patient].filter(Boolean).forEach((input) => listen(input, 'change', refresh));
     const dialog = fields.closest('dialog');
-    if (dialog && !dialog.open) dialog.addEventListener('dialog:open', refresh, { once: true });
+    if (dialog && !dialog.open) listen(dialog, 'dialog:open', refresh, { once: true });
     else refresh();
     if (dialog) {
-      document.addEventListener('click', (event) => {
+      listen(document, 'click', (event) => {
         const slot = event.target.closest('[data-book-slot]');
         if (!slot || slot.dataset.modalOpen !== dialog.id) return;
         clinician.value = slot.dataset.clinician;
@@ -132,3 +146,5 @@
     }
   });
 })();
+
+});

@@ -1,3 +1,5 @@
+(window.MeridianPages?.register || ((_name, initialize) => initialize(null)))('conversations', (lifecycle) => {
+  const listen = lifecycle ? lifecycle.on : (target, ...args) => target?.addEventListener(...args);
 /* Conversations (the record's Messages tab, Patient messages and Team messages): newest message in
    view, Enter sends, and the reply box ready when a conversation was opened. The page stays at the
    top so the heading and tabs stay in view. On Patient messages and Team messages the block runs to
@@ -16,19 +18,19 @@
       block.style.setProperty('--inbox-top', `${Math.round(block.getBoundingClientRect().top + window.scrollY)}px`);
       keep();
     };
-    if (notes) notes.querySelector('summary').addEventListener('click', keep);
+    if (notes) listen(notes.querySelector('summary'), 'click', keep);
     fit();
-    window.addEventListener('resize', fit);
-    window.addEventListener('load', fit);
-    if (document.fonts) document.fonts.ready.then(fit);
+    listen(window, 'resize', fit);
+    listen(window, 'load', fit);
+    if (document.fonts) document.fonts.ready.then(() => { if (!lifecycle || lifecycle.isActive) fit(); });
   }
   const conversation = block.querySelector('[data-record-conversation]');
   if (conversation) conversation.scrollTop = conversation.scrollHeight;
   const reply = block.querySelector('[data-record-reply] textarea');
   if (reply) {
     const grow = () => { reply.style.height = 'auto'; reply.style.height = `${Math.min(reply.scrollHeight, 160)}px`; };
-    reply.addEventListener('input', grow);
-    reply.addEventListener('keydown', (event) => {
+    listen(reply, 'input', grow);
+    listen(reply, 'keydown', (event) => {
       // Enter sends; Shift+Enter starts a new line.
       if (event.key !== 'Enter' || event.shiftKey || event.isComposing) return;
       event.preventDefault();
@@ -40,3 +42,5 @@
     }
   }
 })();
+
+});

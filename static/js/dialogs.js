@@ -1,3 +1,6 @@
+(window.MeridianPages?.register || ((_name, initialize) => initialize(null)))('dialogs', (lifecycle) => {
+  const replaceUrl = value => window.MeridianNavigation?.replaceUrl ? window.MeridianNavigation.replaceUrl(value) : window.history.replaceState(window.history.state, '', value);
+  const listen = lifecycle ? lifecycle.on : (target, ...args) => target?.addEventListener(...args);
 /* Modal dialogs. A [data-modal-open="id"] button or link opens <dialog class="app-dialog" id="id"> as a modal;
    without scripts the link goes to a page with the same form instead. A dialog the server opened (after a form
    error) becomes a modal too. Cancel ([data-dialog-close]) or a click on the backdrop closes it. A dialog opens
@@ -17,16 +20,17 @@
 
   document.querySelectorAll('dialog.app-dialog').forEach((dialog) => {
     if (typeof dialog.showModal !== 'function') return;
-    dialog.querySelectorAll('[data-dialog-close]').forEach((button) => button.addEventListener('click', (event) => {
+    lifecycle?.cleanup(() => { if (dialog.open) dialog.close(); });
+    dialog.querySelectorAll('[data-dialog-close]').forEach((button) => listen(button, 'click', (event) => {
       event.preventDefault();
       dialog.close();
     }));
-    dialog.addEventListener('click', (event) => { if (event.target === dialog) dialog.close(); });
+    listen(dialog, 'click', (event) => { if (event.target === dialog) dialog.close(); });
     if (dialog.hasAttribute('open')) open(dialog);
   });
 
   // Conversation headers can refresh while their existing dialogs stay in place.
-  document.addEventListener('click', (event) => {
+  listen(document, 'click', (event) => {
     const trigger = event.target.closest('[data-modal-open]');
     if (!trigger) return;
     const dialog = document.getElementById(trigger.dataset.modalOpen);
@@ -39,6 +43,8 @@
   const url = new URL(window.location.href);
   if (url.searchParams.has('update')) {
     url.searchParams.delete('update');
-    window.history.replaceState(null, '', url.pathname + url.search + url.hash);
+    replaceUrl(url.pathname + url.search + url.hash);
   }
 })();
+
+});

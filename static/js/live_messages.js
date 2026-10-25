@@ -1,3 +1,8 @@
+(window.MeridianPages?.register || ((_name, initialize) => initialize(null)))('live_messages', (lifecycle) => {
+  const listen = lifecycle ? lifecycle.on : (target, ...args) => target?.addEventListener(...args);
+  const setTimeout = lifecycle ? lifecycle.timeout : window.setTimeout.bind(window);
+  const setInterval = lifecycle ? lifecycle.interval : window.setInterval.bind(window);
+  const fetch = lifecycle ? lifecycle.fetch : (...args) => window.fetch(...args);
 /* WebSockets carry invalidations only. Authorised HTML/JSON comes from Django, and PostgreSQL
    supplies missed messages after a disconnect. Keep the composer and its unsent text in place. */
 (() => {
@@ -16,6 +21,7 @@
   const token = () => config.querySelector('[name="csrfmiddlewaretoken"]')?.value;
 
   function notice(text, reload = false) {
+    if (lifecycle && !lifecycle.isActive) return;
     let box = document.querySelector('[data-live-status]');
     if (!box) {
       box = document.createElement('p');
@@ -36,6 +42,7 @@
   }
 
   function updateCounts(data) {
+    if (lifecycle && !lifecycle.isActive) return;
     for (const name of ['patient', 'team', 'total']) {
       const count = Math.max(0, Number(data[name]) || 0);
       document.querySelectorAll(`[data-live-unread="${name}"]`).forEach(el => {
@@ -62,7 +69,7 @@
       const form = pane.querySelector('form textarea')?.form;
       pane.replaceChildren(...(form ? [form] : []));
       if (form) {
-        form.addEventListener('submit', event => event.preventDefault());
+        listen(form, 'submit', event => event.preventDefault());
         form.querySelectorAll('button, select').forEach(el => { el.disabled = true; });
       }
     });
@@ -72,6 +79,7 @@
   }
 
   function validScope(other) {
+    if (lifecycle && !lifecycle.isActive) return false;
     if (!other || other !== scope) { stop(); return false; }
     return !stopped;
   }
@@ -86,6 +94,7 @@
     try {
       const response = await fetch(url, { credentials: 'same-origin', cache: 'no-store', signal: controller.signal, ...options,
         headers: { ...headers, ...options.headers } });
+      if (lifecycle && !lifecycle.isActive) throw new Error('Page is inactive');
       if ([401, 403, 409].includes(response.status)) { stop(); throw new Error('Access changed'); }
       // Keep the cancellation and timeout active until the whole body has arrived.
       const body = await response.text();
@@ -245,13 +254,14 @@
   }
 
   function sendError(form, text) {
+    if (lifecycle && !lifecycle.isActive) return;
     let error = form.querySelector('[data-live-send-error]');
     if (!error) { error = document.createElement('p'); error.dataset.liveSendError = ''; error.className = 'live-message-error'; error.setAttribute('role', 'alert'); form.prepend(error); }
     error.textContent = text;
     error.hidden = !text;
   }
 
-  document.addEventListener('submit', async event => {
+  listen(document, 'submit', async event => {
     const form = event.target.closest('[data-live-reply]');
     if (!form) return;
     event.preventDefault();
@@ -283,6 +293,7 @@
       if (!stopped && !suspended) sendError(form, 'We could not confirm whether this message was sent. Your draft is saved here. Check the conversation before sending again.');
     } finally {
       sending = false;
+      if (lifecycle && !lifecycle.isActive) return;
       form.removeAttribute('aria-busy');
       form.querySelectorAll('button[type="submit"]').forEach(el => { el.disabled = stopped || messageList()?.dataset.liveClosed === 'true'; });
       scheduleRefresh();
@@ -328,6 +339,14 @@
     socket?.close();
   }
 
+  lifecycle?.cleanup(() => {
+    stopped = true;
+    suspend();
+    // A delayed close/message from the old socket must never stop the new page.
+    socket = null;
+    clearInterval(heartbeatTimer); clearInterval(pollTimer);
+  });
+
   function resume() {
     if (stopped) return;
     suspended = false;
@@ -335,19 +354,19 @@
     scheduleRefresh(); scheduleRead();
   }
 
-  document.addEventListener('visibilitychange', () => {
+  listen(document, 'visibilitychange', () => {
     if (!document.hidden) { scheduleRefresh(); scheduleRead(); }
   });
-  document.addEventListener('messages:access-changed', stop);
-  document.addEventListener('messages:searching', () => { searching = true; revision += 1; });
-  document.addEventListener('messages:searched', () => { searching = false; scheduleRefresh(); });
-  document.addEventListener('scroll', scheduleRead, true);
-  window.addEventListener('resize', scheduleRead);
-  window.addEventListener('online', () => { scheduleRefresh(); if (!socket || socket.readyState > 1) connect(); });
-  document.addEventListener('workspace:navigating', suspend);
-  document.addEventListener('workspace:navigation-cancelled', resume);
-  window.addEventListener('pageshow', resume);
-  window.addEventListener('pagehide', suspend);
+  listen(document, 'messages:access-changed', stop);
+  listen(document, 'messages:searching', () => { searching = true; revision += 1; });
+  listen(document, 'messages:searched', () => { searching = false; scheduleRefresh(); });
+  listen(document, 'scroll', scheduleRead, true);
+  listen(window, 'resize', scheduleRead);
+  listen(window, 'online', () => { scheduleRefresh(); if (!socket || socket.readyState > 1) connect(); });
+  listen(document, 'workspace:navigating', suspend);
+  listen(document, 'workspace:navigation-cancelled', resume);
+  listen(window, 'pageshow', resume);
+  listen(window, 'pagehide', suspend);
   const pollTimer = setInterval(() => { scheduleRefresh(); scheduleRead(); }, 30000);
   heartbeatTimer = setInterval(() => {
     if (!stopped && !suspended && socket && socket.readyState < 2 && Date.now() - lastSocketMessage > 65000) socket.close();
@@ -357,3 +376,5 @@
   if (initial && initial.dataset.liveHistory !== 'older') initial.scrollTop = initial.scrollHeight;
   connect(); scheduleRefresh(); scheduleRead();
 })();
+
+});

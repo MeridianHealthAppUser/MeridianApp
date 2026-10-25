@@ -1,3 +1,7 @@
+(window.MeridianPages?.register || ((_name, initialize) => initialize(null)))('record_overview', (lifecycle) => {
+  const replaceUrl = value => window.MeridianNavigation?.replaceUrl ? window.MeridianNavigation.replaceUrl(value) : window.history.replaceState(window.history.state, '', value);
+  const listen = lifecycle ? lifecycle.on : (target, ...args) => target?.addEventListener(...args);
+  const setTimeout = lifecycle ? lifecycle.timeout : window.setTimeout.bind(window);
 /* The clinical Overview of a patient record: the log filter, the consult note pop-up, the
    prescription dialogs and inline summary editing. The Weight tab uses the consult note pop-up too.
    Without scripts, each of these still works through ordinary links and forms. */
@@ -6,6 +10,7 @@
   const card = document.querySelector('[data-bloods-form]');
   const dialog = document.getElementById('record-bloods-dialog');
   if (!card || !dialog || typeof dialog.showModal !== 'function') return;
+  lifecycle?.cleanup(() => { if (dialog.open) dialog.close(); });
   const field = card.querySelector('textarea[name="tests"]');
   const previewForm = dialog.querySelector('[data-bloods-preview-form]');
   const frame = dialog.querySelector('[data-bloods-frame]');
@@ -16,7 +21,7 @@
   }
   // A preview that comes back as a page rather than the PDF couldn't be made: say why in a toast too.
   let previewing = false;
-  if (frame) frame.addEventListener('load', () => {
+  if (frame) listen(frame, 'load', () => {
     if (!previewing) return;
     previewing = false;
     let page = null;
@@ -30,7 +35,7 @@
     previewing = true;
     previewForm.submit();
   }
-  card.addEventListener('submit', (event) => {
+  listen(card, 'submit', (event) => {
     if (!field.value.trim()) return;  // The browser asks for the required text.
     event.preventDefault();
     fill(field.value.trim());
@@ -59,9 +64,9 @@
     root.querySelectorAll('[data-log-count]').forEach((count) => { count.hidden = count.dataset.logCount !== name; });
     const url = new URL(window.location.href);
     url.searchParams.set('log', name);
-    window.history.replaceState(null, '', url);
+    replaceUrl(url);
   }
-  filterLinks.forEach((link) => link.addEventListener('click', (event) => {
+  filterLinks.forEach((link) => listen(link, 'click', (event) => {
     event.preventDefault();
     showLog(link.dataset.logFilter);
   }));
@@ -75,30 +80,31 @@
     if (field) field.focus();
     return true;
   }
-  document.querySelectorAll('[data-dialog-open]').forEach((trigger) => trigger.addEventListener('click', (event) => {
+  document.querySelectorAll('[data-dialog-open]').forEach((trigger) => listen(trigger, 'click', (event) => {
     if (openDialog(document.getElementById(trigger.dataset.dialogOpen))) event.preventDefault();
   }));
   document.querySelectorAll('.record-dialog').forEach((dialog) => {
-    dialog.querySelectorAll('[data-dialog-close]').forEach((button) => button.addEventListener('click', (event) => {
+    lifecycle?.cleanup(() => { if (dialog.open) dialog.close(); });
+    dialog.querySelectorAll('[data-dialog-close]').forEach((button) => listen(button, 'click', (event) => {
       event.preventDefault();
       dialog.close();
     }));
     // A click on the backdrop closes the dialog.
-    dialog.addEventListener('click', (event) => { if (event.target === dialog) dialog.close(); });
+    listen(dialog, 'click', (event) => { if (event.target === dialog) dialog.close(); });
     if (dialog.hasAttribute('open')) openDialog(dialog);
   });
   // Opening a dialog from the address bar, as the no-script links do, leaves it there; tidy the URL.
   const url = new URL(window.location.href);
   if (url.searchParams.has('prescription')) {
     url.searchParams.delete('prescription');
-    window.history.replaceState(null, '', url.pathname + url.search);
+    replaceUrl(url.pathname + url.search);
   }
 
   /* Renew: the new expiry follows the weeks chosen. */
   const renew = document.querySelector('[data-renew-form]');
   if (renew) {
     const expiry = renew.querySelector('[data-renew-expiry]');
-    renew.addEventListener('change', () => {
+    listen(renew, 'change', () => {
       const chosen = renew.querySelector('input[name="weeks"]:checked');
       if (chosen && expiry) expiry.textContent = chosen.dataset.expires;
     });
@@ -124,8 +130,8 @@
         ? keep : (dose.options[0] ? dose.options[0].value : '');
       updatePreview();
     }
-    if (medicine) medicine.addEventListener('change', fillDoses);
-    change.addEventListener('change', (event) => { if (event.target !== medicine) updatePreview(); });
+    if (medicine) listen(medicine, 'change', fillDoses);
+    listen(change, 'change', (event) => { if (event.target !== medicine) updatePreview(); });
     fillDoses();
   }
 
@@ -163,9 +169,9 @@
       }
       showLengths(reset);
     }
-    initiateMedicine.addEventListener('change', () => showPlans(true));
-    plans.forEach((input) => input.addEventListener('change', () => showLengths(true)));
-    lengths.forEach((input) => input.addEventListener('change', updatePreview));
+    listen(initiateMedicine, 'change', () => showPlans(true));
+    plans.forEach((input) => listen(input, 'change', () => showLengths(true)));
+    lengths.forEach((input) => listen(input, 'change', updatePreview));
     showPlans(false);
   }
 
@@ -184,14 +190,14 @@
     openDialog(consult);
   }
   root.querySelectorAll('[data-consult]').forEach((dot) => {
-    dot.addEventListener('click', () => openConsult(dot.dataset.consult));
-    dot.addEventListener('keydown', (event) => {
+    listen(dot, 'click', () => openConsult(dot.dataset.consult));
+    listen(dot, 'keydown', (event) => {
       if (event.key !== 'Enter' && event.key !== ' ') return;
       event.preventDefault();
       openConsult(dot.dataset.consult);
     });
   });
-  if (showButton && !showButton.dataset.logUrl) showButton.addEventListener('click', () => {
+  if (showButton && !showButton.dataset.logUrl) listen(showButton, 'click', () => {
     consult.close();
     showLog('clinical');
     const entry = consultEntry && document.getElementById(consultEntry);
@@ -219,16 +225,18 @@
       saving = true;
       form.requestSubmit();
     };
-    if (field.matches('[data-summary-select]')) field.addEventListener('change', save);
+    if (field.matches('[data-summary-select]')) listen(field, 'change', save);
     // Pressing Save or Cancel takes focus from the field before the click lands, so leave it to the button.
-    form.addEventListener('pointerdown', (event) => {
+    listen(form, 'pointerdown', (event) => {
       if (event.target.closest('button, a')) pressingButton = true;
     });
-    field.addEventListener('focus', () => { pressingButton = false; });
-    field.addEventListener('blur', (event) => {
+    listen(field, 'focus', () => { pressingButton = false; });
+    listen(field, 'blur', (event) => {
       if (pressingButton || (event.relatedTarget && form.contains(event.relatedTarget))) return;
       // Escape closes the editor first; a closed editor is not saved.
-      window.setTimeout(() => { if (form.closest('details').open) save(); }, 0);
+      setTimeout(() => { if (form.closest('details').open) save(); }, 0);
     });
   });
 })();
+
+});

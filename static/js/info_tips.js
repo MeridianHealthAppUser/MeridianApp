@@ -1,3 +1,5 @@
+(window.MeridianPages?.register || ((_name, initialize) => initialize(null)))('info_tips', (lifecycle) => {
+  const listen = lifecycle ? lifecycle.on : (target, ...args) => target?.addEventListener(...args);
 /* (i) tips: the note shows in a bubble while the mouse is over the (i), or the (i) has keyboard focus. A click or
    tap keeps it open until a click or tap elsewhere, or Escape. The bubble is placed against the window so a table
    or card that scrolls can't cut it off: above the (i), or below it when there's no room above. Without scripts it
@@ -9,6 +11,10 @@
   const EDGE = 8;
   const GAP = 10;
   let current = null;
+  lifecycle?.cleanup(() => {
+    if (current) hide(current);
+    document.documentElement.classList.remove('info-tips-ready');
+  });
 
   function place(tip) {
     const button = tip.querySelector('.info-tip__button');
@@ -45,26 +51,28 @@
   tips.forEach((tip) => {
     const button = tip.querySelector('.info-tip__button');
     button.setAttribute('aria-expanded', 'false');
-    tip.addEventListener('pointerenter', (event) => { if (event.pointerType === 'mouse') show(tip); });
-    tip.addEventListener('pointerleave', (event) => {
+    listen(tip, 'pointerenter', (event) => { if (event.pointerType === 'mouse') show(tip); });
+    listen(tip, 'pointerleave', (event) => {
       if (event.pointerType === 'mouse' && !('pinned' in tip.dataset)) hide(tip);
     });
-    button.addEventListener('focus', () => { if (button.matches(':focus-visible')) show(tip); });
-    button.addEventListener('blur', () => { if (!('pinned' in tip.dataset)) hide(tip); });
-    button.addEventListener('click', (event) => {
+    listen(button, 'focus', () => { if (button.matches(':focus-visible')) show(tip); });
+    listen(button, 'blur', () => { if (!('pinned' in tip.dataset)) hide(tip); });
+    listen(button, 'click', (event) => {
       event.preventDefault();
       if ('pinned' in tip.dataset) hide(tip);
       else show(tip, true);
     });
   });
 
-  document.addEventListener('click', (event) => {
+  listen(document, 'click', (event) => {
     if (current && !current.contains(event.target)) hide(current);
   });
-  document.addEventListener('keydown', (event) => {
+  listen(document, 'keydown', (event) => {
     if (event.key === 'Escape' && current) hide(current);
   });
   // Follow the (i) when the page, or the table it sits in, scrolls.
-  window.addEventListener('scroll', () => { if (current) place(current); }, { capture: true, passive: true });
-  window.addEventListener('resize', () => { if (current) place(current); });
+  listen(window, 'scroll', () => { if (current) place(current); }, { capture: true, passive: true });
+  listen(window, 'resize', () => { if (current) place(current); });
 })();
+
+});

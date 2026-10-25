@@ -1,3 +1,5 @@
+(window.MeridianPages?.register || ((_name, initialize) => initialize(null)))('time_ranges', (lifecycle) => {
+  const listen = lifecycle ? lifecycle.on : (target, ...args) => target?.addEventListener(...args);
 /* A From and an Until time ([data-time-range], two quarter-hour Time lists from care/widgets.py): Until waits for a
    From, then lists only the times after it, so From 08:00 starts Until at 08:15. An Until that's no longer after From
    is cleared. Saving still checks the end is after the start. */
@@ -6,7 +8,14 @@
     const [start, end] = range.querySelectorAll('select.quarter-hour-time');
     if (!start || !end) return;
     const placeholder = end.options[0] && !end.options[0].value ? end.options[0].text : 'Time';
+    const originalOptions = [...end.options].map(option => ({ text: option.text, value: option.value }));
+    const originallyDisabled = end.disabled;
     const times = [...end.options].filter((option) => option.value).map((option) => option.value);
+    lifecycle?.cleanup(() => {
+      const chosen = end.value;
+      end.replaceChildren(...originalOptions.map(option => new Option(option.text, option.value, false, option.value === chosen)));
+      end.disabled = originallyDisabled;
+    });
 
     function refresh() {
       const chosen = end.value;
@@ -20,7 +29,9 @@
       end.disabled = false;
     }
 
-    start.addEventListener('change', refresh);
+    listen(start, 'change', refresh);
     refresh();
   });
 })();
+
+});

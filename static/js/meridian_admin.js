@@ -1,3 +1,5 @@
+(window.MeridianPages?.register || ((_name, initialize) => initialize(null)))('meridian_admin', (lifecycle) => {
+  const listen = lifecycle ? lifecycle.on : (target, ...args) => target?.addEventListener(...args);
 /* Small, local SVG charts: no external analytics, fonts, or chart CDN. */
 (() => {
   'use strict';
@@ -67,15 +69,15 @@
         const label = `${activity.labels[index]}: ${seriesLabels[key]}, ${value}`;
         const point = svgNode('circle', { cx: x(index), cy: y(value), r: 4, fill: '#fff', stroke: color, 'stroke-width': 2, tabindex: '0', class: 'md-chart-point', 'aria-label': label });
         point.append(svgNode('title', {}, label));
-        point.addEventListener('mouseenter', () => { tooltip.textContent = label; });
-        point.addEventListener('focus', () => { tooltip.textContent = label; });
+        listen(point, 'mouseenter', () => { tooltip.textContent = label; });
+        listen(point, 'focus', () => { tooltip.textContent = label; });
         svg.append(point);
       });
     });
     chart.replaceChildren(svg, tooltip);
   }
   document.querySelectorAll('[data-chart-series]').forEach(button => {
-    button.addEventListener('click', () => {
+    listen(button, 'click', () => {
       const key = button.dataset.chartSeries;
       if (visible.has(key)) visible.delete(key); else visible.add(key);
       button.setAttribute('aria-pressed', String(visible.has(key)));
@@ -85,12 +87,15 @@
   renderActivity();
   if (chart && typeof ResizeObserver !== 'undefined') {
     let previousWidth = chart.clientWidth;
-    new ResizeObserver(() => {
+    const observer = new ResizeObserver(() => {
+      if (lifecycle && !lifecycle.isActive) return;
       if (chart.clientWidth !== previousWidth) {
         previousWidth = chart.clientWidth;
         renderActivity();
       }
-    }).observe(chart);
+    });
+    observer.observe(chart);
+    lifecycle?.cleanup(() => observer.disconnect());
   }
   const statuses = readData('meridian-appointment-data');
   const donut = document.getElementById('meridian-appointment-chart');
@@ -111,7 +116,7 @@
   if (directorySearch) {
     const groups = [...document.querySelectorAll('.md-directory-group')];
     let expandedBeforeSearch = null;
-    directorySearch.addEventListener('input', () => {
+    listen(directorySearch, 'input', () => {
       const query = directorySearch.value.trim().toLocaleLowerCase();
       if (query && expandedBeforeSearch === null) expandedBeforeSearch = groups.map(group => group.open);
       let matches = 0;
@@ -133,3 +138,5 @@
   const sidebarToggle = document.querySelector('[data-lte-toggle="sidebar"]');
   if (sidebarToggle) sidebarToggle.setAttribute('aria-label', 'Toggle administration navigation');
 })();
+
+});

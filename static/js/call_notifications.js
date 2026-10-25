@@ -1,3 +1,6 @@
+(window.MeridianPages?.register || ((_name, initialize) => initialize(null)))('call_notifications', (lifecycle) => {
+  const listen = lifecycle ? lifecycle.on : (target, ...args) => target?.addEventListener(...args);
+  const setTimeout = lifecycle ? lifecycle.timeout : window.setTimeout.bind(window);
 /* In-app invitations only: no camera access, outbound email or autoplay audio. */
 (() => {
   'use strict';
@@ -60,13 +63,21 @@
     };
     candidate.onerror = () => { /* onclose handles backoff; never interrupt app work. */ };
   }
-  dismiss.addEventListener('click',hide);
-  window.addEventListener('pagehide',() => {
+  listen(dismiss, 'click',hide);
+  listen(window, 'pagehide',() => {
     suspended = true;
     clearTimeout(retry); hide();
     const previous = socket; socket = null; previous?.close(1000);
   });
-  window.addEventListener('pageshow',() => { suspended = false; connect(); });
-  window.addEventListener('online',connect);
+  listen(window, 'pageshow',() => { suspended = false; connect(); });
+  listen(window, 'online',connect);
+  lifecycle?.cleanup(() => {
+    terminal = true;
+    suspended = true;
+    clearTimeout(retry); hide();
+    const previous = socket; socket = null; previous?.close(1000);
+  });
   connect();
 })();
+
+});

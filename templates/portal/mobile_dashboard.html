@@ -31,20 +31,7 @@
       {% endif %}
 
       {# Clinicians and practice administrators don't need the count cards; Super Admins keep them. #}{% if not simple_overview %}
-      <section class="mobile-metrics" aria-label="Practice metrics">
-        {% for metric_name, metric_value in metrics.items %}
-          <article class="metric-card">
-            <span class="metric-card__label">{{ metric_name|metric_label }}</span>
-            <strong class="metric-card__value">{{ metric_value }}</strong>
-          </article>
-        {% empty %}
-          <article class="metric-card">
-            <span class="metric-card__label">Care activity</span>
-            <strong class="metric-card__value">—</strong>
-            <span class="metric-card__hint">New activity will show here.</span>
-          </article>
-        {% endfor %}
-      </section>
+      {% if defer_dashboard_metrics %}{% include 'portal/includes/dashboard_metrics_loading.html' with metrics_class='mobile-metrics' %}{% else %}{% include 'portal/includes/dashboard_metrics.html' with metrics_class='mobile-metrics' %}{% endif %}
       {% endif %}
 
       <nav class="mobile-quick-actions" aria-label="Quick actions">

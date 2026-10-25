@@ -1,3 +1,6 @@
+(window.MeridianPages?.register || ((_name, initialize) => initialize(null)))('patient_portal', (lifecycle) => {
+  const replaceUrl = value => window.MeridianNavigation?.replaceUrl ? window.MeridianNavigation.replaceUrl(value) : window.history.replaceState(window.history.state, '', value);
+  const listen = lifecycle ? lifecycle.on : (target, ...args) => target?.addEventListener(...args);
 /* Small conveniences on the patient pages. Every control still works without it. */
 (() => {
   function openWeightLog(focus) {
@@ -10,11 +13,11 @@
     return true;
   }
 
-  document.addEventListener('click', (event) => {
+  listen(document, 'click', (event) => {
     const opener = event.target.closest('[data-weight-log-open]');
     if (opener && openWeightLog(true)) {
       event.preventDefault();
-      history.replaceState(null, '', '#weight-log');
+      replaceUrl('#weight-log');
       return;
     }
     const chip = event.target.closest('[data-subject-chip]');
@@ -39,6 +42,8 @@
       if (target) target.focus({ preventScroll: true });
     }
   }
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', onLoad, { once: true });
+  if (document.readyState === 'loading') listen(document, 'DOMContentLoaded', onLoad, { once: true });
   else onLoad();
 })();
+
+});

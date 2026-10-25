@@ -1,3 +1,5 @@
+(window.MeridianPages?.register || ((_name, initialize) => initialize(null)))('conversation_management', (lifecycle) => {
+  const listen = lifecycle ? lifecycle.on : (target, ...args) => target?.addEventListener(...args);
 /* Message action, on its page or in its modal: "Clinician to add" (or "Colleague to add") only shows, and must be
    chosen, while adding someone is the chosen action. Hidden, it's also disabled so it isn't sent. Without
    scripts, every field shows. */
@@ -18,7 +20,9 @@
       });
     }
 
-    action.addEventListener('change', sync);
+    listen(action, 'change', sync);
     sync();
   });
 })();
+
+});

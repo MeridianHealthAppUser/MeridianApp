@@ -1,3 +1,7 @@
+(window.MeridianPages?.register || ((_name, initialize) => initialize(null)))('record_timeline', (lifecycle) => {
+  const listen = lifecycle ? lifecycle.on : (target, ...args) => target?.addEventListener(...args);
+  const setTimeout = lifecycle ? lifecycle.timeout : window.setTimeout.bind(window);
+  const fetch = lifecycle ? lifecycle.fetch : (...args) => window.fetch(...args);
 (() => {
   'use strict';
   const card = document.querySelector('[data-record-timeline]');
@@ -52,7 +56,7 @@
     const requested = next;
     loading = true;
     controller = new AbortController();
-    const timeout = window.setTimeout(() => controller.abort(), 20000);
+    const timeout = setTimeout(() => controller.abort(), 20000);
     scroll.setAttribute('aria-busy', 'true');
     button.disabled = true;
     button.textContent = 'Loading…';
@@ -132,19 +136,22 @@
       }
     }
   };
-  button.addEventListener('click', () => { automatic = true; load(true); });
+  listen(button, 'click', () => { automatic = true; load(true); });
   if ('IntersectionObserver' in window && next && !stopped) {
     observer = new IntersectionObserver(entries => {
       if (automatic && entries.some(entry => entry.isIntersecting)) load();
     }, { root: scroll, rootMargin: '0px 0px 100px 0px', threshold: 0 });
     observer.observe(sentinel);
   }
-  window.addEventListener('pagehide', () => {
+  listen(window, 'pagehide', () => {
     stopped = true;
     controller?.abort();
     observer?.disconnect();
   });
-  window.addEventListener('pageshow', event => {
+  listen(window, 'pageshow', event => {
     if (event.persisted) terminal('Reload this record to confirm your current access and history.');
   });
+  lifecycle?.cleanup(() => { stopped = true; controller?.abort(); observer?.disconnect(); });
 })();
+
+});

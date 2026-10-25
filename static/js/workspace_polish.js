@@ -1,3 +1,7 @@
+(window.MeridianPages?.register || ((_name, initialize) => initialize(null)))('workspace_polish', lifecycle => {
+  const listen = lifecycle ? lifecycle.on : (target, ...args) => target?.addEventListener(...args);
+  const setTimeout = lifecycle ? lifecycle.timeout : window.setTimeout.bind(window);
+  const requestAnimationFrame = lifecycle ? lifecycle.raf : window.requestAnimationFrame.bind(window);
 /* Remember navigation groups and reveal the current desktop destination. */
 (() => {
   function initializeRailNavigation() {
@@ -8,7 +12,7 @@
       group.open = Boolean(group.querySelector('[aria-current="page"], [aria-current="true"]')) || savedState !== 'closed';
       // Native details may queue an initialization toggle; only remember a change.
       let previousOpen = group.open;
-      group.addEventListener('toggle', () => {
+      listen(group, 'toggle', () => {
         if (group.open === previousOpen) return;
         previousOpen = group.open;
         try { window.localStorage.setItem(storageKey, group.open ? 'open' : 'closed'); } catch (_) { /* Keep native toggling. */ }
@@ -30,13 +34,13 @@
     });
   }
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', initializeRailNavigation, { once: true });
+    listen(document, 'DOMContentLoaded', initializeRailNavigation, { once: true });
   } else { initializeRailNavigation(); }
-  window.addEventListener('pageshow', revealCurrentRail);
+  listen(window, 'pageshow', revealCurrentRail);
   let resizeFrame;
-  window.addEventListener('resize', () => {
+  listen(window, 'resize', () => {
     window.cancelAnimationFrame(resizeFrame);
-    resizeFrame = window.requestAnimationFrame(revealCurrentRail);
+    resizeFrame = requestAnimationFrame(revealCurrentRail);
   });
 })();
 
@@ -75,7 +79,7 @@
     document.dispatchEvent(new CustomEvent('workspace:navigating'));
     // Resume even on a page without a content region if navigation was cancelled or downloaded a file.
     window.clearTimeout(giveUpTimer);
-    giveUpTimer = window.setTimeout(hideLoader, GIVE_UP_AFTER_MS);
+    giveUpTimer = setTimeout(hideLoader, GIVE_UP_AFTER_MS);
   }
 
   function contentRegion() {
@@ -95,7 +99,7 @@
     region.appendChild(loader);
     // A response the browser downloads never replaces this page.
     window.clearTimeout(giveUpTimer);
-    giveUpTimer = window.setTimeout(hideLoader, GIVE_UP_AFTER_MS);
+    giveUpTimer = setTimeout(hideLoader, GIVE_UP_AFTER_MS);
   }
 
   function hideLoader() {
@@ -116,7 +120,7 @@
   function queueLoader(event) {
     window.clearTimeout(showTimer);
     // Fast pages swap in before the loader would appear; prevented events never navigate.
-    showTimer = window.setTimeout(() => { if (!event.defaultPrevented) showLoader(); }, SHOW_AFTER_MS);
+    showTimer = setTimeout(() => { if (!event.defaultPrevented) showLoader(); }, SHOW_AFTER_MS);
   }
 
   function opensAnotherPage(link) {
@@ -128,10 +132,11 @@
   }
 
   // Listen on window: it hears clicks and submits last, after any other handler could cancel them.
-  window.addEventListener('click', (event) => {
+  listen(window, 'click', (event) => {
     if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
     const link = event.target.closest && event.target.closest('a[href]');
     if (!link || link.closest('[data-no-loader]') || link.hasAttribute('download')) return;
+    if (window.MeridianNavigation?.canHandleLink(link, event)) return;
     if ((link.target && link.target !== '_self') || !opensAnotherPage(link)) return;
     startNavigation();
     if (PAINT_FIRST) {
@@ -143,10 +148,11 @@
     queueLoader(event);
   });
 
-  window.addEventListener('submit', (event) => {
+  listen(window, 'submit', (event) => {
     if (event.defaultPrevented) return;
     const form = event.target;
     const submitter = event.submitter;
+    if (window.MeridianNavigation?.canHandleForm(form, event)) return;
     // Read attributes: a field named "target" or "method" shadows the form property.
     const target = (submitter && submitter.getAttribute('formtarget')) || form.getAttribute('target');
     const method = (submitter && submitter.getAttribute('formmethod')) || form.getAttribute('method') || '';
@@ -180,7 +186,7 @@
   });
 
   // Back and forward can restore this page from the cache with the loader still showing.
-  window.addEventListener('pageshow', hideLoader);
+  listen(window, 'pageshow', hideLoader);
 })();
 
 /* Inline editors: opening one focuses its field; Cancel or Escape restores the value and closes it. */
@@ -194,14 +200,14 @@
   }
 
   // Toggle does not bubble, so listen while it travels down.
-  document.addEventListener('toggle', (event) => {
+  listen(document, 'toggle', (event) => {
     const editor = event.target;
     if (!editor.matches || !editor.matches('[data-inline-editor]') || !editor.open) return;
     const field = editor.querySelector('select, textarea, input:not([type="hidden"])');
     if (field) field.focus();
   }, true);
 
-  document.addEventListener('click', (event) => {
+  listen(document, 'click', (event) => {
     const cancel = event.target.closest && event.target.closest('[data-inline-editor-cancel]');
     const editor = cancel && cancel.closest('[data-inline-editor]');
     if (!editor) return;
@@ -209,7 +215,7 @@
     closeEditor(editor);
   });
 
-  document.addEventListener('keydown', (event) => {
+  listen(document, 'keydown', (event) => {
     const editor = event.key === 'Escape' && event.target.closest && event.target.closest('[data-inline-editor][open]');
     if (!editor) return;
     event.preventDefault();
@@ -226,8 +232,8 @@
       const ready = boxes.every((box) => box.checked);
       buttons.forEach((button) => { button.disabled = !ready; });
     };
-    boxes.forEach((box) => box.addEventListener('change', update));
-    window.addEventListener('pageshow', update);
+    boxes.forEach((box) => listen(box, 'change', update));
+    listen(window, 'pageshow', update);
     update();
   }
 
@@ -243,18 +249,20 @@
     });
   }
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', initialize, { once: true });
+    listen(document, 'DOMContentLoaded', initialize, { once: true });
   } else { initialize(); }
 })();
 
 /* Pop-up pickers (such as the mobile patient section list) close on Escape or a tap elsewhere. */
 (() => {
   const openPickers = () => document.querySelectorAll('.patient-workspace-picker[open]');
-  document.addEventListener('click', (event) => {
+  listen(document, 'click', (event) => {
     openPickers().forEach((picker) => { if (!picker.contains(event.target)) picker.open = false; });
   });
-  document.addEventListener('keydown', (event) => {
+  listen(document, 'keydown', (event) => {
     if (event.key !== 'Escape') return;
     openPickers().forEach((picker) => { picker.open = false; picker.querySelector('summary').focus(); });
   });
 })();
+
+});

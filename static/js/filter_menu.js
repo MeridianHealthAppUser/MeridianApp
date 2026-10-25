@@ -1,3 +1,5 @@
+(window.MeridianPages?.register || ((_name, initialize) => initialize(null)))('filter_menu', (lifecycle) => {
+  const listen = lifecycle ? lifecycle.on : (target, ...args) => target?.addEventListener(...args);
 /* Filters menus (templates/portal/includes/filter_menu.html). The menu closes on Escape, a click elsewhere or Cancel;
    Cancel also puts back the ticks it opened with. A section's search hides the choices that don't match. Without
    scripts the menu still opens and closes, and Apply works. */
@@ -29,24 +31,24 @@
   }
 
   menus.forEach((menu) => {
-    menu.addEventListener('toggle', () => { if (menu.open) place(menu); });
+    listen(menu, 'toggle', () => { if (menu.open) place(menu); });
     if (menu.open) place(menu);
-    menu.querySelector('[data-filter-cancel]').addEventListener('click', () => {
+    listen(menu.querySelector('[data-filter-cancel]'), 'click', () => {
       close(menu);
       menu.querySelector('summary').focus();
     });
     menu.querySelectorAll('[data-filter-search]').forEach((search) => {
-      search.addEventListener('input', () => filter(search));
+      listen(search, 'input', () => filter(search));
       // Enter in the search box doesn't apply the filters.
-      search.addEventListener('keydown', (event) => { if (event.key === 'Enter') event.preventDefault(); });
+      listen(search, 'keydown', (event) => { if (event.key === 'Enter') event.preventDefault(); });
     });
   });
 
-  document.addEventListener('click', (event) => {
+  listen(document, 'click', (event) => {
     menus.forEach((menu) => { if (menu.open && !menu.contains(event.target)) close(menu); });
   });
-  window.addEventListener('resize', () => menus.forEach((menu) => { if (menu.open) place(menu); }));
-  document.addEventListener('keydown', (event) => {
+  listen(window, 'resize', () => menus.forEach((menu) => { if (menu.open) place(menu); }));
+  listen(document, 'keydown', (event) => {
     if (event.key !== 'Escape') return;
     menus.forEach((menu) => {
       if (!menu.open) return;
@@ -55,3 +57,5 @@
     });
   });
 })();
+
+});

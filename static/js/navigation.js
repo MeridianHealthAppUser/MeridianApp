@@ -1,3 +1,6 @@
+(window.MeridianPages?.register || ((_name, initialize) => initialize(null)))('navigation', (lifecycle) => {
+  const listen = lifecycle ? lifecycle.on : (target, ...args) => target?.addEventListener(...args);
+  const requestAnimationFrame = lifecycle ? lifecycle.raf : window.requestAnimationFrame.bind(window);
 /* Keep the active item visible in scrollable navigation without moving the page. */
 (() => {
   function revealCurrentNavigation() {
@@ -21,14 +24,16 @@
   }
 
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', revealCurrentNavigation, { once: true });
+    listen(document, 'DOMContentLoaded', revealCurrentNavigation, { once: true });
   } else {
     revealCurrentNavigation();
   }
-  window.addEventListener('pageshow', revealCurrentNavigation);
+  listen(window, 'pageshow', revealCurrentNavigation);
   let resizeFrame;
-  window.addEventListener('resize', () => {
+  listen(window, 'resize', () => {
     window.cancelAnimationFrame(resizeFrame);
-    resizeFrame = window.requestAnimationFrame(revealCurrentNavigation);
+    resizeFrame = requestAnimationFrame(revealCurrentNavigation);
   });
 })();
+
+});

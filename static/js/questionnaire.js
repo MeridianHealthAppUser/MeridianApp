@@ -1,3 +1,5 @@
+(window.MeridianPages?.register || ((_name, initialize) => initialize(null)))('questionnaire', (lifecycle) => {
+  const listen = lifecycle ? lifecycle.on : (target, ...args) => target?.addEventListener(...args);
 (() => {
   const form = document.querySelector('#screening-form');
   if (!form) return;
@@ -23,10 +25,10 @@
     if (!practiceInput || !documents.length) return;
     documents.forEach(section => { section.hidden = section.dataset.practiceId !== practiceInput.value; });
   }
-  form.addEventListener('change', updateProgress);
-  heightInput?.addEventListener('input', updateBmi);
-  weightInput?.addEventListener('input', updateBmi);
-  practiceInput?.addEventListener('change', () => {
+  listen(form, 'change', updateProgress);
+  listen(heightInput, 'input', updateBmi);
+  listen(weightInput, 'input', updateBmi);
+  listen(practiceInput, 'change', () => {
     updatePracticeDocuments();
     if (consentInput) consentInput.checked = false;
   });
@@ -34,3 +36,5 @@
   updateBmi();
   updatePracticeDocuments();
 })();
+
+});

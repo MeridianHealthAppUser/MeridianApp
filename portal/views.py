@@ -83,6 +83,13 @@ class StaffCompanyRequiredMixin:
         if self.clinician_redirect_message and self.membership.role == CompanyMembership.Role.DOCTOR:
             messages.error(request, self.clinician_redirect_message)
             return redirect('portal:desktop-dashboard')
+        from .page_navigation import bind_navigation_context, maybe_navigation_shell, maybe_navigation_section
+        if response := bind_navigation_context(request, company=self.company, membership=self.membership):
+            return response
+        if response := maybe_navigation_section(self, request):
+            return response
+        if response := maybe_navigation_shell(self, request):
+            return response
         return super().dispatch(request, *args, **kwargs)
 
 
@@ -101,7 +108,35 @@ class PatientPortalRequiredMixin:
         request.realtime_scope = patient_scope(self.patient_company, self.patient, request.user)
         if response := changed_scope_response(request):
             return response
+        from .page_navigation import bind_navigation_context, maybe_navigation_shell, maybe_navigation_section
+        if response := bind_navigation_context(request, company=self.patient_company, patient=self.patient):
+            return response
+        if response := maybe_navigation_section(self, request):
+            return response
+        if response := maybe_navigation_shell(self, request):
+            return response
         return super().dispatch(request, *args, **kwargs)
+
+
+def staff_dashboard_metrics(company, user, membership):
+    """Summary counts can be rendered separately from the working appointment/task lists."""
+    now, today = timezone.now(), timezone.localdate()
+    patients = Patient.objects.filter(company=company, is_active=True)
+    appointments = Appointment.objects.for_company(company).filter(starts_at__gte=now, status=Appointment.Status.BOOKED)
+    if membership.role == membership.Role.DOCTOR:
+        patients = patients.filter(assigned_doctor=user)
+        appointments = appointments.filter(clinician=user)
+    tasks = visible_tasks(company, user, membership).filter(status__in=(ClinicalTask.Status.OPEN, ClinicalTask.Status.IN_PROGRESS))
+    metrics = {
+        'patients': patients.count(), 'appointments': appointments.filter(starts_at__date=today).count(),
+        'open_tasks': tasks.count(), 'unread_messages': unread_for_staff(company, user).count(),
+    }
+    if membership.is_admin:
+        metrics['shipments_due'] = Shipment.objects.for_company(company).filter(
+            scheduled_for__lte=today + timedelta(days=7),
+            status__in=(Shipment.Status.DRAFT, Shipment.Status.HELD, Shipment.Status.READY),
+        ).count()
+    return metrics
 
 
 class StaffDashboardContextMixin(StaffCompanyRequiredMixin):
@@ -124,25 +159,13 @@ class StaffDashboardContextMixin(StaffCompanyRequiredMixin):
             upcoming_appointments = upcoming_appointments.filter(clinician=self.request.user)
 
         recent_threads = staff_threads(self.company, self.request.user).select_related('patient').order_by('-last_message_at', '-created_at', '-pk')
-        # What the patient or a colleague sent since this member last read each conversation, as in the menu badge.
-        incoming_unread = unread_for_staff(self.company, self.request.user)
-
         patients = Patient.objects.filter(company=self.company, is_active=True)
         # Clinicians' patient records are the patients assigned to them.
         if self.membership.role == self.membership.Role.DOCTOR:
             patients = patients.filter(assigned_doctor=self.request.user)
-        metrics = {
-            'patients': patients.count(),
-            'appointments': upcoming_appointments.filter(starts_at__date=today).count(),
-            'open_tasks': open_tasks.count(),
-            'unread_messages': incoming_unread.count(),
-        }
-        # Shipping is Operations work, which the Clinician role doesn't see.
-        if self.membership.is_admin:
-            metrics['shipments_due'] = Shipment.objects.for_company(self.company).filter(
-                scheduled_for__lte=today + timedelta(days=7),
-                status__in=(Shipment.Status.DRAFT, Shipment.Status.HELD, Shipment.Status.READY),
-            ).count()
+        from .page_navigation import canonical_url, is_content_request
+        defer_metrics = is_content_request(self.request)
+        metrics = {} if defer_metrics else staff_dashboard_metrics(self.company, self.request.user, self.membership)
         # Clinicians and practice administrators get the same simple Overview: appointments and open tasks only.
         simple = uses_flat_menu(self.membership)
         context.update(
@@ -150,6 +173,8 @@ class StaffDashboardContextMixin(StaffCompanyRequiredMixin):
             active_membership=self.membership,
             today=today,
             metrics=metrics,
+            defer_dashboard_metrics=defer_metrics,
+            dashboard_content_url=canonical_url(self.request),
             simple_overview=simple,
             upcoming_appointments=upcoming_appointments[:8],
             open_tasks=attach_clinical_task_links(list(open_tasks[:8]), self.request.user, self.membership),

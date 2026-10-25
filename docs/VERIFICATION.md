@@ -99,6 +99,18 @@ The navigation suite also runs WebKit when installed. Both suites use synthetic 
 
 The focused run passed all 16 existing messaging scenarios in Chrome and all 20 navigation scenarios across Chrome and WebKit. Django system checks and JavaScript syntax checks also passed.
 
+## Page navigation — 24 October 2026
+
+The shared navigation suite exercises immediate destination/URL changes under delayed responses, stale-response rejection, Back/Forward, error recovery, deferred sections and lifecycle cleanup. Backend tests check shell/query separation, practice/role/record access, scope changes, one-time flash/booking state, build identity and the ordinary SSR rollback. These are isolated application checks, not a measurement of production PostgreSQL or Daphne latency.
+
+- Full backend regression: **1,486 tests passed with 17 expected optional skips**. The final navigation tests were also run separately after the full regression run.
+- Final focused navigation run: **19 tests passed**, including six journeys using actual Django-rendered responses, assets and CSRF-protected message reads for patient, clinician and Super Admin accounts at desktop/mobile widths.
+- **44 shared navigation browser scenarios passed across Chrome and WebKit**, plus four controller-lifecycle checks and 16 existing messaging scenarios. These include rapid clicks, pending and failed loads, script/style races, unsaved forms, native POST submission, Back/Forward, restored-page authorization and bounded deferred requests.
+- **164 access comparisons passed**: all 41 fast-shell routes across clinician, practice administrator, Super Admin and patient accounts matched ordinary rendering's status/redirect results. The separate practice-context and role suite passed 41 tests.
+- Production hashed static collection, JavaScript syntax checks, Django system checks and `git diff --check` passed. No migration, dependency or additional service is required for this change.
+
+The architecture, request contracts, rollback setting and focused verification commands are documented in [PAGE_NAVIGATION.md](PAGE_NAVIGATION.md).
+
 ## Limits
 
 Passing tests is not a clinical, regulatory or penetration-test certification. Payment collection, outbound email, live prescribing, third-party Zoom integration and courier APIs remain excluded. Native appointment video is provided instead. The questionnaire remains lead-only; the checkout creates a patient login only with the checkout test code. File uploads have basic PDF checks, not malware scanning. Review the live-use prerequisites in [USER_GUIDE.md](USER_GUIDE.md) and [DEPLOYMENT.md](DEPLOYMENT.md) before handling real patient data.

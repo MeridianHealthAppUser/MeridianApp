@@ -1,16 +1,19 @@
+(window.MeridianPages?.register || ((_name, initialize) => initialize(null)))('toasts', (lifecycle) => {
+  const listen = lifecycle ? lifecycle.on : (target, ...args) => target?.addEventListener(...args);
 /* Toasts: the close button dismisses one, and a confirmation that has faded out is removed.
    window.meridianToast(text, 'error') adds one from a script, above any open dialog. */
 (() => {
   function wire(toast) {
-    toast.addEventListener('animationend', (event) => {
+    listen(toast, 'animationend', (event) => {
       if (event.animationName === 'toast-out') toast.remove();
     });
     const close = toast.querySelector('[data-toast-close]');
-    if (close) close.addEventListener('click', () => toast.remove());
+    if (close) listen(close, 'click', () => toast.remove());
   }
   document.querySelectorAll('[data-toast]').forEach(wire);
 
   window.meridianToast = (text, kind = 'success') => {
+    if (lifecycle && !lifecycle.isActive) return null;
     let stack = document.querySelector('.toast-stack');
     if (!stack) {
       stack = document.createElement('div');
@@ -43,3 +46,5 @@
     return toast;
   };
 })();
+
+});

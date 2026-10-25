@@ -81,6 +81,7 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'portal.page_navigation.PageNavigationMiddleware',
     # A clinician opening or changing a record that isn't theirs gets a toast and a way back, not a 403 page.
     'portal.record_access.RecordAccessMiddleware',
 ]
@@ -99,6 +100,7 @@ TEMPLATES = [
                 'django.contrib.messages.context_processors.messages',
                 'practices.context_processors.active_company',
                 'video.context_processors.call_notifications',
+                'portal.page_navigation.page_navigation_context',
             ],
         },
     },
@@ -106,6 +108,7 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'config.wsgi.application'
 ASGI_APPLICATION = 'config.asgi.application'  # Daphne serves HTTP, messaging and native video WebSockets.
+PAGE_NAVIGATION_ENABLED = os.getenv('PAGE_NAVIGATION_ENABLED', 'true').lower() == 'true'
 
 # Local development is one ASGI process. Shared Redis is required for video and
 # live messaging in production. Ordinary HTTP messaging still works without it.

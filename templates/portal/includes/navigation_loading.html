@@ -1,0 +1,8 @@
+<section class="page-navigation-loading" data-page-loading data-navigation-shell data-navigation-loading aria-busy="true" aria-labelledby="page-loading-title">
+  <h1 id="page-loading-title">{{ page_title }}</h1>
+  <p role="status">Loading…</p>
+  <div class="page-skeleton-grid" aria-hidden="true">
+    {% for card in '123'|make_list %}<div class="page-skeleton-card{% if forloop.last %} page-skeleton-card--wide{% endif %}"><span class="page-skeleton-line page-skeleton-line--title"></span><span class="page-skeleton-line"></span><span class="page-skeleton-line"></span><span class="page-skeleton-line"></span></div>{% endfor %}
+  </div>
+  <noscript><p><a href="{{ full_page_url }}">Open this page without JavaScript</a></p></noscript>
+</section>

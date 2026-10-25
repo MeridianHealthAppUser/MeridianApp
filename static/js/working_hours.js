@@ -1,3 +1,5 @@
+(window.MeridianPages?.register || ((_name, initialize) => initialize(null)))('working_hours', (lifecycle) => {
+  const listen = lifecycle ? lifecycle.on : (target, ...args) => target?.addEventListener(...args);
 /* Regular working hours (templates/portal/includes/schedule_availability.html): a day can be worked in more than one
    period, such as 08:00–11:00 and 13:00–16:00. An extra period with nothing in it waits behind "+ Add hours", and ×
    takes one away, clearing its times so it isn't saved. Without scripts every period shows and empty ones are ignored. */
@@ -13,7 +15,7 @@
       if (blank(row) && !row.querySelector('.errorlist')) row.hidden = true;
       const remove = row.querySelector('[data-period-remove]');
       remove.hidden = false;
-      remove.addEventListener('click', () => {
+      listen(remove, 'click', () => {
         row.querySelectorAll('select').forEach((select) => {
           select.value = '';
           select.dispatchEvent(new Event('change'));
@@ -25,7 +27,7 @@
       });
     });
 
-    add.addEventListener('click', () => {
+    listen(add, 'click', () => {
       const next = day.querySelector('[data-working-period][hidden]');
       if (!next) return;
       next.hidden = false;
@@ -35,3 +37,5 @@
     refresh();
   });
 })();
+
+});

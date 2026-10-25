@@ -1,3 +1,7 @@
+(window.MeridianPages?.register || ((_name, initialize) => initialize(null)))('appointment_video', (lifecycle) => {
+  const listen = lifecycle ? lifecycle.on : (target, ...args) => target?.addEventListener(...args);
+  const setTimeout = lifecycle ? lifecycle.timeout : window.setTimeout.bind(window);
+  const fetch = lifecycle ? lifecycle.fetch : (...args) => window.fetch(...args);
 /* My Appointments: the server authorizes each visible Join action; timers refresh
    at its opening time and remove it at its end without reloading the page. */
 (() => {
@@ -55,7 +59,7 @@
     if (stopped || away) return;
     const until = [...rows.values()].map(row => Date.parse(row.dataset.videoClosesAt) - currentTime())
       .filter(value => Number.isFinite(value) && value >= 0);
-    if (until.length) expiryTimer = window.setTimeout(() => { expire(); scheduleExpiry(); }, Math.min(...until, 2147483000) + 1);
+    if (until.length) expiryTimer = setTimeout(() => { expire(); scheduleExpiry(); }, Math.min(...until, 2147483000) + 1);
   }
 
   function schedule() {
@@ -69,7 +73,7 @@
         if (Number.isFinite(until) && until >= 0) delay = Math.min(delay, until + 50);
       }
     }
-    timer = window.setTimeout(refresh, Math.max(50, delay));
+    timer = setTimeout(refresh, Math.max(50, delay));
   }
 
   function windowText(item) {
@@ -117,7 +121,7 @@
     if (stopped || away || document.hidden || controller) return;
     window.clearTimeout(timer);
     controller = new AbortController();
-    const timeout = window.setTimeout(() => controller?.abort(), 10000);
+    const timeout = setTimeout(() => controller?.abort(), 10000);
     try {
       const response = await fetch(endpoint.href, {
         credentials: 'same-origin', cache: 'no-store', signal: controller.signal,
@@ -137,13 +141,16 @@
     }
   }
 
-  document.addEventListener('visibilitychange', () => {
+  listen(document, 'visibilitychange', () => {
     if (document.hidden) { window.clearTimeout(timer); controller?.abort(); }
     else refresh();
   });
-  window.addEventListener('focus', refresh);
-  window.addEventListener('online', refresh);
-  window.addEventListener('pagehide', () => { away = true; window.clearTimeout(timer); window.clearTimeout(expiryTimer); controller?.abort(); });
-  window.addEventListener('pageshow', () => { away = false; refresh(); });
+  listen(window, 'focus', refresh);
+  listen(window, 'online', refresh);
+  listen(window, 'pagehide', () => { away = true; window.clearTimeout(timer); window.clearTimeout(expiryTimer); controller?.abort(); });
+  listen(window, 'pageshow', () => { away = false; refresh(); });
+  lifecycle?.cleanup(() => { stopped = true; away = true; controller?.abort(); });
   refresh();
 })();
+
+});
