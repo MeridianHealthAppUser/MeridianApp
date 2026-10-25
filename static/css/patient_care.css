@@ -7,7 +7,7 @@
 .patient-care .console-form textarea { min-width: 0; max-width: 100%; box-sizing: border-box; }
 .patient-care .console-form textarea { resize: vertical; min-height: 7.5rem; }
 .patient-care .console-form .errorlist { color: var(--console-red); margin: .4rem 0 .75rem; padding-left: 1.1rem; overflow-wrap: anywhere; }
-.patient-care .console-form .errorlist.nonfield { padding: .9rem 1rem .9rem 2rem; border: 1px solid #efccc8; border-radius: .65rem; background: #fbedeb; }
+.patient-care .console-form .errorlist.nonfield { padding: .9rem 1rem .9rem 2rem; border: 1px solid var(--c-efccc8); border-radius: .65rem; background: var(--c-fbedeb); }
 .patient-care-filters { display: flex; flex-wrap: wrap; align-items: end; gap: 1rem; }
 .patient-care-filters .console-form__field { flex: 1 1 11rem; }
 .patient-care .patient-care-filters button { flex: 0 1 auto; margin-bottom: 0; }
@@ -22,14 +22,14 @@
 .patient-care-profile-footer p { margin: 0; max-width: 44rem; color: var(--patient-text); font-size: .875rem; }
 .patient-care-profile-footer button { flex: 0 0 auto; }
 .patient-care-caption { color: var(--patient-text); font-size: .875rem; line-height: 1.65; margin: 1.3rem 0 0; }
-.patient-care .console-button--primary { color: #fff; }
+.patient-care .console-button--primary { color: var(--c-ffffff); }
 .patient-progress-chart-section { margin-bottom: 1.2rem; }
 .patient-weight-chart { margin: 1.5rem 0 0; }
 .patient-weight-chart svg { display: block; width: 100%; height: auto; overflow: visible; }
 .patient-weight-chart text { fill: var(--console-muted); font-family: inherit; font-size: 12px; }
 .patient-weight-chart__grid { stroke: var(--console-soft-line); stroke-width: 1; }
 .patient-weight-chart__line { stroke: var(--console-teal); stroke-width: 2.5; fill: none; }
-.patient-weight-chart__point { stroke: var(--console-teal); stroke-width: 1.5; fill: #fff; }
+.patient-weight-chart__point { stroke: var(--console-teal); stroke-width: 1.5; fill: var(--c-ffffff); }
 .patient-weight-chart figcaption { color: var(--console-muted); font-size: .8rem; line-height: 1.5; margin-top: .5rem; }
 .patient-weight-chart__range { display: none; }
 @media (max-width: 46rem) {

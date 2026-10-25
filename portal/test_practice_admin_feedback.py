@@ -245,11 +245,14 @@ class OperationsFeedbackTests(SessionMixin, OperationsFixture):
     def test_shipping_list_has_the_patients_doctor_product_quantity_status_and_notes(self):
         shipment = self.ready()
         self.login(self.admin)
-        page = self.client.get(reverse('portal:ops-shipping'))
+        page = self.client.get(reverse('portal:ops-shipping'), {'week': timezone.localdate()})
         self.assertNotContains(page, 'ops-metric')
         self.assertNotContains(page, 'Pens to order')
-        headings = re.findall(r'<th scope="col">([^<]+)</th>', page.content.decode())
-        self.assertEqual(headings, ['Patient', 'Doctor', 'Product', 'Qty', 'Status', 'Notes'])
+        html = page.content.decode()
+        table = html[html.index('ops-shipping-table'):]
+        headings = re.findall(r'<th scope="col">([^<]+)</th>', table[:table.index('</thead>')])
+        # Where it goes and whether it's paid joined the owner's columns on 24 Oct 2026.
+        self.assertEqual(headings, ['Patient', 'Doctor', 'Deliver to', 'Product', 'Qty', 'Paid', 'Status', 'Notes'])
         self.assertContains(page, self.doctor.titled_name)
         row = page.context['shipments'][0]
         response = self.client.post(reverse('portal:ops-shipment-note', args=[shipment.pk]), {
@@ -258,7 +261,7 @@ class OperationsFeedbackTests(SessionMixin, OperationsFixture):
         shipment.refresh_from_db()
         self.assertEqual(shipment.note, 'Leave with reception')
         self.assertTrue(AuditEvent.objects.filter(action='shipment.note_updated', target_id=str(shipment.pk)).exists())
-        self.assertContains(self.client.get(reverse('portal:ops-shipping')), 'Leave with reception')
+        self.assertContains(self.client.get(reverse('portal:ops-shipping'), {'week': timezone.localdate()}), 'Leave with reception')
         # A doctor can't.
         self.login(self.doctor)
         self.assertEqual(self.client.post(reverse('portal:ops-shipment-note', args=[shipment.pk]), {'note': 'x'}).status_code, 403)
@@ -268,8 +271,9 @@ class OperationsFeedbackTests(SessionMixin, OperationsFixture):
         self.shipment(quantity=3)  # A draft: going out, but not ordered until it's ready.
         self.shipment(quantity=5, status='cancelled')
         self.login(self.admin)
-        page = self.client.get(reverse('portal:ops-stock'))
-        rows = {row['product'].pk: row for row in page.context['rows']}
+        # The week's pens are under its parcels on Weekly shipping.
+        page = self.client.get(reverse('portal:ops-shipping'), {'week': timezone.localdate()})
+        rows = {row['product'].pk: row for row in page.context['stock_rows']}
         self.assertEqual(set(rows), {self.product.pk, self.open_product.pk})
         self.assertEqual((rows[self.product.pk]['to_ship'], rows[self.product.pk]['to_order']), (5, 2))
         self.assertEqual((rows[self.open_product.pk]['to_ship'], rows[self.open_product.pk]['to_order']), (0, 0))
@@ -281,13 +285,13 @@ class OperationsFeedbackTests(SessionMixin, OperationsFixture):
         self.assertContains(page, f'Week {page.context["week_number"]}')
         # Super Admins see how it's worked out.
         self.login(self.super_admin)
-        page = self.client.get(reverse('portal:ops-stock'))
+        page = self.client.get(reverse('portal:ops-shipping'), {'week': timezone.localdate()})
         self.assertContains(page, 'How To order is worked out')
         self.assertContains(page, '<th scope="col">Safety stock</th>', html=True)
-        self.assertEqual({row['product'].pk: row['draft'] for row in page.context['rows']}[self.product.pk], 3)
+        self.assertEqual({row['product'].pk: row['draft'] for row in page.context['stock_rows']}[self.product.pk], 3)
         # Next week is empty.
         later = self.client.get(page.context['next_week_url'])
-        self.assertEqual(sum(row['to_ship'] for row in later.context['rows']), 0)
+        self.assertEqual(sum(row['to_ship'] for row in later.context['stock_rows']), 0)
 
     def test_dispatch_history_by_week_without_tracking_and_exported(self):
         shipment = self.locked()

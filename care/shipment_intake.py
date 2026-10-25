@@ -16,7 +16,7 @@ from .services import record_audit
 @transaction.atomic
 def create_manual_shipment(*, company, patient, actor, product, quantity, scheduled_for, submission_key, request=None):
     company = Company.objects.select_for_update().get(pk=company.pk)
-    require_operations_actor(company, actor)
+    require_operations_actor(company, actor, shipping=True)
     try:
         submission_key = str(UUID(str(submission_key)))
     except (ValueError, TypeError, AttributeError):

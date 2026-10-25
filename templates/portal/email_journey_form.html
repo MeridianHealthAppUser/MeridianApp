@@ -1,0 +1,9 @@
+{% extends 'portal/staff_page_base.html' %}{% load static workspace_ui %}
+{% block title %}{% if journey %}{{ journey.name }}{% else %}New journey email{% endif %} | Meridian{% endblock %}
+{% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/operations.css' %}?v=20261025a">{% endblock %}
+{% block breadcrumbs %}{% breadcrumbs 'Email journeys' 'portal:email-journeys' journey.name|default:'New email' %}{% endblock %}
+{% block page_heading %}<header class="staff-page-header"><div><h1>{% if journey %}{{ journey.name }}{% else %}New journey email{% endif %}</h1><p>{{ company.name }}{% if journey %} · {{ journey.get_track_display }}{% endif %}</p></div></header>{% endblock %}
+{% block page_content %}<div class="ops-grid">
+  <section class="staff-page-card ops-panel"><form method="post" action="{{ request.path }}" class="ops-form">{% csrf_token %}{% include 'portal/operations_fields.html' %}<div class="ops-actions"><button class="console-button console-button--primary" type="submit">Save</button><a class="console-button console-button--secondary" href="{% url 'portal:email-journeys' %}">Back</a></div></form></section>
+  <section class="staff-page-card ops-panel"><h2>Preview</h2>{% if preview %}<p><strong>{{ preview.subject }}</strong></p><p class="ops-note">{{ preview.body|linebreaksbr }}</p><p>Shown with your name. Save to see changes here.</p>{% else %}<p>Save the email to preview it.</p>{% endif %}</section>
+</div>{% endblock %}

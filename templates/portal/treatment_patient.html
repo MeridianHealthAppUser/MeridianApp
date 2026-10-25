@@ -2,7 +2,7 @@
 {% load static workspace_ui %}
 
 {% block title %}My Treatment | Meridian{% endblock %}
-{% block patient_extra_css %}<link rel="stylesheet" href="{% static 'css/treatment.css' %}?v=20261022a"><link rel="stylesheet" href="{% static 'css/dialogs.css' %}?v=20261022a"><script src="{% static 'js/dialogs.js' %}?v=20261022a" defer></script>{% endblock %}
+{% block patient_extra_css %}<link rel="stylesheet" href="{% static 'css/treatment.css' %}?v=20261022a"><link rel="stylesheet" href="{% static 'css/patient_billing.css' %}?v=20261025d"><link rel="stylesheet" href="{% static 'css/dialogs.css' %}?v=20261022a"><script src="{% static 'js/dialogs.js' %}?v=20261022a" defer></script>{% endblock %}
 {% block patient_content_class %}patient-treatment{% endblock %}
 {% block patient_breadcrumbs %}{% breadcrumbs 'My Treatment' %}{% endblock %}
 {% block patient_heading %}<header class="patient-page-heading"><div><h1>My Treatment</h1></div></header>{% endblock %}
@@ -66,7 +66,7 @@
             <p class="patient-plan__product">{% if treatment %}<strong>{{ treatment.medicine }} {{ treatment.dose }}</strong>{% elif plan_authorization %}<strong>{{ plan_authorization.product.name }} {{ plan_authorization.max_dose }}</strong> <span>· {{ plan_authorization.quantity_per_cycle }} per cycle</span>{% else %}<strong>{{ current_plan.plan_name }}</strong>{% endif %}</p>
             {% if plan_dose.price is not None %}<p class="patient-plan__amount">R{{ plan_dose.price|floatformat:"-2" }}<span>{{ plan_dose.billing_text }}</span></p>{% endif %}
           </div>
-          <p class="patient-small patient-plan__billing">Reference amount only. No payment is collected in this app.</p>
+          <p class="patient-small patient-plan__billing">{% if plan_billing %}{{ plan_billing.text }}. {% endif %}<a href="{% url 'portal:patient-billing' %}">Billing and payments</a></p>
           {% if treatment %}{% include 'portal/includes/patient_treatment_overview.html' %}{% endif %}
           <dl class="patient-kv">
             <div><dt>Plan</dt><dd>{{ current_plan.plan_name }}</dd></div>
@@ -117,10 +117,10 @@
           </dl>{% endif %}
           {% if current_authorization.instructions %}<div class="patient-plan__note"><h3 class="patient-eyebrow">Your doctor’s instructions</h3><p class="treatment-instructions">{{ current_authorization.instructions|linebreaksbr }}</p></div>{% endif %}
           {% if can_enroll or enrollment_form.errors %}
-            <div class="patient-plan__manage">
+            <div class="patient-plan__manage" id="start-subscription">
               <h3 class="patient-eyebrow">Start your subscription</h3>
-              <p class="patient-small">Your parcels are scheduled from your subscription.{% if enroll_dose.price is not None %} The reference amount is R{{ enroll_dose.price|floatformat:"-2" }} {{ enroll_dose.billing_text }}.{% endif %} No payment is collected in this app.</p>
-              <form method="post" action="{% url 'portal:patient-subscription-enroll' %}" class="console-form">
+              <p class="patient-small">Your parcels are sent from your subscription, once each payment is in.{% if enroll_dose.price is not None %} It’s R{{ enroll_dose.price|floatformat:"-2" }} {{ enroll_dose.billing_text }}{% if enroll_amount and enroll_amount != enroll_dose.price %}, up to R{{ enroll_amount|floatformat:"-2" }} as your dose goes up{% endif %}, starting today.{% endif %}</p>
+              <form method="post" action="{% url 'portal:patient-subscription-enroll' %}" class="console-form patient-start-form">
                 {% csrf_token %}
                 <input type="hidden" name="treatment_context" value="{{ enrollment_context }}">
                 {{ enrollment_form.non_field_errors }}
@@ -129,6 +129,16 @@
                   {{ enrollment_form.authorization }}
                   {{ enrollment_form.authorization.errors }}
                 </div>
+                <fieldset class="patient-fieldset">
+                  <legend>Where should we send your parcels?</legend>
+                  {% include 'portal/includes/delivery_address_fields.html' with form=enrollment_form %}
+                </fieldset>
+                <fieldset class="patient-fieldset">
+                  <legend>{{ enrollment_form.method.label }}</legend>
+                  {% for choice in enrollment_form.method %}<label class="patient-check" for="{{ choice.id_for_label }}">{{ choice.tag }}<span>{{ choice.choice_label }}</span></label>{% endfor %}
+                  {{ enrollment_form.method.errors }}
+                  <p class="patient-small">Next you approve it with your bank or card provider. Your first payment is taken once it’s approved, and the same amount every {{ enroll_dose.billing_weeks|default:4 }} weeks after that.</p>
+                </fieldset>
                 <label class="patient-check" for="{{ enrollment_form.confirm.id_for_label }}">{{ enrollment_form.confirm }}<span>{{ enrollment_form.confirm.label }}</span></label>
                 {{ enrollment_form.confirm.errors }}
                 <div class="patient-card-actions"><button type="submit" class="console-button console-button--primary">Start my subscription</button></div>

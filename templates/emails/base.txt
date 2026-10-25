@@ -3,4 +3,6 @@
 Meridian Health
 
 Please do not reply to this email. If you need help, please email {{ support_email }}.
-{% endautoescape %}
+{% if unsubscribe_url %}
+Unsubscribe from these emails (appointment, message and payment emails still come): {{ unsubscribe_url }}
+{% endif %}{% endautoescape %}

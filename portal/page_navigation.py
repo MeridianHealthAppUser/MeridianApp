@@ -52,9 +52,8 @@ STAFF_PAGES = {
     'compounding-list': Page('Compounding records', 'compounding', 'clinical'),
     'treatment-subscriptions': Page('Subscriptions', 'subscriptions', 'admin'),
     'ops-catalogue': Page('Catalogue', 'catalogue', 'admin'),
-    'ops-shipping': Page('Weekly shipping list', 'shipping', 'admin'),
-    'ops-stock': Page('Dispatch stock', 'stock', 'admin'),
-    'ops-history': Page('Dispatch history', 'history', 'admin'),
+    'ops-shipping': Page('Weekly shipping', 'shipping', 'shipping'),
+    'ops-history': Page('Dispatch history', 'history', 'shipping'),
     'ops-orders': Page('Non-prescription requests', 'orders', 'admin'),
     'staff-leads': Page('Leads and enquiries', 'leads', 'admin'),
     'staff-lead-history': Page('Lead history', 'leads', 'admin'),
@@ -195,6 +194,10 @@ def _check_page_access(view, request, page):
     access = page.access
     if access == 'admin' and not membership.is_admin:
         raise PermissionDenied('This page is for practice administrators.')
+    if access == 'shipping':
+        from care.operations import can_ship
+        if not can_ship(company, membership):
+            raise PermissionDenied('This page is for practice administrators.')
     if access == 'super_admin' and membership.role != 'super_admin':
         raise PermissionDenied('This page is for practice Super Admins.')
     if access == 'clinical' and not membership.has_clinical_access:
@@ -418,6 +421,9 @@ class PageNavigationMiddleware:
         page = _RenderedPage()
         page.feed(response.content.decode(response.charset))
         if not page.found or page.depth:
+            return _json(request, {'full_navigation': canonical_url(request)}, status=409)
+        # Another site's script (Peach's card form) is never added to a swapped-in page, so that page loads fully.
+        if any(_local_url(request, value) is None for value in page.scripts):
             return _json(request, {'full_navigation': canonical_url(request)}, status=409)
         def assets(values):
             return list(dict.fromkeys(url for value in values if (url := _local_url(request, value))))

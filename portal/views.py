@@ -24,6 +24,7 @@ from care.forms import (
     WeightEntryForm,
 )
 from care.messaging import post_staff_reply, staff_threads, start_conversation, unread_for_staff
+from care.operations import can_ship
 from care.models import (
     Appointment,
     ClinicalNote,
@@ -66,6 +67,8 @@ class StaffCompanyRequiredMixin:
     membership = None
     # Operations, Insights and Settings pages are for practice admins and Super Admins only.
     admin_only = False
+    # Weekly shipping and Dispatch history: doctors too, when the practice lets doctors ship (care.operations.can_ship).
+    shipping = False
     # Practice-wide clinical lists the Clinician role's menu leaves out, as they work from each patient's
     # record: opened by URL, a clinician goes back to the Overview with this message as an error toast.
     clinician_redirect_message = ''
@@ -78,7 +81,7 @@ class StaffCompanyRequiredMixin:
         request.realtime_scope = staff_scope(self.company, request.user)
         if response := changed_scope_response(request):
             return response
-        if self.admin_only and not self.membership.is_admin:
+        if self.admin_only and not self.membership.is_admin and not (self.shipping and can_ship(self.company, self.membership)):
             raise PermissionDenied('This page is for practice administrators.')
         if self.clinician_redirect_message and self.membership.role == CompanyMembership.Role.DOCTOR:
             messages.error(request, self.clinician_redirect_message)

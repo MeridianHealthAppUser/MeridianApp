@@ -6,7 +6,9 @@ from django import forms
 from django.core import signing
 from django.core.exceptions import ValidationError
 
-from care.models import MedicationProduct, PatientSubscription, TreatmentAuthorization
+from care.models import DebitMandate, MedicationProduct, PatientSubscription, TreatmentAuthorization
+
+from .operations_forms import DeliveryAddressForm
 
 
 TREATMENT_CONTEXT_SALT = 'portal.treatment-context.v1'
@@ -76,15 +78,36 @@ class HelpRequestForm(forms.Form):
                              help_text='For example side effects, slow results or the cost. Your doctor and the practice team will reply in My Messages.')
 
 
-class EnrollmentForm(forms.Form):
-    authorization = forms.ModelChoiceField(queryset=TreatmentAuthorization.objects.none(), empty_label='Choose your current authorisation')
-    confirm = forms.BooleanField(label='I want to enroll in this local care plan. No payment is collected and no parcel is automatically dispatched.')
+def limit_methods(field, provider):
+    """Offer only the ways the payment provider takes (Peach Payments: cards only)."""
+    if provider is not None:
+        field.choices = [choice for choice in field.choices if choice[0] in provider.methods]
+        if field.initial not in provider.methods:
+            field.initial = provider.methods[0]
+
+
+class EnrollmentForm(DeliveryAddressForm):
+    """Start my subscription: the prescription, where parcels go (care.addresses) and how it's paid (care.billing)."""
+
+    authorization = forms.ModelChoiceField(label='Your prescription', queryset=TreatmentAuthorization.objects.none(),
+                                           empty_label='Choose your current authorisation')
+    method = forms.ChoiceField(label='Pay by', widget=forms.RadioSelect, initial=DebitMandate.Method.DEBICHECK, choices=(
+        (DebitMandate.Method.DEBICHECK, 'DebiCheck debit order: you approve it in your banking app'),
+        (DebitMandate.Method.CARD, 'Card: kept safely by our payment provider'),
+    ))
+    confirm = forms.BooleanField(label='I agree to the practice collecting my subscription as shown, from today, until I '
+                                       'pause or cancel it.')
+
+    field_order = ('authorization', 'recipient', 'business', 'street', 'suburb', 'city', 'province', 'postal_code',
+                   'phone', 'instructions', 'method', 'confirm')
 
     def __init__(self, *args, authorizations, **kwargs):
+        from care.payment_providers import current_provider
         from care.prescriptions import with_plan_ends
 
         super().__init__(*args, **kwargs)
         self.fields['authorization'].queryset = authorizations
+        limit_methods(self.fields['method'], current_provider())
         # A starting plan's step is authorised until the plan ends.
         ends = {row.pk: row.ends_on for row in with_plan_ends(list(authorizations))}
         self.fields['authorization'].label_from_instance = (

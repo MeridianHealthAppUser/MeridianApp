@@ -61,7 +61,8 @@ class ViewLogSettingTests(TestCase):
         self.login(self.super_admin)
         self.assertContains(self.client.get(url), 'Parcels go out on')
         self.assertEqual(self.client.post(url, {'section': 'shipping', 'shipping_weekday': '9'}).status_code, 400)
-        self.assertRedirects(self.client.post(url, {'section': 'shipping', 'shipping_weekday': '4'}), url, fetch_redirect_response=False)
+        self.assertRedirects(self.client.post(url, {'section': 'shipping', 'shipping_weekday': '4', 'doctors_ship': 'on'}), url,
+                             fetch_redirect_response=False)
         settings_row = PracticeSettings.objects.get(company=self.company)
         self.assertEqual((settings_row.shipping_weekday, settings_row.store_view_log), (4, False))
         self.assertEqual(AuditEvent.objects.get(action='practice.settings_updated').metadata, {'shipping_weekday': 4})

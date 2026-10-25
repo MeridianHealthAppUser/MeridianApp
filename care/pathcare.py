@@ -90,7 +90,13 @@ def _one_line(value):
 
 
 def patient_address(company, patient):
-    """The delivery address from the patient's latest supply request: street; suburb, city; postal code."""
+    """The patient's delivery address (care.addresses), else the one on their latest supply request: street;
+    suburb, city; postal code."""
+    from .models import DeliveryAddress
+
+    saved = DeliveryAddress.objects.filter(company=company, patient=patient).first()
+    if saved is not None:
+        return _one_line(saved.street), ', '.join(_one_line(part) for part in (saved.suburb, saved.city) if part), _one_line(saved.postal_code)
     order = PharmacyOrder.objects.for_company(company).filter(patient=patient).exclude(delivery_address={}).exclude(
         submitted_at__isnull=True,
     ).order_by('-submitted_at', '-pk').first()

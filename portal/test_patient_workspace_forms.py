@@ -15,7 +15,10 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from care.models import Appointment, ClinicalEncounter, ClinicalTask, CompoundingRecord, LabRequest, MedicationProduct, Shipment, TreatmentAuthorization
+from care.models import (
+    Appointment, ClinicalEncounter, ClinicalTask, CompoundingRecord, LabRequest, MedicationProduct, PracticeSettings, Shipment,
+    TreatmentAuthorization,
+)
 from care.widgets import floor_quarter_hour
 from practices.models import Company, CompanyMembership, Patient
 from practices.services import ACTIVE_COMPANY_SESSION_KEY, ACTIVE_PATIENT_COMPANY_SESSION_KEY
@@ -31,6 +34,7 @@ class PatientWorkspaceFormTests(TestCase):
     @classmethod
     def setUpTestData(cls):
         cls.company = Company.objects.create(name='Workspace Forms', slug='workspace-forms')
+        PracticeSettings.objects.create(company=cls.company, doctors_ship=False)
         cls.beta = Company.objects.create(name='Other Workspace', slug='other-workspace-forms')
         cls.doctor = get_user_model().objects.create_user(email='workspace-form-doctor@example.test')
         cls.admin = get_user_model().objects.create_user(email='workspace-form-admin@example.test')
@@ -267,10 +271,14 @@ class SharedPatientActionTests(TestCase):
 
     def test_marker_never_bypasses_practice_or_clinical_permissions(self):
         self.login(company=self.beta)
+        PracticeSettings.objects.create(company=self.beta, doctors_ship=False)
         for name, _, url, admin_page in self.screens():
             with self.subTest(screen=name):
                 # The doctor can't open Operations pages at all, so a delivery is refused before the practice check.
                 self.assertEqual(self.client.get(url, {'workspace': 'patient'}).status_code, 403 if admin_page else 404)
+        # Where the doctor's own practice lets doctors ship, another practice's parcel still isn't there for them.
+        PracticeSettings.objects.filter(company=self.beta).update(doctors_ship=True)
+        self.assertEqual(self.client.get(reverse('portal:ops-shipment-detail', args=[self.shipment.pk])).status_code, 404)
         self.login(self.admin)
         self.assertEqual(self.client.get(reverse('portal:treatment-authorisation-detail', args=[self.authorization.pk]), {'workspace': 'patient'}).status_code, 403)
 

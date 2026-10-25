@@ -1,0 +1,5 @@
+{% extends 'emails/base.html' %}{% block content %}
+        <p style="margin:0 0 16px;">Hello{% if greeting %} {{ greeting }}{% endif %},</p>
+        <p style="margin:0 0 16px;">Your treatment or its price has changed, so your debit order needs your approval for the new amount{% if amount %}: up to <strong>{{ amount }}</strong> every {{ weeks }} weeks{% endif %}. Nothing more is collected, and your next parcel waits, until you approve it.</p>
+        {% include 'emails/button.html' with label='Approve my new debit order' %}
+{% endblock %}

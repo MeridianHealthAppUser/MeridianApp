@@ -42,7 +42,7 @@ Recommended release order:
 
 HSTS preload is deliberately not enabled automatically. A deployment check may report that the domain is not configured for browser preload; review domain-wide HTTPS policy before opting in.
 
-Payments, third-party Zoom integration and courier APIs are not configured. Transactional email (password reset links, PathCare forms and notifications; see [Emails and appointment reminders](#emails-and-appointment-reminders)) uses the `DJANGO_EMAIL_*` settings. Native WebRTC video is included; production Redis and TURN must be provisioned separately. Configure any future integration separately; never infer payment success from a browser flag. The local review-reminder command can be scheduled only after choosing an authorised operational account and reviewing its scope.
+Payments and the courier are switched on by settings (see [Billing, debit orders and the courier](#billing-debit-orders-and-the-courier)); third-party Zoom integration is not configured. Transactional email (password reset links, PathCare forms and notifications; see [Emails and appointment reminders](#emails-and-appointment-reminders)) uses the `DJANGO_EMAIL_*` settings. Native WebRTC video is included; production Redis and TURN must be provisioned separately. Configure any future integration separately; never infer payment success from a browser flag. The local review-reminder command can be scheduled only after choosing an authorised operational account and reviewing its scope.
 
 ## PostgreSQL connection limits
 
@@ -161,6 +161,66 @@ an always-running scheduler would be a separate component and additional cost. S
 [App Platform pricing](https://docs.digitalocean.com/products/app-platform/details/pricing/).
 
 Locally, every email is printed in the terminal running `runserver` instead of being sent. Run `python manage.py send_appointment_reminders` to see due day-before and starting-soon reminders. `seed_demo` sends nothing.
+
+## Billing, debit orders and the courier
+
+Billing (`care/billing.py`) and The Courier Guy (`care/courier.py`) were added on 24 Oct 2026.
+
+- `PAYMENT_PROVIDER` chooses who collects:
+  - `sandbox` is for local use. A debit order is approved, or a card paid, on a page inside the app, and no money
+    moves. It is refused in production.
+  - `peach` is Peach Payments (`care/peach.py`). It takes cards only, because Peach doesn't offer DebiCheck.
+    - Set `PEACH_ENTITY_ID` and `PEACH_ACCESS_TOKEN` (the 3-D Secure entity), and `PEACH_RECURRING_ENTITY_ID` and
+      `PEACH_RECURRING_ACCESS_TOKEN` (the recurring entity Peach activates on request).
+    - `PEACH_API_URL` defaults to the sandbox (`https://sandbox-card.peachpayments.com`) with debug on, and to
+      `https://card.peachpayments.com` otherwise.
+    - The patient enters their card in Peach's form on the app's page. Peach keeps it, and the app charges it each
+      period.
+    - The calls were checked against Peach's public sandbox on 25 Oct 2026 (in euros, which is the currency its shared
+      test account takes): the card forms, the first and later charges, a decline, and forgetting a card.
+    - Peach steers new merchants to its newer Orchestration API. Confirm which API the practice's account is on.
+  - `stitch` is Stitch (`care/stitch.py`): DebiCheck debit orders, kept cards, and once-off card or bank payments.
+    - Set `STITCH_CLIENT_ID` and `STITCH_CLIENT_SECRET`.
+    - Stitch must allowlist the app's domain for the return page.
+    - DebiCheck collections go to Stitch as daily collection files, and Stitch's REPLY and OUTPUT files come back.
+      Until Stitch gives SFTP access, exchange them on Operations > Billing (Super Admins), or run
+      `python manage.py stitch_debicheck --write DIR` and `--read FILE` beside an SFTP sync.
+    - It was written from Stitch's published schema and examples. Stitch issues test clients itself, and none was
+      available.
+  - Empty means nothing is collected in the app, and the practice records the payments it receives on
+    Operations > Billing.
+- Moving between Peach and Stitch: `PAYMENT_PROVIDER` only decides where new debit orders and payments go. A debit
+  order already set up stays with the provider that holds the card or mandate, and is collected there. Keep the old
+  provider's settings (and its webhook) in place until its debit orders have all been replaced or cancelled. Sandbox
+  debit orders are never collected once `PAYMENT_PROVIDER` is a real provider.
+- `PEACH_WEBHOOK_SECRET` and `STITCH_WEBHOOK_SECRET` are each provider's webhook secret: Peach's 64-character hex key,
+  and Stitch's `whsec_` signing secret. `PAYMENT_WEBHOOK_SECRET` still works for the provider in `PAYMENT_PROVIDER`
+  when its own isn't set.
+  - The webhook address is `https://<site>/billing/webhooks/peach/` or `https://<site>/billing/webhooks/stitch/`.
+  - Register it with the provider. With Stitch, subscribe to the `payment`, `payment-consent-request` and
+    `transaction` events.
+  - Webhooks settle payments the provider didn't answer straight away. Without the secret, every webhook is refused.
+- Schedule `python manage.py run_debits` once a day in the morning (the `daily-debits` job in `.do/app.yaml.example`).
+  It opens each subscription's next cycle when its debit date comes round, collects it, and retries failed debits on
+  the days in Practice settings > Billing (3 and 7 days after the debit date by default). After the last retry the
+  cycle waits in the failure queue with a task for the practice.
+- `TCG_API_KEY` switches on **Book waybills** on Weekly shipping. It is a Bearer API key from The Courier Guy's portal
+  (Integrations > API Keys). `TCG_API_URL` defaults to the live host, `https://api.portal.thecourierguy.co.za`. A
+  sandbox account (register at `https://tcg-sandbox.shiplogic.com/register`) uses `https://api.shiplogic.com`. Fill in
+  the collection address, contact and usual parcel size in Practice settings > Courier first. The calls follow
+  ShipLogic's published TCG API collection and The Courier Guy's own WooCommerce plugin. Book one parcel in the sandbox
+  before go-live, to confirm that the account's service level (ECO by default) and the waybill printed on the label
+  match what the practice expects. Holding or cancelling a booked parcel cancels its booking. The Courier Guy refuses
+  that once the parcel has been collected.
+- `TCG_WEBHOOK_TOKEN` switches on The Courier Guy's tracking webhook. Subscribe to "Tracking event" on its portal
+  (Settings > Webhook subscriptions) with `https://<site>/courier/webhooks/<token>/`.
+  - Each parcel's courier status (collected, at the hub, delivered) is shown on Weekly shipping and in Dispatch
+    history, and a dispatched parcel the courier delivers is marked delivered.
+  - The Courier Guy doesn't sign its webhooks, so the token in the address is what keeps others out. Make it long and
+    random.
+- Schedule `python manage.py send_journey_emails` once a day (the `journey-emails` job) for the email journeys
+  (`care/journeys.py`). Every journey email starts switched off: a Super Admin rewrites and switches each on under
+  Settings > Email journeys.
 
 ## Meridian administration and first login
 

@@ -5,14 +5,14 @@
 .patient-workspace-actions { align-items: center; display: flex; flex-wrap: wrap; gap: .65rem; }
 .patient-workspace-tabs { border-bottom: 1px solid var(--console-line); display: flex; flex-wrap: wrap; gap: .3rem; margin-bottom: 1.3rem; padding-bottom: .75rem; }
 .patient-workspace-tabs a { align-items: center; border: 1px solid transparent; border-radius: .55rem; color: var(--console-muted); display: inline-flex; font-size: .8rem; font-weight: 650; min-height: 44px; padding: .55rem .75rem; text-decoration: none; }
-.patient-workspace-tabs a.is-active { background: var(--console-teal-soft); border-color: #acd8cb; color: var(--console-teal-dark); }
-.patient-workspace-tabs a:hover { background: #edf6f2; }
+.patient-workspace-tabs a.is-active { background: var(--console-teal-soft); border-color: var(--c-acd8cb); color: var(--console-teal-dark); }
+.patient-workspace-tabs a:hover { background: var(--c-edf6f2); }
 /* Operations and Administration use these tabs too (includes/page_tabs.html); Data requests carries a count. */
 .patient-workspace-tabs a .nav-badge { margin-left: .45rem; }
 .patient-workspace-content { min-width: 0; }
 .patient-workspace-toolbar { align-items: center; display: flex; flex-wrap: wrap; gap: .7rem; justify-content: space-between; margin-bottom: 1rem; }
 .patient-workspace-toolbar h2 { color: var(--console-ink); font-size: 1.15rem; margin: 0; }
-.patient-workspace-panel { background: #fff; border: 1px solid var(--console-line); border-radius: .85rem; margin-bottom: 1rem; overflow: hidden; }
+.patient-workspace-panel { background: var(--c-ffffff); border: 1px solid var(--console-line); border-radius: .85rem; margin-bottom: 1rem; overflow: hidden; }
 .patient-workspace-panel__body { padding: 1rem 1.2rem; }
 .patient-workspace-table-wrap { overflow-x: auto; }
 .patient-workspace-table { border-collapse: collapse; font-size: .8rem; width: 100%; }
@@ -21,12 +21,12 @@
 .patient-workspace-table tr:last-child td { border-bottom: 0; }
 .patient-workspace-table small { color: var(--console-muted); display: block; margin-top: .2rem; }
 .patient-workspace-empty, .patient-workspace-notice { color: var(--console-muted); font-size: .85rem; line-height: 1.6; margin: 0; padding: 1.1rem; }
-.patient-workspace-notice { background: #edf6f2; border: 1px solid #cce2d7; border-radius: .75rem; margin-bottom: 1rem; }
+.patient-workspace-notice { background: var(--c-edf6f2); border: 1px solid var(--c-cce2d7); border-radius: .75rem; margin-bottom: 1rem; }
 /* A past clinician reads the record but can't change it. */
-.patient-workspace-notice--read-only { background: #fff8eb; border-color: #f0dcb0; color: #6b5217; }
+.patient-workspace-notice--read-only { background: var(--c-fff8eb); border-color: var(--c-f0dcb0); color: var(--c-6b5217); }
 .patient-workspace-pagination { align-items: center; display: flex; flex-wrap: wrap; font-size: .8rem; gap: .6rem; justify-content: space-between; padding: 1rem; }
 .patient-workspace-summary { display: grid; gap: .8rem; grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); margin-bottom: 1rem; }
-.patient-workspace-summary a { background: #fff; border: 1px solid var(--console-line); border-radius: .85rem; color: var(--console-muted); font-size: .8rem; padding: 1rem; text-decoration: none; }
+.patient-workspace-summary a { background: var(--c-ffffff); border: 1px solid var(--console-line); border-radius: .85rem; color: var(--console-muted); font-size: .8rem; padding: 1rem; text-decoration: none; }
 .patient-workspace-summary strong { color: var(--console-ink); display: block; font-size: 1.7rem; margin-top: .4rem; }
 .patient-workspace-facts { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr)); margin: 0; }
 .patient-workspace-facts dt { color: var(--console-muted); font-size: .75rem; }
@@ -66,16 +66,16 @@
 @media (max-width: 52rem) {
   .patient-workspace-tabs { display: none; }
   .patient-workspace-picker { display: block; margin: .25rem 0 1.2rem; }
-  .patient-workspace-picker > summary { align-items: center; background: #fff; border: 1px solid var(--console-line); border-radius: .75rem; color: var(--console-ink); cursor: pointer; display: flex; font-size: .95rem; font-weight: 700; gap: .75rem; justify-content: space-between; list-style: none; min-height: 3rem; padding: .7rem 1rem; }
+  .patient-workspace-picker > summary { align-items: center; background: var(--c-ffffff); border: 1px solid var(--console-line); border-radius: .75rem; color: var(--console-ink); cursor: pointer; display: flex; font-size: .95rem; font-weight: 700; gap: .75rem; justify-content: space-between; list-style: none; min-height: 3rem; padding: .7rem 1rem; }
   .patient-workspace-picker > summary::-webkit-details-marker { display: none; }
   .patient-workspace-picker > summary:focus-visible { outline: 2px solid var(--console-teal); outline-offset: 2px; }
   .patient-workspace-picker > summary svg { fill: none; flex: 0 0 auto; height: 1.1rem; stroke: var(--console-teal-dark); stroke-linecap: round; stroke-linejoin: round; stroke-width: 2; transition: transform .15s ease; width: 1.1rem; }
   .patient-workspace-picker[open] > summary svg { transform: rotate(180deg); }
   /* Opens in place, pushing the page down, so no option hides behind the bottom menu bar. */
-  .patient-workspace-picker nav { background: #fff; border: 1px solid var(--console-line); border-radius: .75rem; box-shadow: 0 6px 18px rgba(21, 59, 57, .08); margin-top: .4rem; }
+  .patient-workspace-picker nav { background: var(--c-ffffff); border: 1px solid var(--console-line); border-radius: .75rem; box-shadow: 0 6px 18px var(--c-153b39-080); margin-top: .4rem; }
   .patient-workspace-picker ul { list-style: none; margin: 0; padding: .3rem; }
   .patient-workspace-picker a { align-items: center; border-radius: .55rem; color: var(--console-ink); display: flex; font-size: .92rem; font-weight: 650; justify-content: space-between; min-height: 2.9rem; padding: .6rem .8rem; text-decoration: none; }
-  .patient-workspace-picker a:hover, .patient-workspace-picker a:focus-visible { background: #edf6f2; }
+  .patient-workspace-picker a:hover, .patient-workspace-picker a:focus-visible { background: var(--c-edf6f2); }
   .patient-workspace-picker a[aria-current="page"] { background: var(--console-teal-soft); color: var(--console-teal-dark); }
   .patient-workspace-picker a[aria-current="page"]::after { content: '✓'; font-weight: 800; }
   .patient-workspace-picker a .nav-badge { margin-left: auto; margin-right: .6rem; }

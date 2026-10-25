@@ -5,7 +5,7 @@
 .patient-inbox-toolbar > span { color: var(--console-muted); font-size: .8rem; }
 .patient-inbox-toolbar .patient-inline-link { font-size: .8rem; }
 
-.patient-inbox { background: var(--console-card, #fff); border: 1px solid var(--console-line); border-radius: 1rem; box-shadow: var(--console-shadow); display: grid; grid-template-columns: minmax(15rem, 19.5rem) minmax(0, 1fr); overflow: hidden; }
+.patient-inbox { background: var(--console-card, var(--c-ffffff)); border: 1px solid var(--console-line); border-radius: 1rem; box-shadow: var(--console-shadow); display: grid; grid-template-columns: minmax(15rem, 19.5rem) minmax(0, 1fr); overflow: hidden; }
 .patient-inbox-threads { border-right: 1px solid var(--console-line); display: flex; flex-direction: column; min-width: 0; }
 .patient-inbox-thread-list { flex: 1 1 auto; list-style: none; margin: 0; max-height: 36rem; overflow-y: auto; padding: 0; }
 .patient-inbox-thread-list > li + li { border-top: 1px solid var(--console-soft-line); }
@@ -17,7 +17,7 @@
 .patient-inbox-thread.is-unread > strong { font-weight: 700; }
 /* Unread count per conversation, matching the red badge on My Messages in the menu. */
 .patient-inbox-thread > strong { align-items: flex-start; display: flex; gap: .5rem; justify-content: space-between; }
-.patient-inbox-thread__badge { align-items: center; background: var(--patient-badge, #d92d20); border-radius: 999px; color: #fff; display: inline-flex; flex: 0 0 auto; font-size: .68rem; font-variant-numeric: tabular-nums; font-weight: 700; height: 1.15rem; justify-content: center; line-height: 1; margin-top: .05rem; min-width: 1.15rem; padding: 0 .35rem; white-space: nowrap; }
+.patient-inbox-thread__badge { align-items: center; background: var(--patient-badge, var(--c-d92d20)); border-radius: 999px; color: var(--c-ffffff); display: inline-flex; flex: 0 0 auto; font-size: .68rem; font-variant-numeric: tabular-nums; font-weight: 700; height: 1.15rem; justify-content: center; line-height: 1; margin-top: .05rem; min-width: 1.15rem; padding: 0 .35rem; white-space: nowrap; }
 .patient-inbox-thread__with { color: var(--console-muted); font-size: .72rem; overflow-wrap: anywhere; }
 .patient-conversation__joined { color: var(--console-muted); font-size: .75rem; margin: .2rem 0 0; }
 /* The latest message with its time or date on the right, laid out like the practice console's conversation lists. */
@@ -40,7 +40,7 @@
 .workspace-page .meridian-console .patient-conversation__header h2 { color: var(--console-ink); font-size: .98rem; font-weight: 500; line-height: 1.4; margin: 0; overflow-wrap: anywhere; }
 .patient-conversation__header p { color: var(--console-muted); font-size: .72rem; margin: .2rem 0 0; }
 .patient-conversation-messages { align-content: start; display: grid; flex: 1; gap: .75rem; list-style: none; margin: 0; max-height: 32rem; overflow-y: auto; padding: 1.25rem; }
-.patient-conversation-message { background: var(--console-teal-soft); border: 1px solid var(--patient-teal-line, #b7dfd6); border-radius: .9rem .9rem .9rem .25rem; justify-self: start; max-width: 76%; min-width: 0; padding: .7rem .9rem; }
+.patient-conversation-message { background: var(--console-teal-soft); border: 1px solid var(--patient-teal-line, var(--c-b7dfd6)); border-radius: .9rem .9rem .9rem .25rem; justify-self: start; max-width: 76%; min-width: 0; padding: .7rem .9rem; }
 .patient-conversation-message--mine { background: var(--console-canvas); border-color: var(--console-line); border-radius: .9rem .9rem .25rem .9rem; justify-self: end; }
 .patient-conversation-message p { color: var(--console-ink); font-size: .86rem; line-height: 1.55; margin: 0; overflow-wrap: anywhere; }
 .patient-conversation-message__meta { color: var(--console-muted); display: flex; flex-wrap: wrap; font-size: .68rem; gap: .2rem .5rem; margin-top: .35rem; }

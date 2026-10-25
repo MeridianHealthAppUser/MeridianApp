@@ -159,3 +159,59 @@ jobs:
       - key: DJANGO_SITE_URL
         value: '${APP_URL}'
         scope: RUN_TIME
+  - name: daily-debits
+    # Collects the subscription debits that have come round and retries failed ones on their retry days
+    # (care/billing.py). Needs the same runtime settings as web, including PAYMENT_PROVIDER and its keys.
+    kind: SCHEDULED
+    schedule:
+      cron: '0 6 * * *'
+      time_zone: Africa/Johannesburg
+    github:
+      repo: MeridianHealthAppUser/MeridianApp
+      branch: main
+      deploy_on_push: false
+    dockerfile_path: Dockerfile
+    source_dir: /
+    run_command: python manage.py run_debits
+    envs:
+      - key: MULTI_PRACTICE_ENABLED
+        value: 'false'
+        scope: RUN_TIME
+      - key: SINGLE_PRACTICE_SLUG
+        value: meridian-health
+        scope: RUN_TIME
+      - key: DJANGO_DEBUG
+        value: 'false'
+        scope: RUN_TIME
+      - key: DJANGO_SITE_URL
+        value: '${APP_URL}'
+        scope: RUN_TIME
+      # - key: PAYMENT_PROVIDER
+      #   value: peach
+      #   scope: RUN_TIME
+  - name: journey-emails
+    # Sends the email journeys' emails that are due (care/journeys.py), once a day.
+    kind: SCHEDULED
+    schedule:
+      cron: '0 9 * * *'
+      time_zone: Africa/Johannesburg
+    github:
+      repo: MeridianHealthAppUser/MeridianApp
+      branch: main
+      deploy_on_push: false
+    dockerfile_path: Dockerfile
+    source_dir: /
+    run_command: python manage.py send_journey_emails
+    envs:
+      - key: MULTI_PRACTICE_ENABLED
+        value: 'false'
+        scope: RUN_TIME
+      - key: SINGLE_PRACTICE_SLUG
+        value: meridian-health
+        scope: RUN_TIME
+      - key: DJANGO_DEBUG
+        value: 'false'
+        scope: RUN_TIME
+      - key: DJANGO_SITE_URL
+        value: '${APP_URL}'
+        scope: RUN_TIME

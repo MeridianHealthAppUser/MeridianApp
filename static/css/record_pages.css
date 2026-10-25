@@ -17,7 +17,7 @@
 .record-timeline-tools { align-items:center; display:flex; flex-wrap:wrap; gap:.6rem; }
 .record-timeline-tools .console-button { min-height:2.75rem; white-space:nowrap; }
 .record-scroll-help { border-bottom:1px solid var(--console-soft-line); color:var(--console-muted); flex:0 0 auto; font-size:.72rem; line-height:1.5; margin:0; padding:.65rem 1.15rem; }
-.record-timeline-scroll { flex:1 1 auto; min-height:0; overflow-y:auto; overscroll-behavior-y:contain; scrollbar-color:#a9c8c5 transparent; scrollbar-gutter:stable; }
+.record-timeline-scroll { flex:1 1 auto; min-height:0; overflow-y:auto; overscroll-behavior-y:contain; scrollbar-color:var(--c-a9c8c5) transparent; scrollbar-gutter:stable; }
 .record-timeline-scroll:focus-visible { outline:2px solid var(--console-teal); outline-offset:-3px; }
 .record-timeline-loader { border-top:1px solid var(--console-soft-line); padding:.8rem 1rem 1rem; position:relative; text-align:center; }
 .record-timeline-loader p { margin:0 0 .6rem; }
@@ -25,20 +25,20 @@
 .record-timeline-loader [hidden] { display:none !important; }
 .record-timeline-loader button { min-height:2.75rem; }
 .record-timeline-sentinel { height:1px; left:0; position:absolute; top:0; width:100%; }
-.record-timeline-loader[data-state="error"] p { color:#9b3737; }
+.record-timeline-loader[data-state="error"] p { color:var(--c-9b3737); }
 .record-timeline { list-style:none; margin:0; padding:1.4rem 1.5rem 1rem 2rem; }
 .record-timeline__entry { border-left:1px solid var(--console-line); padding:0 0 1.5rem 1rem; position:relative; overflow-wrap:anywhere; }
-.record-timeline__entry::before { background:#fff; border:2px solid #8299a1; border-radius:50%; content:""; height:.65rem; left:-.39rem; position:absolute; top:.18rem; width:.65rem; }
-.record-timeline__entry--clinical::before { border-color:#0d958b; }
-.record-timeline__entry--supply::before { border-color:#2e889f; }
-.record-timeline__entry--system::before { border-color:#b07828; }
+.record-timeline__entry::before { background:var(--c-ffffff); border:2px solid var(--c-8299a1); border-radius:50%; content:""; height:.65rem; left:-.39rem; position:absolute; top:.18rem; width:.65rem; }
+.record-timeline__entry--clinical::before { border-color:var(--c-0d958b); }
+.record-timeline__entry--supply::before { border-color:var(--c-2e889f); }
+.record-timeline__entry--system::before { border-color:var(--c-b07828); }
 .record-timeline__meta { color:var(--console-muted); font-size:.7rem; gap:.4rem; }
 .record-timeline__meta .console-status { font-size:.65rem; }
 .record-timeline__entry h3 { color:var(--console-ink); font-family:inherit; font-size:.88rem; line-height:1.45; margin:.45rem 0 .25rem; }
 .record-timeline__detail, .record-timeline__actor { color:var(--console-muted); font-size:.8rem; line-height:1.6; margin:.25rem 0; }
 .record-timeline__detail { white-space:pre-wrap; }
 .record-timeline__actor { font-size:.73rem; }
-.record-text-link, .record-care-links a { color:#087e76; font-size:.8rem; font-weight:700; text-decoration:underline; text-underline-offset:3px; }
+.record-text-link, .record-care-links a { color:var(--c-087e76); font-size:.8rem; font-weight:700; text-decoration:underline; text-underline-offset:3px; }
 .record-sidebar { display:grid; gap:1rem; }
 .record-summary { padding:1.2rem; }
 .record-summary > p:not(.console-kicker) { color:var(--console-muted); font-size:.8rem; line-height:1.6; }
@@ -47,7 +47,7 @@
 .record-summary dd { color:var(--console-ink); font-weight:600; margin:0; overflow-wrap:anywhere; text-align:right; }
 .record-small { color:var(--console-muted); display:block; font-size:.72rem; font-weight:400; line-height:1.6; }
 .record-care-links { display:grid; gap:.9rem; margin-top:1rem; }
-.record-profile { background:var(--console-bg,#f4f8f8); border:1px solid var(--console-line); border-radius:.6rem; margin-top:.7rem; padding:.65rem .8rem; }
+.record-profile { background:var(--console-bg,var(--c-f4f8f8)); border:1px solid var(--console-line); border-radius:.6rem; margin-top:.7rem; padding:.65rem .8rem; }
 .record-profile summary { color:var(--console-ink); cursor:pointer; font-size:.8rem; font-weight:600; line-height:1.5; }
 .record-profile summary:focus-visible { outline:2px solid var(--console-teal); outline-offset:4px; }
 .record-profile dl { display:block; margin:.8rem 0 0; }

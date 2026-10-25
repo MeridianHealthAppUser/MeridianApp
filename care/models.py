@@ -16,6 +16,13 @@ from django.utils import timezone
 from practices.models import CompanyMembership, CompanyScopedModel, Patient
 
 
+# South Africa's provinces, as delivery and collection addresses give them.
+PROVINCES = (
+    ('EC', 'Eastern Cape'), ('FS', 'Free State'), ('GP', 'Gauteng'), ('KZN', 'KwaZulu-Natal'), ('LP', 'Limpopo'),
+    ('MP', 'Mpumalanga'), ('NC', 'Northern Cape'), ('NW', 'North West'), ('WC', 'Western Cape'),
+)
+
+
 class PatientCompanyScopedModel(CompanyScopedModel):
     """Base for records owned by a single patient in a single practice."""
 
@@ -59,9 +66,59 @@ class PracticeSettings(CompanyScopedModel):
         'Store view log on database', default=False,
         help_text='Also record when people view, download or export records. Stored for the practice audit only and never shown in the app.',
     )
+    # Billing (care.billing). A parcel is locked for its week only once what it is for has been paid.
+    require_payment = models.BooleanField(
+        'Parcels need payment before they go out', default=True,
+        help_text='Check and lock week holds back any parcel whose subscription payment or order is not paid.',
+    )
+    payment_retry_days = models.CharField(
+        'Retry a failed debit after', max_length=40, default='3,7',
+        help_text='Days after the debit date, separated by commas. After the last retry the payment goes to the failure queue.',
+    )
+
+    class NewDebitOrder(models.TextChoices):
+        ANY_CHANGE = 'any', 'Whenever the prescription or its price changes'
+        HIGHER = 'higher', 'Only when the amount goes above what the patient approved'
+
+    # When a prescription or price change asks the patient to approve a new debit order (care.billing.review_mandates).
+    new_debit_order = models.CharField('Ask for a new debit order', max_length=10, choices=NewDebitOrder.choices,
+                                       default=NewDebitOrder.ANY_CHANGE)
+    # Weekly shipping and Dispatch history (care.operations) for doctors as well as administrators.
+    doctors_ship = models.BooleanField(
+        'Doctors can set up and ship parcels', default=True,
+        help_text='Weekly shipping and Dispatch history for doctors: marking parcels ready, checking payment, locking the '
+                  'week, booking The Courier Guy and recording the collection.',
+    )
+    # The Courier Guy (care.courier): where parcels are collected and the parcel the practice usually sends.
+    collection_business = models.CharField('Business name', max_length=150, blank=True)
+    collection_street = models.CharField('Street address', max_length=200, blank=True)
+    collection_suburb = models.CharField('Suburb', max_length=120, blank=True)
+    collection_city = models.CharField('City', max_length=120, blank=True)
+    collection_province = models.CharField('Province', max_length=3, blank=True, choices=PROVINCES)
+    collection_postal_code = models.CharField('Postal code', max_length=10, blank=True)
+    collection_contact = models.CharField('Contact name', max_length=150, blank=True)
+    collection_phone = models.CharField('Contact number', max_length=32, blank=True)
+    collection_email = models.EmailField('Contact email', blank=True)
+    courier_service_level = models.CharField(
+        'Service level', max_length=20, default='ECO',
+        help_text='The Courier Guy service code: ECO for economy road (the default), OVN for overnight.',
+    )
+    parcel_length_cm = models.PositiveSmallIntegerField('Parcel length (cm)', default=30)
+    parcel_width_cm = models.PositiveSmallIntegerField('Parcel width (cm)', default=20)
+    parcel_height_cm = models.PositiveSmallIntegerField('Parcel height (cm)', default=15)
+    parcel_weight_kg = models.DecimalField('Parcel weight (kg)', max_digits=5, decimal_places=2, default=Decimal('2.00'))
 
     class Meta:
         constraints = [models.UniqueConstraint(fields=('company',), name='one_practice_settings_per_company')]
+
+    def retry_days(self):
+        """The retry schedule as whole days, in order: '3,7' is [3, 7]. Anything unreadable is left out."""
+        days = []
+        for part in (self.payment_retry_days or '').split(','):
+            part = part.strip()
+            if part.isdigit() and 0 < int(part) <= 60:
+                days.append(int(part))
+        return sorted(set(days))
 
 
 class ConsentDocument(CompanyScopedModel):
@@ -112,6 +169,8 @@ class Lead(CompanyScopedModel):
     screening_status = models.CharField(max_length=16, choices=ScreeningStatus.choices, default=ScreeningStatus.PENDING)
     stage = models.CharField(max_length=20, choices=Stage.choices, default=Stage.QUESTIONNAIRE)
     converted_patient = models.OneToOneField(Patient, null=True, blank=True, on_delete=models.SET_NULL, related_name='source_lead')
+    # From the unsubscribe link at the foot of a journey email (care.journeys); the enquiry itself is kept.
+    emails_unsubscribed_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         indexes = [models.Index(fields=('company', 'stage', 'screening_status')), models.Index(fields=('company', 'email'))]
@@ -404,7 +463,11 @@ class PatientSubscription(PatientCompanyScopedModel):
 
 
 class SubscriptionCycle(PatientCompanyScopedModel):
-    """An immutable financial snapshot for one recurring subscription cycle."""
+    """One billing period of a subscription (care.billing): what is collected for it, when, and whether it was paid.
+    Its parcels are the ones planned up to its last day, so a paid cycle is what lets them go out.
+
+    Pending covers a debit not yet collected and one being retried (attempts > 0); Failed is a debit whose retries
+    have all failed, in the failure queue until someone pays it or records the payment."""
 
     class Status(models.TextChoices):
         PENDING = 'pending', 'Pending'
@@ -415,10 +478,17 @@ class SubscriptionCycle(PatientCompanyScopedModel):
     subscription = models.ForeignKey(PatientSubscription, on_delete=models.PROTECT, related_name='cycles')
     cycle_number = models.PositiveIntegerField()
     starts_on = models.DateField()
+    # The last day the cycle pays for. Older cycles from before billing ran have none.
+    ends_on = models.DateField(null=True, blank=True)
     due_on = models.DateField()
     amount = models.DecimalField(max_digits=10, decimal_places=2)
     status = models.CharField(max_length=16, choices=Status.choices, default=Status.PENDING)
     idempotency_key = models.CharField(max_length=128, blank=True)
+    mandate = models.ForeignKey('DebitMandate', null=True, blank=True, on_delete=models.PROTECT, related_name='cycles')
+    attempts = models.PositiveSmallIntegerField(default=0)
+    next_attempt_on = models.DateField(null=True, blank=True)
+    paid_at = models.DateTimeField(null=True, blank=True)
+    failure_reason = models.CharField(max_length=300, blank=True)
 
     class Meta:
         constraints = [
@@ -1240,6 +1310,12 @@ class Shipment(PatientCompanyScopedModel):
     dispatch_snapshot = models.JSONField(default=dict, blank=True)
     # The practice's own note on this parcel, from the Weekly shipping list's Notes column.
     note = models.CharField(max_length=500, blank=True)
+    # The Courier Guy (care.courier): the shipment booked for the parcel once its week is locked, and its waybill.
+    waybill = models.CharField(max_length=60, blank=True)
+    courier_shipment_id = models.CharField(max_length=60, blank=True)
+    courier_status = models.CharField(max_length=60, blank=True)
+    courier_error = models.CharField(max_length=500, blank=True)
+    waybill_created_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         indexes = [models.Index(fields=('company', 'status', 'scheduled_for')), models.Index(fields=('company', 'patient', 'cycle_number'))]
@@ -1249,6 +1325,13 @@ class Shipment(PatientCompanyScopedModel):
         super().clean()
         if self.subscription_id and self.company_id and self.subscription.company_id != self.company_id:
             raise ValidationError({'subscription': 'The subscription must belong to the same company.'})
+
+    @property
+    def courier_status_label(self):
+        """The Courier Guy's latest status for the parcel, in words ("At the hub"), or ''."""
+        from .courier import status_label
+
+        return status_label(self.courier_status) if self.courier_status else ''
 
 
 class ShipmentItem(CompanyScopedModel):
@@ -1272,22 +1355,51 @@ class ShipmentItem(CompanyScopedModel):
 
 
 class Payment(PatientCompanyScopedModel):
+    """One attempt to take money, or money the practice recorded by hand: a subscription debit (one row per try), a
+    once-off card payment for a non-prescription request, the first consultation, or a payment received outside the
+    platform (EFT, cash) recorded by the practice."""
+
     class Status(models.TextChoices):
         PENDING = 'pending', 'Pending'
         PAID = 'paid', 'Paid'
         FAILED = 'failed', 'Failed'
         REFUNDED = 'refunded', 'Refunded'
 
+    class Kind(models.TextChoices):
+        SUBSCRIPTION = 'subscription', 'Subscription debit'
+        ONCE_OFF = 'once_off', 'Once-off purchase'
+        CONSULTATION = 'consultation', 'Consultation'
+        MANUAL = 'manual', 'Recorded by the practice'
+
+    class Method(models.TextChoices):
+        DEBICHECK = 'debicheck', 'DebiCheck debit order'
+        CARD = 'card', 'Card'
+        EFT = 'eft', 'EFT'
+        CASH = 'cash', 'Cash'
+        OTHER = 'other', 'Other'
+
     subscription = models.ForeignKey(PatientSubscription, null=True, blank=True, on_delete=models.SET_NULL, related_name='payments')
     subscription_cycle = models.ForeignKey(SubscriptionCycle, null=True, blank=True, on_delete=models.SET_NULL, related_name='payments')
     appointment = models.ForeignKey(Appointment, null=True, blank=True, on_delete=models.SET_NULL, related_name='payments')
     invoice = models.OneToOneField(Invoice, null=True, blank=True, on_delete=models.SET_NULL, related_name='payment')
+    pharmacy_order = models.ForeignKey('PharmacyOrder', null=True, blank=True, on_delete=models.SET_NULL, related_name='payments')
+    # A parcel paid for outside the platform, recorded from the Weekly shipping list.
+    shipment = models.ForeignKey('Shipment', null=True, blank=True, on_delete=models.SET_NULL, related_name='payments')
+    kind = models.CharField(max_length=16, choices=Kind.choices, blank=True)
+    method = models.CharField(max_length=16, choices=Method.choices, blank=True)
+    provider = models.CharField(max_length=20, blank=True)
+    attempt = models.PositiveSmallIntegerField(default=1)
     amount = models.DecimalField(max_digits=10, decimal_places=2)
     due_on = models.DateField()
     paid_at = models.DateTimeField(null=True, blank=True)
     status = models.CharField(max_length=16, choices=Status.choices, default=Status.PENDING)
     provider_reference = models.CharField(max_length=120, blank=True)
+    # Paid by the patient on the provider's page (a card checkout), rather than collected with their debit order: a
+    # checkout that fails isn't a failed debit, so it doesn't use up a retry.
+    checkout = models.BooleanField(default=False)
     failure_reason = models.CharField(max_length=500, blank=True)
+    recorded_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name='+')
+    note = models.CharField(max_length=300, blank=True)
 
     class Meta:
         indexes = [models.Index(fields=('company', 'status', 'due_on'))]
@@ -1295,7 +1407,7 @@ class Payment(PatientCompanyScopedModel):
 
     def clean(self):
         super().clean()
-        for field in ('subscription', 'subscription_cycle', 'appointment', 'invoice'):
+        for field in ('subscription', 'subscription_cycle', 'appointment', 'invoice', 'pharmacy_order', 'shipment'):
             related = getattr(self, field, None)
             if related and self.company_id and related.company_id != self.company_id:
                 raise ValidationError({field: f'The {field} must belong to the same company.'})
@@ -1350,34 +1462,76 @@ class ReviewRule(CompanyScopedModel):
 
 
 class EmailJourney(CompanyScopedModel):
-    class Trigger(models.TextChoices):
-        LEAD_CREATED = 'lead_created', 'Lead created'
-        CONSULT_BOOKED = 'consult_booked', 'Consult booked'
-        PAYMENT_FAILED = 'payment_failed', 'Payment failed'
-        REVIEW_DUE = 'review_due', 'Review due'
-        SHIPMENT_DISPATCHED = 'shipment_dispatched', 'Shipment dispatched'
+    """One email of a journey (care.journeys): sent delay_days after someone joins its track, while they are still in
+    it. A person moves between tracks as their care changes (they book, start treatment, cancel, a debit fails), so
+    each track's emails stop by themselves once they no longer apply. Super Admins write and switch them on under
+    Settings > Email journeys."""
+
+    class Track(models.TextChoices):
+        SCREENED = 'screened', 'Completed screening but did not book'
+        CONSULTED = 'consulted', 'Had a consultation'
+        EARLY = 'early', 'Treatment months 1 to 6'
+        ONGOING = 'ongoing', 'Treatment month 5 onwards'
+        CANCELLED = 'cancelled', 'Cancelled subscription'
+        PAYMENT_FAILED = 'payment_failed', 'Failed subscription payment'
+
+    class Button(models.TextChoices):
+        NONE = '', 'No button'
+        QUESTIONNAIRE = 'questionnaire', 'Finish booking (questionnaire)'
+        BOOK = 'book', 'Book a consult'
+        SUBSCRIPTION = 'subscription', 'Start my subscription'
+        WEIGHT = 'weight', 'Log my weight'
+        MEDICAL = 'medical', 'Check my medical information'
+        BLOODS = 'bloods', 'My blood tests'
+        TREATMENT = 'treatment', 'My treatment'
+        BILLING = 'billing', 'Update my payment details'
+        MESSAGES = 'messages', 'Message my care team'
 
     name = models.CharField(max_length=255)
-    trigger = models.CharField(max_length=24, choices=Trigger.choices)
-    subject_template = models.CharField(max_length=255)
-    body_template = models.TextField()
-    is_active = models.BooleanField(default=True)
+    track = models.CharField(max_length=24, choices=Track.choices)
+    delay_days = models.PositiveSmallIntegerField('Days after joining the track', default=0)
+    subject_template = models.CharField('Subject', max_length=255)
+    body_template = models.TextField('Message', help_text='Plain text. {first_name} is replaced with the person’s first name.')
+    button = models.CharField(max_length=20, choices=Button.choices, blank=True)
+    is_active = models.BooleanField(default=False)
 
     class Meta:
         constraints = [models.UniqueConstraint(fields=('company', 'name'), name='unique_email_journey_name_per_company')]
+        ordering = ('track', 'delay_days', 'pk')
+
+    def __str__(self):
+        return self.name
 
 
 class EmailDelivery(CompanyScopedModel):
-    journey = models.ForeignKey(EmailJourney, on_delete=models.PROTECT, related_name='deliveries')
+    """An email the platform sent, logged against the patient (or the enquiry, for someone without a record yet): a
+    journey email, or one of the notifications in care.notifications. The communications log lists these."""
+
+    journey = models.ForeignKey(EmailJourney, null=True, blank=True, on_delete=models.PROTECT, related_name='deliveries')
     patient = models.ForeignKey(Patient, null=True, blank=True, on_delete=models.SET_NULL, related_name='email_deliveries')
     lead = models.ForeignKey(Lead, null=True, blank=True, on_delete=models.SET_NULL, related_name='email_deliveries')
     recipient_email = models.EmailField()
+    # The notification it was (care.notifications.KINDS), or "journey".
+    kind = models.CharField(max_length=40, blank=True)
+    subject = models.CharField(max_length=255, blank=True)
+    # Which time the person joined the track: the subscription or cycle that put them there, so a later return gets
+    # the emails again.
+    entry_key = models.CharField(max_length=64, blank=True)
     sent_at = models.DateTimeField(null=True, blank=True)
     opened_at = models.DateTimeField(null=True, blank=True)
     status = models.CharField(max_length=20, default='queued')
 
     class Meta:
-        indexes = [models.Index(fields=('company', 'status', 'sent_at'))]
+        indexes = [models.Index(fields=('company', 'status', 'sent_at')), models.Index(fields=('company', 'patient', 'sent_at'))]
+        ordering = ('-created_at', '-pk')
+        constraints = [
+            models.UniqueConstraint(fields=('journey', 'patient', 'entry_key'),
+                                    condition=models.Q(journey__isnull=False, patient__isnull=False),
+                                    name='one_journey_email_per_patient_entry'),
+            models.UniqueConstraint(fields=('journey', 'lead', 'entry_key'),
+                                    condition=models.Q(journey__isnull=False, lead__isnull=False, patient__isnull=True),
+                                    name='one_journey_email_per_lead_entry'),
+        ]
 
     def clean(self):
         super().clean()
@@ -1503,6 +1657,8 @@ class PharmacyOrder(PatientCompanyScopedModel):
     submitted_at = models.DateTimeField(null=True, blank=True)
     subtotal = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     shipment = models.OneToOneField(Shipment, null=True, blank=True, on_delete=models.PROTECT, related_name='pharmacy_order')
+    # A once-off card payment (care.billing.start_order_payment), or a payment the practice recorded for it.
+    paid_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         ordering = ('-created_at', '-pk')
@@ -1624,6 +1780,85 @@ class AdministrativeFollowUp(CompanyScopedModel):
 class PatientCommunicationPreference(PatientCompanyScopedModel):
     patient = models.OneToOneField(Patient, on_delete=models.PROTECT, related_name='communication_preference')
     marketing_enabled = models.BooleanField(default=False)
+    # From the unsubscribe link in a journey email, or turned off on My profile. Emails about payments still go.
+    journey_emails_off_at = models.DateTimeField(null=True, blank=True)
+
+
+class DeliveryAddress(PatientCompanyScopedModel):
+    """Where a patient's parcels go and the number the courier calls: one per patient. The patient keeps it on My
+    profile (and gives it when they start their subscription); the practice can change it from the Weekly shipping
+    list. Every change is in the audit log (care.addresses)."""
+
+    patient = models.OneToOneField(Patient, on_delete=models.PROTECT, related_name='delivery_address')
+    recipient = models.CharField('Recipient', max_length=150, blank=True, help_text='Leave blank to use the patient’s name.')
+    business = models.CharField('Business or complex name', max_length=150, blank=True)
+    street = models.CharField('Street address', max_length=200)
+    suburb = models.CharField('Suburb', max_length=120)
+    city = models.CharField('City or town', max_length=120)
+    province = models.CharField('Province', max_length=3, choices=PROVINCES)
+    postal_code = models.CharField('Postal code', max_length=10)
+    phone = models.CharField('Contact number', max_length=32)
+    instructions = models.CharField('Delivery instructions', max_length=300, blank=True)
+    updated_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name='+')
+
+    def __str__(self):
+        return ', '.join(self.lines())
+
+    def lines(self):
+        """The address as it is written on a parcel, a line for each part that is filled in."""
+        return [part for part in (self.business, self.street, self.suburb,
+                                  ' '.join(part for part in (self.city, self.postal_code) if part),
+                                  self.get_province_display()) if part]
+
+    def missing(self):
+        """What the courier still needs, as the field labels, or nothing when the address is complete."""
+        required = ('street', 'suburb', 'city', 'province', 'postal_code', 'phone')
+        return [str(self._meta.get_field(name).verbose_name) for name in required if not str(getattr(self, name)).strip()]
+
+
+class DebitMandate(PatientCompanyScopedModel):
+    """A patient's authority for the practice to collect their subscription (care.billing): a DebiCheck debit order,
+    the default, or a card the payment provider keeps. The amount is the most collected each time; a prescription or
+    price change that needs more asks the patient to confirm a new one (Update needed). Card and bank details stay
+    with the provider: only a label such as "FNB ···1234" is kept here."""
+
+    class Method(models.TextChoices):
+        DEBICHECK = 'debicheck', 'DebiCheck debit order'
+        CARD = 'card', 'Card'
+
+    class Status(models.TextChoices):
+        PENDING = 'pending', 'Waiting for approval'
+        ACTIVE = 'active', 'Active'
+        UPDATE_NEEDED = 'update_needed', 'New amount to confirm'
+        CANCELLED = 'cancelled', 'Cancelled'
+        FAILED = 'failed', 'Not approved'
+
+    subscription = models.ForeignKey(PatientSubscription, null=True, blank=True, on_delete=models.PROTECT, related_name='mandates')
+    method = models.CharField(max_length=16, choices=Method.choices, default=Method.DEBICHECK)
+    status = models.CharField(max_length=16, choices=Status.choices, default=Status.PENDING)
+    amount = models.DecimalField(max_digits=10, decimal_places=2)
+    interval_weeks = models.PositiveSmallIntegerField(default=4)
+    reference = models.CharField(max_length=40, blank=True)
+    provider = models.CharField(max_length=20)
+    provider_reference = models.CharField(max_length=120, blank=True)
+    account_label = models.CharField(max_length=80, blank=True)
+    # A DebiCheck debit order with Stitch is collected on one weekday (1 Monday to 7 Sunday): the bank only accepts
+    # collections on the day the patient approved.
+    collection_day = models.PositiveSmallIntegerField(null=True, blank=True)
+    approved_at = models.DateTimeField(null=True, blank=True)
+    cancelled_at = models.DateTimeField(null=True, blank=True)
+    failure_reason = models.CharField(max_length=300, blank=True)
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name='+')
+
+    class Meta:
+        ordering = ('-created_at', '-pk')
+        indexes = [models.Index(fields=('company', 'patient', 'status'))]
+
+    def clean(self):
+        super().clean()
+        if self.subscription_id and self.company_id and (self.subscription.company_id != self.company_id
+                                                         or self.subscription.patient_id != self.patient_id):
+            raise ValidationError({'subscription': 'The subscription must belong to the same patient and practice.'})
 
 
 class PatientDataRequest(PatientCompanyScopedModel):

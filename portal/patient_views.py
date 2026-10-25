@@ -68,6 +68,7 @@ PATIENT_NAV_GROUPS = {
     'overview': 'home', 'progress': 'home', 'updates': 'home',
     'treatment': 'treatment', 'subscription': 'treatment', 'medical_profile': 'treatment', 'labs': 'treatment',
     'appointments': 'appointments', 'messages': 'messages', 'pharmacy': 'medications', 'orders': 'medications',
+    'billing': 'treatment',
 }
 
 

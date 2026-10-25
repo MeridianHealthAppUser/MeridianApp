@@ -1,0 +1,21 @@
+{% extends 'portal/operations_base.html' %}
+{% load workspace_ui %}
+{% block title %}Emails | Meridian{% endblock %}
+{% block breadcrumbs %}{% breadcrumbs 'Administration' %}{% endblock %}
+{% block page_heading %}<header class="staff-page-header"><div><h1>Administration</h1><p>{{ company.name }} · Every email sent to a patient or an enquiry: journey emails, appointments, messages and billing. Emails never include clinical details.</p></div></header>{% page_tabs %}{% endblock %}
+{% block operations_content %}<section class="staff-page-card">
+  <header class="staff-page-card__header staff-list-header"><div><h2>Communications log</h2></div>{% include 'portal/includes/list_tools.html' with search_label='Search emails' %}</header>
+  <div data-search-region="list">{% if filter_form.errors %}<div class="staff-filter-error" role="alert">Correct the filters to view emails.</div>{% else %}
+    <div class="ops-table-wrap"><table class="ops-table">
+      <thead><tr><th scope="col">Sent</th><th scope="col">To</th><th scope="col">Subject</th><th scope="col">Email</th><th scope="col">Status</th></tr></thead>
+      <tbody>{% for email in page_obj %}<tr>
+        <td data-label="Sent">{{ email.sent_at|default:email.created_at|date:'j M Y, H:i' }}</td>
+        <td data-label="To"><strong>{% if email.patient %}{{ email.patient }}{% elif email.lead %}{{ email.lead }}<small>Enquiry</small>{% else %}—{% endif %}</strong><small>{{ email.recipient_email }}</small></td>
+        <td data-label="Subject">{{ email.subject|default:'—' }}</td>
+        <td data-label="Email">{% if email.journey %}{{ email.journey.name }}<small>{{ email.journey.get_track_display }}</small>{% else %}{{ email.kind|default:'—' }}{% endif %}</td>
+        <td data-label="Status">{{ email.status|capfirst }}</td>
+      </tr>{% empty %}<tr><td colspan="5" class="ops-empty">No emails match. Emails are logged here as they’re sent.</td></tr>{% endfor %}</tbody>
+    </table></div>
+  {% endif %}</div>
+</section>
+<div data-search-region="pages">{% include 'portal/operations_pagination.html' with pagination_label='Emails' %}</div>{% endblock %}

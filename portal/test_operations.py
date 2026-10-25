@@ -248,13 +248,31 @@ class OperationsPortalTests(OperationsPortalFixture):
         self.login(self.doctor)
         self.assertEqual(self.client.post(reverse('portal:ops-shipping-prepare'), {'week': week}).status_code, 403)
 
+    def test_the_list_opens_on_the_week_of_the_next_shipping_day(self):
+        from datetime import date
+
+        PracticeSettings.objects.update_or_create(company=self.company, defaults={'shipping_weekday': 1})  # Tuesday
+        # Sunday 25 Oct 2026: the next shipping day is Tuesday 27 Oct, in next week. Tuesday itself is still its week.
+        for today, monday, label in ((date(2026, 10, 25), date(2026, 10, 26), 'Next week'),
+                                     (date(2026, 10, 27), date(2026, 10, 26), 'This week')):
+            with self.subTest(today=today), patch('django.utils.timezone.localdate', return_value=today):
+                page = self.page('ops-shipping')
+                self.assertEqual(page.context['week_start'], monday)
+                self.assertEqual(page.context['filter_form'].cleaned_data['week'], monday)
+                other = self.page('ops-shipping', week=monday + timedelta(days=7))
+                self.assertEqual((other.context['this_week_url'].endswith(f'week={monday}'), other.context['this_week_label']),
+                                 (True, label))
+
     def test_shipping_list_searches_and_filters_by_several_statuses_from_the_filters_menu(self):
         week = self.today - timedelta(days=self.today.weekday())
         draft = self.shipment(quantity=1, scheduled_for=week)
         ready = self.ready(self.shipment(quantity=1, scheduled_for=week, tracking_number='TRACK-123'))
         page = self.page('ops-shipping', week=week)
         self.assertNotContains(page, 'Show week')
-        self.assertEqual([section['label'] for section in page.context['filter_menu']['sections']], ['Week', 'Status'])
+        # The week is chosen with the arrows beside its heading; the Filters menu keeps it.
+        self.assertEqual([section['label'] for section in page.context['filter_menu']['sections']], ['Status'])
+        self.assertIn(('week', week.isoformat()), page.context['filter_menu']['hidden'])
+        self.assertEqual(page.context['search_hidden']['week'], week.isoformat())
         self.assertContains(page, 'data-conversation-search')
         listed = lambda **query: {row.pk for row in self.page('ops-shipping', week=week, **query).context['shipments']}
         self.assertEqual(listed(status=['draft', 'ready']), {draft.pk, ready.pk})
@@ -321,10 +339,13 @@ class OperationsPortalTests(OperationsPortalFixture):
         foreign = self.shipment(company=self.beta, patient=self.beta_patient, product=self.beta_product, subscription=None,
                                 scheduled_for=week, status='ready')
         ShipmentItem.objects.filter(shipment=foreign).update(quantity=9)
-        # What to order is on Dispatch stock (22 Oct 2026), for the same week.
-        page = self.page('ops-stock', week=week)
+        # What to order is on Weekly shipping, under the week's parcels (Dispatch stock was its own page until
+        # 24 Oct 2026; its address opens this one).
+        self.assertRedirects(self.client.get(reverse('portal:ops-stock'), {'week': week}),
+                             f'{reverse("portal:ops-shipping")}?week={week}#week-pens', fetch_redirect_response=False)
+        page = self.page('ops-shipping', week=week)
         self.assertEqual([(line['product'].pk, line['pens']) for line in page.context['week_order']['lines']], [(self.product.pk, 3)])
-        self.assertEqual([(row['product'].pk, row['to_ship'], row['to_order']) for row in page.context['rows']],
+        self.assertEqual([(row['product'].pk, row['to_ship'], row['to_order']) for row in page.context['stock_rows']],
                          [(self.product.pk, 4, 3), (self.open_product.pk, 0, 0)])
         self.assertContains(page, 'Not in To order yet: 1 draft parcel.')
         self.assertContains(page, f'{reverse("portal:ops-week-order")}?week={week}')
@@ -357,7 +378,8 @@ class OperationsPortalTests(OperationsPortalFixture):
 
     def test_invalid_filters_are_validated_and_shipping_pagination_reaches_page_two(self):
         week = self.today - timedelta(days=self.today.weekday())
-        for _ in range(21):
+        # A week shows 100 parcels a page.
+        for _ in range(101):
             self.shipment(quantity=1, scheduled_for=week)
         response = self.page('ops-shipping', week=week, page=2)
         self.assertEqual(response.context['page_obj'].number, 2)

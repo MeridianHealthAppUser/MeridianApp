@@ -28,6 +28,7 @@ page), muted #5a7274. The logo sits on white so its black lettering stays readab
           </tr>
         </table>
         <p style="margin:24px 0 0;font-size:12px;line-height:1.5;color:#6e8588;">Please do not reply to this email. If you need help, please email <a href="mailto:{{ support_email }}" style="color:#087e75;">{{ support_email }}</a>.</p>
+        {% if unsubscribe_url %}<p style="margin:8px 0 0;font-size:12px;line-height:1.5;color:#6e8588;">You get these emails about your care with us. <a href="{{ unsubscribe_url }}" style="color:#087e75;">Unsubscribe</a> from them at any time; emails about appointments, messages and payments still come.</p>{% endif %}
       </div>
     </td>
   </tr>

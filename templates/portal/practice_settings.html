@@ -6,12 +6,37 @@
 <section class="staff-page-card practice-shipping-settings" aria-labelledby="shipping-heading">
   <div class="staff-page-card__header"><div>
     <h2 id="shipping-heading">Shipping</h2>
-    <p>Parcels are drafted from prescriptions for this day each week. Pens are ordered for the week’s parcels before it.</p>
+    <p>Parcels are drafted from prescriptions for this day each week. Pens are ordered for the week’s parcels before it. Practice administrators and Super Admins set up and ship each week, and doctors too when this allows it.</p>
   </div></div>
   <form class="console-form practice-settings-form" method="post">
     {% csrf_token %}<input type="hidden" name="section" value="shipping">
     {{ shipping_form.non_field_errors }}
     {% include 'portal/includes/form_field.html' with field=shipping_form.shipping_weekday %}
+    {% include 'portal/includes/form_field.html' with field=shipping_form.doctors_ship %}
+    <button class="console-button console-button--primary" type="submit">Save settings</button>
+  </form>
+</section>
+<section class="staff-page-card practice-shipping-settings" id="billing-settings" aria-labelledby="billing-heading">
+  <div class="staff-page-card__header"><div>
+    <h2 id="billing-heading">Billing</h2>
+    <p>{% if payment_provider %}Payments are taken with {{ payment_provider.label }}.{% else %}No payment provider is connected yet: payments are recorded by hand on Operations > Billing.{% endif %} Subscription prices are set for each dose in the Catalogue, which also sets how often each is billed (every 4 weeks unless it says otherwise).</p>
+  </div></div>
+  <form class="console-form practice-settings-form" method="post">
+    {% csrf_token %}<input type="hidden" name="section" value="billing">
+    {{ billing_form.non_field_errors }}
+    {% for field in billing_form %}{% include 'portal/includes/form_field.html' %}{% endfor %}
+    <button class="console-button console-button--primary" type="submit">Save settings</button>
+  </form>
+</section>
+<section class="staff-page-card practice-shipping-settings" id="courier-settings" aria-labelledby="courier-heading">
+  <div class="staff-page-card__header"><div>
+    <h2 id="courier-heading">Courier</h2>
+    <p>The Courier Guy collects locked parcels here on the shipping day. {% if courier_enabled %}Waybills are booked from Weekly shipping.{% else %}It isn’t connected yet: add TCG_API_KEY to the app’s settings to book waybills from Weekly shipping.{% endif %}</p>
+  </div></div>
+  <form class="console-form practice-settings-form practice-settings-form--grid" method="post">
+    {% csrf_token %}<input type="hidden" name="section" value="courier">
+    {{ courier_form.non_field_errors }}
+    {% for field in courier_form %}{% include 'portal/includes/form_field.html' %}{% endfor %}
     <button class="console-button console-button--primary" type="submit">Save settings</button>
   </form>
 </section>

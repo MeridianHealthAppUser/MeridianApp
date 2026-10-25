@@ -5,9 +5,10 @@ Authenticated navigation updates the address and destination loading state immed
 ## Page loading
 
 - Internal HTML destinations use one shared navigation controller, including Back/Forward, filters, errors and retry. External links, downloads, account changes, video rooms and form POSTs retain native browser navigation.
-- The 41 registered main destinations in `portal/page_navigation.py` return a lightweight shell on a browser document request. Their existing authentication, practice and applicable object/role checks run before the shell. Message reads, audit events, flash messages and one-time booking confirmations are not consumed by shell rendering.
+- The 40 registered main destinations in `portal/page_navigation.py` return a lightweight shell on a browser document request. Their existing authentication, practice and applicable object/role checks run before the shell. Message reads, audit events, flash messages and one-time booking confirmations are not consumed by shell rendering.
 - Detail/editor routes without a registered lightweight access resolver keep their complete server-rendered response on a direct visit or hard refresh. They still participate in internal content navigation through their original authorized view.
 - Super Admin dashboard metrics are a separate deferred section: appointment/task content arrives first, then the counts load. The client permits at most two section requests at once. This is the first registered deferred section; other pages currently return their main content together.
+- A page that runs another site's script, such as Peach's card form, always loads as a complete page: the client only adds same-origin `/static/` scripts.
 - `?__full=1` requests a complete server-rendered page. Shells include a no-JavaScript link to this fallback; load errors also provide an “Open full page” link.
 
 ## Server contract and access

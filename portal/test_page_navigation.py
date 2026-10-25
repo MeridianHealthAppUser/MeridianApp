@@ -121,6 +121,15 @@ class PageNavigationTests(TestCase):
         self.assertEqual(self.client.get(url, {'thread': '', '__shell': '1'}).status_code, 404)
         self.assertEqual(self.client.get(url, {'thread': '', '__full': '1'}).status_code, 404)
 
+    def test_doctor_shipping_shells_follow_the_practice_setting_like_the_full_view(self):
+        self.login()
+        for name in ('ops-shipping', 'ops-history'):
+            self.assertEqual(self.client.get(reverse(f'portal:{name}'), HTTP_ACCEPT='text/html').status_code, 200)
+        PracticeSettings.objects.filter(company=self.company).update(doctors_ship=False)
+        for name in ('ops-shipping', 'ops-history'):
+            self.assertEqual(self.client.get(reverse(f'portal:{name}'), HTTP_ACCEPT='text/html').status_code, 403)
+            self.assertEqual(self.client.get(reverse(f'portal:{name}'), {'__full': '1'}).status_code, 403)
+
     def test_realtime_snapshots_remain_rendered_html_even_with_browser_accept_header(self):
         self.login(self.patient_user, patient=True)
         response = self.client.get(reverse('portal:patient-messages'), {'thread': self.thread.pk},
@@ -321,6 +330,23 @@ class RenderedNavigationFragmentTests(SimpleTestCase):
         parser.feed(f'<html><head><title>Care</title></head><body><main id="workspace-content">{content}</main><footer>Outside</footer></body></html>')
         self.assertEqual(''.join(parser.parts), content)
         self.assertEqual(parser.depth, 0)
+
+    def test_a_page_running_another_sites_script_opens_as_a_full_page(self):
+        from django.http import HttpResponse
+        from django.test import RequestFactory
+        from .page_navigation import PageNavigationMiddleware
+
+        # Peach's card form: its widget script can't be added to a swapped-in page, so the browser loads it fully.
+        widget = '<script src="https://eu-test.oppwa.com/v1/paymentWidgets.js?checkoutId=x"></script>'
+        for script, status in ((widget, 409), ('<script src="/static/js/dialogs.js"></script>', 200)):
+            request = RequestFactory().get('/patient/billing/card/mandate/1/', HTTP_X_MERIDIAN_NAVIGATION='content')
+            request._page_navigation = {'scope': 'patient:1:1:1', 'layout': 'patient'}
+            page = HttpResponse(f'<html><head><title>Card</title>{script}</head><body><main id="workspace-content">'
+                                '<form class="paymentWidgets"></form></main></body></html>')
+            response = PageNavigationMiddleware(lambda request: page)(request)
+            self.assertEqual(response.status_code, status)
+            if status == 409:
+                self.assertEqual(json.loads(response.content)['full_navigation'], '/patient/billing/card/mandate/1/')
 
 
 class NavigationBuildSignatureTests(SimpleTestCase):

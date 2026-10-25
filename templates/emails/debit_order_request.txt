@@ -1,0 +1,4 @@
+{% extends 'emails/base.txt' %}{% block content %}Hello{% if greeting %} {{ greeting }}{% endif %},
+
+Your practice has asked you to set up your debit order again, so your subscription payments and parcels carry on. It only takes a minute:
+{{ url }}{% endblock %}

@@ -24,6 +24,8 @@ urlpatterns = [
     path('', include('portal.treatment_urls')),
     path('', include('portal.patient_care_urls')),
     path('', include('portal.operations_urls')),
+    path('', include('portal.billing_urls')),
+    path('', include('portal.journey_urls')),
     path('questionnaire/', intake_views.QuestionnaireView.as_view(), name='questionnaire'),
     path('questionnaire/result/', intake_views.QuestionnaireResultView.as_view(), name='questionnaire-result'),
     path('questionnaire/call-me/', intake_views.QuestionnaireCallbackView.as_view(), name='questionnaire-call-me'),

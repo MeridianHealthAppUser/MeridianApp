@@ -1,0 +1,30 @@
+{% extends 'portal/patient_page_base.html' %}
+{% load static workspace_ui %}
+{% block title %}{{ page_title }} | Meridian{% endblock %}
+{% block patient_extra_css %}<link rel="stylesheet" href="{% static 'css/patient_billing.css' %}?v=20261025d">{% endblock %}
+{% block patient_breadcrumbs %}{% breadcrumbs 'Billing and payments' 'portal:patient-billing' page_title %}{% endblock %}
+{% block patient_heading %}
+  <header class="patient-page-heading"><div><h1>{{ page_title }}</h1><p>Sandbox: this page stands in for your bank or card provider while the practice tests payments. No money moves.</p></div></header>
+{% endblock %}
+{% block patient_content %}
+  <section class="console-card billing-sandbox" aria-labelledby="sandbox-heading">
+    <div class="console-card__body">
+      <h2 class="patient-eyebrow" id="sandbox-heading">{{ patient_company.name }}</h2>
+      {% if mandate %}
+        <p>Approve a {{ mandate.get_method_display|lower }} of up to <strong>{{ amount }}</strong> every {{ mandate.interval_weeks }} weeks, reference {{ mandate.reference }}.</p>
+      {% else %}
+        <p>Pay <strong>{{ amount }}</strong> by card{% if payment.pharmacy_order_id %} for your request{% else %} for your subscription{% endif %}.</p>
+      {% endif %}
+      <form method="post" action="{{ request.path }}" class="patient-card-actions patient-card-actions--stack">{% csrf_token %}<input type="hidden" name="workflow_context" value="{{ workflow_context }}">
+        {% if mandate %}
+          <button class="console-button console-button--primary" type="submit" name="choice" value="approve">Approve</button>
+          <button class="console-button console-button--secondary" type="submit" name="choice" value="fail">Approve, but fail the debits (to test the failure queue)</button>
+          <button class="console-button console-button--secondary patient-button--rose" type="submit" name="choice" value="decline">Decline</button>
+        {% else %}
+          <button class="console-button console-button--primary" type="submit" name="choice" value="pay">Pay {{ amount }}</button>
+          <button class="console-button console-button--secondary patient-button--rose" type="submit" name="choice" value="decline">Decline the card</button>
+        {% endif %}
+      </form>
+    </div>
+  </section>
+{% endblock %}

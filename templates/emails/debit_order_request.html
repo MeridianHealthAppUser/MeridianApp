@@ -1,0 +1,5 @@
+{% extends 'emails/base.html' %}{% block content %}
+        <p style="margin:0 0 16px;">Hello{% if greeting %} {{ greeting }}{% endif %},</p>
+        <p style="margin:0 0 16px;">Your practice has asked you to set up your debit order again, so your subscription payments and parcels carry on. It only takes a minute.</p>
+        {% include 'emails/button.html' with label='Set up my debit order' %}
+{% endblock %}

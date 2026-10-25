@@ -168,3 +168,25 @@ class SinglePracticeDemoTests(TestCase):
         self.assertFalse(other.is_active)
         self.assertEqual(other.name, 'Archived Orion')
         self.assertFalse(CompanyMembership.objects.filter(company=other).exists())
+
+
+@override_settings(DEBUG=True, MULTI_PRACTICE_ENABLED=False, SINGLE_PRACTICE_SLUG='meridian-health', PAYMENT_PROVIDER='sandbox')
+class BillingDemoSeedTests(TestCase):
+    def test_the_billing_demo_puts_each_patient_in_a_different_billing_and_shipping_state(self):
+        from care.billing import billing_state
+        from care.models import ClinicalTask, PatientSubscription, Shipment
+        from care.operations import lock_reasons
+
+        call_command('seed_demo', stdout=StringIO())
+        call_command('seed_billing_demo', stdout=StringIO())
+        states = {plan.patient.first_name: billing_state(plan)[0] for plan in PatientSubscription.objects.select_related('patient')}
+        self.assertEqual({name: states.get(name) for name in ('Ayesha', 'Pieter', 'Zanele', 'Lerato', 'Ruan', 'Megan', 'Thabo')},
+                         {'Ayesha': 'paid', 'Pieter': 'retrying', 'Zanele': 'failed', 'Lerato': 'update', 'Ruan': 'no_mandate',
+                          'Megan': 'paid', 'Thabo': 'pending'})
+        self.assertTrue(ClinicalTask.objects.filter(title__startswith='Debit failed: follow up with Zanele').exists())
+        week = Shipment.objects.filter(status=Shipment.Status.READY).select_related('patient')
+        clear = sorted(parcel.patient.first_name for parcel in week if not lock_reasons(parcel) and parcel.patient.first_name != 'Nadia')
+        self.assertEqual(clear, ['Ayesha', 'Lerato', 'Ruan'])
+        self.assertTrue(Shipment.objects.filter(status=Shipment.Status.DELIVERED).exists())
+        with self.assertRaisesMessage(Exception, 'already seeded'):
+            call_command('seed_billing_demo', stdout=StringIO())

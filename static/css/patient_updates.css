@@ -18,12 +18,12 @@
 .workspace-page .meridian-console .patient-update__body h3 { color: var(--console-ink); font-size: .9rem; font-weight: 500; line-height: 1.4; margin: 0; overflow-wrap: anywhere; }
 .patient-update__body p { color: var(--patient-text); font-size: .82rem; line-height: 1.6; margin: .25rem 0 0; overflow-wrap: anywhere; }
 .patient-update__body .patient-update__meta { color: var(--console-muted); font-size: .72rem; margin-top: .1rem; }
-.patient-update__icon { align-items: center; background: #fff; border: 1px solid var(--console-line); border-radius: 50%; color: var(--patient-text); display: flex; height: 1.9rem; justify-content: center; left: -1rem; position: absolute; top: .7rem; width: 1.9rem; }
+.patient-update__icon { align-items: center; background: var(--c-ffffff); border: 1px solid var(--console-line); border-radius: 50%; color: var(--patient-text); display: flex; height: 1.9rem; justify-content: center; left: -1rem; position: absolute; top: .7rem; width: 1.9rem; }
 .patient-update__icon svg { fill: none; height: .95rem; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.8; width: .95rem; }
 .patient-update--appointment .patient-update__icon { background: var(--patient-amber-soft); border-color: var(--patient-amber-line); color: var(--console-amber); }
 .patient-update--delivery .patient-update__icon { background: var(--patient-blue-soft); border-color: var(--patient-blue-line); color: var(--patient-blue); }
 .patient-update--payment .patient-update__icon, .patient-update--medication .patient-update__icon { background: var(--console-teal-soft); border-color: var(--patient-teal-line); color: var(--console-teal-dark); }
-.patient-update--clinical .patient-update__icon { background: var(--patient-ok-soft, #e8f5ee); border-color: var(--patient-ok-line, #bfe0ce); color: var(--patient-ok, #1a7a52); }
+.patient-update--clinical .patient-update__icon { background: var(--patient-ok-soft, var(--c-e8f5ee)); border-color: var(--patient-ok-line, var(--c-bfe0ce)); color: var(--patient-ok, var(--c-1a7a52)); }
 .patient-update--message .patient-update__icon { background: var(--console-canvas); border-color: var(--console-line); color: var(--console-ink); }
 .patient-updates__empty { padding: 3rem 1rem; text-align: center; }
 

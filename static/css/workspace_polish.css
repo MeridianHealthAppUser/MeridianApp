@@ -1,12 +1,12 @@
 /* A final shared finish, loaded last only on authenticated portal workspaces.
    Workflow-specific grids remain in their owning stylesheets. */
-.workspace-page { background:#f5f8f7; }
-.workspace-page .meridian-console { --console-line:#dfe9e6; --console-soft-line:#edf3f0; --console-shadow:0 5px 20px rgba(21,59,57,.035); --console-muted:#647e81; }
-.workspace-skip-link { background:#075e58; border-radius:.5rem; color:#fff; font-weight:700; left:1rem; padding:.8rem 1rem; position:fixed; top:-5rem; z-index:100; }
+.workspace-page { background:var(--c-f5f8f7); }
+.workspace-page .meridian-console { --console-line:var(--c-dfe9e6); --console-soft-line:var(--c-edf3f0); --console-shadow:0 5px 20px var(--c-153b39-035); --console-muted:var(--c-647e81); }
+.workspace-skip-link { background:var(--c-075e58); border-radius:.5rem; color:var(--c-ffffff); font-weight:700; left:1rem; padding:.8rem 1rem; position:fixed; top:-5rem; z-index:100; }
 .workspace-skip-link:focus { top:.6rem; }
 .workspace-page .site-header { gap:1rem; min-height:4rem; }
 .workspace-page .header-signout { white-space:nowrap; }
-.workspace-page .site-header select { border-color:#cfdfda; border-radius:.6rem; font-size:.8rem; min-height:2.35rem; }
+.workspace-page .site-header select { border-color:var(--c-cfdfda); border-radius:.6rem; font-size:.8rem; min-height:2.35rem; }
 .workspace-page .meridian-console .console-topbar { min-height:4.4rem; padding-inline:clamp(1rem,2.8vw,2.5rem); }
 .workspace-page .meridian-console .console-content { padding:1.75rem clamp(1rem,2.8vw,2.5rem); }
 .workspace-page .meridian-console :is(.staff-page-header,.inbox-page-header,.patient-page-heading) h1 { font-size:clamp(1.9rem,2.65vw,2.65rem); letter-spacing:-.02em; line-height:1.12; }
@@ -15,24 +15,24 @@
 .workspace-page .meridian-console :is(.staff-page-card__header,.console-card__header) { min-height:4rem; }
 .workspace-page .meridian-console .console-kicker { font-size:.65rem; letter-spacing:.11em; }
 .workspace-page .meridian-console .console-button { border-radius:.6rem; font-weight:700; min-height:2.55rem; }
-.workspace-page .meridian-console .console-button--primary { color:#fff; }
-.workspace-page .meridian-console .console-button--quiet { border-color:#dce8e3; background:#fff; min-height:2.2rem; padding:.4rem .7rem; }
-.workspace-page .meridian-console .console-button--quiet:hover { background:#f0f8f4; }
+.workspace-page .meridian-console .console-button--primary { color:var(--c-ffffff); }
+.workspace-page .meridian-console .console-button--quiet { border-color:var(--c-dce8e3); background:var(--c-ffffff); min-height:2.2rem; padding:.4rem .7rem; }
+.workspace-page .meridian-console .console-button--quiet:hover { background:var(--c-f0f8f4); }
 .workspace-page .meridian-console .console-button:hover { transform:none; }
-.workspace-page .meridian-console :is(a,button,input,select,textarea,summary):focus-visible { outline:2px solid #07877f; outline-offset:3px; }
+.workspace-page .meridian-console :is(a,button,input,select,textarea,summary):focus-visible { outline:2px solid var(--c-07877f); outline-offset:3px; }
 .workspace-page .meridian-console :is(button,input,select,textarea):disabled { cursor:not-allowed; opacity:.65; }
 .workspace-page .meridian-console :is(input,select,textarea) { scroll-margin-block:6rem; }
 .workspace-page .meridian-console input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]),
-.workspace-page .meridian-console :is(select,textarea) { border-color:#d5e4df; border-radius:.6rem; }
+.workspace-page .meridian-console :is(select,textarea) { border-color:var(--c-d5e4df); border-radius:.6rem; }
 .workspace-page .meridian-console :is(.privacy-form,.management-form,.clinical-form,.ops-form) > .console-button { justify-self:start; }
 .workspace-page .meridian-console :is(.privacy-form,.management-form,.clinical-form) { max-width:60rem; }
 .workspace-page .meridian-console :is(.helptext,.privacy-help,.management-help,.staff-form-help) { line-height:1.6; }
-.workspace-page .meridian-console input[type="checkbox"] { accent-color:#07877f; }
+.workspace-page .meridian-console input[type="checkbox"] { accent-color:var(--c-07877f); }
 .workspace-page .meridian-console :is(.console-role-badge,.console-status,.console-priority,.management-status) { line-height:1.25; font-weight:700; letter-spacing:0; }
 .workspace-page .meridian-console table { font-variant-numeric:tabular-nums; }
-.workspace-page .meridian-console table thead { background:#f7faf8; }
-.workspace-page .meridian-console table th { color:#688286; font-weight:700; letter-spacing:.055em; position:relative; }
-.workspace-page .meridian-console table tbody tr:hover td { background:#f8fcfa; }
+.workspace-page .meridian-console table thead { background:var(--c-f7faf8); }
+.workspace-page .meridian-console table th { color:var(--c-688286); font-weight:700; letter-spacing:.055em; position:relative; }
+.workspace-page .meridian-console table tbody tr:hover td { background:var(--c-f8fcfa); }
 .workspace-page .meridian-console :is(.console-empty,.staff-empty-state,.ops-empty,.patient-empty) { line-height:1.65; }
 .workspace-page .meridian-console .patient-page-actions { align-items:center; display:flex; flex-wrap:wrap; gap:.65rem; }
 .workspace-page .meridian-console .patient-navigation__links { gap:.25rem .4rem; }
@@ -60,22 +60,22 @@
 .workspace-page .workspace-overview .console-section { margin-top:.9rem; }
 
 @media (min-width:52.001rem) {
-  .workspace-page .site-header { background:#fff; height:4rem; position:sticky; top:0; z-index:45; }
+  .workspace-page .site-header { background:var(--c-ffffff); height:4rem; position:sticky; top:0; z-index:45; }
   /* Wide enough for "Patient Records & Messages" and its unread badge on one line. */
   .workspace-page .console-shell { grid-template-columns:17rem minmax(0,1fr); }
   .workspace-page .console-sidebar { align-self:start; height:calc(100vh - 4rem); height:calc(100dvh - 4rem); min-height:0; overflow:hidden; padding:1rem .6rem .85rem; position:sticky; top:4rem; }
   .workspace-page .console-sidebar__practice { flex:0 0 auto; margin:0 0 .85rem; padding:.7rem; border-radius:.7rem; }
   .workspace-page .console-sidebar__practice p { font-size:.59rem; }
   .workspace-page .console-sidebar__practice strong { font-size:.76rem; line-height:1.4; overflow-wrap:anywhere; }
-  .workspace-page .console-nav { display:flex; flex:1 1 auto; flex-direction:column; gap:.12rem; min-height:0; overflow-y:auto; overscroll-behavior-y:contain; padding:.1rem .25rem .65rem .05rem; scrollbar-color:#bfd5cc transparent; scrollbar-width:thin; }
-  .workspace-page .console-nav__label { color:#8a9e9d; display:block; flex:0 0 auto; font-size:.59rem; letter-spacing:.11em; margin:.8rem 0 .2rem; padding:0 .65rem; }
-  .workspace-page .console-nav a { border:1px solid transparent; border-radius:.55rem; color:#527074; flex:0 0 auto; font-size:.79rem; font-weight:600; gap:.5rem; line-height:1.3; min-height:2.1rem; padding:.45rem .65rem; }
+  .workspace-page .console-nav { display:flex; flex:1 1 auto; flex-direction:column; gap:.12rem; min-height:0; overflow-y:auto; overscroll-behavior-y:contain; padding:.1rem .25rem .65rem .05rem; scrollbar-color:var(--c-bfd5cc) transparent; scrollbar-width:thin; }
+  .workspace-page .console-nav__label { color:var(--c-8a9e9d); display:block; flex:0 0 auto; font-size:.59rem; letter-spacing:.11em; margin:.8rem 0 .2rem; padding:0 .65rem; }
+  .workspace-page .console-nav a { border:1px solid transparent; border-radius:.55rem; color:var(--c-527074); flex:0 0 auto; font-size:.79rem; font-weight:600; gap:.5rem; line-height:1.3; min-height:2.1rem; padding:.45rem .65rem; }
   .workspace-page .console-nav a::before { height:.22rem; width:.22rem; flex:0 0 auto; }
-  .workspace-page .console-nav a.is-active { background:#e5f4ef; border-color:#acd8cb; color:#087a71; font-weight:750; }
-  .workspace-page .console-nav a:hover { background:#f1f8f4; color:#086e66; }
+  .workspace-page .console-nav a.is-active { background:var(--c-e5f4ef); border-color:var(--c-acd8cb); color:var(--c-087a71); font-weight:750; }
+  .workspace-page .console-nav a:hover { background:var(--c-f1f8f4); color:var(--c-086e66); }
   .workspace-page .console-nav a:focus-visible { outline-offset:-2px; }
-  .workspace-page .console-nav--flat a.console-nav__item { border-radius:.65rem; color:#527074; font-size:.8rem; font-weight:500; gap:.45rem; min-height:2.8rem; padding:.6rem .6rem; }
-  .workspace-page .console-nav--flat a.console-nav__item.is-active { background:var(--console-teal-soft); border-color:#b5e3ea; color:var(--console-teal-dark); font-weight:600; }
+  .workspace-page .console-nav--flat a.console-nav__item { border-radius:.65rem; color:var(--c-527074); font-size:.8rem; font-weight:500; gap:.45rem; min-height:2.8rem; padding:.6rem .6rem; }
+  .workspace-page .console-nav--flat a.console-nav__item.is-active { background:var(--console-teal-soft); border-color:var(--c-b5e3ea); color:var(--console-teal-dark); font-weight:600; }
   .workspace-page .console-sidebar__footer { flex:0 0 auto; margin-top:.5rem; padding:.8rem .4rem 0; }
   .workspace-page .console-person__copy strong { font-size:.74rem; }
   .workspace-page .console-person__copy span { font-size:.65rem; }
@@ -84,7 +84,7 @@
   .workspace-page .meridian-console .console-content { padding:1.3rem 1rem 2rem; }
   .workspace-page .meridian-console .console-topbar { min-height:4rem; }
   .workspace-page .meridian-console .record-directory-filters { grid-template-columns:repeat(2,minmax(0,1fr)); }
-  .workspace-page .meridian-console .staff-mobile-nav { background:rgba(255,255,255,.97); border-top:1px solid #dbe7e2; box-shadow:0 -3px 14px rgba(21,59,57,.035); padding-block:.45rem; }
+  .workspace-page .meridian-console .staff-mobile-nav { background:var(--c-ffffff-970); border-top:1px solid var(--c-dbe7e2); box-shadow:0 -3px 14px var(--c-153b39-035); padding-block:.45rem; }
   .workspace-page .meridian-console .staff-mobile-nav a { border-radius:.55rem; min-height:2.75rem; }
   .workspace-page .meridian-console .console-button { min-height:2.75rem; }
   .workspace-page .meridian-console .patient-navigation a { font-size:.71rem; min-height:3.4rem; padding:.35rem .3rem; }
@@ -111,7 +111,7 @@
 }
 /* Page loader: the header and navigation stay put while the content area waits for the next page. */
 .is-page-loading { min-height:18rem; position:relative; }
-.workspace-page-loader { animation:workspace-page-loader-in .18s ease; -webkit-backdrop-filter:blur(2px); backdrop-filter:blur(2px); background:rgba(244,248,247,.76); inset:0; position:absolute; z-index:5; }
+.workspace-page-loader { animation:workspace-page-loader-in .18s ease; -webkit-backdrop-filter:blur(2px); backdrop-filter:blur(2px); background:var(--c-f4f8f7-760); inset:0; position:absolute; z-index:5; }
 .workspace-page-loader--instant { animation:none; }
 .workspace-page-loader__inner { display:flex; justify-content:center; margin-top:6rem; position:sticky; top:calc(45vh - 32px); }
 .workspace-page-loader__spinner { display:block; height:64px; position:relative; width:64px; }

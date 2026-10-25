@@ -144,13 +144,13 @@ class PatientSubscriptionAdmin(OperationalWorkflowReadOnlyAdmin):
 
 
 @admin.register(models.SubscriptionCycle)
-class SubscriptionCycleAdmin(CompanyScopedAdmin):
+class SubscriptionCycleAdmin(OperationalWorkflowReadOnlyAdmin):
     list_display = ('subscription', 'patient', 'company', 'cycle_number', 'amount', 'due_on', 'status')
     autocomplete_fields = ('company', 'patient', 'subscription')
 
 
 @admin.register(models.Invoice)
-class InvoiceAdmin(CompanyScopedAdmin):
+class InvoiceAdmin(OperationalWorkflowReadOnlyAdmin):
     list_display = ('invoice_number', 'patient', 'company', 'total', 'due_on', 'status')
     search_fields = ('invoice_number', 'patient__first_name', 'patient__last_name')
     autocomplete_fields = ('company', 'patient', 'subscription_cycle')
@@ -320,8 +320,9 @@ class ShipmentItemAdmin(OperationalWorkflowReadOnlyAdmin):
 
 
 @admin.register(models.Payment)
-class PaymentAdmin(CompanyScopedAdmin):
-    list_display = ('patient', 'company', 'amount', 'due_on', 'status', 'paid_at')
+class PaymentAdmin(OperationalWorkflowReadOnlyAdmin):
+    # Money is taken and recorded through care.billing, so every payment has its audit entry.
+    list_display = ('patient', 'company', 'kind', 'amount', 'due_on', 'status', 'paid_at')
     autocomplete_fields = ('company', 'patient', 'subscription', 'subscription_cycle', 'appointment', 'invoice')
 
 
@@ -344,13 +345,19 @@ class ReviewRuleAdmin(CompanyScopedAdmin):
 
 @admin.register(models.EmailJourney)
 class EmailJourneyAdmin(CompanyScopedAdmin):
-    list_display = ('name', 'company', 'trigger', 'is_active')
+    list_display = ('name', 'company', 'track', 'delay_days', 'is_active')
 
 
 @admin.register(models.EmailDelivery)
-class EmailDeliveryAdmin(CompanyScopedAdmin):
-    list_display = ('journey', 'recipient_email', 'company', 'status', 'sent_at', 'opened_at')
+class EmailDeliveryAdmin(OperationalWorkflowReadOnlyAdmin):
+    # The communications log: what was sent stays as it was sent.
+    list_display = ('kind', 'journey', 'recipient_email', 'company', 'status', 'sent_at')
     autocomplete_fields = ('company', 'journey', 'patient', 'lead')
+
+
+@admin.register(models.DeliveryAddress, models.DebitMandate)
+class BillingRecordAdmin(OperationalWorkflowReadOnlyAdmin):
+    list_display = ('id', 'patient', 'company', 'updated_at')
 
 
 @admin.register(models.AuditEvent)

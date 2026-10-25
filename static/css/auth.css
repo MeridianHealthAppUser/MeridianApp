@@ -3,7 +3,7 @@
 .login-layout { margin: 0 auto; max-width: 30rem; }
 .login-brand { display: block; margin: 0 auto 2.25rem; width: fit-content; }
 .login-brand .platform-logo { width: 230px; }
-.login-brand:focus-visible { border-radius: .5rem; outline: 3px solid rgba(13, 145, 135, .35); outline-offset: 6px; }
+.login-brand:focus-visible { border-radius: .5rem; outline: 3px solid var(--c-0d9187-350); outline-offset: 6px; }
 /* Intro panel, hidden for now (commented out in templates/accounts/auth_base.html). To bring it back, uncomment this block too.
 .page-shell { max-width: 75rem; }
 .login-layout { align-items: stretch; display: grid; gap: 1.5rem; grid-template-columns: minmax(0, 1.15fr) minmax(22rem, .85fr); max-width: none; }
@@ -20,23 +20,23 @@
   .login-assurance { margin-top: 2rem; }
 }
 */
-.login-card { background: #fff; border: 1px solid #dce8e5; border-radius: 1.25rem; box-shadow: 0 18px 50px rgba(16, 61, 59, .08); padding: clamp(1.75rem, 4vw, 3rem); }
-.login-card h1 { color: #153638; font-family: inherit; font-size: 2.1rem; font-weight: 500; letter-spacing: -.02em; margin: .4rem 0 .65rem; }
-.login-card > p { color: #5a7274; line-height: 1.55; margin: 0 0 1.75rem; }
+.login-card { background: var(--c-ffffff); border: 1px solid var(--c-dce8e5); border-radius: 1.25rem; box-shadow: 0 18px 50px var(--c-103d3b-080); padding: clamp(1.75rem, 4vw, 3rem); }
+.login-card h1 { color: var(--c-153638); font-family: inherit; font-size: 2.1rem; font-weight: 500; letter-spacing: -.02em; margin: .4rem 0 .65rem; }
+.login-card > p { color: var(--c-5a7274); line-height: 1.55; margin: 0 0 1.75rem; }
 .login-form p { margin: 1.5rem 0 1.1rem; }
-.login-form label { color: #23484a; display: block; font-size: .875rem; font-weight: 700; margin-bottom: .45rem; }
-.login-form input[type='email'], .login-form input[type='password'] { background: #fff; border: 1px solid #bfcecb; border-radius: .65rem; color: #183638; font: inherit; min-height: 3rem; padding: .7rem .85rem; width: 100%; }
-.login-form input:focus { border-color: #0d9187; box-shadow: 0 0 0 3px rgba(13, 145, 135, .16); outline: none; }
+.login-form label { color: var(--c-23484a); display: block; font-size: .875rem; font-weight: 700; margin-bottom: .45rem; }
+.login-form input[type='email'], .login-form input[type='password'] { background: var(--c-ffffff); border: 1px solid var(--c-bfcecb); border-radius: .65rem; color: var(--c-183638); font: inherit; min-height: 3rem; padding: .7rem .85rem; width: 100%; }
+.login-form input:focus { border-color: var(--c-0d9187); box-shadow: 0 0 0 3px var(--c-0d9187-160); outline: none; }
 .login-form .remember-row { align-items: center; display: flex; gap: .6rem; margin: .2rem 0 1.35rem; }
-.login-form .remember-row label { color: #5a7274; font-size: .82rem; font-weight: 500; margin: 0; }
-.login-form .remember-row input { accent-color: #0c968b; height: 1rem; margin: 0; width: 1rem; }
-.login-submit { background: #0c968b; border: 1px solid #0c968b; border-radius: .7rem; color: #fff; cursor: pointer; font: inherit; font-weight: 750; min-height: 3.1rem; padding: .75rem 1rem; width: 100%; }
-.login-submit:hover { background: #087e75; border-color: #087e75; }
-.login-errors, .login-field-errors { color: #a3322b; font-size: .85rem; line-height: 1.45; list-style: none; margin: 0 0 1rem; padding: .75rem .85rem; }
-.login-errors { background: #fff3f1; border: 1px solid #f1ccc6; border-radius: .65rem; }
+.login-form .remember-row label { color: var(--c-5a7274); font-size: .82rem; font-weight: 500; margin: 0; }
+.login-form .remember-row input { accent-color: var(--c-0c968b); height: 1rem; margin: 0; width: 1rem; }
+.login-submit { background: var(--c-0c968b); border: 1px solid var(--c-0c968b); border-radius: .7rem; color: var(--c-ffffff); cursor: pointer; font: inherit; font-weight: 750; min-height: 3.1rem; padding: .75rem 1rem; width: 100%; }
+.login-submit:hover { background: var(--c-087e75); border-color: var(--c-087e75); }
+.login-errors, .login-field-errors { color: var(--c-a3322b); font-size: .85rem; line-height: 1.45; list-style: none; margin: 0 0 1rem; padding: .75rem .85rem; }
+.login-errors { background: var(--c-fff3f1); border: 1px solid var(--c-f1ccc6); border-radius: .65rem; }
 .login-field-errors { margin: -.65rem 0 .85rem; padding: 0; }
-.login-help { border-top: 1px solid #e5eeec; color: #5a7274; font-size: .875rem; line-height: 1.55; margin-top: 1.75rem; padding-top: 1.4rem; }
-.login-help a { color: #087e75; font-weight: 700; text-decoration: none; }
+.login-help { border-top: 1px solid var(--c-e5eeec); color: var(--c-5a7274); font-size: .875rem; line-height: 1.55; margin-top: 1.75rem; padding-top: 1.4rem; }
+.login-help a { color: var(--c-087e75); font-weight: 700; text-decoration: none; }
 .login-help a:hover { text-decoration: underline; }
 @media (max-width: 780px) {
   .page-shell { padding: 2rem 1rem 2.5rem; }
@@ -45,19 +45,19 @@
   .login-card { padding: 1.75rem 1.35rem; }
 }
 /* Secondary action under the main button, e.g. "Forgot password". */
-.login-secondary { align-items: center; background: #fff; border: 1px solid #bfdcd7; border-radius: .7rem; color: #087e75; display: flex; font-weight: 750; justify-content: center; margin-top: .75rem; min-height: 3.1rem; padding: .75rem 1rem; text-decoration: none; width: 100%; }
-.login-secondary:hover { background: #eef8f6; border-color: #0c968b; }
-.login-secondary:focus-visible, .login-submit:focus-visible { outline: 3px solid rgba(13, 145, 135, .35); outline-offset: 2px; }
-.login-notice { background: #eef8f5; border: 1px solid #b9ddd6; border-radius: .65rem; color: #1b635d; font-size: .9rem; line-height: 1.55; margin: 0 0 1.25rem; padding: .85rem 1rem; }
-.login-form .login-hint { color: #5a7274; font-size: .8rem; line-height: 1.5; margin: -.6rem 0 1rem; }
+.login-secondary { align-items: center; background: var(--c-ffffff); border: 1px solid var(--c-bfdcd7); border-radius: .7rem; color: var(--c-087e75); display: flex; font-weight: 750; justify-content: center; margin-top: .75rem; min-height: 3.1rem; padding: .75rem 1rem; text-decoration: none; width: 100%; }
+.login-secondary:hover { background: var(--c-eef8f6); border-color: var(--c-0c968b); }
+.login-secondary:focus-visible, .login-submit:focus-visible { outline: 3px solid var(--c-0d9187-350); outline-offset: 2px; }
+.login-notice { background: var(--c-eef8f5); border: 1px solid var(--c-b9ddd6); border-radius: .65rem; color: var(--c-1b635d); font-size: .9rem; line-height: 1.55; margin: 0 0 1.25rem; padding: .85rem 1rem; }
+.login-form .login-hint { color: var(--c-5a7274); font-size: .8rem; line-height: 1.5; margin: -.6rem 0 1rem; }
 .login-form .login-hint ul { margin: .3rem 0 0; padding-left: 1.1rem; }
 a.login-submit { align-items: center; display: flex; justify-content: center; text-decoration: none; }
 /* Sign-in page: the round back-to-home button beside "Secure sign in", as on the console's pages. */
 .login-eyebrow-row { align-items: center; display: flex; gap: .75rem; margin: 0 0 1.75rem; }
 .login-eyebrow-row .eyebrow { margin: 0; }
 /* Sign-in page: "Not a patient yet?" section at the bottom of the card, linking to the questionnaire. */
-.login-new-patient { border-top: 1px solid #e5eeec; margin-top: 1.4rem; padding-top: 1.4rem; }
+.login-new-patient { border-top: 1px solid var(--c-e5eeec); margin-top: 1.4rem; padding-top: 1.4rem; }
 /* Smaller than the help line above it, and without that line's divider. */
-.login-new-patient__text { color: #5a7274; font-size: .75rem; line-height: 1.5; }
+.login-new-patient__text { color: var(--c-5a7274); font-size: .75rem; line-height: 1.5; }
 /* "Get started" is a full-width secondary button below the text, like "Forgot password". */
 .login-new-patient .login-secondary { margin-top: 1rem; }

@@ -15,7 +15,7 @@
 .record-weight-chart text { fill: var(--console-muted); font-family: inherit; font-size: 15px; }
 .record-weight-chart__grid { stroke: var(--console-line); stroke-width: 1; }
 .record-weight-chart__line { fill: none; stroke: var(--console-teal); stroke-linecap: round; stroke-linejoin: round; stroke-width: 2; vector-effect: non-scaling-stroke; }
-.record-weight-chart__point { fill: #fff; stroke: var(--console-teal); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+.record-weight-chart__point { fill: var(--c-ffffff); stroke: var(--console-teal); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
 .record-weight-chart__range { color: var(--console-muted); display: none; flex-wrap: wrap; font-size: .7rem; gap: .35rem .7rem; justify-content: space-between; }
 .record-weight-chart figcaption { color: var(--console-muted); font-size: .7rem; line-height: 1.5; margin-top: .4rem; }
 .record-weight-table { border-collapse: collapse; font-size: .75rem; table-layout: fixed; width: 100%; }
@@ -52,7 +52,7 @@
 .record-weight__panes { align-items: start; display: grid; gap: 1.1rem; grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .record-weight-table--tab { margin-top: .6rem; }
 .workspace-page .meridian-console .record-weight-table--tab thead { background: none; }
-.record-weight-table--tab th { color: #7b9093; font-size: .62rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+.record-weight-table--tab th { color: var(--c-7b9093); font-size: .62rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
 .record-weight-table--tab td { padding-block: .75rem; }
 .record-weight-table--tab td:first-child, .record-weight-table--tab td:nth-child(2) { white-space: nowrap; }
 .record-weight-table--tab tbody tr:last-child td { border-bottom: 1px solid var(--console-soft-line); }

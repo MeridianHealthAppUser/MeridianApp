@@ -12,8 +12,8 @@ from django.test import TestCase, TransactionTestCase
 from django.utils import timezone
 
 from practices.models import Company, CompanyMembership, Patient
-from .models import (AuditEvent, MedicationProduct, PatientSubscription, Payment,
-                     PracticeSettings, Shipment, ShipmentItem, TreatmentAuthorization)
+from .models import (AuditEvent, DeliveryAddress, MedicationProduct, PatientSubscription, Payment,
+                     PracticeSettings, Shipment, ShipmentItem, SubscriptionCycle, TreatmentAuthorization)
 from .operations import (allowance_window, change_parcel, dispatch_shipment, hold_or_cancel_shipment, lock_shipping_week,
                          mark_delivered, prepare_shipment, prepare_week, product_allowance, shipment_hold_reason, week_order)
 
@@ -50,7 +50,16 @@ class OperationsFixture(TestCase):
             starts_on=cls.today - timedelta(days=10), expires_on=cls.today + timedelta(days=180))
         cls.plan = PatientSubscription.objects.create(company=cls.company, patient=cls.patient, authorization=cls.auth,
             plan_name='Local non-payment plan', starts_on=cls.today - timedelta(days=5))
-        PracticeSettings.objects.create(company=cls.company)
+        # Doctors don't ship here; DoctorsShipTests switch it on.
+        PracticeSettings.objects.create(company=cls.company, doctors_ship=False)
+        # What Check and lock week asks for besides the prescription: somewhere to deliver, and payment.
+        cls.address = DeliveryAddress.objects.create(
+            company=cls.company, patient=cls.patient, street='1 Test Street', suburb='Gardens', city='Cape Town',
+            province='WC', postal_code='8001', phone='082 555 0114')
+        cls.cycle = SubscriptionCycle.objects.create(
+            company=cls.company, patient=cls.patient, subscription=cls.plan, cycle_number=1,
+            starts_on=cls.today - timedelta(days=5), ends_on=cls.today + timedelta(days=400),
+            due_on=cls.today - timedelta(days=5), amount=Decimal('100.00'), status='paid')
 
     def shipment(self, *, product=None, quantity=4, **extra):
         values = dict(company=self.company, patient=self.patient, subscription=self.plan,
@@ -298,6 +307,39 @@ class ShipmentOperationsTests(OperationsFixture):
         shipment = dispatch_shipment(shipment=shipment, actor=self.admin, tracking_number='REF', confirm=True)
         with self.assertRaises(ValidationError):
             mark_delivered(shipment=shipment, actor=self.admin, confirm='yes')
+
+
+class DoctorsShipTests(OperationsFixture):
+    """Practice settings' "Doctors can set up and ship parcels" (on by default): the practice's doctors do the week too."""
+
+    def setUp(self):
+        PracticeSettings.objects.filter(company=self.company).update(doctors_ship=True)
+
+    def test_doctors_set_up_and_ship_the_week_and_keep_the_address(self):
+        from .addresses import save_delivery_address
+        from .billing import record_manual_payment
+
+        shipment = prepare_shipment(shipment=self.shipment(), actor=self.doctor)
+        self.assertEqual((shipment.status, shipment.prepared_by), ('ready', self.doctor))
+        payment = record_manual_payment(company=self.company, actor=self.doctor, amount='100', method='eft',
+                                        shipment=shipment, from_shipping=True)
+        self.assertEqual(payment.recorded_by, self.doctor)
+        lock_shipping_week(company=self.company, actor=self.doctor, week_start=self.today)
+        shipment.refresh_from_db()
+        self.assertIsNotNone(shipment.locked_at)
+        dispatch_shipment(shipment=shipment, actor=self.doctor, tracking_number='REF-9', confirm=True)
+        save_delivery_address(company=self.company, patient=self.patient, actor=self.doctor,
+                              data=dict(street='2 New Road', suburb='Gardens', city='Cape Town', province='WC',
+                                        postal_code='8001', phone='082 555 0114'))
+        self.assertEqual(DeliveryAddress.objects.get(patient=self.patient).street, '2 New Road')
+        # Subscription billing stays with administrators.
+        with self.assertRaises(PermissionDenied):
+            record_manual_payment(company=self.company, actor=self.doctor, amount='100', method='eft', cycle=self.cycle)
+
+    def test_switching_it_off_takes_shipping_back_to_administrators(self):
+        PracticeSettings.objects.filter(company=self.company).update(doctors_ship=False)
+        with self.assertRaises(PermissionDenied):
+            prepare_shipment(shipment=self.shipment(), actor=self.doctor)
 
 
 class StockRemovalMigrationTests(TransactionTestCase):
