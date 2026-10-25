@@ -12,6 +12,7 @@ from hashlib import sha256
 from html import unescape
 from html.parser import HTMLParser
 from pathlib import Path
+import re
 from urllib.parse import urljoin, urlsplit
 
 from django.contrib.staticfiles.storage import staticfiles_storage
@@ -20,6 +21,7 @@ from django.core.exceptions import PermissionDenied
 from django.http import Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import render_to_string
+from django.urls import URLResolver, get_resolver, get_script_prefix
 from django.utils.cache import add_never_cache_headers, patch_vary_headers
 from django.utils.http import url_has_allowed_host_and_scheme
 
@@ -85,6 +87,85 @@ PATIENT_PAGES = {
 }
 
 
+# HTML transport eligibility is independent of the lightweight-shell access
+# registry. These detail/editor views still run their complete original gates.
+# Downloads, background fragments, status APIs and POST-only actions must never
+# be requested speculatively as page content, even when their URL has no suffix.
+HTML_PAGE_ROUTES = frozenset(STAFF_PAGES) | frozenset(PATIENT_PAGES) | frozenset((
+    'activity-statement-create', 'activity-statement-detail',
+    'appointment-book', 'appointment-detail',
+    'clinical-consultation-create', 'clinical-consultation-detail',
+    'clinical-lab-create', 'clinical-lab-detail',
+    'compounding-create', 'compounding-detail',
+    'conversation-manage', 'team-conversation-manage',
+    'dropout-detail', 'lead-detail', 'lead-follow-up',
+    'management-user-create', 'management-membership-edit',
+    'management-practice-create', 'management-practice-edit',
+    'ops-product-create', 'ops-product-detail', 'ops-dose-create', 'ops-dose-detail',
+    'ops-starting-plan-create', 'ops-starting-plan-detail',
+    'ops-shipping-create', 'ops-shipment-detail', 'ops-order-detail',
+    'patient-appointment-detail', 'patient-book-appointment',
+    'patient-data-request-create', 'patient-data-request-detail',
+    'patient-lab-detail', 'patient-basket', 'patient-order-detail', 'patient-subscription',
+    'policy-create', 'staff-data-request-detail', 'staff-menu-section',
+    'staff-patient-record', 'task-create', 'task-edit',
+    'treatment-authorisation-create', 'treatment-authorisation-detail', 'treatment-authorisation-renew',
+    'treatment-review-rule-create', 'treatment-review-rule-detail',
+))
+
+PATIENT_HTML_PAGE_ROUTES = frozenset(PATIENT_PAGES) | frozenset((
+    'patient-appointment-detail', 'patient-book-appointment',
+    'patient-data-request-create', 'patient-data-request-detail',
+    'patient-lab-detail', 'patient-basket', 'patient-order-detail', 'patient-subscription',
+))
+STAFF_HTML_PAGE_ROUTES = HTML_PAGE_ROUTES - PATIENT_HTML_PAGE_ROUTES
+
+# An intentional native/API classification makes new GET endpoints fail the
+# registry inventory check until their transport is chosen explicitly.
+NATIVE_GET_ROUTES = frozenset((
+    'patient-appointment-video-status', 'staff-message-status', 'patient-message-status',
+    'public-terms', 'public-privacy', 'public-contact',
+    'questionnaire', 'questionnaire-result', 'questionnaire-checkout',
+    'appointment-book-times', 'patient-booking-times', 'patient-appointment-calendar',
+    'compounding-print', 'metrics-export', 'activity-statement-export',
+    'staff-patient-record-export', 'staff-patient-record-history',
+    'staff-patient-record-excel', 'staff-patient-record-workbook',
+    'ops-manifest', 'ops-week-order', 'ops-history-export',
+    'clinical-lab-result-download', 'patient-lab-result-download', 'patient-lab-form',
+    'record-conversation-search', 'patient-blood-test-form', 'patient-blood-result-report',
+))
+
+
+def _html_route(match):
+    return bool(match and match.namespace == 'portal' and match.url_name in HTML_PAGE_ROUTES)
+
+
+def navigation_paths(urlconf=None, script_prefix='/', *, layout=None):
+    """Return JavaScript-compatible, anchored path patterns for known HTML views."""
+    return _resolver_navigation_paths(get_resolver(urlconf), script_prefix, layout)
+
+
+@lru_cache(maxsize=8)
+def _resolver_navigation_paths(resolver, script_prefix, layout):
+    paths = []
+    routes = {'patient': PATIENT_HTML_PAGE_ROUTES, 'staff': STAFF_HTML_PAGE_ROUTES, None: HTML_PAGE_ROUTES}.get(layout, ())
+
+    def component(pattern):
+        value = pattern.regex.pattern.removeprefix('^').removesuffix(r'\Z').removesuffix('$')
+        return re.sub(r'\(\?P<[^>]+>', '(?:', value)
+
+    def visit(patterns, prefix='', namespaces=()):
+        for entry in patterns:
+            path = prefix + component(entry.pattern)
+            if isinstance(entry, URLResolver):
+                visit(entry.url_patterns, path, namespaces + ((entry.namespace,) if entry.namespace else ()))
+            elif namespaces == ('portal',) and entry.name in routes:
+                paths.append('^' + re.escape(script_prefix) + path + '$')
+
+    visit(resolver.url_patterns)
+    return tuple(dict.fromkeys(paths))
+
+
 def canonical_url(request):
     query = request.GET.copy()
     query.pop('__shell', None)
@@ -95,6 +176,10 @@ def canonical_url(request):
 
 def is_content_request(request):
     return getattr(settings, 'PAGE_NAVIGATION_ENABLED', True) and request.method == 'GET' and request.headers.get(NAVIGATION_HEADER) == 'content'
+
+
+def is_section_request(request):
+    return getattr(settings, 'PAGE_NAVIGATION_ENABLED', True) and request.method == 'GET' and request.headers.get(NAVIGATION_HEADER) == 'section'
 
 
 def wants_shell(request):
@@ -127,6 +212,15 @@ def bind_navigation_context(request, *, company, membership=None, patient=None):
     return None
 
 
+def navigation_response(view, request, *, company, membership=None, patient=None):
+    """Shared transport steps, called only after the view's tenant/auth gates."""
+    if response := bind_navigation_context(request, company=company, membership=membership, patient=patient):
+        return response
+    if response := maybe_navigation_section(view, request):
+        return response
+    return maybe_navigation_shell(view, request)
+
+
 @lru_cache(maxsize=4)
 def _source_build_signature(base_dir):
     """Fingerprint deployable source when unhashed static storage is in use.
@@ -137,10 +231,18 @@ def _source_build_signature(base_dir):
     """
     root = Path(base_dir)
     files = set()
+    static_types = frozenset(('.css', '.js', '.json', '.map', '.txt', '.svg', '.png', '.jpg', '.jpeg',
+                              '.webp', '.gif', '.ico', '.avif', '.woff', '.woff2', '.ttf', '.otf',
+                              '.eot', '.pdf', '.webm', '.mp4', '.ogg'))
+
+    def deployable(path, suffixes):
+        return (path.is_file() and path.suffix.lower() in suffixes
+                and not any(part.startswith('.') or part == '__pycache__' for part in path.relative_to(root).parts))
+
     for name in ('accounts', 'care', 'config', 'portal', 'practices', 'video'):
-        files.update(path for path in (root / name).rglob('*.py') if path.is_file())
-    for name in ('static', 'templates'):
-        files.update(path for path in (root / name).rglob('*') if path.is_file())
+        files.update(path for path in (root / name).rglob('*.py') if deployable(path, {'.py'}))
+    for name, suffixes in (('static', static_types), ('templates', {'.html', '.txt'})):
+        files.update(path for path in (root / name).rglob('*') if deployable(path, suffixes))
     files.update(path for name in ('Dockerfile', 'requirements.txt') if (path := root / name).is_file())
     digest = sha256()
     for path in sorted(files, key=lambda path: path.relative_to(root).as_posix()):
@@ -171,6 +273,8 @@ def page_navigation_context(request):
     if getattr(request, '_page_navigation', None):
         context['page_navigation_config'] = {
             **_metadata(request), 'shell': bool(getattr(request, '_navigation_shell', False)),
+            'navigation_paths': navigation_paths(getattr(request, 'urlconf', None), get_script_prefix(),
+                                                 layout=request._page_navigation['layout']),
         }
     if getattr(request, '_navigation_shell', False):
         # Rendering the empty shell must not consume the flash-message storage.
@@ -275,7 +379,7 @@ def maybe_navigation_shell(view, request):
 
 def maybe_navigation_section(view, request):
     """Small registered sections load after the destination's primary content."""
-    if not getattr(settings, 'PAGE_NAVIGATION_ENABLED', True) or request.method != 'GET' or request.headers.get(NAVIGATION_HEADER) != 'section':
+    if not is_section_request(request):
         return None
     route = getattr(request.resolver_match, 'url_name', '')
     section = request.headers.get('X-Meridian-Section')
@@ -287,6 +391,8 @@ def maybe_navigation_section(view, request):
     html = render_to_string('portal/includes/dashboard_metrics.html', {
         'metrics': staff_dashboard_metrics(view.company, request.user, view.membership),
         'metrics_class': 'mobile-metrics' if route == 'mobile-dashboard' else 'console-metrics',
+        'metrics_empty_title': 'Care activity' if route == 'mobile-dashboard' else 'Practice activity',
+        'metrics_empty_hint': 'New activity will show here.' if route == 'mobile-dashboard' else 'Metrics will appear as care is recorded.',
     })
     return _json(request, {'section': section, 'html': html})
 
@@ -390,10 +496,23 @@ class PageNavigationMiddleware:
     def __init__(self, get_response):
         self.get_response = get_response
 
+    def process_view(self, request, view_func, view_args, view_kwargs):
+        # Fail closed before invoking a download/action view. In particular, do
+        # not record an extra download audit before falling back to the browser.
+        content, section = is_content_request(request), is_section_request(request)
+        if (content or section) and not _html_route(request.resolver_match):
+            if section:
+                return _json(request, {'error': 'This page section was not found.'}, status=404)
+            view_class = getattr(view_func, 'view_class', None)
+            if view_class is not None and ('get' not in view_class.http_method_names or not hasattr(view_class, 'get')):
+                # Preserve the original method/authentication response for a
+                # GET sent to a POST-only action; no GET body can execute.
+                return None
+            return _json(request, {'full_navigation': canonical_url(request)}, status=409)
+
     def __call__(self, request):
         response = self.get_response(request)
-        section = (getattr(settings, 'PAGE_NAVIGATION_ENABLED', True) and request.method == 'GET'
-                   and request.headers.get(NAVIGATION_HEADER) == 'section')
+        section = is_section_request(request)
         if not (is_content_request(request) or section):
             return response
         if section and response.get('Content-Type', '').startswith('application/json'):

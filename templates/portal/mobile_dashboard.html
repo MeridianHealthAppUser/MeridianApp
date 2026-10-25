@@ -31,7 +31,7 @@
       {% endif %}
 
       {# Clinicians and practice administrators don't need the count cards; Super Admins keep them. #}{% if not simple_overview %}
-      {% if defer_dashboard_metrics %}{% include 'portal/includes/dashboard_metrics_loading.html' with metrics_class='mobile-metrics' %}{% else %}{% include 'portal/includes/dashboard_metrics.html' with metrics_class='mobile-metrics' %}{% endif %}
+      {% if defer_dashboard_metrics %}{% include 'portal/includes/dashboard_metrics_loading.html' with metrics_class='mobile-metrics' %}{% else %}{% include 'portal/includes/dashboard_metrics.html' with metrics_class='mobile-metrics' metrics_empty_title='Care activity' metrics_empty_hint='New activity will show here.' %}{% endif %}
       {% endif %}
 
       <nav class="mobile-quick-actions" aria-label="Quick actions">

@@ -1,4 +1,5 @@
 (window.MeridianPages?.register || ((_name, initialize) => initialize(null)))('navigation', (lifecycle) => {
+  const cancelAnimationFrame = lifecycle ? lifecycle.cancelAnimationFrame : window.cancelAnimationFrame.bind(window);
   const listen = lifecycle ? lifecycle.on : (target, ...args) => target?.addEventListener(...args);
   const requestAnimationFrame = lifecycle ? lifecycle.raf : window.requestAnimationFrame.bind(window);
 /* Keep the active item visible in scrollable navigation without moving the page. */
@@ -31,7 +32,7 @@
   listen(window, 'pageshow', revealCurrentNavigation);
   let resizeFrame;
   listen(window, 'resize', () => {
-    window.cancelAnimationFrame(resizeFrame);
+    cancelAnimationFrame(resizeFrame);
     resizeFrame = requestAnimationFrame(revealCurrentNavigation);
   });
 })();

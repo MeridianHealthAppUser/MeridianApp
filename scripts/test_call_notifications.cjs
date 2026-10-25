@@ -19,6 +19,7 @@ const {chromium} = require(process.env.MERIDIAN_PLAYWRIGHT_PATH);
         close(code){this.onclose?.({code});}
       };
     });
+    await page.addScriptTag({path:'static/js/page_lifecycle.js'});
     await page.addScriptTag({path:'static/js/call_notifications.js'});
     assert.equal(await page.locator('#incoming-call').isVisible(),false);
     await page.evaluate(() => testSockets[0].onmessage({data:JSON.stringify({type:'incoming_call',appointment_id:'javascript:alert(1)',caller_name:'X',practice_name:'Y'})}));
@@ -36,14 +37,23 @@ const {chromium} = require(process.env.MERIDIAN_PLAYWRIGHT_PATH);
     assert.equal(await page.locator('#incoming-call').isVisible(),false);
     await page.evaluate(() => testSockets[0].onmessage({data:JSON.stringify({type:'incoming_call',appointment_id:43,caller_name:'Another call',practice_name:'Example practice'})}));
     assert.equal(await page.locator('#incoming-call').isVisible(),true);
+    // The shell controller must keep receiving while the router has disposed
+    // page controllers and is waiting for the destination content.
+    await page.evaluate(() => MeridianPages.dispose());
+    assert.equal(await page.locator('#incoming-call').isVisible(),true);
     await page.evaluate(() => testSockets[0].onmessage({data:JSON.stringify({type:'call_cancelled',appointment_id:43})}));
     assert.equal(await page.locator('#incoming-call').isVisible(),false);
+    await page.evaluate(() => testSockets[0].onmessage({data:JSON.stringify({type:'incoming_call',appointment_id:44,caller_name:'Arrived during navigation',practice_name:'Example practice'})}));
+    assert.equal(await page.locator('#incoming-call').isVisible(),true);
+    await page.evaluate(() => MeridianPages.mount());
+    assert.equal(await page.evaluate(()=>testSockets.length),1);
+    assert.equal(await page.locator('#incoming-call').isVisible(),true);
     await page.evaluate(() => testSockets[0].onmessage({data:JSON.stringify({type:'ping'})}));
     assert.equal(await page.evaluate(()=>testSockets[0].sent[0]),'{"type":"pong"}');
     await page.evaluate(() => testSockets[0].onclose({code:4001}));
     await page.waitForTimeout(1800);
     assert.equal(await page.evaluate(()=>testSockets.length),1);
     assert.deepEqual(errors,[]);
-    console.log('Notification banner: safe text/URLs, deduplication, cancellation, terminal auth and 320px layout passed.');
+    console.log('Notification banner: safe text/URLs, deduplication, cancellation, soft-navigation persistence, terminal auth and 320px layout passed.');
   } finally {await browser.close();}
 })().catch(error=>{console.error(error);process.exitCode=1;});

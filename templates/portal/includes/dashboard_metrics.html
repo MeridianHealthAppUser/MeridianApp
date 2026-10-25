@@ -6,6 +6,6 @@
     <strong class="metric-card__value">{{ metric_value }}</strong>
   </article>
   {% empty %}
-  <article class="metric-card"><span class="metric-card__label">Practice activity</span><strong class="metric-card__value">—</strong><span class="metric-card__hint">Metrics will appear as care is recorded.</span></article>
+  <article class="metric-card"><span class="metric-card__label">{{ metrics_empty_title|default:'Practice activity' }}</span><strong class="metric-card__value">—</strong><span class="metric-card__hint">{{ metrics_empty_hint|default:'Metrics will appear as care is recorded.' }}</span></article>
   {% endfor %}
 </section>

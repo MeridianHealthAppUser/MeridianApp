@@ -1,11 +1,20 @@
 /* One owner for authenticated URL-first navigation. Django remains the authority for every page. */
 (() => {
   'use strict';
-  if (window.MeridianNavigation || !window.fetch || !window.AbortController || !window.DOMParser) return;
+  if (window.MeridianNavigation || !window.MeridianPages || !window.fetch || !window.AbortController || !window.DOMParser) return;
   const configElement = document.getElementById('page-navigation-config');
   let config;
   try { config = JSON.parse(configElement?.textContent || 'null'); } catch (_) { return; }
   if (!config || config.version !== 1 || !config.scope || !document.getElementById('workspace-content')) return;
+  // The authorized initial document declares this layout's HTML routes once.
+  // Content/section responses do not repeat or replace that declaration.
+  const declaredPaths = config.navigation_paths;
+  let navigationPaths;
+  try {
+    if (!Array.isArray(declaredPaths) || !declaredPaths.length
+        || declaredPaths.some(path => typeof path !== 'string' || !path.startsWith('^') || !path.endsWith('$'))) return;
+    navigationPaths = declaredPaths.map(path => new RegExp(path));
+  } catch (_) { return; }
 
   const NATIVE_PATH = /^\/(?:accounts|admin|video|health|static|media|questionnaire)(?:\/|$)/;
   const FILE_PATH = /\.(?:pdf|ics|xlsx?|csv|zip|png|jpe?g|svg|webp|woff2?)(?:$|\/)/i;
@@ -15,10 +24,14 @@
   let sections = new Set();
   let sectionQueue = [];
   let renderedURL = window.location.href;
-  let savingScroll = false;
+  let scrollTimer = null;
+  let saveScroll = true;
   let routing = false;
-  let historyPosition = Number.isInteger(history.state?.meridianPosition) ? history.state.meridianPosition : 0;
-  let restoringCancelledPop = false;
+  const newHistoryBranch = () => window.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`;
+  let historyBranch = newHistoryBranch();
+  let historyPosition = 0;
+  let restoringCancelledPop = null;
+  let historyRecovery = null;
   const formBaselines = new WeakMap();
   const editedForms = new Set();
   const loadedScripts = new Set([...document.querySelectorAll('script[src]')].map(script => new URL(script.src, location.href).href));
@@ -33,14 +46,64 @@
       return /^https?:$/.test(url.protocol) && url.origin === window.location.origin ? url : null;
     } catch (_) { return null; }
   };
-  const nativeVisit = value => {
+  const nativeVisit = (value, { full = false } = {}) => {
     const url = absolute(value);
-    if (url) window.location.replace(url.href);
+    if (url) {
+      // A fallback must bypass the shell so a persistent content failure cannot
+      // reload the same shell and start the same failing request indefinitely.
+      if (full && (acceptsURL(url) || (config.shell && url.pathname === location.pathname && !NATIVE_PATH.test(url.pathname)))) url.searchParams.set('__full', '1');
+      window.location.replace(url.href);
+    }
   };
+  const fullVisit = value => nativeVisit(value, { full: true });
+
+  function writeHistory(method, state, value, fallback = value) {
+    try { history[method](state, '', value); return true; }
+    catch (_) { if (fallback) fullVisit(fallback); return false; }
+  }
+  function updatePersistentHeader(url) {
+    document.querySelectorAll('.site-header .company-switcher input[name="next"]').forEach(input => { input.value = url.pathname; });
+  }
 
   function stateWithScroll() {
     return { ...(history.state && typeof history.state === 'object' ? history.state : {}),
-      meridianNavigation: true, meridianPosition: historyPosition, scroll: [window.scrollX, window.scrollY] };
+      meridianNavigation: true, meridianBranch: historyBranch, meridianPosition: historyPosition, scroll: [window.scrollX, window.scrollY] };
+  }
+  function reanchorHistory() {
+    historyBranch = newHistoryBranch(); historyPosition = 0;
+    writeHistory('replaceState', stateWithScroll(), location.href, null);
+  }
+  function clearHistoryRecovery(remount = false) {
+    if (!historyRecovery) return;
+    root().inert = historyRecovery.wasInert;
+    historyRecovery.panel.remove(); historyRecovery = null;
+    if (remount) window.MeridianPages.mount(document);
+  }
+  function restoreRenderedEntry() {
+    const branch = newHistoryBranch();
+    if (writeHistory('pushState', { meridianNavigation: true, meridianBranch: branch, meridianPosition: 0,
+      scroll: [window.scrollX, window.scrollY] }, renderedURL, null)) {
+      // Legacy popstate cannot be cancelled. A new entry preserves the unknown
+      // destination without guessing a direction; its old forward branch ends.
+      historyBranch = branch; historyPosition = 0;
+      updatePersistentHeader(new URL(renderedURL));
+      clearHistoryRecovery(true);
+      return;
+    }
+    if (historyRecovery) return;
+    const panel = document.createElement('section'); panel.className = 'page-navigation-error';
+    panel.dataset.historyRecovery = ''; panel.setAttribute('role', 'alert');
+    panel.style.cssText = 'position:fixed;inset:1rem 1rem auto;z-index:2147483647;max-width:42rem;margin-inline:auto;background:white;';
+    const message = document.createElement('p');
+    message.textContent = 'Your unsaved changes are still here. Return to the editor’s address to continue editing safely.';
+    const retry = document.createElement('button'); retry.type = 'button'; retry.className = 'console-button console-button--primary';
+    retry.textContent = 'Return to editor'; retry.addEventListener('click', restoreRenderedEntry);
+    panel.append(message, retry);
+    historyRecovery = { panel, wasInert: root().inert };
+    root().inert = true;
+    window.clearTimeout(scrollTimer); scrollTimer = null;
+    window.MeridianPages.dispose();
+    document.body.append(panel); retry.focus();
   }
   function formValue(form) {
     return JSON.stringify([...form.elements].filter(field => field.name && !['submit', 'button', 'reset'].includes(field.type)).map(field =>
@@ -65,16 +128,29 @@
     if (event.target.form) editedForms.add(event.target.form);
   });
   function replaceUrl(value) {
+    if (historyRecovery) return;
     const url = absolute(value);
     if (!url) return;
-    history.replaceState(stateWithScroll(), '', url.href);
+    if (!writeHistory('replaceState', stateWithScroll(), url.href, null)) return;
+    updatePersistentHeader(url);
     if (!routing) renderedURL = url.href;
   }
-  history.replaceState(stateWithScroll(), '', window.location.href);
+  if (!writeHistory('replaceState', stateWithScroll(), window.location.href, null)) return;
+  if (config.shell === false && !document.querySelector('[data-navigation-shell], [data-navigation-error]')) {
+    const clean = new URL(window.location.href);
+    if (clean.searchParams.get('__full') === '1') {
+      clean.searchParams.delete('__full');
+      // SSR has already supplied authorized content. Cleaning its recovery URL
+      // is optional and must never trigger another document load if rejected.
+      if (writeHistory('replaceState', stateWithScroll(), clean.href, null)) {
+        renderedURL = clean.href; updatePersistentHeader(clean);
+      }
+    }
+  }
   if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
 
   function acceptsURL(url) {
-    return url && url.pathname !== '/' && !NATIVE_PATH.test(url.pathname) && !FILE_PATH.test(url.pathname)
+    return url && navigationPaths.some(path => path.test(url.pathname)) && url.pathname !== '/' && !NATIVE_PATH.test(url.pathname) && !FILE_PATH.test(url.pathname)
       && !/(?:\/activate\/|\/download\/|\/export\/|\/print\/|\/preview(?:\/|$))/.test(url.pathname);
   }
   function canHandleLink(link, event) {
@@ -188,13 +264,17 @@
   }
   function activateStyles(styles = []) {
     const wanted = styles.map(assetURL);
-    document.querySelectorAll('link[rel="stylesheet"]').forEach(link => {
-      if (assetURL(link.href) && !wanted.includes(link.href)) { link.media = 'not all'; }
+    const links = [...document.querySelectorAll('link[rel="stylesheet"]')];
+    links.forEach(link => {
+      if (assetURL(link.href) && !wanted.includes(link.href) && link.media !== 'not all') { link.media = 'not all'; }
     });
     // Preserve the server's CSS order, including the patient theme that deliberately comes last.
+    // Existing links already in that order do not need a DOM move on every page.
+    const ordered = links.filter(link => wanted.includes(link.href));
+    const needsOrder = ordered.length !== wanted.length || ordered.some((link, index) => link.href !== wanted[index]);
     for (const href of wanted) {
-      const link = [...document.querySelectorAll('link[rel="stylesheet"]')].find(node => node.href === href);
-      if (link) { link.media = ''; document.head.append(link); }
+      const link = links.find(node => node.href === href);
+      if (link) { if (link.media) link.media = ''; if (needsOrder) document.head.append(link); }
     }
   }
   async function loadScripts(scripts = [], current) {
@@ -230,6 +310,15 @@
     document.querySelectorAll(selector).forEach(node => node.remove());
     if (html) document.body.insertAdjacentHTML('beforeend', html);
   }
+  function mergeToasts(html) {
+    if (typeof html !== 'string' || !html) return;
+    const fragment = new DOMParser().parseFromString(html, 'text/html');
+    const incoming = [...fragment.querySelectorAll('.toast-stack [data-toast]')];
+    if (!incoming.length) return;
+    let stack = document.querySelector('.toast-stack');
+    if (!stack) { stack = document.createElement('div'); stack.className = 'toast-stack'; document.body.append(stack); }
+    stack.append(...incoming);
+  }
 
   function cancelSections() {
     sectionQueue = [];
@@ -262,12 +351,12 @@
             headers: { 'X-Meridian-Navigation': 'section', 'X-Meridian-Navigation-Scope': config.scope,
               'X-Meridian-Section': target.dataset.contentSection, 'Accept': 'application/json' } });
           if (current !== generation || !target.isConnected) return;
-          if ([401, 409].includes(response.status)) { nativeVisit(window.location.href); return; }
+          if ([401, 409].includes(response.status)) { fullVisit(window.location.href); return; }
           if (!response.ok) throw new Error('Section unavailable');
           const data = await response.json();
           if (current !== generation || !target.isConnected) return;
-          if (data.scope !== config.scope || data.version !== 1 || typeof data.html !== 'string') throw new Error('Section context changed');
           if (data.redirect_url) { nativeVisit(data.redirect_url); return; }
+          if (data.scope !== config.scope || data.version !== 1 || typeof data.html !== 'string') throw new Error('Section context changed');
           target.innerHTML = data.html; target.removeAttribute('aria-busy'); target.dataset.deferredLoaded = '';
         } catch (error) {
           if (current !== generation || !target.isConnected) return;
@@ -287,26 +376,35 @@
 
   async function navigate(value, options = {}) {
     const url = absolute(value);
-    if (!acceptsURL(url)) { nativeVisit(value); return; }
+    if (!acceptsURL(url)) { fullVisit(value); return; }
     if (!options.initial && !mayLeave()) {
       if (options.pop) {
-        const delta = historyPosition - options.position;
-        if (Number.isInteger(delta) && delta !== 0) { restoringCancelledPop = true; history.go(delta); }
-        else history.replaceState(stateWithScroll(), '', renderedURL);
+        const delta = options.branch === historyBranch ? historyPosition - options.position : NaN;
+        if (Number.isInteger(delta) && delta !== 0) {
+          restoringCancelledPop = { branch: historyBranch, position: historyPosition, url: renderedURL };
+          try { history.go(delta); } catch (_) { restoringCancelledPop = null; restoreRenderedEntry(); }
+        } else restoreRenderedEntry();
       }
       return;
     }
+    const detached = Boolean(historyRecovery);
+    if (detached || (options.pop && (options.branch !== historyBranch || !Number.isInteger(options.position)))) {
+      historyBranch = newHistoryBranch(); historyPosition = options.pop || options.replace ? 0 : -1;
+    }
+    clearHistoryRecovery();
     const current = ++generation;
+    window.clearTimeout(scrollTimer); scrollTimer = null;
     pending?.abort(); cancelSections();
     pending = new AbortController();
     const controller = pending;
     const oldScope = config.scope;
     routing = true;
     if (!options.pop) {
-      history.replaceState(stateWithScroll(), '', window.location.href);
+      if (!detached && !writeHistory('replaceState', stateWithScroll(), window.location.href, url.href)) return;
       if (!options.replace) historyPosition += 1;
-      history[options.replace ? 'replaceState' : 'pushState']({ meridianNavigation: true, meridianPosition: historyPosition, scroll: [0, 0] }, '', url.href);
-    } else if (Number.isInteger(options.position)) historyPosition = options.position;
+      if (!writeHistory(options.replace ? 'replaceState' : 'pushState', { meridianNavigation: true, meridianBranch: historyBranch, meridianPosition: historyPosition, scroll: [0, 0] }, url.href)) return;
+    } else if (options.branch === historyBranch && Number.isInteger(options.position)) historyPosition = options.position;
+    updatePersistentHeader(url);
     notify('workspace:navigating', { url: url.href });
     window.MeridianPages?.dispose();
     updateActiveNavigation(url); loading(options.title);
@@ -316,14 +414,20 @@
       const response = await fetch(url.href, { credentials: 'same-origin', cache: 'no-store', redirect: 'error', signal: controller.signal,
         headers: { 'X-Meridian-Navigation': 'content', 'X-Meridian-Navigation-Scope': oldScope, 'Accept': 'application/json' } });
       if (current !== generation) return;
-      if (!(response.headers.get('Content-Type') || '').includes('application/json')) { nativeVisit(url.href); return; }
+      if (!(response.headers.get('Content-Type') || '').includes('application/json')) { fullVisit(url.href); return; }
       const data = await response.json();
       if (current !== generation) return;
-      if (data.redirect_url) { nativeVisit(data.redirect_url); return; }
-      if ([401, 409].includes(response.status)) { nativeVisit(url.href); return; }
+      if (data.redirect_url) {
+        const destination = absolute(data.redirect_url);
+        if (acceptsURL(destination) && (options.redirects || 0) < 5) {
+          await navigate(destination.href, { replace: true, initial: true, redirects: (options.redirects || 0) + 1 });
+        } else nativeVisit(data.redirect_url, { full: true });
+        return;
+      }
+      if ([401, 409].includes(response.status)) { fullVisit(url.href); return; }
       if (!response.ok) { errorPage(url, response.status); return; }
       if (data.version !== 1 || data.scope !== oldScope || data.layout !== config.layout
-          || (config.build && data.build && data.build !== config.build)) { nativeVisit(url.href); return; }
+          || (config.build && data.build && data.build !== config.build)) { fullVisit(url.href); return; }
       const canonical = absolute(data.canonical_url || url.href);
       if (!canonical || typeof data.html !== 'string') throw new Error('Invalid navigation response');
       canonical.hash = url.hash;
@@ -344,13 +448,15 @@
       root().replaceChildren(...next.childNodes);
       root().removeAttribute('aria-busy');
       replaceOutside('[data-live-messages]', data.live_messages_html);
-      replaceOutside('.toast-stack', data.toast_html);
+      mergeToasts(data.toast_html);
       if (typeof data.body_class === 'string') document.body.className = data.body_class;
-      config = { ...config, ...data, html: undefined, assets: undefined, shell: false };
+      config = { ...config, ...data, navigation_paths: declaredPaths, html: undefined, assets: undefined, shell: false };
       if (configElement) configElement.textContent = JSON.stringify({ version: 1, scope: config.scope, layout: config.layout,
-        canonical_url: canonical.pathname + canonical.search, build: config.build, shell: false });
-      history.replaceState({ meridianNavigation: true, meridianPosition: historyPosition, scroll: options.restoreScroll || [0, 0] }, '', canonical.href);
+        canonical_url: canonical.pathname + canonical.search, build: config.build, navigation_paths: config.navigation_paths, shell: false });
+      if (!writeHistory('replaceState', { meridianNavigation: true, meridianBranch: historyBranch, meridianPosition: historyPosition, scroll: options.restoreScroll || [0, 0] }, canonical.href)) return;
+      updatePersistentHeader(canonical);
       renderedURL = canonical.href;
+      saveScroll = true;
       document.title = data.title || 'Meridian';
       window.MeridianPages?.mount(document);
       rememberForms();
@@ -373,6 +479,9 @@
   }
 
   window.MeridianNavigation = { navigate, replaceUrl, canHandleLink, canHandleForm };
+  for (const type of ['click', 'submit']) document.addEventListener(type, event => {
+    if (historyRecovery && root()?.contains(event.target)) { event.preventDefault(); event.stopImmediatePropagation(); }
+  }, true);
   window.addEventListener('click', event => {
     const link = event.target.closest?.('a[href]');
     if (!canHandleLink(link, event)) return;
@@ -390,23 +499,48 @@
     url.search = new URLSearchParams(fields).toString(); navigate(url.href);
   });
   window.addEventListener('popstate', event => {
-    if (restoringCancelledPop) { restoringCancelledPop = false; return; }
+    if (restoringCancelledPop) {
+      const expected = restoringCancelledPop; restoringCancelledPop = null;
+      if (event.state?.meridianBranch === expected.branch && event.state?.meridianPosition === expected.position && location.href === expected.url) {
+        updatePersistentHeader(new URL(location.href)); clearHistoryRecovery(true); return;
+      }
+    }
     if (!routing && !root()?.querySelector('[data-navigation-loading], [data-navigation-error]')
         && new URL(renderedURL).pathname === location.pathname && new URL(renderedURL).search === location.search) {
       if (location.hash) {
         try { document.getElementById(decodeURIComponent(location.hash.slice(1)))?.scrollIntoView(); } catch (_) { /* Invalid hashes are ignored. */ }
       } else window.scrollTo(...(event.state?.scroll || [0, 0]));
+      if (event.state?.meridianBranch === historyBranch && Number.isInteger(event.state?.meridianPosition)) historyPosition = event.state.meridianPosition;
+      else reanchorHistory();
       renderedURL = window.location.href;
+      clearHistoryRecovery(true);
       return;
     }
-    navigate(window.location.href, { pop: true, position: event.state?.meridianPosition, restoreScroll: event.state?.scroll || [0, 0] });
+    navigate(window.location.href, { pop: true, branch: event.state?.meridianBranch, position: event.state?.meridianPosition, restoreScroll: event.state?.scroll || [0, 0] });
+  });
+  window.addEventListener('hashchange', () => {
+    if (routing || historyRecovery || restoringCancelledPop) return;
+    const rendered = new URL(renderedURL);
+    if (rendered.pathname !== location.pathname || rendered.search !== location.search) return;
+    // A native anchor can add an entry without advancing our logical position.
+    // End that branch so later multi-entry traversal never trusts stale offsets.
+    reanchorHistory();
+    renderedURL = location.href;
   });
   window.addEventListener('scroll', () => {
-    if (routing || savingScroll) return;
-    savingScroll = true;
-    requestAnimationFrame(() => { if (!routing) history.replaceState(stateWithScroll(), '', location.href); savingScroll = false; });
+    if (routing || historyRecovery) return;
+    window.clearTimeout(scrollTimer);
+    scrollTimer = window.setTimeout(() => {
+      scrollTimer = null;
+      // Scroll persistence is optional: a browser quota must never reload an
+      // edited page. Explicit navigation can still use its guarded fallback.
+      if (!routing && !historyRecovery && saveScroll) saveScroll = writeHistory('replaceState', stateWithScroll(), location.href, null);
+    }, 150);
   }, { passive: true });
-  window.addEventListener('pagehide', () => { generation += 1; pending?.abort(); cancelSections(); window.MeridianPages?.dispose(); });
+  window.addEventListener('pagehide', () => {
+    generation += 1; pending?.abort(); cancelSections(); window.clearTimeout(scrollTimer); scrollTimer = null;
+    window.MeridianPages?.dispose({ all: true });
+  });
   window.addEventListener('pageshow', event => {
     if (!event.persisted) return;
     // Recheck the current authorization instead of restoring cached clinical content.

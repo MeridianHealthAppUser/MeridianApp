@@ -4,5 +4,5 @@
   <div class="page-skeleton-grid" aria-hidden="true">
     {% for card in '123'|make_list %}<div class="page-skeleton-card{% if forloop.last %} page-skeleton-card--wide{% endif %}"><span class="page-skeleton-line page-skeleton-line--title"></span><span class="page-skeleton-line"></span><span class="page-skeleton-line"></span><span class="page-skeleton-line"></span></div>{% endfor %}
   </div>
-  <noscript><p><a href="{{ full_page_url }}">Open this page without JavaScript</a></p></noscript>
+  <p class="page-navigation-loading__label"><a href="{{ full_page_url }}" data-native-navigation>Open full page</a> if loading does not finish.</p>
 </section>

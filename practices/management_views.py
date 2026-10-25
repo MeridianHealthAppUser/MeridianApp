@@ -35,10 +35,8 @@ class ManagementView(LoginRequiredMixin, View):
         self.membership = active_membership_for(request, self.company)
         from portal.realtime_context import staff_scope
         request.realtime_scope = staff_scope(self.company, request.user)
-        from portal.page_navigation import bind_navigation_context, maybe_navigation_shell
-        if response := bind_navigation_context(request, company=self.company, membership=self.membership):
-            return response
-        if response := maybe_navigation_shell(self, request):
+        from portal.page_navigation import navigation_response
+        if response := navigation_response(self, request, company=self.company, membership=self.membership):
             return response
         return super().dispatch(request, *args, **kwargs)
 

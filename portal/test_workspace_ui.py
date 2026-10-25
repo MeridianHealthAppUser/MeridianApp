@@ -9,6 +9,7 @@ from care.messaging import add_participant
 from care.models import MessageThread
 from practices.models import Company, CompanyMembership, Patient
 from practices.services import ACTIVE_COMPANY_SESSION_KEY, ACTIVE_PATIENT_COMPANY_SESSION_KEY
+from .test_markup import actionable_paths
 
 
 @override_settings(MULTI_PRACTICE_ENABLED=True)
@@ -118,12 +119,14 @@ class WorkspacePresentationTests(TestCase):
         for group in ('Care', 'Operations', 'Administration', 'Insights', 'Settings'):
             self.assertContains(response, f'data-navigation-group="{group.lower()}"')
             self.assertContains(response, f'</svg>{group}</span>')
+        paths = actionable_paths(response)
         for name in ('staff-tasks', 'staff-schedule', 'ops-catalogue', 'policy-list', 'management-users', 'metrics', 'staff-data-requests'):
-            self.assertContains(response, reverse(f'portal:{name}'))
+            self.assertIn(reverse(f'portal:{name}'), paths)
         self.login(self.doctor)
         response = self.page('desktop-dashboard')
-        self.assertNotContains(response, reverse('portal:management-users'))
-        self.assertNotContains(response, reverse('portal:staff-data-requests'))
+        paths = actionable_paths(response)
+        self.assertNotIn(reverse('portal:management-users'), paths)
+        self.assertNotIn(reverse('portal:staff-data-requests'), paths)
 
     def test_admin_task_title_and_navigation_use_short_label(self):
         self.login(self.super_admin)

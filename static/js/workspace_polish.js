@@ -1,4 +1,6 @@
 (window.MeridianPages?.register || ((_name, initialize) => initialize(null)))('workspace_polish', lifecycle => {
+  const clearTimeout = lifecycle ? lifecycle.clearTimeout : window.clearTimeout.bind(window);
+  const cancelAnimationFrame = lifecycle ? lifecycle.cancelAnimationFrame : window.cancelAnimationFrame.bind(window);
   const listen = lifecycle ? lifecycle.on : (target, ...args) => target?.addEventListener(...args);
   const setTimeout = lifecycle ? lifecycle.timeout : window.setTimeout.bind(window);
   const requestAnimationFrame = lifecycle ? lifecycle.raf : window.requestAnimationFrame.bind(window);
@@ -39,7 +41,7 @@
   listen(window, 'pageshow', revealCurrentRail);
   let resizeFrame;
   listen(window, 'resize', () => {
-    window.cancelAnimationFrame(resizeFrame);
+    cancelAnimationFrame(resizeFrame);
     resizeFrame = requestAnimationFrame(revealCurrentRail);
   });
 })();
@@ -78,7 +80,7 @@
     // Pause live requests before the browser waits for the destination, including Safari's paint delay.
     document.dispatchEvent(new CustomEvent('workspace:navigating'));
     // Resume even on a page without a content region if navigation was cancelled or downloaded a file.
-    window.clearTimeout(giveUpTimer);
+    clearTimeout(giveUpTimer);
     giveUpTimer = setTimeout(hideLoader, GIVE_UP_AFTER_MS);
   }
 
@@ -98,13 +100,13 @@
     region.setAttribute('aria-busy', 'true');
     region.appendChild(loader);
     // A response the browser downloads never replaces this page.
-    window.clearTimeout(giveUpTimer);
+    clearTimeout(giveUpTimer);
     giveUpTimer = setTimeout(hideLoader, GIVE_UP_AFTER_MS);
   }
 
   function hideLoader() {
-    window.clearTimeout(showTimer);
-    window.clearTimeout(giveUpTimer);
+    clearTimeout(showTimer);
+    clearTimeout(giveUpTimer);
     document.querySelectorAll('.workspace-page-loader').forEach((loader) => loader.remove());
     document.querySelectorAll('.is-page-loading').forEach((region) => {
       region.classList.remove('is-page-loading');
@@ -118,7 +120,7 @@
   }
 
   function queueLoader(event) {
-    window.clearTimeout(showTimer);
+    clearTimeout(showTimer);
     // Fast pages swap in before the loader would appear; prevented events never navigate.
     showTimer = setTimeout(() => { if (!event.defaultPrevented) showLoader(); }, SHOW_AFTER_MS);
   }

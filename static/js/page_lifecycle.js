@@ -1,4 +1,5 @@
 /* A controller owns its listeners, timers and background reads until the next page.
+   Persistent controllers belong to the retained application shell and survive soft visits.
    The navigation controller disposes before replacing content, then mounts the new page.
    There are no global EventTarget/fetch patches: ownership is explicit at each call site. */
 (() => {
@@ -37,18 +38,21 @@
         timers.add(id);
         return id;
       },
+      clearTimeout(id) { timers.delete(id); window.clearTimeout(id); },
       interval(callback, delay, ...args) {
         if (!active) return 0;
         const id = window.setInterval(() => { if (active) callback(...args); }, delay);
         intervals.add(id);
         return id;
       },
+      clearInterval(id) { intervals.delete(id); window.clearInterval(id); },
       raf(callback) {
         if (!active) return 0;
         const id = window.requestAnimationFrame(time => { frames.delete(id); if (active) callback(time); });
         frames.add(id);
         return id;
       },
+      cancelAnimationFrame(id) { frames.delete(id); window.cancelAnimationFrame(id); },
       async fetch(input, options = {}) {
         check();
         // Once submitted, mutations must finish. Controllers decide how to handle
@@ -84,6 +88,7 @@
         timers.forEach(id => window.clearTimeout(id));
         intervals.forEach(id => window.clearInterval(id));
         frames.forEach(id => window.cancelAnimationFrame(id));
+        timers.clear(); intervals.clear(); frames.clear();
         for (const cleanup of cleanups.reverse()) {
           try { cleanup(); } catch (error) { console.error('Page cleanup failed', error); }
         }
@@ -108,20 +113,23 @@
   }
 
   window.MeridianPages = {
-    register(name, initialize) {
+    register(name, initialize, options = {}) {
       if (controllers.has(name)) return;
-      controllers.set(name, initialize);
+      controllers.set(name, { initialize, persistent: options.persistent === true });
       if (document.readyState !== 'loading') mountOne(name, initialize);
     },
     mount(nextRoot = document) {
       root = nextRoot;
       enabled = true;
-      controllers.forEach((initialize, name) => mountOne(name, initialize));
+      controllers.forEach(({ initialize }, name) => mountOne(name, initialize));
     },
-    dispose() {
+    dispose({ all = false } = {}) {
       enabled = false;
-      mounted.forEach(scope => scope.dispose());
-      mounted.clear();
+      mounted.forEach((scope, name) => {
+        if (!all && controllers.get(name)?.persistent) return;
+        scope.dispose();
+        mounted.delete(name);
+      });
     },
   };
   document.addEventListener('DOMContentLoaded', () => {

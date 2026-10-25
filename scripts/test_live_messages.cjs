@@ -1,5 +1,6 @@
 /* Browser-level checks for realtime delivery, read visibility, navigation and safe reply behaviour.
-   Run with MERIDIAN_PLAYWRIGHT_PATH pointing to an installed playwright package. */
+   Run with MERIDIAN_PLAYWRIGHT_PATH pointing to an installed playwright package.
+   MERIDIAN_TEST_NO_LIFECYCLE=1 also verifies the plain-page fallback. */
 const assert = require('node:assert/strict');
 const { chromium } = require(process.env.MERIDIAN_PLAYWRIGHT_PATH || 'playwright');
 
@@ -72,6 +73,7 @@ const { chromium } = require(process.env.MERIDIAN_PLAYWRIGHT_PATH || 'playwright
         close(code = 1000) { this.readyState = 3; this.onclose?.({ code }); }
       };
     });
+    if (process.env.MERIDIAN_TEST_NO_LIFECYCLE !== '1') await page.addScriptTag({ path: 'static/js/page_lifecycle.js' });
     await page.addScriptTag({ path: 'static/js/conversations.js' });
     if (withSearch) await page.addScriptTag({ path: 'static/js/conversation_search.js' });
     await page.addScriptTag({ path: 'static/js/live_messages.js' });

@@ -12,6 +12,7 @@ from django.urls import reverse
 from django.utils import timezone
 from django.utils.decorators import method_decorator
 from django.utils.http import url_has_allowed_host_and_scheme
+from django.utils.functional import SimpleLazyObject
 from django.views import View
 from django.views.decorators.cache import never_cache
 from django.views.generic import DetailView, TemplateView
@@ -83,12 +84,8 @@ class StaffCompanyRequiredMixin:
         if self.clinician_redirect_message and self.membership.role == CompanyMembership.Role.DOCTOR:
             messages.error(request, self.clinician_redirect_message)
             return redirect('portal:desktop-dashboard')
-        from .page_navigation import bind_navigation_context, maybe_navigation_shell, maybe_navigation_section
-        if response := bind_navigation_context(request, company=self.company, membership=self.membership):
-            return response
-        if response := maybe_navigation_section(self, request):
-            return response
-        if response := maybe_navigation_shell(self, request):
+        from .page_navigation import navigation_response
+        if response := navigation_response(self, request, company=self.company, membership=self.membership):
             return response
         return super().dispatch(request, *args, **kwargs)
 
@@ -108,12 +105,8 @@ class PatientPortalRequiredMixin:
         request.realtime_scope = patient_scope(self.patient_company, self.patient, request.user)
         if response := changed_scope_response(request):
             return response
-        from .page_navigation import bind_navigation_context, maybe_navigation_shell, maybe_navigation_section
-        if response := bind_navigation_context(request, company=self.patient_company, patient=self.patient):
-            return response
-        if response := maybe_navigation_section(self, request):
-            return response
-        if response := maybe_navigation_shell(self, request):
+        from .page_navigation import navigation_response
+        if response := navigation_response(self, request, company=self.patient_company, patient=self.patient):
             return response
         return super().dispatch(request, *args, **kwargs)
 
@@ -164,10 +157,17 @@ class StaffDashboardContextMixin(StaffCompanyRequiredMixin):
         if self.membership.role == self.membership.Role.DOCTOR:
             patients = patients.filter(assigned_doctor=self.request.user)
         from .page_navigation import canonical_url, is_content_request
-        defer_metrics = is_content_request(self.request)
-        metrics = {} if defer_metrics else staff_dashboard_metrics(self.company, self.request.user, self.membership)
         # Clinicians and practice administrators get the same simple Overview: appointments and open tasks only.
         simple = uses_flat_menu(self.membership)
+        defer_metrics = not simple and is_content_request(self.request)
+        if defer_metrics:
+            metrics = {}
+        elif simple:
+            # Keep the context contract for explicit consumers without running
+            # four/five counts for cards these overview templates never render.
+            metrics = SimpleLazyObject(lambda: staff_dashboard_metrics(self.company, self.request.user, self.membership))
+        else:
+            metrics = staff_dashboard_metrics(self.company, self.request.user, self.membership)
         context.update(
             company=self.company,
             active_membership=self.membership,

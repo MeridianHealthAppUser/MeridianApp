@@ -1,4 +1,5 @@
 (window.MeridianPages?.register || ((_name, initialize) => initialize(null)))('call_notifications', (lifecycle) => {
+  const clearTimeout = lifecycle ? lifecycle.clearTimeout : window.clearTimeout.bind(window);
   const listen = lifecycle ? lifecycle.on : (target, ...args) => target?.addEventListener(...args);
   const setTimeout = lifecycle ? lifecycle.timeout : window.setTimeout.bind(window);
 /* In-app invitations only: no camera access, outbound email or autoplay audio. */
@@ -80,4 +81,4 @@
   connect();
 })();
 
-});
+}, { persistent: true });

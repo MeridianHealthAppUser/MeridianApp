@@ -17,6 +17,7 @@ from practices.services import ACTIVE_COMPANY_SESSION_KEY, ACTIVE_PATIENT_COMPAN
 
 from .intake_views import LEAD_KEY
 from .privacy_forms import PublicPracticeForm
+from .test_markup import actionable_paths
 
 
 @override_settings(MULTI_PRACTICE_ENABLED=False, SINGLE_PRACTICE_SLUG='meridian-health', DEBUG=True)
@@ -150,10 +151,12 @@ class SinglePracticeSurfacesTests(TestCase):
             with self.subTest(page=name):
                 response = self.client.get(reverse(f'portal:{name}', args=args))
                 self.assertEqual(response.status_code, 200)
-                self.assertNotContains(response, reverse('portal:management-practices'))
+                paths = actionable_paths(response)
+                self.assertNotIn(reverse('portal:management-practices'), paths)
                 self.assertNotContains(response, 'company-switcher')
-                self.assertContains(response, reverse('portal:management-users'))
-        self.assertContains(self.client.get(reverse('portal:mobile-dashboard')), reverse('portal:staff-menu-section', args=['settings']))
+                self.assertIn(reverse('portal:management-users'), paths)
+        self.assertIn(reverse('portal:staff-menu-section', args=['settings']),
+                      actionable_paths(self.client.get(reverse('portal:mobile-dashboard'))))
 
     def test_profile_save_does_not_modify_or_audit_other_practice_data(self):
         other_membership = CompanyMembership.objects.get(company=self.other, user=self.staff)

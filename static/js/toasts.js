@@ -3,14 +3,16 @@
 /* Toasts: the close button dismisses one, and a confirmation that has faded out is removed.
    window.meridianToast(text, 'error') adds one from a script, above any open dialog. */
 (() => {
-  function wire(toast) {
-    listen(toast, 'animationend', (event) => {
-      if (event.animationName === 'toast-out') toast.remove();
-    });
-    const close = toast.querySelector('[data-toast-close]');
-    if (close) listen(close, 'click', () => toast.remove());
-  }
-  document.querySelectorAll('[data-toast]').forEach(wire);
+  // The shell retains old errors and merges new server messages between visits.
+  // Delegation keeps both usable while content loads without wiring each toast.
+  listen(document, 'animationend', event => {
+    if (event.animationName === 'toast-out' && event.target.matches?.('[data-toast]')) event.target.remove();
+  });
+  listen(document, 'click', event => {
+    const close = event.target.closest?.('[data-toast-close]');
+    const toast = close?.closest('[data-toast]');
+    if (toast) { event.preventDefault(); toast.remove(); }
+  });
 
   window.meridianToast = (text, kind = 'success') => {
     if (lifecycle && !lifecycle.isActive) return null;
@@ -34,7 +36,6 @@
     close.textContent = '×';
     toast.append(message, close);
     stack.append(toast);
-    wire(toast);
     // A modal dialog sits above the page, so the stack joins the top layer to show above it.
     let modalOpen = false;
     try { modalOpen = Boolean(document.querySelector('dialog:modal')); } catch (error) { /* An older browser. */ }
@@ -47,4 +48,4 @@
   };
 })();
 
-});
+}, { persistent: true });

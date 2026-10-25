@@ -77,7 +77,7 @@
         {% for message in messages %}<div class="flash-message toast {{ message.tags }}" role="{% if 'error' in message.tags %}alert{% else %}status{% endif %}" data-toast><span>{{ message }}</span><button class="toast__close" type="button" aria-label="Dismiss" data-toast-close>&times;</button></div>{% endfor %}
       </div>
     {% endif %}
-    <script src="{% static 'js/toasts.js' %}?v=20261006" defer></script>
+    <script src="{% static 'js/toasts.js' %}?v=20261025" defer></script>
     <main class="page-shell" id="workspace-content"{% if page_navigation_config %} data-page-navigation{% endif %}>
       {% block content %}{% endblock %}
     </main>

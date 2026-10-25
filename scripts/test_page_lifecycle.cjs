@@ -125,7 +125,8 @@ const { chromium } = require(process.env.MERIDIAN_PLAYWRIGHT_PATH || 'playwright
       await page.close(); cases++;
     }
 
-    // Invitations use one socket even when their retained header is remounted.
+    // Shell invitations keep their socket, visible banner and deduplication while
+    // page content is absent. Only a real page exit tears down the shell scope.
     {
       const page = await setup('<aside id="incoming-call" hidden><p id="incoming-call-title"></p><p id="incoming-call-practice"></p><a id="incoming-call-join"></a><button id="incoming-call-dismiss">Dismiss</button></aside>');
       await page.evaluate(() => {
@@ -136,17 +137,99 @@ const { chromium } = require(process.env.MERIDIAN_PLAYWRIGHT_PATH || 'playwright
         };
       });
       await script(page, 'call_notifications');
-      for (let i = 0; i < 3; i++) await remount(page);
-      assert.equal(await page.evaluate(() => window.sockets.filter(socket => socket.readyState === 1).length), 1);
       await page.evaluate(() => {
         const data = JSON.stringify({ type: 'incoming_call', appointment_id: 7, caller_name: 'Clinician', practice_name: 'Practice' });
         window.sockets[0].onmessage({ data });
       });
-      assert.equal(await page.locator('#incoming-call').isHidden(), true);
-      await page.evaluate(() => window.sockets.at(-1).onmessage({ data: JSON.stringify({ type: 'incoming_call', appointment_id: 7, caller_name: 'Clinician', practice_name: 'Practice' }) }));
+      assert.equal(await page.locator('#incoming-call').isVisible(), true);
+      for (let i = 0; i < 3; i++) await remount(page);
+      assert.equal(await page.evaluate(() => window.sockets.length), 1);
       assert.equal(await page.locator('#incoming-call').isVisible(), true);
       await page.locator('#incoming-call-dismiss').click();
+      await remount(page);
+      await page.evaluate(() => window.sockets[0].onmessage({ data: JSON.stringify({ type: 'incoming_call', appointment_id: 7, caller_name: 'Clinician', practice_name: 'Practice' }) }));
       assert.equal(await page.locator('#incoming-call').isHidden(), true);
+      await page.evaluate(() => {
+        MeridianPages.dispose();
+        window.sockets[0].onmessage({ data: JSON.stringify({ type: 'incoming_call', appointment_id: 8, caller_name: 'Held-page call', practice_name: 'Practice' }) });
+      });
+      assert.equal(await page.locator('#incoming-call').isVisible(), true);
+      assert.match(await page.locator('#incoming-call-title').textContent(), /Held-page call/);
+      await page.evaluate(() => MeridianPages.mount());
+      assert.equal(await page.locator('#incoming-call').isVisible(), true);
+      await page.evaluate(() => MeridianPages.dispose({ all: true }));
+      assert.equal(await page.locator('#incoming-call').isHidden(), true);
+      assert.equal(await page.evaluate(() => window.sockets.filter(socket => socket.readyState === 1).length), 0);
+      await page.close(); cases++;
+    }
+
+    // Cancelling a debounce releases its ownership immediately, rather than
+    // retaining every keystroke's cancelled timer until the user leaves the page.
+    {
+      const page = await setup('<h1>Timer ownership</h1>');
+      const result = await page.evaluate(async () => {
+        let scope;
+        MeridianPages.register('timer-test', current => { scope = current; });
+        const clears = { timeouts: 0, intervals: 0, frames: 0 };
+        const originalTimeout = window.clearTimeout.bind(window);
+        const originalInterval = window.clearInterval.bind(window);
+        const originalFrame = window.cancelAnimationFrame.bind(window);
+        window.clearTimeout = id => { clears.timeouts++; originalTimeout(id); };
+        window.clearInterval = id => { clears.intervals++; originalInterval(id); };
+        window.cancelAnimationFrame = id => { clears.frames++; originalFrame(id); };
+        for (let i = 0; i < 1000; i++) scope.clearTimeout(scope.timeout(() => {}, 60000));
+        scope.clearInterval(scope.interval(() => {}, 60000));
+        scope.cancelAnimationFrame(scope.raf(() => {}));
+        // Fired timers and frames must also release their ownership.
+        await new Promise(resolve => scope.timeout(resolve, 0));
+        await new Promise(resolve => scope.raf(resolve));
+        const before = { ...clears };
+        MeridianPages.dispose();
+        return { before, after: clears };
+      });
+      assert.deepEqual(result.before, { timeouts: 1000, intervals: 1, frames: 1 });
+      assert.deepEqual(result.after, result.before);
+      await page.close(); cases++;
+    }
+
+    // Retained shell controls stay interactive during a held content visit, and
+    // delegated toast controls handle newly merged messages without remounting.
+    {
+      const page = await setup(`<header><details data-account-menu><summary>Account</summary>
+        <a id="profile" href="#profile">Profile</a><button id="logout">Log out</button></details></header>
+        <div class="toast-stack"><div class="toast error" data-toast><span>Existing error</span><button data-toast-close>Dismiss existing</button></div></div>`);
+      await page.evaluate(() => {
+        window.toastRemovals = 0;
+        const remove = Element.prototype.remove;
+        Element.prototype.remove = function () { if (this.hasAttribute('data-toast')) window.toastRemovals++; return remove.call(this); };
+      });
+      await script(page, 'account_menu');
+      await script(page, 'toasts');
+      await page.evaluate(() => MeridianPages.dispose());
+      await page.locator('summary').focus();
+      await page.keyboard.press('ArrowDown');
+      assert.equal(await page.evaluate(() => document.activeElement.id), 'profile');
+      assert.equal(await page.locator('summary').getAttribute('aria-expanded'), 'true');
+      await page.keyboard.press('Escape');
+      assert.equal(await page.locator('summary').getAttribute('aria-expanded'), 'false');
+      await page.getByRole('button', { name: 'Dismiss existing' }).click();
+      assert.equal(await page.locator('[data-toast]').count(), 0);
+      await page.evaluate(() => {
+        document.querySelector('.toast-stack').insertAdjacentHTML('beforeend', '<div class="toast error" data-toast><span>Merged error</span><button data-toast-close>Dismiss merged</button></div>');
+        window.meridianToast('Script error while loading', 'error');
+      });
+      assert.equal(await page.locator('[data-toast]').count(), 2);
+      await page.getByRole('button', { name: 'Dismiss merged' }).click();
+      for (let i = 0; i < 3; i++) await remount(page);
+      await page.locator('summary').focus();
+      await page.keyboard.press('ArrowDown');
+      assert.equal(await page.evaluate(() => document.activeElement.id), 'profile');
+      await page.keyboard.press('Escape');
+      await page.evaluate(() => document.querySelector('[data-toast]').dispatchEvent(new AnimationEvent('animationend', { bubbles: true, animationName: 'toast-out' })));
+      assert.equal(await page.locator('[data-toast]').count(), 0);
+      assert.equal(await page.evaluate(() => window.toastRemovals), 3);
+      await page.evaluate(() => MeridianPages.dispose({ all: true }));
+      assert.equal(await page.evaluate(() => window.meridianToast('After exit', 'error')), null);
       await page.close(); cases++;
     }
 

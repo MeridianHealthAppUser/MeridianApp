@@ -2,7 +2,7 @@
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const { chromium } = require(process.env.MERIDIAN_PLAYWRIGHT_PATH || 'playwright');
+const { chromium, webkit } = require(process.env.MERIDIAN_PLAYWRIGHT_PATH || 'playwright');
 const datasets = JSON.parse(fs.readFileSync(0, 'utf8'));
 const origin = 'https://meridian.test';
 const mime = { '.js': 'application/javascript', '.css': 'text/css', '.woff2': 'font/woff2', '.woff': 'font/woff',
@@ -192,11 +192,80 @@ async function run(browser, fixture, width) {
   }
 }
 
+async function runFallback(browser, fixture, mode) {
+  const automatic = mode === 'content-unavailable';
+  const context = await browser.newContext({ javaScriptEnabled: mode !== 'no-javascript' });
+  const page = await context.newPage();
+  const documents = [], contentRequests = [];
+  if (mode === 'missing-abort-controller' || mode === 'missing-dom-parser') {
+    await context.addInitScript(name => { window[name] = undefined; },
+      mode === 'missing-abort-controller' ? 'AbortController' : 'DOMParser');
+  }
+  await context.addInitScript(() => { window.WebSocket = undefined; });
+  await context.route('**/*', async route => {
+    const request = route.request(), url = new URL(request.url());
+    if (url.origin !== origin) return route.fulfill({ status: 404, body: '' });
+    if (url.pathname.startsWith('/static/')) {
+      if ((mode === 'missing-router' && url.pathname.endsWith('/app_navigation.js'))
+          || (mode === 'missing-runtime' && url.pathname.endsWith('/page_lifecycle.js'))) return route.abort('failed');
+      const filename = path.resolve('static', decodeURIComponent(url.pathname.slice('/static/'.length)));
+      if (!filename.startsWith(path.resolve('static') + path.sep) || !fs.existsSync(filename)) {
+        return route.fulfill({ status: 404, body: '' });
+      }
+      return route.fulfill({ contentType: mime[path.extname(filename)] || 'application/octet-stream', body: fs.readFileSync(filename) });
+    }
+    if (request.isNavigationRequest()) {
+      documents.push(url.pathname + url.search);
+      return route.fulfill({ contentType: 'text/html', body: url.searchParams.get('__full') === '1'
+        ? fixture.pages[fixture.initial].snapshot : fixture.shell });
+    }
+    if (request.headers()['x-meridian-navigation'] === 'content') {
+      contentRequests.push(request.url());
+      if (automatic) return route.fulfill({ status: 504, contentType: 'text/html', body: 'Synthetic upstream unavailable' });
+    }
+    if (fixture.endpoints[url.pathname]) return route.fulfill({ json: fixture.endpoints[url.pathname] });
+    return route.fulfill({ status: 204, body: '' });
+  });
+  try {
+    await page.goto(origin + fixture.initial);
+    if (!automatic) {
+      const fallback = page.locator('[data-navigation-shell] a[data-native-navigation]');
+      await fallback.waitFor({ state: 'visible' });
+      const href = new URL(await fallback.getAttribute('href'), origin);
+      assert.equal(href.pathname, fixture.initial);
+      assert.equal(href.searchParams.get('__full'), '1');
+      assert.equal(await fallback.evaluate(link => Boolean(link.closest('noscript'))), false);
+      await fallback.click();
+      await page.waitForURL(url => url.searchParams.get('__full') === '1');
+    }
+    await page.waitForFunction(() => !document.querySelector('[data-navigation-shell]'));
+    await page.waitForSelector('#workspace-content h1');
+    if (automatic) {
+      await page.waitForURL(url => url.pathname === fixture.initial && !url.searchParams.has('__full'));
+      await page.waitForTimeout(150);
+    }
+    assert.equal(await page.locator('[data-navigation-shell]').count(), 0, `${mode}: full page is usable`);
+    assert.equal(documents.length, 2, `${mode}: exactly one native fallback`);
+    assert.equal(new URL(documents[1], origin).searchParams.get('__full'), '1', `${mode}: native fallback bypassed the shell`);
+    assert.equal(contentRequests.length, automatic ? 1 : 0, `${mode}: no repeating content hydration`);
+    console.log(`Rendered shell fallback passed: ${mode}.`);
+  } finally { await context.close(); }
+}
+
 (async () => {
   const browser = await chromium.launch({ channel: 'chrome', headless: true });
-  let flows = 0;
+  let flows = 0, fallbacks = 0;
   try {
     for (const fixture of datasets) for (const width of [1280, 390]) { await run(browser, fixture, width); flows += 1; }
+    for (const mode of ['missing-router', 'missing-runtime', 'missing-abort-controller', 'missing-dom-parser', 'no-javascript', 'content-unavailable']) {
+      await runFallback(browser, datasets[0], mode); fallbacks += 1;
+    }
   } finally { await browser.close(); }
-  console.log(JSON.stringify({ flows }));
+  const safari = await webkit.launch({ headless: true });
+  try {
+    for (const mode of ['missing-router', 'missing-runtime', 'missing-abort-controller', 'missing-dom-parser', 'no-javascript', 'content-unavailable']) {
+      await runFallback(safari, datasets[0], mode); fallbacks += 1;
+    }
+  } finally { await safari.close(); }
+  console.log(JSON.stringify({ flows, fallbacks }));
 })().catch(error => { console.error(error); process.exitCode = 1; });

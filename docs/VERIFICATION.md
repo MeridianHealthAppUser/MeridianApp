@@ -111,6 +111,30 @@ The shared navigation suite exercises immediate destination/URL changes under de
 
 The architecture, request contracts, rollback setting and focused verification commands are documented in [PAGE_NAVIGATION.md](PAGE_NAVIGATION.md).
 
+## Navigation resilience review — 25 October 2026
+
+- Full backend regression: **1,496 tests run, no failures, 18 expected optional skips**. The focused backend navigation/UI run passed 138 tests with one optional browser skip. After tightening positive menu assertions to require actual links, all 57 tests in the four affected UI modules passed again.
+- **76 shared navigation scenarios passed: 38 in Chrome and 38 in native WebKit.** Added coverage reproduces sustained scrolling, bounded proxy/content fallbacks, rejected history writes, practice-switcher destinations, expired deferred sessions, persistent error toasts, unknown-history Back cancellation, explicit route eligibility, redirect chains, stylesheet reuse and invitations arriving while page content is held.
+- Six actual Django-rendered patient, clinician and Super Admin journeys passed at desktop/mobile widths. **Ten further rendered-shell cases passed across Chrome and WebKit:** missing router, missing lifecycle runtime, unavailable AbortController, unavailable DOMParser and disabled JavaScript. The visible native fallback reached complete authorized content without another hydration request.
+- Six lifecycle scenarios passed, including retained call/account/toast controllers, full-exit disposal and 1,000 cancelled debounce timers. The notification/appointment browser-backed Django run passed 12 tests, and account-menu tests passed eight.
+- All 16 existing messaging browser scenarios passed with the lifecycle runtime and passed again in plain-page fallback mode. Numeric desktop/mobile unread badges, message visibility, drafts, submission, scrolling and reconnect/session behavior remain covered.
+- Automated permission parity checks cover all 41 shell routes across four roles (164 comparisons). The transport registry checks all 88 declared HTML destinations and excludes native downloads, APIs and actions. Forged content/section requests are rejected before a download view or audit side effect can run.
+- Production hashed static collection, migration-drift checks, Django system checks and diff checks passed. No additional service, dependency, environment variable or database migration is required.
+
+Shell and full-view authorization predicates remain separate, with the new automated parity matrix guarding against drift. Navigation no longer disconnects incoming-call alerts; genuine network outages still do not replay ephemeral invitations. Unsaved-form prompts cover intercepted navigation. Live DigitalOcean latency and cross-network media still require a deployment smoke test.
+
+## Follow-up navigation review — 25 October 2026
+
+- Fresh full SQLite regression: **1,500 tests run, no failures, 18 expected optional skips**, in 140.806 seconds. The follow-up navigation/request/UI checks also passed 89 tests with one optional browser skip. These are new local executions, separate from the preceding 1,496-test report.
+- **110 navigation browser scenarios passed: 55 Chrome and 55 native WebKit.** New regressions cover optional address-update rejection without reload/draft loss, fresh scroll saving after navigation, initial history failures, Back/Forward/multiple-entry jumps without position metadata, duplicate-address and native-hash branches, failed recovery with blocked form submission, retry to the original POST address, one-time route compilation and SSR fallback URL cleanup.
+- Six actual Django-rendered desktop/mobile journeys passed, plus **12 rendered-shell fallback checks across Chrome and WebKit**. The additional simulated proxy outage verifies one failed content request, one full-document fallback, successful canonical URL cleanup and no hydration loop.
+- Initial documents contain only the current layout's routes (19 patient or 69 staff); content, section, redirect and error JSON omit the list. Inventory checks classify all 116 current portal GET views (88 HTML and 28 native/API). UI checks now parse actual link/form/submitter URLs, including query-bearing destinations, instead of relying on literal `href` strings or matching script metadata.
+- Production static collection into a temporary directory verified hashed navigation assets; all 38 JavaScript scripts passed syntax checks, and diff checks passed. The mobile empty copy is now supplied explicitly, independent of its CSS class; the unhashed-development toast asset version was updated.
+
+Cancelling an unknown history traversal cannot preserve both the entire browser history and the visible editor through the legacy History API. Recovery adds a new editor entry, retains the draft and original destination, and may truncate Forward history. If the browser rejects that write too, the editor is temporarily disabled with a retry control so a native form cannot submit to the wrong URL. See [PAGE_NAVIGATION.md](PAGE_NAVIGATION.md).
+
+The separate shell access predicates and per-controller compatibility adapters remain deliberate maintenance items. The source-build hash remains cached once per process when a static manifest is absent; production continues to prefer the collected manifest. Rebuilding lazy querysets does not itself issue duplicate SQL.
+
 ## Limits
 
 Passing tests is not a clinical, regulatory or penetration-test certification. Payment collection, outbound email, live prescribing, third-party Zoom integration and courier APIs remain excluded. Native appointment video is provided instead. The questionnaire remains lead-only; the checkout creates a patient login only with the checkout test code. File uploads have basic PDF checks, not malware scanning. Review the live-use prerequisites in [USER_GUIDE.md](USER_GUIDE.md) and [DEPLOYMENT.md](DEPLOYMENT.md) before handling real patient data.

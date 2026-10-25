@@ -4,6 +4,7 @@ from datetime import timedelta
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 from tempfile import TemporaryDirectory
@@ -19,7 +20,8 @@ from django.contrib.messages.storage.cookie import MessageEncoder
 from django.db import connection
 from django.test import Client, SimpleTestCase, TestCase, override_settings
 from django.test.utils import CaptureQueriesContext
-from django.urls import reverse
+from django.template.loader import render_to_string
+from django.urls import URLResolver, get_resolver, reverse
 from django.utils import timezone
 
 from care.models import (
@@ -109,6 +111,8 @@ class PageNavigationTests(TestCase):
         query = {'thread': self.thread.pk}
         shell = self.client.get(url, query, HTTP_ACCEPT='text/html')
         self.assertNotContains(shell, self.message.body)
+        script_enabled_html = re.sub(r'<noscript\b[^>]*>.*?</noscript>', '', shell.content.decode(), flags=re.I | re.S)
+        self.assertIn('data-native-navigation>Open full page</a>', script_enabled_html)
         for data, headers in ((query, {}), ({**query, '__full': '1'}, {'HTTP_ACCEPT': 'text/html'})):
             response = self.client.get(url, data, **headers)
             self.assertEqual(response.status_code, 200)
@@ -150,6 +154,47 @@ class PageNavigationTests(TestCase):
         self.assertIn('data-live-messages', payload['live_messages_html'])
         self.assertIn('csrfmiddlewaretoken', payload['live_messages_html'])
         self.assertIn(payload['scope'], payload['live_messages_html'])
+        self.assertNotIn('navigation_paths', payload)
+
+    def test_initial_route_config_is_scoped_to_the_bound_patient_or_staff_layout(self):
+        from .page_navigation import navigation_paths
+
+        for user, patient, route, layout, owned_path, other_path in (
+            (self.patient_user, True, 'portal:patient-dashboard', 'patient', '/patient/appointments/17/', '/patients/17/'),
+            (self.doctor, False, 'portal:desktop-dashboard', 'staff', '/patients/17/', '/patient/appointments/17/'),
+        ):
+            with self.subTest(layout=layout):
+                self.login(user, patient=patient)
+                response = self.client.get(reverse(route), {'__shell': '1'})
+                self.assertEqual(response.status_code, 200)
+                match = re.search(r'<script\b[^>]*\bid="page-navigation-config"[^>]*>(.*?)</script>',
+                                  response.content.decode(), flags=re.S)
+                self.assertIsNotNone(match)
+                config = json.loads(match.group(1))
+                self.assertEqual(config['layout'], layout)
+                self.assertEqual(config['navigation_paths'], list(navigation_paths(layout=layout)))
+                self.assertTrue(any(re.fullmatch(pattern, owned_path) for pattern in config['navigation_paths']))
+                self.assertFalse(any(re.fullmatch(pattern, other_path) for pattern in config['navigation_paths']))
+                other_layout = 'staff' if patient else 'patient'
+                self.assertTrue(set(config['navigation_paths']).isdisjoint(navigation_paths(layout=other_layout)))
+
+    def test_content_section_redirect_and_error_payloads_do_not_repeat_route_config(self):
+        CompanyMembership.objects.filter(pk=self.membership.pk).update(role='super_admin')
+        self.login()
+        dashboard = reverse('portal:desktop-dashboard')
+        responses = (
+            self.content(dashboard),
+            self.client.get(dashboard, HTTP_X_MERIDIAN_NAVIGATION='section', HTTP_X_MERIDIAN_SECTION='dashboard-metrics'),
+            self.client.get(dashboard, HTTP_X_MERIDIAN_NAVIGATION='section', HTTP_X_MERIDIAN_SECTION='not-registered'),
+            self.content(reverse('portal:patient-detail', args=[999999999])),
+            self.content(reverse('portal:patient-detail', args=[self.patient.pk]), {'tab': 'notes'}),
+            self.content(reverse('portal:clinical-lab-result-download', args=[17])),
+        )
+        for response in responses:
+            with self.subTest(status=response.status_code):
+                self.assertNotIn('navigation_paths', response.json())
+        self.client.logout()
+        self.assertNotIn('navigation_paths', self.content(dashboard).json())
 
     def test_staff_scope_changes_after_role_or_practice_change_before_private_content_is_rendered(self):
         self.login()
@@ -192,6 +237,10 @@ class PageNavigationTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(urlsplit(response.json()['redirect_url']).path, reverse('accounts:login'))
         self.assertNotContains(response, self.message.body)
+        section = self.client.get(reverse('portal:desktop-dashboard'), HTTP_X_MERIDIAN_NAVIGATION='section',
+                                  HTTP_X_MERIDIAN_SECTION='dashboard-metrics')
+        self.assertEqual(section.status_code, 200)
+        self.assertEqual(urlsplit(section.json()['redirect_url']).path, reverse('accounts:login'))
         self.login()
         scope = self.content(url).json()['scope']
         CompanyMembership.objects.filter(user=self.doctor).update(is_active=False)
@@ -279,6 +328,67 @@ class PageNavigationTests(TestCase):
             self.assertEqual(self.client.get(url, **{**headers, 'HTTP_X_MERIDIAN_SECTION': 'arbitrary-data'}).status_code, 404)
             self.assertEqual(self.client.get(url, **headers, HTTP_X_MERIDIAN_NAVIGATION_SCOPE='staff:other').status_code, 409)
 
+    def test_unknown_sections_are_rejected_consistently_after_staff_patient_and_management_gates(self):
+        CompanyMembership.objects.filter(pk=self.membership.pk).update(role='super_admin')
+        for user, patient, route, body_builder in (
+            (self.doctor, False, 'portal:staff-tasks', 'portal.staff_views.StaffTaskListView.get_context_data'),
+            (self.patient_user, True, 'portal:patient-messages', 'portal.patient_views.patient_messages_context'),
+            (self.doctor, False, 'portal:management-users', 'practices.management_views.ManagementUsersView.get'),
+        ):
+            with self.subTest(route=route):
+                self.login(user, patient=patient)
+                with patch(body_builder, side_effect=AssertionError('Unsupported section evaluated page content')):
+                    response = self.client.get(reverse(route), HTTP_X_MERIDIAN_NAVIGATION='section',
+                                               HTTP_X_MERIDIAN_SECTION='unknown-section')
+                self.assertEqual(response.status_code, 404)
+                self.assertNotIn('html', response.json())
+        self.login(self.admin)
+        denied = self.client.get(reverse('portal:management-users'), HTTP_X_MERIDIAN_NAVIGATION='section',
+                                 HTTP_X_MERIDIAN_SECTION='unknown-section')
+        self.assertEqual(denied.status_code, 403)
+
+    def test_simple_overviews_do_not_compute_unused_metric_counts_on_ssr_or_content(self):
+        for user in (self.doctor, self.admin):
+            self.login(user)
+            for route in ('portal:desktop-dashboard', 'portal:mobile-dashboard'):
+                for content in (False, True):
+                    with self.subTest(user=user.pk, route=route, content=content), \
+                            patch('portal.views.staff_dashboard_metrics', side_effect=AssertionError('Unused metric counts')):
+                        response = (self.content(reverse(route)) if content else
+                                    self.client.get(reverse(route), {'__full': '1'}, HTTP_ACCEPT='text/html'))
+                    self.assertEqual(response.status_code, 200)
+                    html = response.json()['html'] if content else response.content.decode()
+                    self.assertIn('Upcoming appointments', html)
+                    self.assertNotIn('data-content-section="dashboard-metrics"', html)
+
+    def test_download_content_transport_does_not_invoke_the_download_or_audit_it(self):
+        self.login()
+        url = reverse('portal:clinical-lab-result-download', args=[17])
+        with patch('portal.clinical_views.LabResultDownloadView.get', side_effect=AssertionError('Speculative download ran')):
+            response = self.content(url)
+            section = self.client.get(url, HTTP_X_MERIDIAN_NAVIGATION='section', HTTP_X_MERIDIAN_SECTION='dashboard-metrics')
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(response.json()['full_navigation'], url)
+        self.assertEqual(section.status_code, 404)
+        self.assertFalse(AuditEvent.objects.filter(action='lab_result.downloaded').exists())
+
+    def test_all_registered_shells_retain_full_view_access_results_for_each_role(self):
+        from .page_navigation import PATIENT_PAGES, STAFF_PAGES
+
+        super_admin = get_user_model().objects.create_user(email='navigation-super-admin@example.test')
+        CompanyMembership.objects.create(company=self.company, user=super_admin, role='super_admin')
+        for user in (self.doctor, self.admin, super_admin, self.patient_user):
+            self.login(user, patient=user == self.patient_user)
+            for route in sorted(set(STAFF_PAGES) | set(PATIENT_PAGES)):
+                kwargs = {'pk': self.patient.pk} if route == 'patient-detail' else None
+                url = reverse(f'portal:{route}', kwargs=kwargs)
+                with self.subTest(user=user.pk, route=route):
+                    full = self.client.get(url, {'__full': '1'}, HTTP_ACCEPT='text/html')
+                    shell = self.client.get(url, {'__shell': '1'}, HTTP_ACCEPT='text/html')
+                    self.assertLess(full.status_code, 500)
+                    self.assertEqual(shell.status_code, full.status_code)
+                    self.assertEqual(urlsplit(shell.get('Location', '')).path, urlsplit(full.get('Location', '')).path)
+
     @override_settings(PAGE_NAVIGATION_ENABLED=False)
     def test_feature_switch_retains_complete_normal_rendering(self):
         self.login(self.patient_user, patient=True)
@@ -322,6 +432,108 @@ class RenderedNavigationFragmentTests(SimpleTestCase):
         self.assertEqual(''.join(parser.parts), content)
         self.assertEqual(parser.depth, 0)
 
+    def test_shared_metrics_preserve_mobile_and_desktop_empty_copy(self):
+        mobile = render_to_string('portal/includes/dashboard_metrics.html', {
+            'metrics': {}, 'metrics_class': 'different-mobile-style',
+            'metrics_empty_title': 'Care activity', 'metrics_empty_hint': 'New activity will show here.',
+        })
+        desktop = render_to_string('portal/includes/dashboard_metrics.html', {'metrics': {}})
+        self.assertIn('Care activity', mobile)
+        self.assertIn('New activity will show here.', mobile)
+        self.assertIn('Practice activity', desktop)
+        self.assertIn('Metrics will appear as care is recorded.', desktop)
+
+    def test_actionable_url_assertions_parse_attributes_and_normalize_query_strings(self):
+        from .test_markup import actionable_paths
+
+        markup = '''<script type="application/json">{"navigation_paths": ["^/hidden/$"], "markup": "<a href='/hidden/'>"}</script>
+          <a href="/linked/?tab=overview#details">Open</a>
+          <form action="/submitted/?next=home"></form>
+          <button formaction="/alternate/?draft=1">Save</button>
+          <input type="submit" formaction="/input-target/?draft=1">
+          <div data-url="/metadata-only/"></div>'''
+        self.assertEqual(actionable_paths(markup), {'/linked/', '/submitted/', '/alternate/', '/input-target/'})
+
+
+class NavigationRouteRegistryTests(SimpleTestCase):
+    def test_every_portal_class_based_get_route_is_explicitly_html_or_native(self):
+        from .page_navigation import HTML_PAGE_ROUTES, NATIVE_GET_ROUTES
+
+        discovered = set()
+
+        def visit(entries, namespaces=()):
+            for entry in entries:
+                if isinstance(entry, URLResolver):
+                    visit(entry.url_patterns, namespaces + ((entry.namespace,) if entry.namespace else ()))
+                elif namespaces == ('portal',):
+                    cls = getattr(entry.callback, 'view_class', None)
+                    if cls and 'get' in cls.http_method_names and hasattr(cls, 'get'):
+                        discovered.add(entry.name)
+
+        visit(get_resolver().url_patterns)
+        self.assertTrue(HTML_PAGE_ROUTES.isdisjoint(NATIVE_GET_ROUTES))
+        self.assertEqual(discovered, HTML_PAGE_ROUTES | NATIVE_GET_ROUTES,
+                         'Every class-based portal GET must explicitly choose HTML navigation or native/API transport.')
+
+    def test_every_declared_html_route_has_an_anchored_path_and_supports_get(self):
+        from .page_navigation import HTML_PAGE_ROUTES, navigation_paths
+
+        patterns = navigation_paths()
+        declared = set()
+
+        def visit(entries, namespaces=()):
+            for entry in entries:
+                if isinstance(entry, URLResolver):
+                    visit(entry.url_patterns, namespaces + ((entry.namespace,) if entry.namespace else ()))
+                elif namespaces == ('portal',) and entry.name in HTML_PAGE_ROUTES:
+                    declared.add(entry.name)
+                    cls = entry.callback.view_class
+                    self.assertIn('get', cls.http_method_names, entry.name)
+                    self.assertTrue(hasattr(cls, 'get'), entry.name)
+                    kwargs = {name: 23 if converter.regex == '[0-9]+' else 'operations'
+                              for name, converter in entry.pattern.converters.items()}
+                    url = reverse(f'portal:{entry.name}', kwargs=kwargs)
+                    self.assertTrue(any(re.fullmatch(pattern, url) for pattern in patterns), entry.name)
+                    self.assertFalse(any(re.fullmatch(pattern, url + 'unexpected/') for pattern in patterns), entry.name)
+
+        visit(get_resolver().url_patterns)
+        self.assertEqual(declared, HTML_PAGE_ROUTES)
+        for pattern in patterns:
+            self.assertTrue(pattern.startswith('^/') and pattern.endswith('$'), pattern)
+            self.assertNotIn('(?P<', pattern)
+            self.assertNotIn(r'\Z', pattern)
+        # Repeated metadata construction reuses the same resolver-derived list.
+        self.assertIs(navigation_paths(), patterns)
+
+    def test_download_api_public_and_post_only_routes_are_not_html_destinations(self):
+        from .page_navigation import navigation_paths
+
+        patterns = navigation_paths()
+        excluded = (
+            '/', '/accounts/login/', '/admin/', '/health/', '/questionnaire/', '/privacy/',
+            '/video/appointments/23/', '/blood-tests/23/report/', '/patient/blood-tests/23/report/',
+            '/patient/blood-tests/23/form.pdf', '/patients/23/blood-results/24/report.pdf',
+            '/patients/23/blood-tests/preview/', '/patients/23/blood-tests/24/form.pdf',
+            '/patients/23/record/export/', '/patients/23/record/history/',
+            '/patients/23/record/export.xlsx', '/patients/23/record/workbook.xlsx',
+            '/compounding/23/print/', '/metrics/export.csv', '/activity-statements/23/export.csv',
+            '/shipping/manifest.csv', '/shipping/order.csv', '/dispatch-history/export.csv',
+            '/messages/status/', '/patient/messages/status/', '/patient/appointments/video-status/',
+            '/patient/appointments/book/times/', '/schedule/book/times/',
+            '/patients/23/messages/search/', '/tasks/23/complete/', '/messages/23/seen/',
+            '/messages/new/', '/patient/messages/new/', '/schedule/appointments/23/time/',
+        )
+        for path in excluded:
+            with self.subTest(path=path):
+                self.assertFalse(any(re.fullmatch(pattern, path) for pattern in patterns))
+
+    def test_script_prefix_is_included_in_declared_paths(self):
+        from .page_navigation import navigation_paths
+
+        patterns = navigation_paths(script_prefix='/workspace/')
+        self.assertTrue(any(re.fullmatch(pattern, '/workspace/patients/23/') for pattern in patterns))
+        self.assertFalse(any(re.fullmatch(pattern, '/patients/23/') for pattern in patterns))
+
 
 class NavigationBuildSignatureTests(SimpleTestCase):
     def test_unhashed_deploys_change_signature_when_source_or_templates_change(self):
@@ -362,6 +574,29 @@ class NavigationBuildSignatureTests(SimpleTestCase):
             storage.manifest_hash = 'collected-static-manifest'
             self.assertEqual(build_signature(), 'collected-static-manifest')
             fallback.assert_not_called()
+
+    def test_unhashed_fingerprint_ignores_hidden_files_caches_and_unshipped_file_types(self):
+        from .page_navigation import _source_build_signature
+
+        self.addCleanup(_source_build_signature.cache_clear)
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            script = root / 'static' / 'app.js'
+            script.parent.mkdir(parents=True)
+            script.write_text('deployed script')
+            previous = _source_build_signature(directory)
+            for name in ('static/.DS_Store', 'templates/.DS_Store', 'static/.cache/generated.js',
+                         'templates/.drafts/private.html', 'portal/.cache/module.py',
+                         'static/app.js.bak', 'static/build.log', 'templates/notes.md',
+                         'portal/__pycache__/cached.py'):
+                path = root / name
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text('unshipped local noise')
+                _source_build_signature.cache_clear()
+                self.assertEqual(_source_build_signature(directory), previous, name)
+            script.write_text('changed deployed script')
+            _source_build_signature.cache_clear()
+            self.assertNotEqual(_source_build_signature(directory), previous)
 
 
 @override_settings(MULTI_PRACTICE_ENABLED=True, PAGE_NAVIGATION_ENABLED=True, DEBUG=True,

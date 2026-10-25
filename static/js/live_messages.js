@@ -1,4 +1,6 @@
 (window.MeridianPages?.register || ((_name, initialize) => initialize(null)))('live_messages', (lifecycle) => {
+  const clearTimeout = lifecycle ? lifecycle.clearTimeout : window.clearTimeout.bind(window);
+  const clearInterval = lifecycle ? lifecycle.clearInterval : window.clearInterval.bind(window);
   const listen = lifecycle ? lifecycle.on : (target, ...args) => target?.addEventListener(...args);
   const setTimeout = lifecycle ? lifecycle.timeout : window.setTimeout.bind(window);
   const setInterval = lifecycle ? lifecycle.interval : window.setInterval.bind(window);

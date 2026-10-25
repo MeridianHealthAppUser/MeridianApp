@@ -11,6 +11,7 @@ from care.messaging import start_conversation
 from care.team_messaging import start_team_conversation
 from practices.models import Company, CompanyMembership, Patient
 from practices.services import ACTIVE_COMPANY_SESSION_KEY
+from .test_markup import actionable_paths
 
 
 @override_settings(MULTI_PRACTICE_ENABLED=False, SINGLE_PRACTICE_SLUG='menu-practice')
@@ -35,8 +36,9 @@ class StaffMenuTests(TestCase):
         html = self.client.get(reverse('portal:mobile-dashboard')).content.decode()
         bar = html[html.index('class="mobile-bottom-nav staff-mobile-nav"'):]
         bar = bar[:bar.index('</nav>')]
+        paths = actionable_paths('<nav ' + bar + '</nav>')
         return [key for key in ('care', 'operations', 'administration', 'insights', 'settings')
-                if reverse('portal:staff-menu-section', args=[key]) in bar]
+                if reverse('portal:staff-menu-section', args=[key]) in paths]
 
     def test_each_role_sees_only_its_sections_on_the_mobile_bar(self):
         expected = {
@@ -54,9 +56,10 @@ class StaffMenuTests(TestCase):
         self.login('super_admin')
         page = self.client.get(reverse('portal:staff-menu-section', args=['settings']))
         self.assertContains(page, '<h1>Settings</h1>', html=True)
+        paths = actionable_paths(page)
         for name in ('treatment-review-rules', 'management-users', 'policy-list', 'practice-settings'):
-            self.assertContains(page, reverse(f'portal:{name}'))
-        self.assertNotContains(page, reverse('portal:management-practices'))
+            self.assertIn(reverse(f'portal:{name}'), paths)
+        self.assertNotIn(reverse('portal:management-practices'), paths)
         self.assertContains(page, 'aria-current="page"')
         for role in ('doctor', 'practice_admin'):
             self.login(role)
@@ -74,20 +77,20 @@ class StaffMenuTests(TestCase):
                  'metrics', 'activity-statements', 'treatment-review-rules')
         overview = self.client.get(reverse('portal:desktop-dashboard'))
         self.assertNotIn('shipments_due', overview.context['metrics'])
-        sidebar = overview.content.decode()
+        paths = actionable_paths(overview)
         for name in pages:
             with self.subTest(page=name):
-                self.assertNotIn(f'href="{reverse(f"portal:{name}")}"', sidebar)
+                self.assertNotIn(reverse(f'portal:{name}'), paths)
                 self.assertEqual(self.client.get(reverse(f'portal:{name}')).status_code, 403)
         # A Super Admin who is also a doctor keeps every section.
         CompanyMembership.objects.filter(user=self.people['super_admin']).update(clinician_type='doctor')
         self.login('super_admin')
         overview = self.client.get(reverse('portal:desktop-dashboard'))
         self.assertIn('shipments_due', overview.context['metrics'])
-        sidebar = overview.content.decode()
+        paths = actionable_paths(overview)
         for name in pages:
             with self.subTest(page=name, role='super_admin'):
-                self.assertIn(f'href="{reverse(f"portal:{name}")}"', sidebar)
+                self.assertIn(reverse(f'portal:{name}'), paths)
                 self.assertEqual(self.client.get(reverse(f'portal:{name}')).status_code, 200)
 
     def test_clinicians_get_a_flat_menu_with_patient_records_and_messages_and_its_red_unread_count(self):

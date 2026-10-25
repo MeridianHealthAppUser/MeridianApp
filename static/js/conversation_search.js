@@ -1,4 +1,5 @@
 (window.MeridianPages?.register || ((_name, initialize) => initialize(null)))('conversation_search', (lifecycle) => {
+  const clearTimeout = lifecycle ? lifecycle.clearTimeout : window.clearTimeout.bind(window);
   const replaceUrl = value => window.MeridianNavigation?.replaceUrl ? window.MeridianNavigation.replaceUrl(value) : window.history.replaceState(window.history.state, '', value);
   const listen = lifecycle ? lifecycle.on : (target, ...args) => target?.addEventListener(...args);
   const setTimeout = lifecycle ? lifecycle.timeout : window.setTimeout.bind(window);
@@ -23,7 +24,7 @@
 
   listen(document, 'messages:stopped', () => {
     stopped = true;
-    window.clearTimeout(timer);
+    clearTimeout(timer);
     pending?.abort();
   });
 
@@ -95,26 +96,26 @@
     if (stopped || suspended) return;
     needsSearch = true;
     if (clear) clear.hidden = !input.value;
-    window.clearTimeout(timer);
+    clearTimeout(timer);
     timer = setTimeout(search, 200);
   });
   listen(form, 'submit', (event) => {
     event.preventDefault();
-    window.clearTimeout(timer);
+    clearTimeout(timer);
     search();
   });
   if (clear) listen(clear, 'click', (event) => {
     event.preventDefault();
     input.value = '';
     clear.hidden = true;
-    window.clearTimeout(timer);
+    clearTimeout(timer);
     search();
     input.focus();
   });
 
   function suspend() {
     suspended = true;
-    window.clearTimeout(timer);
+    clearTimeout(timer);
     pending?.abort();
     pending = null;
   }

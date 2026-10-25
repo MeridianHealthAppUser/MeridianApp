@@ -1,4 +1,5 @@
 (window.MeridianPages?.register || ((_name, initialize) => initialize(null)))('record_timeline', (lifecycle) => {
+  const clearTimeout = lifecycle ? lifecycle.clearTimeout : window.clearTimeout.bind(window);
   const listen = lifecycle ? lifecycle.on : (target, ...args) => target?.addEventListener(...args);
   const setTimeout = lifecycle ? lifecycle.timeout : window.setTimeout.bind(window);
   const fetch = lifecycle ? lifecycle.fetch : (...args) => window.fetch(...args);
@@ -123,7 +124,7 @@
       loader.dataset.state = 'error';
       button.textContent = 'Try again';
     } finally {
-      window.clearTimeout(timeout);
+      clearTimeout(timeout);
       loading = false;
       scroll.removeAttribute('aria-busy');
       button.disabled = false;
