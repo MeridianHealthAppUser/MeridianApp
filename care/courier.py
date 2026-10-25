@@ -225,7 +225,7 @@ def apply_tracking(payload):
         return None
     status = str(payload['status'])[:60]
     with transaction.atomic():
-        parcel = Shipment.objects.select_for_update().select_related('company', 'patient').get(pk=parcel.pk)
+        parcel = Shipment.objects.select_for_update(of=('self',)).select_related('company', 'patient').get(pk=parcel.pk)
         parcel.courier_status = status
         fields = ['courier_status', 'updated_at']
         if status == 'delivered' and parcel.status == Shipment.Status.DISPATCHED:

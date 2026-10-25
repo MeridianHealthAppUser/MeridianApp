@@ -127,7 +127,7 @@ def start_debit_order(*, subscription, actor, method=DebitMandate.Method.DEBICHE
     approve it (the provider's, or the sandbox's)."""
     provider = require_provider()
     company = Company.objects.select_for_update().get(pk=subscription.company_id)
-    subscription = PatientSubscription.objects.select_for_update().select_related(
+    subscription = PatientSubscription.objects.select_for_update(of=('self',)).select_related(
         'patient', 'authorization__dose', 'authorization__product').get(pk=subscription.pk, company=company)
     _require_patient(subscription.patient, actor)
     if subscription.status == PatientSubscription.Status.CANCELLED:
@@ -161,7 +161,7 @@ def approve_mandate(*, mandate, account_label='', provider_reference='', fail_de
     billing date when this is the first, and collects what is due now: the first debit, or a payment that failed.
     provider_reference is what the provider collects with (its mandate, or the stored card's token), when it is only
     known once approved."""
-    mandate = DebitMandate.objects.select_for_update().select_related('subscription__patient').get(pk=mandate.pk)
+    mandate = DebitMandate.objects.select_for_update(of=('self',)).select_related('subscription__patient').get(pk=mandate.pk)
     if mandate.status == DebitMandate.Status.ACTIVE:
         return mandate
     if mandate.status != DebitMandate.Status.PENDING:
@@ -336,7 +336,7 @@ def collect_cycle(cycle, *, today=None, actor=None, request=None):
     """Try to collect one cycle with the subscription's debit order. Returns the Payment tried, or None when nothing
     could be tried (no debit order, or one waiting for the patient to confirm a new amount)."""
     today = today or timezone.localdate()
-    cycle = SubscriptionCycle.objects.select_for_update().select_related('subscription', 'patient').get(pk=cycle.pk)
+    cycle = SubscriptionCycle.objects.select_for_update(of=('self',)).select_related('subscription', 'patient').get(pk=cycle.pk)
     if cycle.status in (SubscriptionCycle.Status.PAID, SubscriptionCycle.Status.CANCELLED):
         return None
     if Payment.objects.filter(subscription_cycle=cycle, status=Payment.Status.PENDING, checkout=False).exists():
@@ -384,7 +384,7 @@ def record_collection(*, payment, status, reference='', reason='', today=None, a
     payment = Payment.objects.select_for_update().get(pk=payment.pk)
     if payment.status != Payment.Status.PENDING:
         return payment  # Already settled: the provider told us twice (its answer, then a webhook).
-    cycle = SubscriptionCycle.objects.select_for_update().select_related('subscription', 'patient').get(pk=payment.subscription_cycle_id)
+    cycle = SubscriptionCycle.objects.select_for_update(of=('self',)).select_related('subscription', 'patient').get(pk=payment.subscription_cycle_id)
     payment.provider_reference = reference[:120] or payment.provider_reference
     if status == 'pending':
         payment.save(update_fields=('provider_reference', 'updated_at'))
@@ -431,7 +431,7 @@ def bill_subscription(subscription, *, today=None):
     """Open every cycle that has come round for this subscription and collect what is due: new cycles, retries that
     are due, and any cycle still waiting (a new debit order collects a failed payment straight away)."""
     today = today or timezone.localdate()
-    subscription = PatientSubscription.objects.select_for_update().select_related('authorization').get(pk=subscription.pk)
+    subscription = PatientSubscription.objects.select_for_update(of=('self',)).select_related('authorization').get(pk=subscription.pk)
     if subscription.status not in BILLABLE:
         return []
     mandate = DebitMandate.objects.filter(subscription=subscription, status__in=LIVE_MANDATES).order_by('-approved_at', '-pk').first()
@@ -619,7 +619,7 @@ def ask_for_new_debit_order(*, subscription, actor, request=None):
 def start_order_payment(*, order, actor, request=None):
     """The patient pays for their non-prescription request by card. Returns the payment and where to pay."""
     provider = require_provider()
-    order = PharmacyOrder.objects.select_for_update().select_related('patient').get(pk=order.pk)
+    order = PharmacyOrder.objects.select_for_update(of=('self',)).select_related('patient').get(pk=order.pk)
     _require_patient(order.patient, actor)
     if order.paid_at:
         raise ValidationError('This request is already paid.')
@@ -641,7 +641,7 @@ def start_order_payment(*, order, actor, request=None):
 def start_cycle_payment(*, cycle, actor, request=None):
     """The patient pays a failed or retrying debit now, by card, instead of waiting for the next retry."""
     provider = require_provider()
-    cycle = SubscriptionCycle.objects.select_for_update().select_related('patient', 'subscription').get(pk=cycle.pk)
+    cycle = SubscriptionCycle.objects.select_for_update(of=('self',)).select_related('patient', 'subscription').get(pk=cycle.pk)
     _require_patient(cycle.patient, actor)
     if cycle.status in (SubscriptionCycle.Status.PAID, SubscriptionCycle.Status.CANCELLED):
         raise ValidationError('This payment is already settled.')
@@ -658,7 +658,7 @@ def start_cycle_payment(*, cycle, actor, request=None):
 @transaction.atomic
 def complete_card_payment(*, payment, paid, reference='', reason='', actor=None, request=None):
     """The provider's answer for a card payment: a non-prescription request, or a debit paid by card instead."""
-    payment = Payment.objects.select_for_update().select_related('pharmacy_order', 'subscription_cycle').get(pk=payment.pk)
+    payment = Payment.objects.select_for_update(of=('self',)).select_related('pharmacy_order', 'subscription_cycle').get(pk=payment.pk)
     if payment.status != Payment.Status.PENDING:
         return payment
     payment.provider_reference = reference[:120] or payment.provider_reference
@@ -668,7 +668,7 @@ def complete_card_payment(*, payment, paid, reference='', reason='', actor=None,
         payment.status, payment.failure_reason = Payment.Status.FAILED, (reason or 'The card payment was not completed.')[:500]
     payment.save(update_fields=('status', 'paid_at', 'failure_reason', 'provider_reference', 'updated_at'))
     if paid and payment.subscription_cycle_id:
-        cycle = SubscriptionCycle.objects.select_for_update().select_related('subscription').get(pk=payment.subscription_cycle_id)
+        cycle = SubscriptionCycle.objects.select_for_update(of=('self',)).select_related('subscription').get(pk=payment.subscription_cycle_id)
         if cycle.status != SubscriptionCycle.Status.PAID:
             _mark_paid(cycle, payment)
     elif paid and payment.pharmacy_order_id:
@@ -704,7 +704,7 @@ def settle_mandate(*, mandate, approval, actor=None, request=None):
 def revoke_mandate(*, mandate, reason='', actor=None, request=None):
     """The patient's bank stopped an approved debit order (the patient revoked or paused it there): nothing more is
     collected with it, the patient is asked for a new one and the practice sees it on Operations > Billing."""
-    mandate = DebitMandate.objects.select_for_update().select_related('subscription').get(pk=mandate.pk)
+    mandate = DebitMandate.objects.select_for_update(of=('self',)).select_related('subscription').get(pk=mandate.pk)
     if mandate.status not in LIVE_MANDATES:
         return mandate
     mandate.status, mandate.cancelled_at = DebitMandate.Status.CANCELLED, timezone.now()
