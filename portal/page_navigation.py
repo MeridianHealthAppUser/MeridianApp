@@ -110,7 +110,7 @@ HTML_PAGE_ROUTES = frozenset(STAFF_PAGES) | frozenset(PATIENT_PAGES) | frozenset
     'patient-lab-detail', 'patient-basket', 'patient-order-detail', 'patient-subscription',
     'patient-billing', 'patient-invoice', 'patient-delivery-address',
     'patient-billing-sandbox-mandate', 'patient-billing-sandbox-checkout',
-    'policy-create', 'staff-data-request-detail', 'staff-menu-section',
+    'patient-details-edit', 'policy-create', 'staff-data-request-detail', 'staff-menu-section',
     'staff-patient-record', 'task-create', 'task-edit',
     'treatment-authorisation-create', 'treatment-authorisation-detail', 'treatment-authorisation-renew',
     'treatment-review-rule-create', 'treatment-review-rule-detail',

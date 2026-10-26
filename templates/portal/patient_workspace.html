@@ -9,13 +9,13 @@
     {% else %}<span class="record-pill record-pill--teal">Prescribed to {{ prescription.ends_on|date:'j M' }}</span>{% if prescription_state == 'due' %}<span class="record-pill record-pill--amber">Renewal due</span>{% endif %}{% endif %}
   </span>
   {% if export_url %}<a class="console-button console-button--quiet" data-no-loader href="{{ export_url }}">Export record</a>{% endif %}
-{% endif %}{% endblock %}
+{% endif %}{% if can_edit_details %}<a class="console-button console-button--secondary" href="{% url 'portal:patient-details-edit' patient.pk %}">Edit profile</a>{% endif %}{% endblock %}
 {% block patient_workspace_heading_details %}{% if record_overview %}
   <dl class="record-quickfacts">
-    <div><dt>Title</dt>{% include 'portal/includes/patient_title_editor.html' %}</div>
+    <div><dt>Title</dt><dd>{{ patient.get_title_display|default:'Not recorded' }}</dd></div>
     <div><dt>Age</dt><dd>{% if patient_age is not None %}{{ patient_age }}{% else %}Not recorded{% endif %}</dd></div>
     <div><dt>Location</dt><dd>{{ patient.city|default:'Not recorded' }}</dd></div>
-    <div><dt>Prescribing doctor</dt>{% include 'portal/includes/patient_assigned_clinician.html' %}</div>
+    <div><dt>Prescribing doctor</dt><dd>{{ patient.assigned_doctor.full_name|default:'Unassigned' }}</dd></div>
     <div><dt>ID number</dt><dd>{{ patient.id_number|default:'Not recorded' }}</dd></div>
   </dl>
 {% endif %}{% endblock %}

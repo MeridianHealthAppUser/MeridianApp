@@ -1,6 +1,6 @@
 from django.urls import include, path
 
-from . import availability_views, blood_result_views, pathcare_views, prescription_views, clinical_views, intake_views, lead_views, menu_views, message_management_views, patient_assignment_views, patient_views, practice_settings_views, staff_views, task_views, team_views, views
+from . import availability_views, blood_result_views, pathcare_views, patient_details_views, prescription_views, clinical_views, intake_views, lead_views, menu_views, message_management_views, patient_views, practice_settings_views, staff_views, task_views, team_views, views
 from .patient_workspace import PatientWorkspaceView, RecordConversationSearchView
 from . import realtime_views
 
@@ -80,7 +80,7 @@ urlpatterns = [
     path('patients/<int:pk>/prescription/initiate/', prescription_views.PrescriptionInitiateView.as_view(), name='patient-prescription-initiate'),
     path('patients/<int:pk>/prescription/change/', prescription_views.PrescriptionChangeView.as_view(), name='patient-prescription-change'),
     path('patients/<int:pk>/summary/', prescription_views.SummaryEditView.as_view(), name='patient-summary-edit'),
-    path('patients/<int:pk>/title/', prescription_views.PatientTitleView.as_view(), name='patient-title'),
+    path('patients/<int:pk>/details/', patient_details_views.PatientDetailsEditView.as_view(), name='patient-details-edit'),
     path('patients/<int:pk>/blood-tests/', pathcare_views.BloodTestRequestView.as_view(), name='patient-blood-tests'),
     path('patients/<int:pk>/blood-tests/preview/', pathcare_views.BloodTestPreviewView.as_view(), name='patient-blood-tests-preview'),
     path('patients/<int:pk>/blood-tests/preview.pdf', pathcare_views.BloodTestPreviewPdfView.as_view(), name='patient-blood-tests-preview-pdf'),
@@ -88,7 +88,6 @@ urlpatterns = [
     path('patients/<int:pk>/blood-tests/<int:form_pk>/resend/', pathcare_views.BloodTestResendView.as_view(), name='patient-blood-test-resend'),
     path('patients/<int:pk>/blood-results/', blood_result_views.BloodResultCreateView.as_view(), name='patient-blood-result-create'),
     path('patients/<int:pk>/blood-results/<int:result_pk>/report.pdf', blood_result_views.BloodResultReportView.as_view(), name='patient-blood-result-report'),
-    path('patients/<int:patient_pk>/doctor/', patient_assignment_views.PatientDoctorAssignmentView.as_view(), name='patient-doctor-assign'),
     path('patients/<int:patient_pk>/tasks/', views.PatientTaskCreateView.as_view(), name='patient-task-create'),
     path('patients/<int:patient_pk>/appointments/', views.PatientAppointmentCreateView.as_view(), name='patient-appointment-create'),
     path('patients/<int:patient_pk>/notes/', views.PatientNoteCreateView.as_view(), name='patient-note-create'),

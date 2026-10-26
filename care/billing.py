@@ -250,6 +250,13 @@ def review_mandates(company, patient=None, *, prescription_changed=False):
 
 # The debit run
 
+def billed_to(patient):
+    """Who an invoice is issued to, kept on it (Invoice.billed_to) so a later correction to the patient's details
+    doesn't change an invoice already issued."""
+    name = ' '.join(part for part in (patient.get_title_display(), patient.first_name, patient.last_name) if part)
+    return {'name': name, 'id_number': patient.id_number}
+
+
 def _cycle_end(cycle):
     return cycle.ends_on or cycle.starts_on + timedelta(weeks=DEFAULT_WEEKS, days=-1)
 
@@ -270,7 +277,8 @@ def _open_cycle(subscription, mandate):
     cycle.save()
     invoice = Invoice(company_id=subscription.company_id, patient_id=subscription.patient_id, subscription_cycle=cycle,
                       invoice_number=f'SUB-{subscription.pk:05d}-{number:03d}', issued_on=starts, due_on=starts,
-                      subtotal=cycle.amount, total=cycle.amount, status=Invoice.Status.ISSUED)
+                      subtotal=cycle.amount, total=cycle.amount, status=Invoice.Status.ISSUED,
+                      billed_to=billed_to(subscription.patient))
     invoice.full_clean()
     invoice.save()
     subscription.cycle_number = number

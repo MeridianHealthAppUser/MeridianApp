@@ -20,7 +20,7 @@ from django.views.decorators.csrf import csrf_exempt
 
 from care.addresses import address_for, save_delivery_address
 from care.billing import (
-    apply_notice, approve_mandate, ask_for_new_debit_order, billing_state, complete_card_payment, current_mandate,
+    apply_notice, approve_mandate, ask_for_new_debit_order, billed_to, billing_state, complete_card_payment, current_mandate,
     decline_mandate, money, outstanding, patient_summary, record_manual_payment, retry_now, run_debits, set_next_debit,
     settle_mandate, settle_payment, start_cycle_payment, start_debit_order, start_order_payment,
 )
@@ -151,6 +151,7 @@ class PatientInvoiceView(PatientCarePage):
             'subscription_cycle__subscription'), pk=pk)
         return render(request, 'portal/patient_invoice.html', self.context('billing', f'Invoice {invoice.invoice_number}',
                                                                            invoice=invoice, lines=invoice.lines.all(),
+                                                                           billed_to=invoice.billed_to or billed_to(self.patient),
                                                                            paid=invoice.status == Invoice.Status.PAID))
 
 

@@ -1,0 +1,31 @@
+{% extends 'portal/patient_workspace_base.html' %}
+{% load static %}
+{% block title %}Edit profile | {{ patient }} | Meridian{% endblock %}
+{% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/clinical_workflow.css' %}">{% endblock %}
+{% block patient_workspace_heading_actions %}
+  <a class="console-button console-button--quiet" href="{{ workspace_return_url }}">{{ workspace_return_label }}</a>
+{% endblock %}
+
+{% block patient_workspace_content %}
+  <div class="clinical-workflow clinical-workflow-grid">
+    <section class="staff-page-card" aria-labelledby="patient-details-heading">
+      <header class="staff-page-card__header"><div><h2 id="patient-details-heading">Edit profile</h2><p>The details the practice holds for {{ patient }}.</p></div></header>
+      <div class="clinical-panel-body"><form class="console-form" method="post" action="{{ request.path }}">
+        {% csrf_token %}<input type="hidden" name="workflow_context" value="{{ workflow_context }}">
+        {% if form.non_field_errors %}<div role="alert">{{ form.non_field_errors }}</div>{% endif %}
+        {% for field in form %}{% include 'portal/includes/form_field.html' %}{% endfor %}
+        <div class="clinical-form-actions"><button class="console-button console-button--primary" type="submit">Save profile</button><a class="console-button console-button--quiet" href="{{ workspace_return_url }}">Cancel</a></div>
+      </form></div>
+    </section>
+    <aside class="staff-page-card" aria-labelledby="patient-details-address-heading">
+      <header class="staff-page-card__header"><div><h2 id="patient-details-address-heading">Delivery address</h2></div></header>
+      <div class="clinical-panel-body">
+        {% if address %}<p>{% if address.recipient %}{{ address.recipient }}<br>{% endif %}{% for line in address.lines %}{{ line }}<br>{% endfor %}{{ address.phone }}</p>{% else %}<p class="clinical-panel-description">No delivery address yet.</p>{% endif %}
+        <p><a class="console-button console-button--secondary" href="{{ address_url }}">{% if address %}Change{% else %}Add{% endif %} the delivery address</a></p>
+        <p class="clinical-panel-description">The patient is told on their Updates page when their details or address change.</p>
+        <p class="clinical-panel-description">Documents already issued keep the details they were issued with: invoices, parcels already booked or dispatched, PathCare forms and compounding records.</p>
+        {% if patient.user %}<p class="clinical-panel-description">The login email ({{ patient.user.email }}) isn’t changed here.</p>{% endif %}
+      </div>
+    </aside>
+  </div>
+{% endblock %}

@@ -1,6 +1,6 @@
 """The clinician responsible for a patient: their Prescribing doctor.
 
-Practice administrators and Super Admins choose it, and writing a prescription makes the prescriber it
+A Super Admin chooses it on Edit profile (care.patient_details), and writing a prescription makes the prescriber it
 (care.prescriptions). Only the pointer on the patient changes: appointments, notes, consultations, results
 and tasks keep their original author or clinician, so nothing is moved or lost.
 """
@@ -16,18 +16,8 @@ from .models import ClinicianAssignment
 from .services import record_audit
 
 
-# The care team keeps a patient's details, such as their title.
-CARE_TEAM_ROLES = (CompanyMembership.Role.DOCTOR, CompanyMembership.Role.PRACTICE_ADMIN, CompanyMembership.Role.SUPER_ADMIN)
 ASSIGNING_ROLES = (CompanyMembership.Role.PRACTICE_ADMIN, CompanyMembership.Role.SUPER_ADMIN)
 NOT_ASSIGNING = 'Only a practice administrator or Super Admin can change the Prescribing doctor.'
-
-
-def is_care_team(membership):
-    return membership is not None and membership.role in CARE_TEAM_ROLES
-
-
-def can_assign_doctor(membership):
-    return membership is not None and membership.role in ASSIGNING_ROLES
 
 
 def active_doctors(company):

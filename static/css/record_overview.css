@@ -14,8 +14,6 @@
 .record-quickfacts dt { color: var(--console-muted); font-size: .72rem; }
 .record-quickfacts dt::after { content: ':'; }
 .record-quickfacts dd { color: var(--console-ink); font-size: .78rem; font-weight: 650; margin: 0; }
-.record-quickfacts .patient-workspace-fact-editor[open] { flex-basis: auto; }
-.record-quickfacts .patient-workspace-fact-editor form { background: var(--c-ffffff); border: 1px solid var(--console-line); border-radius: .75rem; box-shadow: var(--console-shadow); margin-top: .5rem; max-width: 26rem; padding: .8rem; }
 
 .record-overview { align-items: start; display: grid; gap: 1.1rem; grid-template-columns: repeat(2, minmax(0, 1fr)); margin-top: 1rem; }
 .record-overview__main, .record-overview__side { align-content: start; display: grid; gap: 1.1rem; min-width: 0; }

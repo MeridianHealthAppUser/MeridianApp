@@ -530,6 +530,9 @@ class Invoice(PatientCompanyScopedModel):
     subtotal = models.DecimalField(max_digits=10, decimal_places=2)
     total = models.DecimalField(max_digits=10, decimal_places=2)
     status = models.CharField(max_length=16, choices=Status.choices, default=Status.DRAFT)
+    # Who it was issued to, as the patient record had them then (care.billing.billed_to): a later correction to the
+    # patient's details doesn't change an invoice already issued.
+    billed_to = models.JSONField(default=dict, blank=True)
 
     class Meta:
         constraints = [models.UniqueConstraint(fields=('company', 'invoice_number'), name='unique_invoice_number_per_company')]
@@ -1316,6 +1319,9 @@ class Shipment(PatientCompanyScopedModel):
     courier_status = models.CharField(max_length=60, blank=True)
     courier_error = models.CharField(max_length=500, blank=True)
     waybill_created_at = models.DateTimeField(null=True, blank=True)
+    # The name, address and number The Courier Guy was given when the parcel was booked (care.courier.booked_delivery):
+    # dispatch records where it was actually sent, even if the patient's address changed after booking.
+    booked_address = models.JSONField(default=dict, blank=True)
 
     class Meta:
         indexes = [models.Index(fields=('company', 'status', 'scheduled_for')), models.Index(fields=('company', 'patient', 'cycle_number'))]

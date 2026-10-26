@@ -56,6 +56,7 @@ ACCESS_AUDIT_LABELS = {
 }
 AUDIT_LABELS = {
     'patient.contact_updated': 'Contact details updated',
+    'patient.details_updated': 'Patient details updated',
     'patient.doctor_assigned': 'Prescribing doctor changed',
     'weight_entry.created': 'Weight entry recorded',
     'appointment.created': 'Appointment created',

@@ -10,8 +10,9 @@
   <section class="console-card billing-invoice" aria-label="Invoice">
     <div class="console-card__body">
       <dl class="patient-kv">
-        <div><dt>Billed to</dt><dd>{% if patient.title %}{{ patient.get_title_display }} {% endif %}{{ patient.first_name }} {{ patient.last_name }}</dd></div>
-        {% if patient.id_number %}<div><dt>ID / passport</dt><dd>{{ patient.id_number }}</dd></div>{% endif %}
+        {# As issued (Invoice.billed_to), not as the patient record has them now. #}
+        <div><dt>Billed to</dt><dd>{{ billed_to.name }}</dd></div>
+        {% if billed_to.id_number %}<div><dt>ID / passport</dt><dd>{{ billed_to.id_number }}</dd></div>{% endif %}
         {% with cycle=invoice.subscription_cycle %}{% if cycle %}<div><dt>Period</dt><dd>{{ cycle.starts_on|date:"j M Y" }} – {{ cycle.ends_on|default:cycle.starts_on|date:"j M Y" }}</dd></div>{% endif %}{% endwith %}
         <div><dt>Status</dt><dd>{% if paid %}Paid{% else %}{{ invoice.get_status_display }}, due {{ invoice.due_on|date:"j F Y" }}{% endif %}</dd></div>
       </dl>

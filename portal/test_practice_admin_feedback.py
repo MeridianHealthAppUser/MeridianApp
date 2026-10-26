@@ -95,7 +95,7 @@ class PracticeAdminMenuTests(SessionMixin, OperationsFixture):
             with self.subTest(url=url):
                 self.assertNotContains(self.client.get(url), f'href="{record}')
         # Nor do actions on a record work.
-        response = self.client.post(reverse('portal:patient-doctor-assign', args=[self.patient.pk]), {'doctor': ''})
+        response = self.client.post(reverse('portal:patient-details-edit', args=[self.patient.pk]), {'assigned_doctor': ''})
         self.assertRedirects(response, reverse('portal:desktop-dashboard'), fetch_redirect_response=False)
 
 

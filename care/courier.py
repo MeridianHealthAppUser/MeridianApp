@@ -24,6 +24,7 @@ from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.utils import timezone
 
+from .addresses import FIELDS as ADDRESS_FIELDS
 from .availability import SAST
 from .billing import practice_settings
 from .models import DeliveryAddress, Shipment
@@ -109,6 +110,28 @@ def shipment_payload(shipment, address, row):
     }
 
 
+def booked_snapshot(shipment, address):
+    """What The Courier Guy is given for the parcel, kept on it (Shipment.booked_address)."""
+    return {'patient_name': str(shipment.patient), **{name: getattr(address, name) for name in ADDRESS_FIELDS},
+            'lines': address.lines()}
+
+
+def booked_delivery(shipment):
+    """Where a booked parcel is going, as dispatch records it ({recipient, lines, phone}), or {} when it isn't booked."""
+    booked = shipment.booked_address or {}
+    if not booked.get('lines'):
+        return {}
+    return {'recipient': booked.get('recipient') or booked.get('patient_name', ''), 'lines': booked['lines'],
+            'phone': booked.get('phone', '')}
+
+
+def changed_since_booking(shipment, address):
+    """Whether the patient's delivery address is no longer the one the parcel was booked with."""
+    booked = shipment.booked_address or {}
+    return bool(booked.get('lines')) and (
+        address is None or any(booked.get(name, '') != getattr(address, name) for name in ADDRESS_FIELDS))
+
+
 def book_waybills(*, company, actor, week_start, request=None):
     """Book a shipment with The Courier Guy for each of the week's locked parcels that has no waybill yet. Each parcel
     is booked on its own, so one that fails (its error is kept on the parcel) doesn't stop the rest. Returns
@@ -150,7 +173,7 @@ def book_waybills(*, company, actor, week_start, request=None):
         Shipment.objects.filter(pk=parcel.pk).update(
             waybill=waybill[:60], courier_shipment_id=str(response.get('id', ''))[:60],
             courier_status=str(response.get('status', ''))[:60], courier_error='', waybill_created_at=timezone.now(),
-            updated_at=timezone.now())
+            booked_address=booked_snapshot(parcel, address), updated_at=timezone.now())
         record_audit(company=company, actor=actor, patient=parcel.patient, action='courier.booked', target=parcel,
                      request=request, metadata={'waybill': waybill})
         booked.append(parcel)

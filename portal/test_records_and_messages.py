@@ -452,22 +452,6 @@ class RecordsAndMessagesTests(TestCase):
         self.assertNotContains(self.client.get(reverse('portal:patient-lab-detail', args=[form.lab_request_id])), 'Your PathCare form')
         self.assertNotContains(self.client.get(reverse('portal:patient-labs')), form_url)
 
-    def test_the_care_team_sets_the_title_printed_on_the_form(self):
-        self.login(self.doctor)
-        response = self.client.post(reverse('portal:patient-title', args=[self.patient.pk]),
-                                    {'workflow_context': self.token(self.doctor, 'patient-title'), 'title': 'MS'})
-        self.assertEqual(response.status_code, 302)
-        self.patient.refresh_from_db()
-        self.assertEqual(self.patient.title, 'MS')
-        # Practice administrators don't open records, so not this either.
-        self.login(self.admin)
-        self.client.post(reverse('portal:patient-title', args=[self.patient.pk]),
-                         {'workflow_context': self.token(self.admin, 'patient-title'), 'title': 'DR'})
-        self.patient.refresh_from_db()
-        self.assertEqual(self.patient.title, 'MS')
-        self.login(self.patient_user)
-        self.assertEqual(self.client.post(reverse('portal:patient-title', args=[self.patient.pk]), {'title': 'DR'}).status_code, 403)
-
     def test_one_menu_entry_and_three_tabs(self):
         self.login(self.doctor)
         for name in ('staff-inbox', 'patient-list', 'team-inbox'):

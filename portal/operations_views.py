@@ -357,7 +357,7 @@ class ShippingListView(OperationsView):
 
     def display(self, request, create_form=None, status=200):
         from care.billing import parcel_payment, practice_settings
-        from care.courier import collection_problem, courier_enabled
+        from care.courier import changed_since_booking, collection_problem, courier_enabled
         from care.models import DeliveryAddress
         from care.operations import delivery_problem
 
@@ -379,6 +379,8 @@ class ShippingListView(OperationsView):
             shipment.current_hold_reason = shipment_hold_reason(shipment) if open_parcel else ''
             shipment.doctor = shipment_doctor(shipment)
             shipment.address = addresses.get(shipment.patient_id)
+            # Changed after The Courier Guy was booked: the waybill still has the old address.
+            shipment.address_changed = open_parcel and changed_since_booking(shipment, shipment.address)
             shipment.payment_state, shipment.payment_text = parcel_payment(shipment)
             # What Check and lock week would hold it back for, besides its prescription; payment is in its own column.
             shipment.lock_problems = [delivery_problem(shipment)] if open_parcel and delivery_problem(shipment) else []
@@ -942,6 +944,7 @@ class ManifestDownloadView(OperationsView):
         if queryset.count() > 10000:
             return HttpResponse('Narrow the export dates to at most 10,000 shipments.', status=400)
         from care.billing import parcel_payment
+        from care.courier import booked_delivery
         from care.models import DeliveryAddress
 
         addresses = {address.patient_id: address for address in DeliveryAddress.objects.filter(
@@ -949,8 +952,8 @@ class ManifestDownloadView(OperationsView):
         rows = []
         for shipment in queryset.order_by('dispatched_at' if self.history else 'scheduled_for', 'pk'):
             snapshot = shipment.dispatch_snapshot or {}
-            # Where it went: the address saved at dispatch, else the patient's address now.
-            sent_to = snapshot.get('delivery_address') or {}
+            # Where it went: the address saved at dispatch, else the one it was booked with, else the patient's now.
+            sent_to = snapshot.get('delivery_address') or booked_delivery(shipment)
             address = addresses.get(shipment.patient_id)
             if sent_to.get('lines'):
                 deliver_to, phone = ', '.join(sent_to['lines']), sent_to.get('phone', '')

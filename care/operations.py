@@ -281,8 +281,8 @@ def hold_or_cancel_shipment(*, shipment, actor, cancel=False, reason, request=No
     fields = ['status', 'hold_reason', 'locked_at', 'updated_at']
     if cancelled_booking:
         shipment.waybill, shipment.courier_shipment_id, shipment.courier_status = '', '', 'cancelled'
-        shipment.waybill_created_at = None
-        fields += ['waybill', 'courier_shipment_id', 'courier_status', 'waybill_created_at']
+        shipment.waybill_created_at, shipment.booked_address = None, {}
+        fields += ['waybill', 'courier_shipment_id', 'courier_status', 'waybill_created_at', 'booked_address']
     shipment.save(update_fields=fields)
     record_audit(company=company, actor=actor, patient=shipment.patient, action='shipment.cancelled' if cancel else 'shipment.held',
                  target=shipment, request=request,
@@ -447,9 +447,14 @@ def dispatch_shipment(*, shipment, actor, tracking_number, confirm=False, batch_
         'items': [{'product': str(item.product), 'dose': item.dose, 'quantity': item.quantity, 'batch_note': item.batch_note}
                   for item in items],
     }
+    from .courier import booked_delivery
+
     order = getattr(shipment, 'pharmacy_order', None)
     address = DeliveryAddress.objects.filter(company=company, patient=shipment.patient).first()
-    if address is not None:
+    if booked := booked_delivery(shipment):
+        # Where The Courier Guy was sent when it was booked, even if the patient's address changed after that.
+        shipment.dispatch_snapshot['delivery_address'] = booked
+    elif address is not None:
         shipment.dispatch_snapshot['delivery_address'] = {
             'recipient': address.recipient or str(shipment.patient), 'lines': address.lines(), 'phone': address.phone}
     elif order:

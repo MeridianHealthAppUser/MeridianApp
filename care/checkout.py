@@ -21,6 +21,7 @@ from practices.models import CompanyMembership, Patient
 from practices.tenancy import company_is_enabled
 
 from .availability import SAST, open_slots_for_day
+from .billing import billed_to
 from .followups import close_callbacks
 from .models import (
     Appointment, AvailabilitySlot, ConsentRecord, Invoice, InvoiceLine, Lead, Payment, PatientEvent,
@@ -214,7 +215,8 @@ def complete_checkout(*, lead, user, password, clinician_id, starts_at, code, re
 
     today = timezone.localdate()
     invoice = Invoice(company=company, patient=patient, invoice_number=f'IC-{appointment.pk:06d}', issued_on=today,
-                      due_on=today, subtotal=quote.fee, total=quote.total, status=Invoice.Status.PAID)
+                      due_on=today, subtotal=quote.fee, total=quote.total, status=Invoice.Status.PAID,
+                      billed_to=billed_to(patient))
     invoice.full_clean()
     invoice.save()
     for description, amount in ((f'Initial consultation · {CONSULT_MINUTES} minutes', quote.fee),

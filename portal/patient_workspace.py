@@ -21,13 +21,12 @@ from care.models import (
     Appointment, AuditEvent, ClinicalEncounter, ClinicalTask, LabRequest,
     PatientSubscription, Payment, RecordTag, Shipment, TreatmentAuthorization,
 )
-from care.patient_assignment import can_assign_doctor, is_care_team
+from care.patient_details import can_edit_details
 from care.services import record_audit
 from care.task_services import visible_tasks
 from practices.models import CompanyMembership, Patient
 from .clinical_tasks import attach_clinical_task_links
 from .filter_menus import choice_section, filter_menu
-from .patient_assignment_views import AssignedDoctorForm
 from .people_tags import in_join_order
 from .record_access import require_record_view
 from .realtime_context import is_realtime_snapshot
@@ -50,6 +49,7 @@ OPERATIONAL_AUDIT_LABELS = {
     'appointment.status_changed': 'Appointment status changed', 'appointment.proposal.accepted': 'Appointment time changed',
     'appointment.time_changed': 'Appointment time changed',
     'patient.contact_updated': 'Patient contact details updated', 'patient.doctor_assigned': 'Prescribing doctor changed',
+    'patient.details_updated': 'Patient details updated',
     'shipment.created': 'Delivery prepared',
     'shipment.locked': 'Delivery contents locked', 'shipment.dispatched': 'Delivery dispatched',
     'pharmacy_order.submitted': 'Supply request submitted', 'pharmacy_order.accepted': 'Supply request accepted',
@@ -99,6 +99,7 @@ def patient_workspace_context(request, company, membership, patient, tab='overvi
                         for name, label in TABS if shows_tab(membership, request.user, patient, name)],
         workspace_return_url=workspace_url(patient, section), workspace_return_label=f'Back to {dict(TABS)[section].lower()}',
         is_super_admin=membership.role == CompanyMembership.Role.SUPER_ADMIN,
+        can_edit_details=can_edit_details(membership),
         patient=patient, company=company, active_membership=membership, nav_section='record',
         is_doctor=membership.is_prescriber, is_clinician=membership.is_clinician, can_view_clinical_notes=membership.has_clinical_access,
         can_add_clinical_note=membership.is_clinician and access in (CHANGE, COVER),
@@ -241,13 +242,6 @@ def workspace_tab_context(request, company, membership, patient, tab, **override
         # legacy booking POST. No form or booking list is rendered on Overview.
         context['legacy_appointment_context'] = make_workflow_context(request, company, 'legacy-staff-booking', patient)
         context['patient_age'] = age(patient.date_of_birth)
-        if is_care_team(membership) and context['can_change_record']:
-            context.update(title_context_token=make_workflow_context(request, company, 'patient-title', patient=patient),
-                           title_choices=Patient.Title.choices)
-        # Writing a prescription makes the prescriber the Prescribing doctor; only administrators change it by hand.
-        if can_assign_doctor(membership) and context['can_change_record']:
-            context.update(doctor_form=AssignedDoctorForm(company=company, initial={'doctor': patient.assigned_doctor_id}),
-                           doctor_assignment_context=make_workflow_context(request, company, 'patient-doctor-assignment', patient))
     elif tab == 'appointments':
         appointments = scoped(Appointment, company, patient).select_related('clinician').order_by('-starts_at', '-pk')
         context.update(paginated(request, patient, tab, appointments, filters=[

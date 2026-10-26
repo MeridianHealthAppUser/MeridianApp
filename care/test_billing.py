@@ -354,6 +354,34 @@ class CourierTests(BillingFixture):
         call.assert_called_once_with('POST', '/v2/shipments/cancel', {'tracking_reference': 'TCG91'})
         self.shipment.refresh_from_db()
         self.assertEqual((self.shipment.status, self.shipment.waybill, self.shipment.courier_status), ('held', '', 'cancelled'))
+        self.assertEqual(self.shipment.booked_address, {})
+
+    def test_a_parcel_is_dispatched_to_the_address_it_was_booked_with(self):
+        from django.urls import reverse
+
+        from practices.services import ACTIVE_COMPANY_SESSION_KEY
+
+        with patch.object(courier, '_call', return_value={'id': 991, 'short_tracking_reference': 'TCG91'}):
+            courier.book_waybills(company=self.company, actor=self.admin, week_start=self.week)
+        self.shipment.refresh_from_db()
+        self.assertEqual((self.shipment.booked_address['street'], self.shipment.booked_address['patient_name']),
+                         ('12 Kloof Street', 'Nadia Mokoena'))
+        self.assertFalse(courier.changed_since_booking(self.shipment, DeliveryAddress.objects.get()))
+        # The patient moves after the booking: Weekly shipping says the waybill still has the old address.
+        save_delivery_address(company=self.company, patient=self.patient, actor=self.patient_user,
+                              data={**ADDRESS, 'street': '9 Long Street'})
+        self.assertTrue(courier.changed_since_booking(self.shipment, DeliveryAddress.objects.get()))
+        self.client.force_login(self.admin)
+        session = self.client.session
+        session[ACTIVE_COMPANY_SESSION_KEY] = self.company.pk
+        session.save()
+        page = self.client.get(reverse('portal:ops-shipping'), {'week': self.week.isoformat()})
+        self.assertContains(page, 'Changed after booking: The Courier Guy has the old address')
+        # Dispatch records where the courier was sent, not the address now.
+        shipment = dispatch_shipment(shipment=self.shipment, actor=self.admin, tracking_number='TCG91', confirm=True)
+        sent_to = shipment.dispatch_snapshot['delivery_address']
+        self.assertEqual((sent_to['recipient'], sent_to['lines'][0], sent_to['phone']),
+                         ('Nadia Mokoena', '12 Kloof Street', '082 555 0114'))
 
     def test_tracking_webhooks_keep_the_courier_status_and_mark_a_delivered_parcel_delivered(self):
         from django.test import Client
