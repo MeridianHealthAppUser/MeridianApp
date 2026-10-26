@@ -1,10 +1,10 @@
 {% extends 'portal/operations_base.html' %}
 {% load static workspace_ui %}
-{% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/dialogs.css' %}?v=20261022a"><script src="{% static 'js/dialogs.js' %}?v=20261022a" defer></script>{% endblock %}
+{% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/dialogs.css' %}?v=20261022a"><script src="{% static 'js/dialogs.js' %}?v=20261022a" defer></script><script src="{% static 'js/shipping_workflow.js' %}" defer></script>{% endblock %}
 {% block title %}Weekly shipping | Meridian{% endblock %}
 {% block breadcrumbs %}{% breadcrumbs 'Operations' %}{% endblock %}
 {% block page_heading %}<header class="staff-page-header"><div><h1>Operations</h1><p>{{ company.name }} · Get the week’s parcels out: mark them ready, check and lock the week, order its pens, book the courier and record the collection.</p></div><div class="ops-actions"><a class="console-button console-button--secondary" href="{{ manifest_url }}">Export manifest CSV</a>{% if can_edit %}<a class="console-button console-button--primary" href="?{{ list_query }}&amp;create=1" data-modal-open="create-shipment" aria-haspopup="dialog">Create shipment</a>{% endif %}</div></header>{% page_tabs %}{% endblock %}
-{% block operations_content %}<section class="staff-page-card" aria-labelledby="shipping-week-heading">
+{% block operations_content %}<section class="staff-page-card ops-shipping-card" data-shipping-workflow aria-labelledby="shipping-week-heading">
   {# A shipping week at a time, as Calendar & Bookings' Week view; the search and Filters keep the week. #}
   <header class="staff-page-card__header ops-week-header">
     <div class="ops-week-nav">
@@ -16,59 +16,60 @@
     {% include 'portal/includes/list_tools.html' with search_label='Search shipments' %}
   </header>
   {% if can_edit and not filter_form.errors %}
-    {# The week's steps, in order. Each says how many parcels it's waiting on. #}
-    <ol class="ops-steps" aria-label="This week’s steps">
-      <li class="ops-step">
-        <span class="ops-step__number" aria-hidden="true">1</span>
-        <h3>Mark ready</h3>
-        <div class="ops-step__summary"><p><strong>{{ week_order.drafts }} draft parcel{{ week_order.drafts|pluralize }}</strong></p><p>Check prescription, care plan and allowance.</p></div>
-        <form method="post" action="{% url 'portal:ops-shipping-prepare' %}">{% csrf_token %}<input type="hidden" name="workflow_context" value="{{ prepare_context }}"><input type="hidden" name="week" value="{{ week_start|date:'Y-m-d' }}"><button class="console-button console-button--secondary" type="submit">Mark ready</button></form>
-      </li>
-      <li class="ops-step">
-        <span class="ops-step__number" aria-hidden="true">2</span>
-        <h3>Check and lock</h3>
-        <div class="ops-step__summary"><p><strong>{{ ready_unlocked }} ready &middot; {{ week_order.locked }} locked</strong></p><p>Verify prescription, delivery details{% if payment_required %} and payment{% endif %}.</p>{% if lock_blocked %}<p class="ops-step__warning">{{ lock_blocked }} blocked. See parcel details below.</p>{% endif %}</div>
-        <div class="ops-step__actions">
-          <form method="post" action="{% url 'portal:ops-shipping-lock' %}">{% csrf_token %}<input type="hidden" name="workflow_context" value="{{ lock_context }}"><input type="hidden" name="week" value="{{ week_start|date:'Y-m-d' }}"><button class="console-button console-button--primary" type="submit">Check &amp; lock</button></form>
-          {% if lock_blocked %}<form method="post" action="{% url 'portal:ops-shipping-lock' %}">{% csrf_token %}<input type="hidden" name="workflow_context" value="{{ lock_context }}"><input type="hidden" name="week" value="{{ week_start|date:'Y-m-d' }}"><input type="hidden" name="hold_failing" value="1"><button class="console-button console-button--secondary" type="submit">Hold {{ lock_blocked }} and lock the rest</button></form>{% endif %}
-        </div>
-      </li>
-      <li class="ops-step">
-        <span class="ops-step__number" aria-hidden="true">3</span>
-        <h3>Order pens</h3>
-        <div class="ops-step__summary"><p>{% if week_order.lines %}<strong>{{ week_order.parcels }} ready parcel{{ week_order.parcels|pluralize }}</strong></p><p>Quantities in <a href="#week-pens">Pens this week</a>.{% else %}Ready parcels determine the order.{% endif %}</p></div>
-        {% if week_order.lines %}<a class="console-button console-button--secondary" data-no-loader href="{{ order_csv_url }}">Order CSV</a>{% endif %}
-      </li>
-      <li class="ops-step">
-        <span class="ops-step__number" aria-hidden="true">4</span>
-        <h3>Book courier</h3>
-        {% if courier_enabled %}
-          <div class="ops-step__summary"><p><strong>{{ to_book }} need{{ to_book|pluralize:"s," }} a waybill</strong></p><p>Collection on the shipping day.</p>{% if courier_problem %}<p class="ops-step__warning">{{ courier_problem }}</p>{% endif %}</div>
-          {% if to_book and not courier_problem %}<form method="post" action="{% url 'portal:ops-shipping-courier' %}">{% csrf_token %}<input type="hidden" name="workflow_context" value="{{ courier_context }}"><input type="hidden" name="week" value="{{ week_start|date:'Y-m-d' }}"><button class="console-button console-button--primary" type="submit">Book waybills</button></form>{% endif %}
-        {% else %}
-          <div class="ops-step__summary"><p>Book externally. Add each parcel’s tracking reference at dispatch.</p></div>
-        {% endif %}
-      </li>
-      <li class="ops-step">
-        <span class="ops-step__number" aria-hidden="true">5</span>
-        <h3>Record collection</h3>
-        <div class="ops-step__summary"><p>{% if courier_enabled %}<strong>{{ to_collect }} awaiting collection</strong></p><p>Confirm once the courier collects.{% else %}Confirm dispatch on each parcel after collection.{% endif %}</p></div>
-        {% if to_collect %}<a class="console-button console-button--secondary" href="#record-collection" data-modal-open="record-collection" aria-haspopup="dialog">Record collection</a>{% endif %}
-      </li>
-    </ol>
+    <div id="shipping-workflow">
+      <ol class="ops-steps" data-shipping-tabs aria-label="This week’s steps">
+        {% for step in shipping_steps %}
+          <li>
+            <a class="ops-step{% if step.complete %} is-complete{% endif %}{% if step.current %} is-current{% endif %}" id="shipping-step-{{ step.key }}" href="{{ step.url }}" data-shipping-step="{{ step.key }}" data-native-navigation aria-controls="shipping-panel-{{ step.key }}" aria-selected="{{ step.selected|yesno:'true,false' }}"{% if step.current %} aria-current="step"{% endif %}>
+              <span class="ops-step__number" aria-hidden="true">{% if step.complete %}<svg viewBox="0 0 20 20" fill="none"><path d="m5 10 3 3 7-7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>{% else %}{{ forloop.counter }}{% endif %}</span>
+              <span class="ops-step__copy"><span class="ops-step__title">{{ step.title }}</span><span class="ops-step__summary">{{ step.summary }}</span>{% if step.complete %}<span class="sr-only">Complete</span>{% endif %}</span>
+            </a>
+          </li>
+        {% endfor %}
+      </ol>
+      <div class="ops-step-panels">
+        <section class="ops-step-panel" id="shipping-panel-ready" data-shipping-panel="ready" aria-labelledby="shipping-step-ready"{% if shipping_step != 'ready' %} hidden{% endif %}>
+          <p>Check prescription, care plan and allowance before marking a parcel ready.{% if week_order.held %} {{ week_order.held }} held parcel{{ week_order.held|pluralize }} need{{ week_order.held|pluralize:"s," }} review.{% endif %}</p>
+          <form method="post" action="{% url 'portal:ops-shipping-prepare' %}">{% csrf_token %}<input type="hidden" name="workflow_context" value="{{ prepare_context }}"><input type="hidden" name="week" value="{{ week_start|date:'Y-m-d' }}"><button class="console-button console-button--primary" type="submit">Mark ready</button></form>
+        </section>
+        <section class="ops-step-panel" id="shipping-panel-lock" data-shipping-panel="lock" aria-labelledby="shipping-step-lock"{% if shipping_step != 'lock' %} hidden{% endif %}>
+          <div><p>Verify each parcel’s prescription, delivery address and contact details{% if payment_required %}, and payment{% endif %} before locking the week.</p>{% if lock_blocked %}<p class="ops-step__warning">{{ lock_blocked }} blocked. See parcel details below.</p>{% endif %}</div>
+          <div class="ops-step__actions">
+            <form method="post" action="{% url 'portal:ops-shipping-lock' %}">{% csrf_token %}<input type="hidden" name="workflow_context" value="{{ lock_context }}"><input type="hidden" name="week" value="{{ week_start|date:'Y-m-d' }}"><button class="console-button console-button--primary" type="submit">Check &amp; lock</button></form>
+            {% if lock_blocked %}<form method="post" action="{% url 'portal:ops-shipping-lock' %}">{% csrf_token %}<input type="hidden" name="workflow_context" value="{{ lock_context }}"><input type="hidden" name="week" value="{{ week_start|date:'Y-m-d' }}"><input type="hidden" name="hold_failing" value="1"><button class="console-button console-button--secondary" type="submit">Hold {{ lock_blocked }} and lock the rest</button></form>{% endif %}
+          </div>
+        </section>
+        <section class="ops-step-panel" id="shipping-panel-order" data-shipping-panel="order" aria-labelledby="shipping-step-order"{% if shipping_step != 'order' %} hidden{% endif %}>
+          <p>{% if week_order.lines %}Review quantities in <a href="#week-pens">Pens this week</a>, then download the order for the ready parcels.{% else %}Mark parcels ready to calculate the pens to order.{% endif %}</p>
+          {% if week_order.lines %}<a class="console-button console-button--primary" data-no-loader href="{{ order_csv_url }}">Download order CSV</a>{% endif %}
+        </section>
+        <section class="ops-step-panel" id="shipping-panel-courier" data-shipping-panel="courier" aria-labelledby="shipping-step-courier"{% if shipping_step != 'courier' %} hidden{% endif %}>
+          {% if courier_enabled %}
+            <div><p>{{ to_book }} locked parcel{{ to_book|pluralize }} need{{ to_book|pluralize:"s," }} a waybill for collection on the shipping day.</p>{% if courier_problem %}<p class="ops-step__warning">{{ courier_problem }}</p>{% endif %}</div>
+            {% if to_book and not courier_problem %}<form method="post" action="{% url 'portal:ops-shipping-courier' %}">{% csrf_token %}<input type="hidden" name="workflow_context" value="{{ courier_context }}"><input type="hidden" name="week" value="{{ week_start|date:'Y-m-d' }}"><button class="console-button console-button--primary" type="submit">Book waybills</button></form>{% endif %}
+          {% else %}
+            <p>The pharmacy books the courier externally. Record each parcel’s tracking reference when it is dispatched.</p>
+          {% endif %}
+        </section>
+        <section class="ops-step-panel" id="shipping-panel-collection" data-shipping-panel="collection" aria-labelledby="shipping-step-collection"{% if shipping_step != 'collection' %} hidden{% endif %}>
+          <p>{% if to_collect %}{{ to_collect }} parcel{{ to_collect|pluralize }} with a waybill {{ to_collect|pluralize:"is,are" }} awaiting collection. Confirm only once the courier has collected them.{% else %}Open each parcel and confirm its dispatch after collection, using its tracking reference.{% endif %}</p>
+          {% if to_collect %}<a class="console-button console-button--primary" href="{{ collection_url }}" data-modal-open="record-collection" aria-haspopup="dialog">Record collection</a>{% endif %}
+        </section>
+      </div>
+    </div>
   {% endif %}
   <div data-search-region="list">{% if filter_form.errors %}<div class="staff-filter-error" role="alert">Correct the filters to view shipments.</div>{% else %}
     <div class="ops-table-wrap"><table class="ops-table ops-shipping-table">
-      <thead><tr><th scope="col">Patient</th><th scope="col">Doctor</th><th scope="col">Deliver to</th><th scope="col">Product</th><th scope="col">Qty</th><th scope="col">Paid</th><th scope="col">Status</th><th scope="col">Notes</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead>
+      <thead><tr><th scope="col">Patient</th><th scope="col">Doctor</th><th scope="col">Deliver to</th><th scope="col">Product</th><th scope="col">Qty</th><th scope="col">Paid</th><th scope="col">Status</th><th scope="col"><span class="sr-only">Notes</span></th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead>
       <tbody>{% for shipment in shipments %}<tr>
         <td data-label="Patient"><strong>{{ shipment.dispatch_snapshot.patient_name|default:shipment.patient }}</strong><small>{{ shipment.scheduled_for|date:'D j M' }}</small></td>
         <td data-label="Doctor">{{ shipment.doctor.titled_name|default:'—' }}</td>
-        <td data-label="Deliver to">{% if shipment.address %}<span class="ops-deliver">{{ shipment.address.street }}, {{ shipment.address.suburb }}, {{ shipment.address.city }} {{ shipment.address.postal_code }}</span><small>{{ shipment.address.phone }}{% if shipment.address.recipient %} · {{ shipment.address.recipient }}{% endif %}</small>{% else %}<span class="ops-flag">No address</span>{% endif %}{% if shipment.address_url %}<a class="ops-inline-link" href="{{ shipment.address_url }}">{% if shipment.address %}Edit{% else %}Add address{% endif %}<span class="sr-only"> for {{ shipment.patient }}</span></a>{% endif %}</td>
+        <td data-label="Deliver to"><div class="ops-delivery-detail">{% if shipment.address %}<span class="ops-deliver">{{ shipment.address.street }}, {{ shipment.address.suburb }}, {{ shipment.address.city }} {{ shipment.address.postal_code }}</span><small>{{ shipment.address.phone }}{% if shipment.address.recipient %} · {{ shipment.address.recipient }}{% endif %}</small>{% else %}<span class="ops-flag">No address</span>{% endif %}{% if shipment.address_url %}<a class="ops-inline-link" href="{{ shipment.address_url }}">{% if shipment.address %}Edit{% else %}Add address{% endif %}<span class="sr-only"> for {{ shipment.patient }}</span></a>{% endif %}</div></td>
         {# One line per pen in the parcel, its quantity beside it in Qty. #}
         <td data-label="Product">{% for item in shipment.items.all %}<div>{{ item.product.name }} <span class="ops-dose">{{ item.dose }}</span></div>{% empty %}—{% endfor %}</td>
         <td data-label="Qty">{% for item in shipment.items.all %}<div>{{ item.quantity }}</div>{% empty %}—{% endfor %}</td>
-        <td data-label="Paid"><span class="ops-paid ops-paid--{{ shipment.payment_state }}">{% if shipment.payment_state == 'paid' %}Paid{% elif shipment.payment_state == 'due' %}Due{% elif shipment.payment_state == 'retrying' %}Retrying{% elif shipment.payment_state == 'failed' %}Failed{% else %}Not paid{% endif %}</span>{% if shipment.payment_state != 'paid' %}<small>{{ shipment.payment_text }}</small>{% if shipment.address_url %}<a class="ops-inline-link" href="{% url 'portal:ops-parcel-payment' shipment.pk %}?next={{ request.get_full_path|urlencode }}">Record payment<span class="sr-only"> for {{ shipment.patient }}</span></a>{% endif %}{% endif %}</td>
-        <td data-label="Status"><span class="console-status console-status--{{ shipment.status }}">{{ shipment.get_status_display }}</span>{% if shipment.locked_at and shipment.status == 'ready' %}<small>Week locked</small>{% endif %}{% with reason=shipment.current_hold_reason|default:shipment.hold_reason %}{% if reason and shipment.status != 'dispatched' and shipment.status != 'delivered' %}<small>{{ reason }}</small>{% endif %}{% endwith %}{% if shipment.status == 'ready' and not shipment.locked_at %}{% for problem in shipment.lock_problems %}<small class="ops-problem">{{ problem }}</small>{% endfor %}{% endif %}{% if shipment.waybill %}<small>Waybill {{ shipment.waybill }}{% if shipment.courier_status_label %} · {{ shipment.courier_status_label }}{% endif %}{% if shipment.courier_shipment_id %} · <a href="{% url 'portal:ops-shipment-label' shipment.pk %}" data-no-loader>Label</a>{% endif %}</small>{% elif shipment.tracking_number %}<small>Tracking {{ shipment.tracking_number }}</small>{% endif %}{% if shipment.courier_error and not shipment.waybill %}<small class="ops-problem">{{ shipment.courier_error }}</small>{% endif %}</td>
+        <td data-label="Paid"><span class="ops-paid ops-paid--{{ shipment.payment_state }}">{% if shipment.payment_state == 'paid' %}Paid{% elif shipment.payment_state == 'due' %}Due{% elif shipment.payment_state == 'retrying' %}Retrying{% elif shipment.payment_state == 'failed' %}Failed{% else %}Not paid{% endif %}</span>{% if shipment.payment_state != 'paid' %}<div class="ops-payment-detail">{{ shipment.payment_text }}{% if shipment.address_url %}<a class="ops-inline-link" href="{% url 'portal:ops-parcel-payment' shipment.pk %}?next={{ request.get_full_path|urlencode }}">Record payment<span class="sr-only"> for {{ shipment.patient }}</span></a>{% endif %}</div>{% endif %}</td>
+        <td data-label="Status"><span class="console-status console-status--{{ shipment.status }}">{{ shipment.get_status_display }}</span>{% if shipment.locked_at and shipment.status == 'ready' %}<small>Week locked</small>{% endif %}{% with reason=shipment.current_hold_reason|default:shipment.hold_reason %}{% if reason and shipment.status != 'dispatched' and shipment.status != 'delivered' %}<small class="ops-problem">{{ reason }}</small>{% endif %}{% endwith %}{% if shipment.status == 'ready' and not shipment.locked_at %}{% for problem in shipment.lock_problems %}<small class="ops-problem">{{ problem }}</small>{% endfor %}{% endif %}{% if shipment.waybill %}<small>Waybill {{ shipment.waybill }}{% if shipment.courier_status_label %} · {{ shipment.courier_status_label }}{% endif %}{% if shipment.courier_shipment_id %} · <a href="{% url 'portal:ops-shipment-label' shipment.pk %}" data-no-loader>Label</a>{% endif %}</small>{% elif shipment.tracking_number %}<small>Tracking {{ shipment.tracking_number }}</small>{% endif %}{% if shipment.courier_error and not shipment.waybill %}<small class="ops-problem">{{ shipment.courier_error }}</small>{% endif %}</td>
         <td data-label="Notes">{% if shipment.note_context %}
           {# The note, then a small editor under it; it opens again after a mistake is shown in a toast. #}
           <details class="ops-note-editor">{% if shipment.note %}<summary><span class="ops-note">{{ shipment.note }}</span> <span class="ops-note-editor__edit">Edit<span class="sr-only"> note for {{ shipment.patient }}</span></span></summary>{% else %}<summary><span class="ops-note-editor__edit">+ Add note<span class="sr-only"> for {{ shipment.patient }}</span></span></summary>{% endif %}
@@ -127,14 +128,14 @@
 {% endif %}
 {% if can_edit and to_collect %}
   {# Record collection: the locked parcels with a waybill go as dispatched, the waybill as tracking, a batch for each medicine. #}
-  <dialog class="app-dialog" id="record-collection" aria-labelledby="record-collection-title">
+  <dialog class="app-dialog" id="record-collection" aria-labelledby="record-collection-title"{% if collect_open %} open{% endif %}>
     <div class="app-dialog__body">
       <h2 id="record-collection-title">Record collection</h2>
       <p class="app-dialog__sub">{{ to_collect }} parcel{{ to_collect|pluralize }} with a waybill {{ to_collect|pluralize:"is,are" }} recorded as dispatched, each with its waybill as the tracking reference. Note each medicine’s batch and expiry for tracing a recall.</p>
       <form class="ops-form" method="post" action="{% url 'portal:ops-shipping-collect' %}">{% csrf_token %}<input type="hidden" name="workflow_context" value="{{ collect_context }}"><input type="hidden" name="week" value="{{ week_start|date:'Y-m-d' }}">
         {% for product in collect_products %}<div class="ops-form-field"><label for="batch-{{ product.pk }}">Batch and expiry: {{ product }} (optional)</label><input id="batch-{{ product.pk }}" name="batch_{{ product.pk }}" maxlength="120" placeholder="SG-2604, expiry 04/2027"></div>{% endfor %}
         <label class="ops-check" for="collect-confirm"><input id="collect-confirm" type="checkbox" name="confirm" required><span>The courier has collected these parcels</span></label>
-        <div class="app-dialog__actions"><a class="console-button console-button--secondary" href="#" data-dialog-close>Cancel</a><button class="console-button console-button--primary" type="submit">Record collection</button></div>
+        <div class="app-dialog__actions"><a class="console-button console-button--secondary" href="{{ collection_close_url }}" data-dialog-close>Cancel</a><button class="console-button console-button--primary" type="submit">Record collection</button></div>
       </form>
     </div>
   </dialog>

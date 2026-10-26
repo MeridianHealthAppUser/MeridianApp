@@ -9,7 +9,7 @@ from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.core.paginator import Paginator
 from django.db import transaction
-from django.db.models import Q
+from django.db.models import Count, Q
 from django.http import HttpResponse, QueryDict
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.defaultfilters import pluralize
@@ -294,6 +294,56 @@ def shipment_doctor(shipment):
     return authorization.prescribed_by if authorization and authorization.prescribed_by_id else shipment.patient.assigned_doctor
 
 
+def _shipping_workflow_context(request, week, order, parcels, *, to_collect):
+    """Presentation state for the week's steps; selecting a step never performs work."""
+    counts = parcels.aggregate(
+        active=Count('pk', filter=~Q(status=Shipment.Status.CANCELLED)),
+        collected=Count('pk', filter=Q(status__in=(Shipment.Status.DISPATCHED, Shipment.Status.DELIVERED))),
+        booked=Count('pk', filter=~Q(status=Shipment.Status.CANCELLED) & (~Q(waybill='') | ~Q(tracking_number=''))),
+    )
+    ready_done = bool(counts['active'] and not order['drafts'] and not order['held'])
+    lock_done = ready_done and order['parcels'] == order['locked']
+    collected_done = bool(counts['active'] and counts['active'] == counts['collected'])
+    if not ready_done:
+        current = 'ready'
+    elif not lock_done:
+        current = 'lock'
+    elif collected_done:
+        current = None
+    elif to_collect:
+        current = 'collection'
+    else:
+        current = 'order'
+    definitions = (
+        ('ready', 'Mark ready', f"{order['drafts']} draft parcel{'s' if order['drafts'] != 1 else ''}", ready_done),
+        ('lock', 'Check and lock', f"{order['parcels'] - order['locked']} ready · {order['locked']} locked", lock_done),
+        ('order', 'Order pens', f"{order['parcels']} ready parcel{'s' if order['parcels'] != 1 else ''}", False),
+        ('courier', 'Book courier', f"{counts['booked']} booked" if counts['booked'] else 'Not booked', False),
+        ('collection', 'Record collection', 'Collected' if collected_done else
+         (f'{to_collect} awaiting collection' if to_collect else 'Pending'), collected_done),
+    )
+    selected = request.GET.get('shipping_step', 'ready')
+    if selected not in {step[0] for step in definitions}:
+        selected = 'ready'
+    query = request.GET.copy()
+    for name in ('create', 'collect', '__shell', '__full', 'shipping_step'):
+        query.pop(name, None)
+    query['week'] = week.isoformat()
+    query['__full'] = '1'  # The native fallback remains usable when scripts are unavailable.
+    steps = []
+    for key, title, summary, complete in definitions:
+        query['shipping_step'] = key
+        steps.append(dict(key=key, title=title, summary=summary, complete=complete,
+                          current=current == key, selected=selected == key,
+                          url=f"{reverse('portal:ops-shipping')}?{query.urlencode()}#shipping-workflow"))
+    query['shipping_step'] = 'collection'
+    query['collect'] = '1'
+    return dict(shipping_steps=steps, shipping_step=selected,
+                collection_url=f"{reverse('portal:ops-shipping')}?{query.urlencode()}#record-collection",
+                collection_close_url=steps[-1]['url'],
+                collect_open=request.GET.get('collect') == '1')
+
+
 class ShippingListView(OperationsView):
     """Weekly shipping, one shipping week at a time: its parcels (drafted from prescriptions, or added by hand with
     Create shipment), where each goes and whether it's paid for, the steps that get them out (mark ready, check and
@@ -368,6 +418,13 @@ class ShippingListView(OperationsView):
             order_csv_url=f'{reverse("portal:ops-week-order")}?{urlencode({"week": week.isoformat()})}',
             manifest_url=f'{reverse("portal:ops-manifest")}?{urlencode({"week": week.isoformat()})}',
         )
+        context.update(_shipping_workflow_context(request, week, order, week_parcels,
+                                                  to_collect=context['to_collect']))
+        # Search/filter requests retain the selected workflow panel without changing its actions.
+        context['search_hidden']['shipping_step'] = context['shipping_step']
+        context['filter_menu']['hidden'].append(('shipping_step', context['shipping_step']))
+        context['search_clear_url'] += f"&shipping_step={context['shipping_step']}"
+        context['filter_menu']['clear_url'] += f"&shipping_step={context['shipping_step']}"
         if self.can_edit:
             # A dialog reopened after a mistake keeps the token it was sent with.
             context.update(create_form=create_form or ShipmentCreateForm(company=self.company),
