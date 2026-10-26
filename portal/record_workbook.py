@@ -166,7 +166,7 @@ def workbook_sheets(request, company, patient, timeline):
         ('Treatment', _sheet(('Medication', 'Dose', 'Doctor', 'Valid from', 'Valid to', 'Status'), (
             (row.product.name, row.max_dose, _person(row.prescribed_by), _day(row.starts_on), _day(row.expires_on), row.get_status_display())
             for row in treatment)), (26, 18, 24, 14, 14, 14), True),
-        ('Dispatch history', _sheet(('Scheduled', 'Cycle', 'Status', 'Tracking', 'Dispatched (SAST)'), (
+        ('Dispatch history', _sheet(('Scheduled', 'Parcel', 'Status', 'Tracking', 'Dispatched (SAST)'), (
             (_day(row.scheduled_for), row.cycle_number, row.get_status_display(), row.tracking_number or 'Not dispatched', _when(row.dispatched_at))
             for row in deliveries)), (14, 8, 16, 24, 20), True),
         ('Export details', _sheet(('Field', 'Value'), (

@@ -205,7 +205,7 @@
         <h3 id="delivery-history-heading">Deliveries</h3>
         <div class="treatment-table-wrap">
           <table class="treatment-table">
-            <thead><tr><th scope="col">Scheduled</th><th scope="col">Cycle</th><th scope="col">Status</th><th scope="col">Tracking reference</th></tr></thead>
+            <thead><tr><th scope="col">Scheduled</th><th scope="col">Parcel</th><th scope="col">Status</th><th scope="col">Tracking reference</th></tr></thead>
             <tbody>
               {% for item in shipments_page %}
                 <tr><td>{{ item.scheduled_for|date:"j M Y" }}</td><td>{{ item.cycle_number }}</td><td>{{ item.get_status_display }}</td><td>{{ item.tracking_number|default:"Not dispatched" }}</td></tr>

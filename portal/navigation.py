@@ -6,6 +6,7 @@ Operations and Administration are each one page of tabs (page_tabs) for whoever 
 
 from django.urls import reverse
 
+from care.models import MedicationProduct
 from care.operations import can_ship
 
 # Each tab: its nav_section key, label and page. Super Admins see the same pages listed in their sections.
@@ -135,8 +136,10 @@ def build_staff_menu(membership, *, multi_practice=False, nav_section='', unread
             _records_item(membership),
             *([_item('consultations', 'Consultations', 'portal:clinical-consultations'),
                _item('labs', 'Blood tests', 'portal:clinical-labs'),
-               _item('authorisations', 'Authorisations', 'portal:treatment-authorisations'),
-               _item('compounding', 'Compounding records', 'portal:compounding-list')] if clinical else []),
+               _item('authorisations', 'Authorisations', 'portal:treatment-authorisations')] if clinical else []),
+            # Only for a practice whose catalogue has a compounded product (Meridian has none).
+            *([_item('compounding', 'Compounding records', 'portal:compounding-list')]
+              if clinical and MedicationProduct.objects.filter(company=membership.company, is_compounded=True).exists() else []),
             _item('schedule', 'Calendar & Bookings', 'portal:staff-schedule'),
         ]),
         ('operations', 'Operations', 'Operations', _tab_items('operations') if admin else []),

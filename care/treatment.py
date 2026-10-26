@@ -1,4 +1,4 @@
-"""Explicit doctor authorisations and local plans; no payment or email processing."""
+"""Explicit doctor authorisations and patients' subscriptions (care plans). Billing is in care.billing."""
 
 from datetime import date, datetime
 from uuid import UUID
@@ -61,13 +61,13 @@ def dose_in_effect(subscription, on_date=None):
 
 def subscription_hold_reason(subscription, on_date=None):
     if subscription is None:
-        return 'A local care plan is required.'
+        return 'A care plan is required.'
     if not subscription.company.is_active or not subscription.patient.is_active or subscription.patient.company_id != subscription.company_id:
         return 'The patient or practice is inactive.'
     # A plan whose debit is being retried stays eligible: whether its parcels are paid for is checked on its own
     # (care.billing.parcel_payment) when the week is locked.
     if subscription.status not in (PatientSubscription.Status.ACTIVE, PatientSubscription.Status.PAYMENT_RETRY):
-        return 'The local care plan is not active.'
+        return 'The care plan is not active.'
     authorization = step_in_effect(subscription.authorization, on_date)
     if authorization is None or authorization.company_id != subscription.company_id or authorization.patient_id != subscription.patient_id:
         return 'A matching treatment authorisation is required.'
@@ -120,10 +120,21 @@ def _hold_shipments(company, patient, subscriptions, reason, authorizations=()):
     return shipments.update(status=Shipment.Status.HELD, hold_reason=reason, updated_at=timezone.now())
 
 
+def other_treatments(company):
+    """What the Authorise treatment form is for: compounded products, and other treatments that need a doctor's
+    authorisation (hormone therapy, say). Main treatments, the Semaglutide and Tirzepatide pens, are prescribed from the
+    record's Overview, which also drafts their parcels, makes the doctor the Prescribing doctor and asks for a new debit
+    order (care.prescriptions). Meridian has none of these, so the form doesn't show there (25 Oct 2026)."""
+    return MedicationProduct.objects.for_company(company).filter(is_active=True, requires_authorisation=True).filter(
+        Q(is_compounded=True) | ~Q(category=MedicationProduct.Category.WEIGHT_MANAGEMENT))
+
+
 @transaction.atomic
 def create_authorization(*, company, patient, actor, product, max_dose, quantity_per_cycle,
                          starts_on, expires_on, review_interval_days, instructions='', renews=None,
-                         submission_key=None, request=None):
+                         acknowledge_flags=False, submission_key=None, request=None):
+    from .prescriptions import _check_flags
+
     company, patient = _lock_context(company, patient, actor)
     _require_doctor(company, actor)
     key = _key(submission_key)
@@ -133,6 +144,8 @@ def create_authorization(*, company, patient, actor, product, max_dose, quantity
     product = MedicationProduct.objects.for_company(company).filter(pk=product.pk, is_active=True).first()
     if product is None:
         raise ValidationError('Choose an active product from this practice.')
+    # A safety flag in the patient's summary data is ticked as reviewed first, as on the Overview's prescriptions.
+    flags = _check_flags(company, patient, acknowledge_flags)
     if not isinstance(max_dose, str) or not max_dose.strip() or len(max_dose) > 80:
         raise ValidationError('Enter the doctor’s explicit maximum dose, up to 80 characters.')
     if not isinstance(instructions, str) or len(instructions) > 10000:
@@ -176,7 +189,8 @@ def create_authorization(*, company, patient, actor, product, max_dose, quantity
         _hold_shipments(company, patient, [plan.pk for plan in subscriptions], 'Authorisation changed. Dispensing review is required before dispatch.')
     record_audit(
         company=company, actor=actor, patient=patient, action='treatment.authorized', target=authorization, request=request,
-        metadata={'submission_key': key, 'previous_authorization_id': previous.pk if previous else None},
+        metadata={'submission_key': key, 'previous_authorization_id': previous.pk if previous else None,
+                  'safety_flags_acknowledged': bool(flags)},
     )
     _event(authorization, 'Treatment authorisation renewed' if previous else 'Treatment authorised',
            'Your doctor recorded a treatment decision. Open your treatment page to see its details.')
@@ -210,7 +224,7 @@ def change_authorization_status(*, authorization, actor, action, request=None):
 def _require_patient_owner(patient, actor):
     _active_actor(actor)
     if patient.user_id != actor.pk:
-        raise PermissionDenied('Only the patient can confirm changes to their local care plan.')
+        raise PermissionDenied('Only the patient can confirm changes to their subscription.')
 
 
 @transaction.atomic
@@ -230,10 +244,10 @@ def enroll_local_subscription(*, company, patient, actor, authorization, confirm
     if existing is not None:
         if existing.status == PatientSubscription.Status.ACTIVE and existing.authorization_id == authorization.pk:
             return existing
-        raise ValidationError('A local plan already exists. Manage that plan before enrolling again.')
+        raise ValidationError('A subscription already exists. Manage it before starting again.')
     plan = PatientSubscription(
         company=company, patient=patient, authorization=authorization,
-        plan_name=f'{company.name[:210]} local care plan',
+        plan_name=f'{company.name[:210]} care plan',
         starts_on=timezone.localdate(), review_due_on=authorization.expires_on, next_debit_on=None,
     )
     plan.full_clean()
@@ -251,6 +265,14 @@ def enroll_local_subscription(*, company, patient, actor, authorization, confirm
     return plan
 
 
+# What the patient's Updates say after they pause, resume or cancel (title, detail).
+STATUS_EVENTS = {
+    'pause': ('Subscription paused', 'Nothing is debited while it’s paused, and parcels not yet sent are held.'),
+    'resume': ('Subscription resumed', 'Debits carry on after the last period you paid for.'),
+    'cancel': ('Subscription cancelled', 'Its debit order is stopped and parcels not yet sent are held. Parcels already sent are unchanged.'),
+}
+
+
 @transaction.atomic
 def change_subscription_status(*, subscription, actor, action, confirm=False, reasons=(), note='', request=None):
     """Pause, resume or cancel, by the patient. Cancelling needs at least one of the plan's CANCELLATION_REASONS. It
@@ -259,7 +281,7 @@ def change_subscription_status(*, subscription, actor, action, confirm=False, re
     _require_patient_owner(patient, actor)
     record = PatientSubscription.objects.select_for_update().for_company(company).get(pk=subscription.pk, patient=patient)
     if confirm is not True:
-        raise ValidationError('Confirm the change to your local care plan.')
+        raise ValidationError('Confirm the change to your subscription.')
     statuses = {'pause': PatientSubscription.Status.PAUSED, 'cancel': PatientSubscription.Status.CANCELLED, 'resume': PatientSubscription.Status.ACTIVE}
     if action not in statuses:
         raise ValidationError('Choose pause, cancel or resume.')
@@ -301,7 +323,7 @@ def change_subscription_status(*, subscription, actor, action, confirm=False, re
             notify('subscription_winback', record.pk)
     record.save(update_fields=fields)
     if action in ('pause', 'cancel'):
-        _hold_shipments(company, patient, [record.pk], 'Local care plan paused or cancelled by the patient.')
+        _hold_shipments(company, patient, [record.pk], 'Subscription paused or cancelled by the patient.')
     if action == 'cancel':
         from .billing import release_mandates
         from .followups import close_help_requests
@@ -314,6 +336,5 @@ def change_subscription_status(*, subscription, actor, action, confirm=False, re
         ending.update(status=DebitMandate.Status.CANCELLED, cancelled_at=timezone.now(), updated_at=timezone.now())
     record_audit(company=company, actor=actor, patient=patient, action=f'subscription.{action}', target=record, request=request,
                  metadata={'reasons': reasons} if action == 'cancel' else None)
-    _event(record, f'Local care plan {"resumed" if action == "resume" else "paused" if action == "pause" else "cancelled"}',
-           'The plan status was updated. No payment was processed. Dispatched parcels remain unchanged.')
+    _event(record, *STATUS_EVENTS[action])
     return record

@@ -49,7 +49,10 @@ class SinglePracticeAccessTests(TestCase):
             clinician=cls.doctor, starts_at=cls.now, duration_minutes=30)
 
     def setUp(self):
-        self.client.force_login(self.doctor)
+        self.login(self.doctor)
+
+    def login(self, user):
+        self.client.force_login(user)
         session = self.client.session
         session[ACTIVE_COMPANY_SESSION_KEY] = self.company.pk
         session.save()
@@ -76,6 +79,7 @@ class SinglePracticeAccessTests(TestCase):
                 self.assertIn('scope', forged.errors)
 
     def test_directory_and_history_do_not_expose_other_practice(self):
+        self.login(self.admin)  # History is Super Admin only.
         for url in (reverse('portal:patient-list'),
                     reverse('portal:staff-patient-record', args=[self.patient.pk])):
             response = self.client.get(url)
@@ -91,6 +95,7 @@ class SinglePracticeAccessTests(TestCase):
             self.assertNotIn(b'DISABLED_PRACTICE_HISTORY', response.content)
 
     def test_all_scope_export_is_rejected_without_cross_practice_audit(self):
+        self.login(self.admin)
         before = AuditEvent.objects.filter(company=self.other).count()
         response = self.client.get(reverse('portal:staff-patient-record-export', args=[self.patient.pk]),
                                    {'scope': 'all', 'reason': 'direct_care'})
@@ -98,6 +103,7 @@ class SinglePracticeAccessTests(TestCase):
         self.assertEqual(AuditEvent.objects.filter(company=self.other).count(), before)
 
     def test_old_multi_practice_history_token_cannot_be_reused(self):
+        self.login(self.admin)
         with override_settings(MULTI_PRACTICE_ENABLED=True):
             response = self.client.get(reverse('portal:staff-patient-record', args=[self.patient.pk]),
                 {'scope': 'all', 'reason': 'direct_care'})

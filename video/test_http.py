@@ -9,7 +9,7 @@ from django.test import Client, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
-from care.models import Appointment, AuditEvent, PatientEvent
+from care.models import Appointment, AuditEvent, ClinicianAssignment, PatientEvent
 from care.test_appointment_lifecycle import AppointmentLifecycleFixture
 from practices.models import CompanyMembership, Patient
 from practices.services import ACTIVE_COMPANY_SESSION_KEY, ACTIVE_PATIENT_COMPANY_SESSION_KEY
@@ -247,6 +247,9 @@ class VideoHTTPTests(AppointmentLifecycleFixture):
 
     def test_native_join_links_are_shown_only_to_booked_doctor_or_patient(self):
         staff_detail = reverse('portal:appointment-detail', args=[self.booking.pk])
+        # The colleague once looked after the patient, so they can open the appointment (but not join it).
+        ClinicianAssignment.objects.create(company=self.company, patient=self.booking.patient, clinician=self.colleague,
+                                           ended_at=timezone.now())
         for actor, permitted in ((self.doctor, True), (self.colleague, False),
                                   (self.admin, False), (self.super_admin, False)):
             self.login(actor)

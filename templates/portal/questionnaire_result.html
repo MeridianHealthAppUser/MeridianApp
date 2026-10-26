@@ -29,7 +29,7 @@
         <section class="questionnaire-card" aria-labelledby="pricing-heading">
           <h2 class="questionnaire-kicker" id="pricing-heading">What you pay for the initial consult</h2>
           <dl class="questionnaire-price-list">
-            <div class="questionnaire-price-row"><dt>Initial consultation<span>30 minutes with a doctor, on Zoom</span></dt><dd>{% if pricing %}R{{ pricing.initial_consult_fee|floatformat:"-2" }}{% else %}<small>Price not configured</small>{% endif %}</dd></div>
+            <div class="questionnaire-price-row"><dt>Initial consultation<span>30 minutes with a doctor, by video call in the app</span></dt><dd>{% if pricing %}R{{ pricing.initial_consult_fee|floatformat:"-2" }}{% else %}<small>Price not configured</small>{% endif %}</dd></div>
           </dl>
           <div class="questionnaire-price-divider">
             <h2 class="questionnaire-kicker">If your doctor prescribes treatment</h2>

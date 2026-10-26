@@ -26,6 +26,7 @@ from . import test_records
 class RecordHistoryTests(TestCase):
     # Reuse only the synthetic clinical-record fixtures and helpers, not its
     # already covered test methods.
+    doctor_role = test_records.ClinicalRecordTests.doctor_role  # History is Super Admin only.
     setUpTestData = classmethod(test_records.ClinicalRecordTests.setUpTestData.__func__)
     event = classmethod(test_records.ClinicalRecordTests.event.__func__)
     login = test_records.ClinicalRecordTests.login
@@ -168,11 +169,11 @@ class RecordHistoryTests(TestCase):
     def test_changed_cross_practice_roles_or_patient_link_require_reload(self):
         first = self.links(scope='all', reason='direct_care')
         urls = (first.context['timeline_next_url'], first.context['timeline_download_url'])
-        for change in ({'role': 'super_admin'}, {'role': 'doctor', 'is_active': False}):
+        for change in ({'role': 'doctor'}, {'role': 'super_admin', 'is_active': False}):
             CompanyMembership.objects.filter(company=self.beta, user=self.doctor).update(**change)
             for url in urls:
                 self.assertEqual(self.client.get(url).status_code, 409)
-        CompanyMembership.objects.filter(company=self.beta, user=self.doctor).update(role='doctor', is_active=True)
+        CompanyMembership.objects.filter(company=self.beta, user=self.doctor).update(role='super_admin', is_active=True)
         Patient.objects.filter(pk=self.beta_patient.pk).update(user=None)
         for url in urls:
             self.assertEqual(self.client.get(url).status_code, 409)

@@ -309,8 +309,11 @@ def workspace_tab_context(request, company, membership, patient, tab, **override
     elif tab == 'payments':
         context.update(paginated(request, patient, tab, scoped(Payment, company, patient).only('pk', 'amount', 'due_on', 'paid_at', 'status').order_by('-due_on', '-pk'), Payment.Status.choices))
     elif tab == 'treatment':
+        from care.treatment import other_treatments
+
         authorizations = scoped(TreatmentAuthorization, company, patient).filter(product__company=company).select_related('product', 'prescribed_by').order_by('-created_at', '-pk')
         context.update(paginated(request, patient, tab, authorizations, TreatmentAuthorization.Status.choices))
+        context['other_treatments_offered'] = other_treatments(company).exists()
     elif tab == 'deliveries':
         context.update(paginated(request, patient, tab, scoped(Shipment, company, patient).defer('dispatch_snapshot', 'hold_reason').order_by('-scheduled_for', '-pk'), Shipment.Status.choices))
     elif tab == 'history':

@@ -15,6 +15,7 @@ from practices.models import Company, CompanyMembership
 
 from .task_forms import TaskEditorForm
 from .clinical_tasks import attach_clinical_task_links
+from .record_access import limit_patient_choices
 from .views import StaffCompanyRequiredMixin, _patient_record_context
 from .workflow_context import make_workflow_context, validate_workflow_context
 from .patient_action_context import patient_action_context, uses_patient_workspace, workspace_destination, workspace_redirect
@@ -43,6 +44,7 @@ class TaskEditorView(LoginRequiredMixin, StaffCompanyRequiredMixin, View):
         return render(self.request, 'portal/patient_workspace_action.html' if context.get('patient_workspace') else 'portal/staff_task_form.html', context)
 
     def scope_patient_field(self, form, task):
+        limit_patient_choices(form.fields['patient'], self.membership, self.request.user, keep=task.patient_id if task else None)
         if task and task.patient_id and uses_patient_workspace(self.request):
             # This editor is inside one patient's workspace. Moving the task
             # between patients remains an explicit action in the global editor.

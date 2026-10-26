@@ -73,6 +73,22 @@ class ParcelTests(TestCase):
                 # Planning it again adds nothing, even when it starts on a shipping day and ends on one.
                 self.assertEqual(schedule_parcels(prescription), [])
 
+    def test_parcels_are_numbered_in_turn_whatever_the_doses_interval(self):
+        # Weekly or every 5 weeks, parcel N is the Nth (not the 28-day block it falls in), and a renewal carries on.
+        five_weekly = MedicationDose.objects.create(company=self.company, pen=self.weekly.pen, amount_mg='7.5',
+                                                    price='3495', dispatch_weeks=5, billing_weeks=5)
+        for dose, count in ((self.weekly, 8), (five_weekly, 6)):
+            with self.subTest(weeks=dose.dispatch_weeks):
+                Shipment.objects.all().delete()
+                TreatmentAuthorization.objects.all().delete()
+                parcels = schedule_parcels(self.prescribe(dose, weeks=dose.dispatch_weeks * count))
+                self.assertEqual([parcel.cycle_number for parcel in parcels], list(range(1, count + 1)))
+        # One that started 12 weeks ago counts the parcels it would already have had.
+        Shipment.objects.all().delete()
+        TreatmentAuthorization.objects.all().delete()
+        parcels = schedule_parcels(self.prescribe(self.monthly, starts_on=self.today - timedelta(weeks=12)))
+        self.assertEqual(parcels[0].cycle_number, 4)
+
     def test_each_draft_can_be_marked_ready_within_the_supply_allowance(self):
         for parcel in schedule_parcels(self.prescribe(self.weekly, weeks=8)):
             self.assertEqual(prepare_shipment(shipment=parcel, actor=self.admin).status, 'ready')

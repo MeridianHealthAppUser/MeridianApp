@@ -622,7 +622,7 @@ class ShipmentDetailView(OperationsView):
                                       confirm=True, batch_notes=form.batch_notes(), request=request)
                 elif action == 'deliver':
                     mark_delivered(shipment=shipment, actor=request.user, confirm=True, request=request)
-                messages.success(request, 'Shipment action recorded. No courier API was called.')
+                messages.success(request, 'Shipment action recorded.')
                 from .patient_action_context import workspace_redirect
                 return workspace_redirect(request, 'portal:ops-shipment-detail', pk=pk)
         except ValidationError as error:
@@ -1046,7 +1046,7 @@ class StaffOrderDetailView(OperationsView):
                     if not form.cleaned_data.get('scheduled_for'):
                         raise ValidationError('Choose a planned dispatch date.')
                     shipment = accept_order(order=order, actor=request.user, scheduled_for=form.cleaned_data['scheduled_for'], confirm=True, request=request)
-                    messages.success(request, 'Request accepted. Prepare the draft shipment separately; no payment or dispatch occurred.')
+                    messages.success(request, 'Request accepted. Its parcel is drafted on Weekly shipping.')
                     return redirect('portal:ops-shipment-detail', pk=shipment.pk)
                 messages.success(request, 'Unaccepted request cancelled.')
                 return redirect('portal:ops-order-detail', pk=pk)
@@ -1133,7 +1133,7 @@ class PatientBasketItemView(PatientPharmacyView):
             if valid:
                 set_basket_quantity(company=self.patient_company, patient=self.patient, actor=request.user, product=product,
                                     quantity=form.cleaned_data['quantity'], request=request)
-                messages.success(request, 'Basket updated. No payment or stock allocation has occurred.')
+                messages.success(request, 'Basket updated.')
                 return redirect('portal:patient-basket')
         except ValidationError as error:
             _errors(request, form, error)

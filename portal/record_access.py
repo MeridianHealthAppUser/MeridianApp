@@ -93,6 +93,16 @@ def openable_patients(patients, user):
     )
 
 
+def limit_patient_choices(field, membership, user, keep=None):
+    """A form's patient list as a doctor (the Clinician role) sees it: only patients whose records they can open, so
+    booking a patient, or a task or team conversation about one, never reaches a record they don't have. keep is
+    the patient an existing task already names. Practice administrators and Super Admins see every patient."""
+    if limited_by_assignment(membership):
+        allowed = openable_patients(field.queryset, user)
+        field.queryset = (allowed | field.queryset.filter(pk=keep)) if keep else allowed
+    return field
+
+
 def label_access(patients, user):
     """Mark the patients on a clinician's list who aren't theirs now: "Covering" or "Past patient"."""
     others = [patient.pk for patient in patients if patient.assigned_doctor_id != user.pk]
