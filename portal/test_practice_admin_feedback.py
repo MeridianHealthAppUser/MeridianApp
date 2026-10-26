@@ -250,9 +250,10 @@ class OperationsFeedbackTests(SessionMixin, OperationsFixture):
         self.assertNotContains(page, 'Pens to order')
         html = page.content.decode()
         table = html[html.index('ops-shipping-table'):]
-        headings = re.findall(r'<th scope="col">([^<]+)</th>', table[:table.index('</thead>')])
+        headings = [re.sub(r'<[^>]+>', '', heading) for heading in re.findall(r'<th scope="col">(.*?)</th>', table[:table.index('</thead>')])]
         # Where it goes and whether it's paid joined the owner's columns on 24 Oct 2026.
-        self.assertEqual(headings, ['Patient', 'Doctor', 'Deliver to', 'Product', 'Qty', 'Paid', 'Status', 'Notes'])
+        # Since 26 Oct, Notes, like Actions, is labelled for screen readers only.
+        self.assertEqual(headings, ['Patient', 'Doctor', 'Deliver to', 'Product', 'Qty', 'Paid', 'Status', 'Notes', 'Actions'])
         self.assertContains(page, self.doctor.titled_name)
         row = page.context['shipments'][0]
         response = self.client.post(reverse('portal:ops-shipment-note', args=[shipment.pk]), {
