@@ -81,7 +81,7 @@ class OperationsTemplateTests(OperationsFixture):
         for route, pk in (('ops-product-detail', self.product.pk), ('ops-shipment-detail', shipment.pk), ('ops-order-detail', order.pk)):
             self.assertEqual(self.client.get(reverse(f'portal:{route}', args=[pk])).status_code, 403)
 
-    def test_patient_catalogue_and_basket_show_no_payment_flow(self):
+    def test_patient_catalogue_and_basket_say_how_a_request_is_paid(self):
         self.login(self.patient_user)
         catalogue = self.assert_page('patient-pharmacy', 'My Medications')
         self.assertContains(catalogue, 'Add to basket')
@@ -90,7 +90,7 @@ class OperationsTemplateTests(OperationsFixture):
         self.basket()
         populated = self.assert_page('patient-basket', 'Submit supply request')
         self.assertContains(populated, 'name="workflow_context"')
-        self.assertContains(populated, 'not a payment screen')
+        self.assertContains(populated, 'pay for it by card on the request’s page')
 
     def test_patient_order_detail_and_history_render_without_staff_actions(self):
         order = self.submitted_order()

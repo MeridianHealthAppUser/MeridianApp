@@ -19,7 +19,7 @@ from care.followups import request_help
 from care.models import AuditEvent, PatientClinicalSummary, PatientSubscription, Shipment, TreatmentAuthorization
 from care.treatment import (
     authorization_is_current, change_authorization_status, change_subscription_status,
-    create_authorization, dose_in_effect, enroll_local_subscription, subscription_hold_reason,
+    create_authorization, dose_in_effect, enroll_local_subscription, other_treatments, subscription_hold_reason,
 )
 from practices.models import CompanyMembership
 
@@ -53,6 +53,14 @@ def _token(request, company, patient, kind, record=None):
     return request.POST.get('treatment_context') or make_treatment_context(request, company, patient, kind, record)
 
 
+# The toast after a patient pauses, resumes or cancels their subscription.
+STATUS_MESSAGES = {
+    'pause': 'Your subscription is paused. Nothing is debited while it’s paused.',
+    'resume': 'Your subscription is active again.',
+    'cancel': 'Your subscription is cancelled and its debit order stopped.',
+}
+
+
 class AuthorizationListView(StaffClinicalView):
     http_method_names = ('get', 'head', 'options')
     nav_section = 'authorisations'
@@ -62,7 +70,8 @@ class AuthorizationListView(StaffClinicalView):
     def get(self, request):
         listing = _listing(request, self.company, _authorizations(self.company), TreatmentAuthorization.Status.choices)
         patient = listing['filter_form'].cleaned_data.get('patient') if listing['filter_form'].is_valid() else None
-        return render(request, 'portal/treatment_authorisations.html', self.context(**listing, selected_patient=patient))
+        return render(request, 'portal/treatment_authorisations.html', self.context(
+            **listing, selected_patient=patient, other_treatments_offered=other_treatments(self.company).exists()))
 
 
 class AuthorizationEditorView(StaffClinicalView):
@@ -78,24 +87,41 @@ class AuthorizationEditorView(StaffClinicalView):
         self.require_doctor(previous.prescribed_by_id)
         return previous.patient, previous
 
+    def overview_instead(self, request, patient, previous):
+        """Main treatments are prescribed, renewed and changed from the record's Overview (care.treatment.
+        other_treatments), and so is everything when the catalogue has nothing else for this form."""
+        offered = other_treatments(self.company)
+        if offered.exists() and (previous is None or offered.filter(pk=previous.product_id).exists()):
+            return None
+        from .patient_workspace import workspace_url
+
+        messages.info(request, 'Prescribe, renew or change a main treatment from the patient’s Overview.')
+        return redirect(workspace_url(patient))
+
     def display(self, request, patient, previous, form, status=200):
+        from care.clinical_summary import summary_safety_flags
+
         context = self.context(
-            patient=patient, previous=previous, form=form,
+            patient=patient, previous=previous, form=form, safety_flags=summary_safety_flags(self.company, patient),
             treatment_context=_token(request, self.company, patient, 'authorization-renew' if previous else 'authorization-create', previous),
         )
         context.update(patient_action_context(self, patient, 'treatment',
-            content_template='portal/includes/authorisation_form_content.html', stylesheets=('css/treatment.css',),
+            content_template='portal/includes/authorisation_form_content.html', stylesheets=('css/treatment.css', 'css/record_overview.css'),
             title='Review and renew' if previous else 'Authorise treatment'))
         return render(request, 'portal/patient_workspace_action.html' if context.get('patient_workspace') else 'portal/treatment_authorisation_form.html', context, status=status)
 
     def get(self, request, patient_pk=None, pk=None):
         patient, previous = self.records(patient_pk, pk)
+        if response := self.overview_instead(request, patient, previous):
+            return response
         # No preselected medication, dose, expiry or review interval: this is a
         # new, explicit clinical decision, not an automatic prescription extension.
         return self.display(request, patient, previous, AuthorizationForm(company=self.company))
 
     def post(self, request, patient_pk=None, pk=None):
         patient, previous = self.records(patient_pk, pk)
+        if response := self.overview_instead(request, patient, previous):
+            return response
         form = AuthorizationForm(request.POST, company=self.company)
         valid = form.is_valid()
         try:
@@ -104,7 +130,7 @@ class AuthorizationEditorView(StaffClinicalView):
                 values = {key: value for key, value in form.cleaned_data.items() if key != 'confirm'}
                 authorization = create_authorization(company=self.company, patient=patient, actor=request.user,
                                                      renews=previous, submission_key=token['submission_key'], request=request, **values)
-                messages.success(request, 'Treatment authorisation recorded. No payment or dispatch was triggered.')
+                messages.success(request, 'Treatment authorisation recorded.')
                 return workspace_redirect(request, 'portal:treatment-authorisation-detail', pk=authorization.pk)
         except ValidationError as error:
             _error(form, error)
@@ -123,9 +149,14 @@ class AuthorizationDetailView(StaffClinicalView):
         replacement = None
         if replacement_event:
             replacement = _authorizations(self.company).filter(pk=replacement_event.target_id, patient=authorization.patient).first()
+        from .patient_workspace import workspace_url
+
         context = self.context(
             authorization=authorization, patient=authorization.patient, replacement=replacement,
             is_current=authorization_is_current(authorization),
+            # A main treatment is renewed from the Overview; only compounded and other treatments here.
+            renewable_here=other_treatments(self.company).filter(pk=authorization.product_id).exists(),
+            overview_url=workspace_url(authorization.patient),
             can_change=self.is_doctor and authorization.prescribed_by_id == request.user.pk,
             form=form if form is not None else ConfirmTreatmentForm(),
             treatment_context=_token(request, self.company, authorization.patient, 'authorization-status', authorization),
@@ -377,8 +408,7 @@ class PatientSubscriptionStatusView(PatientSubscriptionView):
                 change_subscription_status(subscription=plan, actor=request.user, action=request.POST.get('action'),
                                            confirm=form.cleaned_data['confirm'], reasons=form.cleaned_data.get('reasons', ()),
                                            note=form.cleaned_data.get('note', ''), request=request)
-                messages.success(request, 'Your subscription is cancelled. No payment was processed.' if cancelling
-                                 else 'Local care plan status updated. No payment was processed.')
+                messages.success(request, STATUS_MESSAGES[request.POST.get('action')])
                 return redirect(reverse('portal:patient-treatment') + '#treatment-plan')
         except ValidationError as error:
             _error(form, error)

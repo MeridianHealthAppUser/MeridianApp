@@ -1,4 +1,4 @@
-"""Standalone patient care pages. No payment, email or account conversion."""
+"""Standalone patient care pages."""
 
 from datetime import datetime, time, timedelta, timezone as datetime_timezone
 from urllib.parse import urlencode
@@ -87,7 +87,7 @@ class PatientBookingView(PatientCarePage):
             except ValidationError as error:
                 add_error(form, error)
             else:
-                messages.success(request, 'Appointment booked. No payment was taken.' if created else 'This appointment is already booked.')
+                messages.success(request, 'Appointment booked.' if created else 'This appointment is already booked.')
                 # Shown once at the top of My Appointments; it's gone when they come back.
                 request.session[JUST_BOOKED] = appointment.pk
                 return redirect('portal:patient-appointments')

@@ -20,6 +20,11 @@ from practices.services import ACTIVE_COMPANY_SESSION_KEY
 
 @override_settings(MULTI_PRACTICE_ENABLED=True)
 class ClinicalRecordTests(TestCase):
+    # History is Super Admin only (14 Oct 2026), so the reviewing doctor here is a Super Admin who is also a doctor, as
+    # Dr Czech is. A plain doctor (the colleague) is turned away: see test_doctors_are_sent_to_the_overview. Classes
+    # that borrow this setup keep a plain doctor unless they say otherwise.
+    doctor_role = 'super_admin'
+
     @classmethod
     def setUpTestData(cls):
         cls.alpha = Company.objects.create(name='Record Alpha', slug='record-alpha')
@@ -33,9 +38,10 @@ class ClinicalRecordTests(TestCase):
         cls.user = get_user_model().objects.create_user(email='record-patient@example.test')
         cls.other_user = get_user_model().objects.create_user(email='record-patient-other@example.test')
         for company in (cls.alpha, cls.beta, cls.inactive):
-            for user, role in ((cls.doctor, 'doctor'), (cls.colleague, 'doctor'),
-                               (cls.admin, 'practice_admin'), (cls.super_admin, 'super_admin')):
-                CompanyMembership.objects.create(company=company, user=user, role=role)
+            for user, role, clinician_type in ((cls.doctor, getattr(cls, 'doctor_role', 'doctor'), 'doctor'),
+                                               (cls.colleague, 'doctor', 'doctor'),
+                                               (cls.admin, 'practice_admin', ''), (cls.super_admin, 'super_admin', '')):
+                CompanyMembership.objects.create(company=company, user=user, role=role, clinician_type=clinician_type)
         cls.patient = Patient.objects.create(company=cls.alpha, user=cls.user, first_name='Same', last_name='Person', assigned_doctor=cls.doctor)
         cls.beta_patient = Patient.objects.create(company=cls.beta, user=cls.user, first_name='Linked', last_name='Person')
         cls.gamma_patient = Patient.objects.create(company=cls.gamma, user=cls.user, first_name='Hidden', last_name='Person')
@@ -104,6 +110,19 @@ class ClinicalRecordTests(TestCase):
             self.login(user)
             for export in (False, True):
                 self.assertEqual(self.page(export).status_code, 403)
+
+    def test_doctors_are_sent_to_the_overview(self):
+        # Even the patient's own Prescribing doctor: History and the exports are Super Admin only (14 Oct 2026).
+        Patient.objects.filter(pk=self.patient.pk).update(assigned_doctor=self.colleague)
+        self.login(self.colleague)
+        overview = reverse('portal:patient-detail', args=[self.patient.pk])
+        for export in (False, True):
+            response = self.page(export)
+            self.assertEqual(response.status_code, 302)
+            self.assertTrue(response.url.startswith(overview))
+        response = self.client.get(self.url(), follow=True)
+        self.assertContains(response, 'available to Super Admins only')
+        self.assertEqual(self.client.get(reverse('portal:staff-patient-record-workbook', args=[self.patient.pk])).status_code, 403)
 
     def test_current_record_resolved_before_any_cross_practice_scope(self):
         self.login()

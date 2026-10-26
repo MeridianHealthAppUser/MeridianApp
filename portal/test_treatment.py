@@ -9,7 +9,7 @@ from django.test import Client, RequestFactory, TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from care.models import MedicationProduct, PatientSubscription, PracticeSettings, TreatmentAuthorization
+from care.models import MedicationProduct, PatientClinicalSummary, PatientSubscription, PracticeSettings, TreatmentAuthorization
 from care.treatment import create_authorization, enroll_local_subscription
 from practices.models import Company, CompanyMembership, Patient
 from practices.services import ACTIVE_COMPANY_SESSION_KEY, ACTIVE_PATIENT_COMPANY_SESSION_KEY
@@ -92,13 +92,17 @@ class TreatmentPageTests(TestCase):
         self.assertContains(self.client.get(reverse('portal:treatment-authorisation-detail', args=[auth.pk])), 'Read-only')
         self.assertEqual(self.client.get(reverse('portal:treatment-authorisation-create', args=[self.patient.pk])).status_code, 403)
 
+    def compounded(self):
+        return MedicationProduct.objects.create(company=self.company, name='Compounded cream', price=100, is_compounded=True)
+
     def test_create_has_no_prescribing_defaults_and_requires_context(self):
+        product = self.compounded()
         self.login()
         url = reverse('portal:treatment-authorisation-create', args=[self.patient.pk])
         response = self.client.get(url)
         self.assertEqual(response.status_code, 200)
         self.assertFalse(response.context['form'].initial)
-        data = dict(product=self.product.pk, max_dose='Explicit recorded dose', quantity_per_cycle=4,
+        data = dict(product=product.pk, max_dose='Explicit recorded dose', quantity_per_cycle=4,
                     starts_on=timezone.localdate().isoformat(), expires_on=(timezone.localdate() + timedelta(days=90)).isoformat(),
                     review_interval_days=90, instructions='Saved instructions', confirm='on')
         invalid = self.client.post(url, data)
@@ -111,6 +115,40 @@ class TreatmentPageTests(TestCase):
         self.assertEqual(TreatmentAuthorization.objects.count(), 1)
         self.assertEqual(self.client.post(url, data).status_code, 302)
         self.assertEqual(TreatmentAuthorization.objects.count(), 1)
+
+    def test_main_treatments_go_to_the_overview_and_the_form_is_for_compounded_or_other_treatments(self):
+        overview = reverse('portal:patient-detail', args=[self.patient.pk])
+        main = self.authorization()  # self.product is a main treatment (weight management).
+        self.login()
+        create = reverse('portal:treatment-authorisation-create', args=[self.patient.pk])
+        renew = reverse('portal:treatment-authorisation-renew', args=[main.pk])
+        # With only main treatments in the catalogue, as at Meridian, the form isn't offered anywhere.
+        for url in (create, renew):
+            with self.subTest(url=url):
+                self.assertTrue(self.client.get(url).url.startswith(overview))
+                self.assertTrue(self.client.post(url, {}).url.startswith(overview))
+        detail = self.client.get(reverse('portal:treatment-authorisation-detail', args=[main.pk]))
+        self.assertContains(detail, 'Renew from the Overview')
+        self.assertNotContains(detail, renew)
+        # The Treatment tab (Super Admins') offers it only once the catalogue has a compounded or other treatment.
+        self.login(self.super_admin)
+        self.assertFalse(self.client.get(overview, {'tab': 'treatment'}).context['other_treatments_offered'])
+        cream = self.compounded()
+        self.assertTrue(self.client.get(overview, {'tab': 'treatment'}).context['other_treatments_offered'])
+        # It offers only that product, and a safety flag needs the tick.
+        self.login()
+        self.assertTrue(self.client.get(renew).url.startswith(overview))  # The main treatment still renews there.
+        PatientClinicalSummary.objects.create(company=self.company, patient=self.patient, pancreatitis='yes')
+        page = self.client.get(create)
+        self.assertEqual(list(page.context['form'].fields['product'].queryset), [cream])
+        self.assertContains(page, 'name="acknowledge_flags"')
+        data = dict(product=cream.pk, max_dose='Apply once daily', quantity_per_cycle=1,
+                    starts_on=timezone.localdate().isoformat(), expires_on=(timezone.localdate() + timedelta(days=90)).isoformat(),
+                    review_interval_days=90, confirm='on', treatment_context=page.context['treatment_context'])
+        self.assertContains(self.client.post(create, data), 'safety flag', status_code=400)
+        self.assertEqual(self.client.post(create, {**data, 'product': self.product.pk, 'acknowledge_flags': 'on'}).status_code, 400)
+        self.assertEqual(self.client.post(create, {**data, 'acknowledge_flags': 'on'}).status_code, 302)
+        self.assertTrue(TreatmentAuthorization.objects.filter(product=cream).exists())
 
     def test_patient_enrollment_requires_confirmation_token_and_never_crosses_practice(self):
         auth = self.authorization()

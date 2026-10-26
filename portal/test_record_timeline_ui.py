@@ -26,7 +26,8 @@ class RecordTimelinePresentationTests(TestCase):
     def setUpTestData(cls):
         cls.company = Company.objects.create(name='Timeline Example', slug='timeline-example')
         cls.doctor = get_user_model().objects.create_user(email='timeline-ui@example.test', first_name='Example', last_name='Doctor')
-        CompanyMembership.objects.create(company=cls.company, user=cls.doctor, role='doctor')
+        # History is Super Admin only (14 Oct 2026): a Super Admin who is also a doctor, as Dr Czech is.
+        CompanyMembership.objects.create(company=cls.company, user=cls.doctor, role='super_admin', clinician_type='doctor')
         cls.patient = Patient.objects.create(company=cls.company, first_name='Example', last_name='Patient', assigned_doctor=cls.doctor)
         PatientEvent.objects.bulk_create([
             PatientEvent(company=cls.company, patient=cls.patient, category='clinical',

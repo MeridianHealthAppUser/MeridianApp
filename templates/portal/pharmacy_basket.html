@@ -35,7 +35,7 @@
         <div class="console-card__body">
           <h2 class="patient-eyebrow" id="basket-summary-heading">Summary</h2>
           <div class="patient-basket__total"><span>Reference subtotal</span><strong>R{{ order.subtotal|default:'0.00' }}</strong></div>
-          <p class="patient-small">This is a supply request, not a payment screen. No payment is taken, the basket does not reserve stock, and nothing is dispatched until your practice accepts the request.</p>
+          <p class="patient-small">Submitting sends your request to {{ patient_company.name }}. You can then pay for it by card on the request’s page, and nothing is sent until the practice accepts it.</p>
           <form method="post" action="{% url 'portal:patient-order-detail' order.pk %}" class="ops-form">
             {% csrf_token %}
             <input type="hidden" name="workflow_context" value="{{ workflow_context }}">

@@ -96,7 +96,7 @@ class RecordOverviewTests(TestCase):
         # The dose it was sent for, then the pens.
         self.assertContains(response, 'Semaglutide 0.5 mg weekly')
         self.assertContains(response, '4 × 2 mg pens')
-        self.assertContains(response, 'Month 4')
+        self.assertContains(response, 'Parcel 4')
         self.assertContains(response, 'courier MER-438-771-ZA')
         # Valid but expiring within 30 days.
         self.assertContains(response, f'Prescribed to {self.prescription.expires_on.day} {self.prescription.expires_on:%b}')

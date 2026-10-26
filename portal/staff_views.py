@@ -26,6 +26,7 @@ from .clinical_tasks import attach_clinical_task_links
 from .filter_menus import choice_section, filter_menu
 from .navigation import uses_flat_menu
 from .people_tags import person_tag
+from .record_access import limit_patient_choices
 from .views import StaffCompanyRequiredMixin
 
 
@@ -103,6 +104,7 @@ class StaffTaskListView(StaffPageView):
             # Clinicians filter by status, type and patient; a task's free-form tags still show on it.
             data.setlist('tag', [])
         form = TaskFilterForm(data, company=self.company)
+        limit_patient_choices(form.fields['patient'], self.membership, self.request.user)
         menu = self.filter_menu(form, data, queryset, tags=not context['is_doctor'])
         filters = {}
         if form.is_valid():
@@ -174,7 +176,9 @@ class StaffScheduleView(StaffPageView):
         # Create appointment opens the booking form in a modal over the calendar.
         from .appointment_detail_views import staff_booking_form
         from .workflow_context import make_workflow_context
-        context.update(booking_form=staff_booking_form(self.company),
+        booking_form = staff_booking_form(self.company)
+        limit_patient_choices(booking_form.fields['patient'], self.membership, self.request.user)
+        context.update(booking_form=booking_form,
                        booking_context=make_workflow_context(self.request, self.company, 'staff-booking'))
         # view=table is Day, view=week is Week and view=calendar is Month.
         schedule_view = self.request.GET.get('view', 'table')

@@ -35,7 +35,7 @@
       {% if workspace_tab == 'notes' and can_add_clinical_note %}<a class="console-button console-button--primary" href="{{ workspace_url }}&amp;update=note" data-modal-open="add-note" aria-haspopup="dialog">Add note</a>{% endif %}
       {% if workspace_tab == 'tasks' and can_change_record %}<a class="console-button console-button--primary" href="{{ workspace_url }}&amp;update=task" data-modal-open="create-task" aria-haspopup="dialog">Create task</a>{% endif %}
       {% if workspace_tab == 'consultations' and is_clinician and can_write_notes %}<a class="console-button console-button--primary" href="{% url 'portal:clinical-consultation-create' patient.pk %}">New consultation note</a>{% endif %}
-      {% if workspace_tab == 'treatment' and is_doctor and can_change_record %}<a class="console-button console-button--primary" href="{% url 'portal:treatment-authorisation-create' patient.pk %}?workspace=patient">Authorise treatment</a>{% endif %}
+      {% if workspace_tab == 'treatment' and is_doctor and can_change_record and other_treatments_offered %}<a class="console-button console-button--primary" href="{% url 'portal:treatment-authorisation-create' patient.pk %}?workspace=patient">Authorise treatment</a>{% endif %}
     </div></div>
     {% if workspace_tab == 'payments' %}<p class="patient-workspace-notice">Read-only local payment records. Live payment processing is not enabled: no charges, refunds or payment-provider checks happen here. Imported or demo statuses are not proof that funds were received.</p>{% endif %}
     {% if workspace_tab == 'history' %}<p class="patient-workspace-notice">Administrative activity only. Clinical notes, results, private profiles and internal audit details are restricted to authorised clinical roles.</p>{% endif %}
@@ -56,7 +56,7 @@
           {% elif workspace_tab == 'tasks' %}<th scope="col">Task</th><th scope="col">Assigned to</th><th scope="col">Due</th><th scope="col">Status</th><th scope="col">Action</th>
           {% elif workspace_tab == 'payments' %}<th scope="col">Due date</th><th scope="col">Amount</th><th scope="col">Stored status</th><th scope="col">Recorded paid date</th>
           {% elif workspace_tab == 'treatment' %}<th scope="col">Medication</th><th scope="col">Doctor</th><th scope="col">Valid dates</th><th scope="col">Status</th><th scope="col">Action</th>
-          {% elif workspace_tab == 'deliveries' %}<th scope="col">Scheduled</th><th scope="col">Cycle</th><th scope="col">Status</th><th scope="col">Tracking</th><th scope="col">Action</th>
+          {% elif workspace_tab == 'deliveries' %}<th scope="col">Scheduled</th><th scope="col">Parcel</th><th scope="col">Status</th><th scope="col">Tracking</th><th scope="col">Action</th>
           {% elif workspace_tab == 'history' %}<th scope="col">Date and time</th><th scope="col">Administrative activity</th>{% endif %}
         </tr></thead><tbody>
           {% for row in rows %}<tr>

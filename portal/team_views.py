@@ -30,6 +30,7 @@ from .people_tags import in_join_order, people_tags, person_tag, staff_kinds
 from .navigation import messages_title
 from .record_messages import patient_notes
 from .realtime_context import records_conversation_view
+from .record_access import limit_patient_choices
 from .views import StaffCompanyRequiredMixin
 from .workflow_context import make_workflow_context, validate_workflow_context
 
@@ -46,11 +47,12 @@ class TeamThreadForm(forms.Form):
     subject = forms.CharField(label='Subject', max_length=255)
     body = forms.CharField(label='Message', max_length=5000, widget=forms.Textarea(attrs={'rows': 4}))
 
-    def __init__(self, *args, company, actor, **kwargs):
+    def __init__(self, *args, company, actor, membership, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields['members'].queryset = colleagues(company).exclude(pk=actor.pk)
         self.fields['members'].label_from_instance = _label_with_role(company)
         self.fields['patient'].queryset = Patient.objects.for_company(company).filter(is_active=True).order_by('last_name', 'first_name')
+        limit_patient_choices(self.fields['patient'], membership, actor)
 
 
 class TeamMessageForm(forms.Form):
@@ -170,7 +172,7 @@ def team_inbox_context(request, company, membership, *, selected_id=None, **over
         team_search_clear_url=team_url(status=status, about=about),
         team_previous_url=team_url(status=status, page=page.previous_page_number(), search=search, about=about) if page.has_previous() else '',
         team_next_url=team_url(status=status, page=page.next_page_number(), search=search, about=about) if page.has_next() else '',
-        thread_form=TeamThreadForm(company=company, actor=request.user, initial=compose_initial(request)),
+        thread_form=TeamThreadForm(company=company, actor=request.user, membership=membership, initial=compose_initial(request)),
         message_form=TeamMessageForm(auto_id='team_%s'),
         **message_tab_counts(company, request.user), messages_title=messages_title(membership),
     )
@@ -233,7 +235,7 @@ class TeamThreadCreateView(LoginRequiredMixin, StaffCompanyRequiredMixin, View):
     http_method_names = ('post',)
 
     def post(self, request):
-        form = TeamThreadForm(request.POST, company=self.company, actor=request.user)
+        form = TeamThreadForm(request.POST, company=self.company, actor=request.user, membership=self.membership)
         if form.is_valid():
             try:
                 thread = start_team_conversation(company=self.company, actor=request.user, members=list(form.cleaned_data['members']),

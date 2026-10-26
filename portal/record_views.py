@@ -35,11 +35,14 @@ from practices.models import CompanyMembership, Patient
 from practices.tenancy import multi_practice_enabled, scope_queryset
 from .patient_care_forms import PROFILE_FIELDS
 from .record_forms import ClinicalRecordFilterForm, RECORD_CATEGORIES, RECORD_PURPOSES, ScopedPatientDirectoryFilterForm
-from .record_access import label_access, limited_by_assignment, openable_patients, require_record_view
+from .record_access import (
+    RecordAccessDenied, label_access, limited_by_assignment, openable_patients, require_record_view,
+)
 from .views import StaffCompanyRequiredMixin
 
 
 RECORD_TIMEZONE = ZoneInfo('Africa/Johannesburg')
+HISTORY_SUPER_ADMIN_ONLY = 'A patient’s History and record exports are available to Super Admins only.'
 # The record timeline lists changes only. Views, downloads and exports are still
 # audited and appear in privacy access history, but not in the clinical History.
 ACCESS_AUDIT_LABELS = {
@@ -66,7 +69,7 @@ AUDIT_LABELS = {
     'blood_result.recorded': 'Blood result recorded',
     'lab_request.reviewed': 'Blood test report reviewed',
     'treatment.authorized': 'Treatment authorization recorded',
-    'subscription.enrolled_local': 'Local subscription recorded',
+    'subscription.enrolled_local': 'Subscription started',
     'shipment.created': 'Shipment created',
     'shipment.locked': 'Shipment contents locked',
     'shipment.dispatched': 'Shipment dispatched',
@@ -357,6 +360,10 @@ class ClinicalRecordAccessMixin(LoginRequiredMixin, StaffCompanyRequiredMixin):
             pk=self.kwargs['pk'], company=self.company, is_active=True,
         )
         require_record_view(self.membership, self.request.user, self.patient)
+        # History and its JSON/Excel exports are Super Admin only (14 Oct 2026): a doctor goes to the Overview.
+        if self.membership.role != CompanyMembership.Role.SUPER_ADMIN:
+            from .patient_workspace import workspace_url
+            raise RecordAccessDenied(HISTORY_SUPER_ADMIN_ONLY, workspace_url(self.patient))
         data = self.request.GET.copy() if filter_data is None else filter_data.copy()
         data.setdefault('scope', 'current')
         data.setdefault('category', 'all')

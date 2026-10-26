@@ -111,7 +111,7 @@ def submit_basket(*, order, actor, delivery_address, note='', confirm=False, exp
     order.save()
     record_audit(company=company, actor=actor, patient=patient, action='pharmacy_order.submitted', target=order, request=request)
     PatientEvent.objects.create(company=company, patient=patient, category=PatientEvent.Category.MEDICATION,
-                                title='Supply request submitted', detail='Your request is awaiting the practice team. No payment was collected.',
+                                title='Supply request submitted', detail='Your request is awaiting the practice team.',
                                 source_type='care.pharmacyorder', source_id=str(order.pk))
     return order
 

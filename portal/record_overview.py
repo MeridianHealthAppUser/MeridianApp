@@ -105,7 +105,7 @@ def dispensed(company, patient):
                 detail.append(f'courier {shipment.tracking_number}')
             rows.append({'id': f'shipment-{shipment.pk}-{item.pk}', 'date': day, 'product': item.product, 'dose': item.dose,
                          'title': f'{item.product.name} {item.dose or item.product.strength}'.strip(),
-                         'tag': f'Month {shipment.cycle_number}', 'detail': ' · '.join(detail)})
+                         'tag': f'Parcel {shipment.cycle_number}', 'detail': ' · '.join(detail)})
     return rows
 
 

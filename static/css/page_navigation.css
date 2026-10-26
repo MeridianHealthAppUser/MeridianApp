@@ -13,6 +13,9 @@
 .page-navigation-error p { color:var(--c-526f73); line-height:1.6; }
 .page-navigation-error__actions { align-items:center; display:flex; flex-wrap:wrap; gap:1rem; margin-top:1rem; }
 [data-deferred-content][aria-busy="true"] { min-height:8rem; }
+/* After an in-app page change, app_navigation.js moves focus to the page's heading so screen readers announce the new
+   page. The heading isn't something to click or type into, so it shows no focus outline. */
+h1[tabindex="-1"]:focus { outline:none; }
 @keyframes page-skeleton-pulse { 50% { opacity:.45; } }
 @media(max-width:42rem) { .page-skeleton-grid { grid-template-columns:1fr; } .page-skeleton-card { min-height:8rem; } }
 @media(prefers-reduced-motion:reduce) { .page-skeleton-line { animation:none; } }

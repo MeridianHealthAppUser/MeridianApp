@@ -20,7 +20,7 @@ from django.utils.formats import date_format
 
 from care.appointment_lifecycle import change_appointment_status, reschedule_appointment
 from care.clinical import save_consultation
-from care.models import Appointment, AuditEvent, ClinicalTask, PatientMessage
+from care.models import Appointment, AuditEvent, ClinicalTask, ClinicianAssignment, PatientMessage
 from care.services import post_patient_message
 from care.test_appointment_lifecycle import AppointmentLifecycleFixture
 from care.widgets import floor_quarter_hour
@@ -124,7 +124,7 @@ class AppointmentDetailPageTests(AppointmentLifecycleFixture):
         url = self.url('appointment-book')
         response = self.client.get(url)
         self.assertTemplateUsed(response, 'portal/appointment_booking.html')
-        self.assertContains(response, 'No external meeting link is needed and no payment is created. The patient, if they have a login, and the doctor, if someone else books, are emailed a confirmation.')
+        self.assertContains(response, 'No external meeting link is needed. The patient, if they have a login, and the doctor, if someone else books, are emailed a confirmation.')
         self.assertIn('no-store', response['Cache-Control'])
         rejected = self.client.post(url, self.booking_data())
         self.assertEqual(rejected.status_code, 400)
@@ -148,6 +148,30 @@ class AppointmentDetailPageTests(AppointmentLifecycleFixture):
         self.assertEqual(response.status_code, 400)
         self.assertTrue(response.context['form'].non_field_errors())
         self.assertFalse(Appointment.objects.exists())
+
+    def test_a_doctor_only_reaches_patients_whose_records_they_can_open(self):
+        # other_patient was never this doctor's, nor booked with them. A colleague's appointment with them stays
+        # closed, and booking them, which would make this doctor their cover, isn't offered or accepted.
+        theirs = self.appointment(patient=self.other_patient, clinician=self.colleague)
+        own = self.appointment(clinician=self.colleague, starts_at=self.starts_at + timedelta(hours=2))
+        self.login(self.doctor)
+        response = self.client.get(self.url('appointment-detail', theirs.pk))
+        self.assertRedirects(response, self.url('patient-list'), fetch_redirect_response=False)
+        self.assertEqual(self.client.get(self.url('appointment-detail', own.pk)).status_code, 200)
+        page = self.client.get(self.url('appointment-book'))
+        self.assertEqual(list(page.context['form'].fields['patient'].queryset), [self.patient])
+        response = self.client.post(self.url('appointment-book'), self.booking_data(
+            patient=self.other_patient.pk, starts_at=timezone.localtime(self.starts_at + timedelta(hours=4)).strftime('%Y-%m-%dT%H:%M'),
+            workflow_context=page.context['workflow_context']))
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('patient', response.context['form'].errors)
+        self.assertFalse(Appointment.objects.filter(patient=self.other_patient, clinician=self.doctor).exists())
+        for name in ('task-create', 'team-inbox', 'staff-tasks', 'staff-schedule'):
+            with self.subTest(page=name):
+                self.assertNotContains(self.client.get(self.url(name)), 'Other Patient')
+        # Practice administrators still book anyone.
+        self.login(self.admin)
+        self.assertIn(self.other_patient, self.client.get(self.url('appointment-book')).context['form'].fields['patient'].queryset)
 
     def test_expired_tampered_and_other_actor_tokens_do_not_book(self):
         self.login(self.admin)
@@ -240,6 +264,8 @@ class AppointmentDetailPageTests(AppointmentLifecycleFixture):
         self.assertTemplateUsed(response, 'portal/appointment_detail.html')
         self.assertContains(response, 'Record completed')
         token = response.context['workflow_context']
+        # A colleague who once looked after the patient reads the appointment but can't change it.
+        ClinicianAssignment.objects.create(company=self.company, patient=self.patient, clinician=self.colleague, ended_at=timezone.now())
         self.login(self.colleague)
         response = self.client.get(url)
         self.assertFalse(response.context['can_edit'])
@@ -272,6 +298,7 @@ class AppointmentDetailPageTests(AppointmentLifecycleFixture):
         appointment.refresh_from_db()
         self.assertEqual(appointment.status, 'booked')
         # Someone who can't change the booking gets neither the button nor the modal.
+        ClinicianAssignment.objects.create(company=self.company, patient=self.patient, clinician=self.colleague, ended_at=timezone.now())
         self.login(self.colleague)
         response = self.client.get(url)
         self.assertNotContains(response, 'Update booking status')

@@ -7,6 +7,7 @@ from django.core import signing
 from django.core.exceptions import ValidationError
 
 from care.models import DebitMandate, MedicationProduct, PatientSubscription, TreatmentAuthorization
+from care.treatment import other_treatments
 
 from .operations_forms import DeliveryAddressForm
 
@@ -50,10 +51,13 @@ class AuthorizationForm(forms.Form):
     instructions = forms.CharField(label='Instructions visible to the patient', required=False, max_length=10000,
                                    strip=False, widget=forms.Textarea(attrs={'rows': 5}))
     confirm = forms.BooleanField(label='I have reviewed this patient and confirm this treatment authorisation.')
+    # Ticked in the safety flag box (record_safety_flags.html) when the patient has one.
+    acknowledge_flags = forms.BooleanField(required=False)
 
     def __init__(self, *args, company, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields['product'].queryset = MedicationProduct.objects.for_company(company).filter(is_active=True).order_by('name', 'strength', 'pk')
+        # Compounded and other treatments only: main treatments are prescribed from the record's Overview.
+        self.fields['product'].queryset = other_treatments(company).order_by('name', 'strength', 'pk')
 
 
 class ConfirmTreatmentForm(forms.Form):

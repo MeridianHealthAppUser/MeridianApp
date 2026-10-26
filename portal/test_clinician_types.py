@@ -9,7 +9,7 @@ from django.test import TestCase, override_settings
 from django.urls import reverse
 
 from care.checkout import consultation_slots
-from care.models import AuditEvent, ClinicalTask
+from care.models import AuditEvent, ClinicalTask, MedicationProduct
 from care.patient_assignment import active_doctors
 from care.task_services import visible_tasks
 from practices.management_forms import MembershipForm
@@ -73,6 +73,8 @@ class ClinicianTypeTests(TestCase):
         self.assertEqual(list(active_doctors(self.company)), [self.doctor, self.dietitian, self.super_doctor])
 
     def test_super_admin_doctor_does_clinical_work_and_keeps_admin_visibility(self):
+        # Authorise treatment is offered when the catalogue has a compounded or other treatment.
+        MedicationProduct.objects.create(company=self.company, name='Compounded cream', price=100, is_compounded=True)
         task = ClinicalTask.objects.create(company=self.company, patient=self.patient, title='Someone else’s task', assigned_to=self.doctor)
         self.assertIn(task, visible_tasks(self.company, self.super_doctor, self.super_doctor_membership))
         self.login(self.super_doctor)

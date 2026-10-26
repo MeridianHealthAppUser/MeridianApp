@@ -11,7 +11,7 @@
 
 {% block page_content %}
   <p><a class="console-button console-button--primary" href="{% url 'portal:lead-follow-up' lead.pk %}">Follow-up notes and next contact</a></p>
-  <aside class="staff-lead-notice"><strong>{% if lead.converted_patient_id %}Converted enquiry{% else %}Lead only — no patient account created{% endif %}</strong><p>This is the original enquiry, not a clinical record. Payment processing and account activation are not available in this checkpoint.</p></aside>
+  <aside class="staff-lead-notice"><strong>{% if lead.converted_patient_id %}Converted enquiry{% else %}Lead only — no patient account created{% endif %}</strong><p>This is the original enquiry, not a clinical record.</p></aside>
   <div class="staff-lead-detail-grid">
     <section class="staff-page-card" aria-labelledby="lead-answers-heading">
       <header class="staff-page-card__header"><div><h2 id="lead-answers-heading">Questionnaire answers</h2><p>{% if questionnaire.submitted_at %}Submitted {{ questionnaire.submitted_at|date:"j F Y, H:i" }} SAST{% else %}Information supplied with this enquiry.{% endif %}</p></div></header>

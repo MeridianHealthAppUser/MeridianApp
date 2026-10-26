@@ -25,6 +25,7 @@ from care.models import Appointment, ClinicalEncounter, MessageThread
 from practices.models import Patient
 from .clinical_forms import ConsultationForm, make_clinical_context
 from .patient_views import patient_page_context
+from .record_access import limit_patient_choices, limited_by_assignment, require_record_view
 from .views import PatientPortalRequiredMixin, StaffCompanyRequiredMixin
 from .workflow_context import make_workflow_context, validate_workflow_context
 
@@ -74,6 +75,7 @@ class BookingTimesView(LoginRequiredMixin, StaffCompanyRequiredMixin, View):
 
     def get(self, request):
         form = BookingTimesForm(request.GET, company=self.company)
+        limit_patient_choices(form.fields['patient'], self.membership, request.user)
         if not form.is_valid():
             return JsonResponse({'times': []}, status=400)
         data = form.cleaned_data
@@ -124,7 +126,9 @@ class StaffBookingView(LoginRequiredMixin, StaffCompanyRequiredMixin, View):
     http_method_names = ('get', 'post', 'head', 'options')
 
     def booking_form(self, *args, **kwargs):
-        return staff_booking_form(self.company, *args, **kwargs)
+        form = staff_booking_form(self.company, *args, **kwargs)
+        limit_patient_choices(form.fields['patient'], self.membership, self.request.user)
+        return form
 
     def display(self, request, form, status=200):
         return render(request, 'portal/appointment_booking.html', dict(company=self.company, active_membership=self.membership, nav_section='schedule', form=form,
@@ -150,7 +154,7 @@ class StaffBookingView(LoginRequiredMixin, StaffCompanyRequiredMixin, View):
             validate_workflow_context(request, self.company, 'staff-booking')
             if valid:
                 appointment = book_staff_appointment(company=self.company, actor=request.user, request=request, **form.cleaned_data)
-                messages.success(request, 'Appointment booked. No payment collected.')
+                messages.success(request, 'Appointment booked.')
                 return redirect('portal:appointment-detail', pk=appointment.pk)
         except ValidationError as error:
             for message in error.messages:
@@ -167,7 +171,12 @@ class AppointmentDetailMixin:
         queryset = Appointment.objects.for_company(company).filter(patient__company=company, patient__is_active=True).select_related('patient', 'clinician')
         if self.patient_portal:
             queryset = queryset.filter(patient=self.patient)
-        return get_object_or_404(queryset, pk=pk)
+        appointment = get_object_or_404(queryset, pk=pk)
+        # A doctor opens their own appointments, and others only for patients whose records they can open.
+        if (not self.patient_portal and limited_by_assignment(self.membership)
+                and appointment.clinician_id != self.request.user.pk):
+            require_record_view(self.membership, self.request.user, appointment.patient)
+        return appointment
 
     def can_edit(self, appointment):
         if appointment.status != 'booked':
