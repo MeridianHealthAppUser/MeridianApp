@@ -14,8 +14,8 @@
     <a href="{% url 'portal:patient-messages' %}"{% if patient_nav == 'messages' %} class="is-active" aria-current="page"{% endif %}>
       <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M21 15a3 3 0 0 1-3 3H9l-6 3V6a3 3 0 0 1 3-3h12a3 3 0 0 1 3 3Z"/><path d="M7 8h10M7 12h7"/></svg><span class="patient-navigation__label"><span class="patient-navigation__prefix">My </span>Messages</span>{% include 'portal/includes/live_message_badge.html' with kind='patient' count=patient_unread_messages dot=True %}
     </a>
-    <a href="{% url 'portal:patient-pharmacy' %}"{% if patient_nav == 'medications' %} class="is-active" aria-current="{% if patient_section == 'pharmacy' %}page{% else %}true{% endif %}"{% endif %}>
-      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4 7h16v14H4ZM8 7V3h8v4M9 14h6m-3-3v6"/></svg><span class="patient-navigation__label"><span class="patient-navigation__prefix">My </span>Medications</span>
+    <a href="{% url 'portal:patient-medical-profile' %}"{% if patient_nav == 'medical_info' %} class="is-active" aria-current="page"{% endif %}>
+      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M8 4H5v17h14V4h-3"/><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M8 11h8m-8 4h8"/></svg><span class="patient-navigation__label"><span class="patient-navigation__prefix">My </span>Medical Information</span>
     </a>
   </div>
 </nav>

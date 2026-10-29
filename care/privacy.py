@@ -8,8 +8,8 @@ from django.db import transaction
 
 from practices.models import Company, CompanyMembership, Patient
 from practices.tenancy import require_enabled_company
-from .models import ClinicalTask, ConsentDocument, PatientCommunicationPreference, PatientDataRequest, PatientDataRequestReply
-from .services import record_audit
+from .models import AuditEvent, ClinicalTask, ConsentDocument, MessageThread, PatientCommunicationPreference, PatientDataRequest, PatientDataRequestReply
+from .services import post_patient_message, record_audit
 
 
 ADMIN_ROLES = (CompanyMembership.Role.PRACTICE_ADMIN, CompanyMembership.Role.SUPER_ADMIN)
@@ -91,28 +91,60 @@ def submission_uuid(value):
 
 
 @transaction.atomic
-def save_communication_preference(*, actor, company, patient, enabled, expected_updated_at, request=None):
+def request_details_change(*, actor, company, patient, description, submission_key, request=None):
+    """Ask administrators in-app, falling back to Super Admins; never edit details or send email."""
+    from .messaging import add_participant, practice_administrators
+    from .notifications import paused
+
     company = Company.objects.select_for_update().get(pk=company.pk)
     patient = Patient.objects.select_for_update().get(pk=patient.pk)
     own_patient(actor, company, patient)
-    if type(enabled) is not bool:
-        raise ValidationError('Choose whether to receive marketing communications.')
+    key = str(submission_uuid(submission_key))
+    description = description.strip() if isinstance(description, str) else ''
+    if not 1 <= len(description) <= 5000:
+        raise ValidationError('Describe the change in 1 to 5,000 characters.')
+    digest = hashlib.sha256(description.encode()).hexdigest()
+    previous = AuditEvent.objects.filter(company=company, patient=patient, actor=actor,
+        action='patient.details_change_requested', metadata__submission_key=key).first()
+    if previous:
+        if previous.metadata.get('description_digest') != digest:
+            raise ValidationError('This request was already sent. Reload before starting a different request.')
+        return MessageThread.objects.get(pk=previous.target_id, company=company, patient=patient), False
+    administrators = list(practice_administrators(company))
+    if not administrators:
+        administrators = [membership.user for membership in CompanyMembership.objects.filter(
+            company=company, role=CompanyMembership.Role.SUPER_ADMIN, is_active=True, user__is_active=True,
+        ).select_related('user').order_by('user_id')]
+    if not administrators:
+        raise ValidationError('There is no administrator available to receive this request. Please try again later.')
+    with paused():
+        thread = MessageThread(company=company, patient=patient, opened_by=actor,
+                               subject='Request to change my personal details')
+        thread.full_clean()
+        thread.save()
+        for administrator in administrators:
+            add_participant(thread, administrator)
+        post_patient_message(thread=thread, sender=actor, body=description, request=request)
+    record_audit(company=company, actor=actor, patient=patient, target=thread,
+        action='patient.details_change_requested', request=request,
+        metadata={'submission_key': key, 'description_digest': digest})
+    return thread, True
+
+
+@transaction.atomic
+def withdraw_marketing_preference(*, actor, company, patient, request=None):
+    """Withdraw an existing marketing preference without changing care emails or consent history."""
+    company = Company.objects.select_for_update().get(pk=company.pk)
+    patient = Patient.objects.select_for_update().get(pk=patient.pk)
+    own_patient(actor, company, patient)
     preference = PatientCommunicationPreference.objects.select_for_update().filter(company=company, patient=patient).first()
-    if preference and preference.marketing_enabled == enabled:
-        return preference, False
-    current_version = preference.updated_at.isoformat() if preference else None
-    if current_version != expected_updated_at:
-        raise ValidationError('Your preferences changed in another tab. Reload before saving.')
-    if preference is None and not enabled:
-        return None, False
-    if preference is None:
-        preference = PatientCommunicationPreference(company=company, patient=patient)
-    preference.marketing_enabled = enabled
-    preference.full_clean()
-    preference.save()
+    if preference is None or not preference.marketing_enabled:
+        return False
+    preference.marketing_enabled = False
+    preference.save(update_fields=('marketing_enabled', 'updated_at'))
     record_audit(company=company, actor=actor, patient=patient, target=preference,
-                 action='privacy.preference_updated', request=request, metadata={'marketing_enabled': enabled})
-    return preference, True
+                 action='privacy.preference_updated', request=request, metadata={'marketing_enabled': False})
+    return True
 
 
 @transaction.atomic

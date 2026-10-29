@@ -1,6 +1,6 @@
-"""An accessible chart of recorded weights, with no clinical interpretation."""
+"""Accessible recorded weights, optionally alongside a labelled illustrative reference."""
 
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 from urllib.parse import urlencode
 
@@ -22,25 +22,81 @@ class WeightHistoryFilterForm(forms.Form):
         return data
 
 
-def weight_chart(rows):
+REFERENCE_WEEKS = 12
+
+
+def weight_reference(baseline, course=None):
+    """A finite illustration for a known course, independent of the displayed-row limit."""
+    if baseline is None or course is None:
+        return None
+    started = course['started_on']
+    starter_end = started + timedelta(weeks=4)
+    starts_on = max(starter_end, baseline.recorded_on)
+    ends_on = min(course['ends_on'], starter_end + timedelta(weeks=REFERENCE_WEEKS))
+    # Do not infer an earlier weight from a late first entry, or extend a short
+    # prescription. Invalid imported low weights cannot create a nonphysical band.
+    if starts_on >= ends_on or baseline.weight_kg <= Decimal((ends_on - starts_on).days) / 7:
+        return None
+    return {
+        'treatment_start': started,
+        'baseline_date': baseline.recorded_on,
+        'baseline_weight': baseline.weight_kg,
+        'starts_on': starts_on,
+        'ends_on': ends_on,
+        'weeks_limit': REFERENCE_WEEKS,
+    }
+
+
+def weight_chart(rows, *, reference=None):
     rows = list(rows)
     if not rows:
         return None
     values = [row.weight_kg for row in rows]
-    low, high = min(values), max(values)
+    start, end = rows[0].recorded_on, rows[-1].recorded_on
+    reference_rows = []
+    if reference:
+        reference = dict(reference)
+        # A first check-in can show a short illustration within its prescribed
+        # course. The actual series still includes all displayed recorded dates.
+        end = max(end, min(reference['ends_on'], reference['starts_on'] + timedelta(weeks=4)))
+        band_start = max(start, reference['starts_on'])
+        band_end = min(end, reference['ends_on'])
+        if band_start < band_end:
+            for day in (band_start, band_end):
+                weeks = Decimal((day - reference['starts_on']).days) / 7
+                reference_rows.append({
+                    'date': day,
+                    'lower': reference['baseline_weight'] - weeks,
+                    'upper': reference['baseline_weight'] - weeks * Decimal('0.5'),
+                })
+    axis_values = values + [row[key] for row in reference_rows for key in ('lower', 'upper')]
+    low, high = min(axis_values), max(axis_values)
     margin = max(Decimal('0.5'), (high - low) / Decimal('10'))
     low, high = max(Decimal('0'), low - margin), high + margin
-    start, end = rows[0].recorded_on, rows[-1].recorded_on
     days = max(1, (end - start).days)
+
+    def x(day):
+        return (Decimal('377') if start == end else
+                Decimal('62') + Decimal((day - start).days) / days * Decimal('630'))
+
+    def y(weight):
+        return Decimal('212') - (weight - low) / (high - low) * Decimal('180')
+
     points = []
     for row in rows:
-        x = (Decimal('377') if start == end else
-             Decimal('62') + Decimal((row.recorded_on - start).days) / Decimal(days) * Decimal('630'))
-        y = Decimal('212') - (row.weight_kg - low) / (high - low) * Decimal('180')
-        points.append({'x': f'{x:.2f}', 'y': f'{y:.2f}', 'date': row.recorded_on, 'weight': row.weight_kg})
+        points.append({'x': f'{x(row.recorded_on):.2f}', 'y': f'{y(row.weight_kg):.2f}',
+                       'date': row.recorded_on, 'weight': row.weight_kg})
+    if reference:
+        upper = [f'{x(row["date"]):.2f},{y(row["upper"]):.2f}' for row in reference_rows]
+        lower = [f'{x(row["date"]):.2f},{y(row["lower"]):.2f}' for row in reference_rows]
+        reference.update(polygon=' '.join(upper + list(reversed(lower))),
+                         upper_line=' '.join(upper), lower_line=' '.join(lower), rows=reference_rows)
+        if start <= reference['starts_on'] <= end:
+            reference['starter_x'] = f'{x(reference["starts_on"]):.2f}'
     return dict(points=points, polyline=' '.join(f'{point["x"]},{point["y"]}' for point in points),
                 ticks=[{'y': 32, 'label': f'{high:.1f}'}, {'y': 122, 'label': f'{(high + low) / 2:.1f}'}, {'y': 212, 'label': f'{low:.1f}'}],
-                start=start, end=end, count=len(points), minimum=min(values), maximum=max(values))
+                start=start, end=end, recorded_end=rows[-1].recorded_on, reference=reference,
+                count=len(points), minimum=min(values), maximum=max(values))
 
 
 def weight_history_context(request, weights):

@@ -5,7 +5,7 @@ from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.utils import timezone
 
-from care.models import PROVINCES, MedicationDose, MedicationProduct, PatientSubscription, PharmacyOrder, Shipment
+from care.models import PROVINCES, MedicationDose, MedicationProduct, PharmacyOrder, Shipment
 from practices.models import Patient
 
 from .filter_menus import TickedChoiceField
@@ -238,21 +238,6 @@ class DeliveryAddressForm(forms.Form):
         from care.addresses import FIELDS
 
         return {name: self.cleaned_data.get(name, '') for name in FIELDS}
-
-
-class BasketQuantityForm(forms.Form):
-    quantity = forms.IntegerField(min_value=0, max_value=100, initial=1, label='Quantity (0 removes the item)')
-
-
-class SupplyRequestForm(forms.Form):
-    line1 = forms.CharField(label='Street address', max_length=200)
-    line2 = forms.CharField(label='Address line 2', required=False, max_length=200)
-    city = forms.CharField(max_length=200)
-    province = forms.CharField(max_length=200)
-    postal_code = forms.CharField(max_length=20)
-    phone = forms.CharField(label='Delivery contact number', max_length=32)
-    note = forms.CharField(required=False, max_length=1000, widget=forms.Textarea(attrs={'rows': 3}))
-    confirm = forms.BooleanField(label='Request these items for practice review. You pay for them next.')
 
 
 class OrderReviewForm(forms.Form):

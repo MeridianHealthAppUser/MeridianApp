@@ -2,95 +2,88 @@
 {% load static workspace_ui %}
 
 {% block title %}Home | Meridian{% endblock %}
-{% block patient_extra_css %}<link rel="stylesheet" href="{% static 'css/patient_care.css' %}?v=20261017a"><link rel="stylesheet" href="{% static 'css/patient_dashboard.css' %}?v=20261001">{% endblock %}
+{% block patient_extra_css %}<link rel="stylesheet" href="{% static 'css/patient_care.css' %}?v=20261029"><link rel="stylesheet" href="{% static 'css/patient_dashboard.css' %}?v=20261029">{% endblock %}
 {% block patient_content_class %}patient-home{% endblock %}
 
 {% block patient_content %}
   {% if next_consult.video_room_url %}{% include 'portal/includes/patient_next_consult.html' with consult=next_consult eyebrow='Your consult is open' %}{% endif %}
-  <div class="patient-home__grid">
-    <div class="patient-home__left">
-      <section class="patient-home__heading" aria-labelledby="patient-dashboard-heading">
-        <h1 id="patient-dashboard-heading">Welcome back, {{ patient.first_name|default:user.first_name }}.</h1>
-        <div class="patient-home__actions">
-          <a class="console-button console-button--primary" href="{% url 'portal:patient-treatment' %}">Go to my treatment</a>
-          <a class="console-button console-button--secondary" href="{% url 'portal:patient-appointments' %}?book=1">Book my follow-up</a>
-          <a class="console-button console-button--secondary" href="#weight-log" data-weight-log-open>Log my weight</a>
-        </div>
-        <div class="patient-pills" aria-label="Your treatment at a glance">
-          {% if current_authorization %}<span class="patient-pill patient-pill--teal">Authorised until {{ current_authorization.expires_on|date:"j M" }}</span>
-          {% elif last_authorization_state == 'upcoming' %}<span class="patient-pill patient-pill--blue">Authorised from {{ last_authorization.starts_on|date:"j M" }}</span>
-          {% elif last_authorization_state == 'paused' %}<span class="patient-pill patient-pill--amber">Authorisation paused</span>
-          {% elif last_authorization_state == 'ended' %}<span class="patient-pill patient-pill--amber">Authorisation ended {{ last_authorization.expires_on|date:"j M" }}</span>
-          {% else %}<span class="patient-pill">No treatment authorised yet</span>{% endif %}
-          {% if next_consult %}<span class="patient-pill patient-pill--blue">Next consult {{ next_consult.starts_at|date:"D j M, H:i" }}</span>
-          {% elif current_authorization %}<span class="patient-pill patient-pill--amber">Follow-up not yet booked</span>{% endif %}
-        </div>
-      </section>
-
-      <section class="console-card patient-home__status" aria-labelledby="patient-status-heading">
-        <div class="console-card__body">
-          <h2 class="patient-eyebrow" id="patient-status-heading">Where things stand</h2>
-          <dl class="patient-kv">
-            <div><dt>Your medicine</dt><dd>{% if current_authorization %}{{ current_authorization.product }}{% else %}Not prescribed yet{% endif %}</dd></div>
-            <div><dt>Next delivery</dt><dd>{% if next_delivery %}{% if next_delivery.status == 'dispatched' %}On its way{% if next_delivery.tracking_number %} · {{ next_delivery.tracking_number }}{% endif %}{% elif next_delivery.status == 'held' %}On hold · planned {{ next_delivery.scheduled_for|date:"D j M" }}{% else %}Dispatch on {{ next_delivery.scheduled_for|date:"D j M" }}{% endif %}{% else %}Nothing scheduled{% endif %}</dd></div>
-            <div><dt>Authorisation expires</dt><dd{% if current_authorization %} class="patient-kv__amber"{% endif %}>{% if current_authorization %}{{ current_authorization.expires_on|date:"j M Y" }}{% else %}—{% endif %}</dd></div>
-            <div><dt>Your clinician</dt><dd>{% if care_doctor %}{{ care_doctor.full_name }}{% else %}Your care team{% endif %}</dd></div>
-          </dl>
-          <a class="patient-inline-link patient-home__more" href="{% url 'portal:patient-updates' %}">See everything that’s happened</a>
-        </div>
-      </section>
+  <section class="patient-home__heading" aria-labelledby="patient-dashboard-heading">
+    <h1 id="patient-dashboard-heading">Welcome back, {{ patient.first_name|default:user.first_name }}.</h1>
+    <div class="patient-home__actions">
+      <a class="console-button console-button--primary" href="{% url 'portal:patient-treatment' %}">Go to my treatment</a>
+      <a class="console-button console-button--secondary" href="{% url 'portal:patient-appointments' %}?book=1">Book my follow-up</a>
+      <a class="console-button console-button--secondary" href="#weight-log" data-weight-log-open>Log my weight</a>
     </div>
+    <div class="patient-pills" aria-label="Your treatment at a glance">
+      {% if current_authorization %}<span class="patient-pill patient-pill--teal">Authorised until {{ current_authorization.expires_on|date:"j M" }}</span>
+      {% elif last_authorization_state == 'upcoming' %}<span class="patient-pill patient-pill--blue">Authorised from {{ last_authorization.starts_on|date:"j M" }}</span>
+      {% elif last_authorization_state == 'paused' %}<span class="patient-pill patient-pill--amber">Authorisation paused</span>
+      {% elif last_authorization_state == 'ended' %}<span class="patient-pill patient-pill--amber">Authorisation ended {{ last_authorization.expires_on|date:"j M" }}</span>
+      {% else %}<span class="patient-pill">No treatment authorised yet</span>{% endif %}
+      {% if next_consult %}<span class="patient-pill patient-pill--blue">Next consult {{ next_consult.starts_at|date:"D j M, H:i" }}</span>
+      {% elif current_authorization %}<span class="patient-pill patient-pill--amber">Follow-up not yet booked</span>{% endif %}
+    </div>
+  </section>
 
-    <section class="patient-home__right" id="weight-progress" aria-labelledby="weight-headline">
-      <h2 class="patient-home__display" id="weight-headline">{% if weight_change is not None %}{% if weight_change < 0 %}−{{ weight_change_abs|floatformat:1 }} kg since you started{% elif weight_change > 0 %}+{{ weight_change_abs|floatformat:1 }} kg since you started{% else %}No change since you started{% endif %}{% elif latest_weight %}Your first check-in is saved{% else %}Start your weight chart{% endif %}</h2>
-      <p class="patient-home__lead">Log your weight whenever you like. Your doctor sees this chart during your follow-up consults.</p>
-      <section class="console-card patient-home__chart-card" aria-labelledby="weight-chart-heading">
-        <div class="console-card__body">
-          <div class="patient-home__chart-head">
-            <h3 id="weight-chart-heading">Progress</h3>
-            {% if latest_weight %}<span class="patient-pill">Latest {{ latest_weight.weight_kg|kg }} kg · {{ latest_weight.recorded_on|date:"j M" }}</span>{% endif %}
-          </div>
-          {% if weight_chart %}
-            {% include 'portal/includes/patient_weight_chart.html' with chart=weight_chart chart_id='home-weight-chart' %}
-            <p class="patient-home__legend"><span class="patient-home__legend-dot" aria-hidden="true"></span>Your recorded weight</p>
-            <p class="patient-home__note">Recorded check-ins only. The first four weeks are a starter dose, so little change is expected. After that, the aim is to lose 500g to 1kg per week.</p>
-          {% else %}
-            <p class="patient-empty">No check-ins yet. Log your first weight below and it will appear here.</p>
-          {% endif %}
+  <div class="patient-home__grid">
+    <section class="console-card patient-home__status" aria-labelledby="patient-status-heading">
+      <div class="console-card__body">
+        <h2 class="patient-eyebrow" id="patient-status-heading">Where things stand</h2>
+        <dl class="patient-kv">
+          <div><dt>Your medicine</dt><dd>{% if current_authorization %}{{ current_authorization.product }}{% else %}Not prescribed yet{% endif %}</dd></div>
+          <div><dt>Next delivery</dt><dd>{% if next_delivery %}{% if next_delivery.status == 'dispatched' %}On its way{% if next_delivery.tracking_number %} · {{ next_delivery.tracking_number }}{% endif %}{% elif next_delivery.status == 'held' %}On hold · planned {{ next_delivery.scheduled_for|date:"D j M" }}{% else %}Dispatch on {{ next_delivery.scheduled_for|date:"D j M" }}{% endif %}{% else %}Nothing scheduled{% endif %}</dd></div>
+          <div><dt>Authorisation expires</dt><dd{% if current_authorization %} class="patient-kv__amber"{% endif %}>{% if current_authorization %}{{ current_authorization.expires_on|date:"j M Y" }}{% else %}—{% endif %}</dd></div>
+          <div><dt>Your clinician</dt><dd>{% if care_doctor %}{{ care_doctor.full_name }}{% else %}Your care team{% endif %}</dd></div>
+        </dl>
+      </div>
+    </section>
 
-          <details class="patient-weight-log" id="weight-log"{% if failed_form == 'weight_form' or not latest_weight %} open{% endif %}>
-            <summary>Log today’s weight</summary>
-            <form class="console-form" method="post" action="{% url 'portal:patient-weight-add' %}">
-              {% csrf_token %}
-              <input type="hidden" name="patient_context" value="{{ patient_context }}">
-              <input type="hidden" name="return_to" value="home">
-              {{ weight_form.non_field_errors }}
-              <div class="console-form__row">
-                <div class="console-form__field">
-                  <label for="{{ weight_form.weight_kg.id_for_label }}">{{ weight_form.weight_kg.label }}</label>
-                  {{ weight_form.weight_kg }}
-                  {{ weight_form.weight_kg.errors }}
-                </div>
-                <div class="console-form__field">
-                  <label for="{{ weight_form.recorded_on.id_for_label }}">{{ weight_form.recorded_on.label }}</label>
-                  {{ weight_form.recorded_on }}
-                  {{ weight_form.recorded_on.errors }}
-                </div>
+    <section class="console-card patient-home__chart-card" id="weight-progress" aria-labelledby="weight-headline">
+      <div class="console-card__body">
+        <p class="patient-eyebrow">Your progress</p>
+        <h2 class="patient-home__display" id="weight-headline">{% if weight_change is not None %}{% if weight_change < 0 %}−{{ weight_change_abs|floatformat:1 }} kg since you started{% elif weight_change > 0 %}+{{ weight_change_abs|floatformat:1 }} kg since you started{% else %}No change since you started{% endif %}{% elif latest_weight %}Your first check-in is saved{% else %}Start your weight chart{% endif %}</h2>
+        <p class="patient-home__lead">Your doctor sees these check-ins during your follow-up consults.</p>
+        <div class="patient-home__chart-head">
+          {% if latest_weight %}<span class="patient-pill">Latest {{ latest_weight.weight_kg|kg }} kg · {{ latest_weight.recorded_on|date:"j M" }}</span>{% endif %}
+        </div>
+        {% if weight_chart %}
+          {% include 'portal/includes/patient_weight_chart.html' with chart=weight_chart chart_id='home-weight-chart' %}
+          {% if chart_is_limited %}<p class="patient-home__note">Showing your latest 300 check-ins.{% if weight_chart.reference %} The reference keeps its original starting weight and date.{% endif %}</p>{% endif %}
+        {% else %}
+          <p class="patient-empty">No check-ins yet. Log your first weight below and it will appear here.</p>
+        {% endif %}
+
+        <details class="patient-weight-log" id="weight-log"{% if failed_form == 'weight_form' or not latest_weight %} open{% endif %}>
+          <summary>Log today’s weight</summary>
+          <form class="console-form" method="post" action="{% url 'portal:patient-weight-add' %}">
+            {% csrf_token %}
+            <input type="hidden" name="patient_context" value="{{ patient_context }}">
+            <input type="hidden" name="return_to" value="home">
+            {{ weight_form.non_field_errors }}
+            <div class="console-form__row">
+              <div class="console-form__field">
+                <label for="{{ weight_form.weight_kg.id_for_label }}">{{ weight_form.weight_kg.label }}</label>
+                {{ weight_form.weight_kg }}
+                {{ weight_form.weight_kg.errors }}
               </div>
               <div class="console-form__field">
-                <label for="{{ weight_form.note.id_for_label }}">{{ weight_form.note.label }} <span class="patient-optional">(optional)</span></label>
-                {{ weight_form.note }}
-                {{ weight_form.note.errors }}
+                <label for="{{ weight_form.recorded_on.id_for_label }}">{{ weight_form.recorded_on.label }}</label>
+                {{ weight_form.recorded_on }}
+                {{ weight_form.recorded_on.errors }}
               </div>
-              <div class="patient-weight-log__footer">
-                <button class="console-button console-button--primary" type="submit">Save</button>
-                <span>Weigh yourself at most once a week.</span>
-              </div>
-            </form>
-          </details>
-          <a class="patient-inline-link patient-home__more" href="{% url 'portal:patient-progress' %}">See all your check-ins</a>
-        </div>
-      </section>
+            </div>
+            <div class="console-form__field">
+              <label for="{{ weight_form.note.id_for_label }}">{{ weight_form.note.label }} <span class="patient-optional">(optional)</span></label>
+              {{ weight_form.note }}
+              {{ weight_form.note.errors }}
+            </div>
+            <div class="patient-weight-log__footer">
+              <button class="console-button console-button--primary" type="submit">Save</button>
+              <span>Weigh yourself at most once a week.</span>
+            </div>
+          </form>
+        </details>
+      </div>
     </section>
   </div>
 {% endblock %}

@@ -6,7 +6,7 @@ from uuid import UUID
 from django.conf import settings
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
-from django.db.models import Q
+from django.db.models import Exists, F, OuterRef, Q
 from django.utils import timezone
 
 from practices.models import CompanyMembership
@@ -17,22 +17,29 @@ from .notifications import queue as notify
 from .services import record_audit
 
 
+def current_authorizations(queryset=None, on_date=None):
+    """The shared eligibility rule for persisted prescriptions, without per-row lookups."""
+    day = on_date or timezone.localdate()
+    queryset = queryset if queryset is not None else TreatmentAuthorization.objects.all()
+    prescriber = CompanyMembership.objects.filter(
+        company_id=OuterRef('company_id'), user_id=OuterRef('prescribed_by_id'),
+        clinician_type__in=CompanyMembership.PRESCRIBER_TYPES, is_active=True,
+    )
+    return queryset.filter(
+        Exists(prescriber), status=TreatmentAuthorization.Status.ACTIVE,
+        starts_on__lte=day, expires_on__gte=day,
+        company__is_active=True, patient__is_active=True, patient__company_id=F('company_id'),
+        product__is_active=True, product__company_id=F('company_id'), prescribed_by__is_active=True,
+    )
+
+
 def authorization_is_current(authorization, on_date=None):
-    if authorization is None:
+    if authorization is None or authorization.pk is None:
         return False
     day = on_date or timezone.localdate()
-    return bool(
-        authorization.status == TreatmentAuthorization.Status.ACTIVE
-        and authorization.starts_on <= day <= authorization.expires_on
-        and authorization.company.is_active and authorization.patient.is_active
-        and authorization.patient.company_id == authorization.company_id
-        and authorization.product.company_id == authorization.company_id and authorization.product.is_active
-        and authorization.prescribed_by.is_active
-        and CompanyMembership.objects.filter(
-            company_id=authorization.company_id, user_id=authorization.prescribed_by_id,
-            clinician_type__in=CompanyMembership.PRESCRIBER_TYPES, is_active=True,
-        ).exists()
-    )
+    if authorization.status != TreatmentAuthorization.Status.ACTIVE or not authorization.starts_on <= day <= authorization.expires_on:
+        return False
+    return current_authorizations(on_date=day).filter(pk=authorization.pk).exists()
 
 
 def step_in_effect(authorization, on_date=None):

@@ -31,8 +31,8 @@ urlpatterns = [
     path('supply-requests/', views.StaffOrderListView.as_view(), name='ops-orders'),
     path('supply-requests/<int:pk>/', views.StaffOrderDetailView.as_view(), name='ops-order-detail'),
     path('patient/pharmacy/', views.PatientPharmacyView.as_view(), name='patient-pharmacy'),
-    path('patient/pharmacy/basket/', views.PatientBasketView.as_view(), name='patient-basket'),
-    path('patient/pharmacy/items/<int:pk>/', views.PatientBasketItemView.as_view(), name='patient-basket-item'),
+    path('patient/pharmacy/basket/', views.PatientPharmacyView.as_view(), name='patient-basket'),
+    path('patient/pharmacy/items/<int:pk>/', views.PatientPharmacyView.as_view(), name='patient-basket-item'),
     path('patient/orders/', views.PatientOrderListView.as_view(), name='patient-orders'),
     path('patient/orders/<int:pk>/', views.PatientOrderDetailView.as_view(), name='patient-order-detail'),
 ]

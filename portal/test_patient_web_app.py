@@ -142,7 +142,7 @@ class PatientWebAppTests(TestCase):
         self.assertNotIn('Log this week’s weight', titles)
         self.assertIn('Complete your medical profile', titles)
 
-    def test_my_treatment_shows_the_plan_and_keeps_history_collapsed(self):
+    def test_my_treatment_shows_the_plan_without_history(self):
         authorization = self.authorize()
         enroll_local_subscription(company=self.company, patient=self.patient, actor=self.user,
                                   authorization=authorization, confirm=True)
@@ -152,12 +152,15 @@ class PatientWebAppTests(TestCase):
         self.assertContains(response, 'Cancel my subscription')
         # Payments are on Billing and payments (24 Oct 2026).
         self.assertContains(response, 'Billing and payments')
-        self.assertContains(response, '<details class="patient-history" id="treatment-history">')
-        self.assertContains(self.page('patient-treatment', page=1), '<details class="patient-history" id="treatment-history" open>')
-        self.assertContains(response, 'Height')
-        self.assertContains(response, 'subject=Change+to+my+medical+information')
+        self.assertNotContains(response, 'Treatment and delivery history')
+        self.assertNotContains(response, 'id="treatment-history"')
+        self.assertNotContains(response, 'id="medical-information-heading"')
+        self.assertNotContains(response, 'Tell my doctor something has changed')
+        medical_info = self.page('patient-medical-profile')
+        self.assertContains(medical_info, 'Height')
+        self.assertContains(medical_info, 'subject=Change+to+my+medical+information')
 
-    def test_my_medications_lists_authorised_open_and_previous_items_only(self):
+    def test_my_treatment_keeps_previous_prescriptions_below_subscription_without_a_shop(self):
         authorization = self.authorize()
         enroll_local_subscription(company=self.company, patient=self.patient, actor=self.user,
                                   authorization=authorization, confirm=True)
@@ -170,18 +173,82 @@ class PatientWebAppTests(TestCase):
             status=TreatmentAuthorization.Status.EXPIRED,
         )
         never = MedicationProduct.objects.create(company=self.company, name='Never prescribed medicine', price=300)
-        response = self.page('patient-pharmacy')
-        groups = response.context['product_groups']
-        self.assertEqual([product.pk for product in groups['authorised']], [self.product.pk])
-        self.assertEqual([product.pk for product in groups['open']], [supply.pk])
-        self.assertEqual([product.pk for product in groups['previous']], [earlier.pk])
-        self.assertIn(never.pk, [product.pk for product in response.context['products']])
-        self.assertNotContains(response, 'Never prescribed medicine')
-        # The subscribed medicine is managed on My Treatment rather than through the basket.
-        self.assertContains(response, 'Manage subscription')
-        self.assertNotContains(response, f'action="{reverse("portal:patient-basket-item", args=[self.product.pk])}"')
-        self.assertContains(response, f'action="{reverse("portal:patient-basket-item", args=[supply.pk])}"')
-        self.assertNotContains(response, f'action="{reverse("portal:patient-basket-item", args=[earlier.pk])}"')
+        response = self.page('patient-treatment')
+        self.assertContains(response, 'Previously prescribed')
+        self.assertContains(response, earlier.name)
+        self.assertContains(response, 'My active subscription')
+        self.assertLess(response.content.index(b'My active subscription'), response.content.index(b'Previously prescribed'))
+        self.assertNotContains(response, supply.name)
+        self.assertNotContains(response, never.name)
+        self.assertNotContains(response, 'Add to basket')
+        self.assertNotContains(response, reverse('portal:patient-basket'))
+
+    def test_previous_prescriptions_never_cross_patient_or_practice(self):
+        other_user = get_user_model().objects.create_user(email='previous-other@example.test')
+        other = Patient.objects.create(company=self.company, user=other_user, first_name='Other', last_name='Patient')
+        beta = Company.objects.create(name='Previous Beta', slug='previous-beta')
+        beta_patient = Patient.objects.create(company=beta, user=self.user, first_name='Nadia', last_name='Beta')
+        for company, patient, name in ((self.company, other, 'Other patient medicine'),
+                                       (beta, beta_patient, 'Other practice medicine')):
+            product = MedicationProduct.objects.create(company=company, name=name, price=50)
+            TreatmentAuthorization.objects.create(
+                company=company, patient=patient, product=product, prescribed_by=self.doctor, max_dose='Private dose',
+                quantity_per_cycle=1, starts_on=timezone.localdate() - timedelta(days=90),
+                expires_on=timezone.localdate() - timedelta(days=1), review_interval_days=90,
+                status=TreatmentAuthorization.Status.EXPIRED,
+            )
+        response = self.page('patient-treatment')
+        self.assertNotContains(response, 'Other patient medicine')
+        self.assertNotContains(response, 'Other practice medicine')
+        self.assertNotContains(response, 'Previously prescribed')
+
+    def test_previous_prescriptions_keep_latest_record_and_include_upcoming_and_inactive_products(self):
+        self.authorize()
+        today = timezone.localdate()
+        earlier = MedicationProduct.objects.create(company=self.company, name='Archived medicine', price=50, is_active=False)
+        future = MedicationProduct.objects.create(company=self.company, name='Future medicine', price=50)
+
+        def recorded(product, *, starts, ends, dose, status=TreatmentAuthorization.Status.EXPIRED):
+            return TreatmentAuthorization.objects.create(
+                company=self.company, patient=self.patient, product=product, prescribed_by=self.doctor,
+                max_dose=dose, quantity_per_cycle=1, starts_on=today + timedelta(days=starts),
+                expires_on=today + timedelta(days=ends), review_interval_days=90, status=status,
+            )
+
+        recorded(self.product, starts=-200, ends=-100, dose='Older dose of current medicine')
+        recorded(earlier, starts=-200, ends=-100, dose='Older archived dose')
+        latest = recorded(earlier, starts=-90, ends=-1, dose='Most recent archived dose')
+        upcoming = recorded(future, starts=10, ends=90, dose='Future dose', status=TreatmentAuthorization.Status.ACTIVE)
+        response = self.page('patient-treatment')
+        self.assertEqual({row.pk for row in response.context['previous_prescriptions']}, {latest.pk, upcoming.pk})
+        self.assertContains(response, 'Archived medicine')
+        self.assertContains(response, 'Most recent archived dose')
+        self.assertNotContains(response, 'Older archived dose')
+        self.assertNotContains(response, 'Older dose of current medicine')
+        self.assertContains(response, 'Future medicine')
+        from django.utils.dateformat import format as format_date
+
+        self.assertContains(response, f'Starts {format_date(upcoming.starts_on, "j M Y")}')
+
+    def test_previous_prescriptions_paginate_without_losing_subscription_context(self):
+        authorization = self.authorize()
+        enroll_local_subscription(company=self.company, patient=self.patient, actor=self.user,
+                                  authorization=authorization, confirm=True)
+        today = timezone.localdate()
+        for number in range(13):
+            product = MedicationProduct.objects.create(company=self.company, name=f'Previous medicine {number}', price=50)
+            TreatmentAuthorization.objects.create(
+                company=self.company, patient=self.patient, product=product, prescribed_by=self.doctor,
+                max_dose='Previously recorded dose', quantity_per_cycle=1, starts_on=today - timedelta(days=90),
+                expires_on=today - timedelta(days=1), review_interval_days=90, status=TreatmentAuthorization.Status.EXPIRED,
+            )
+        first = self.page('patient-treatment')
+        second = self.page('patient-treatment', prescription_page=2)
+        self.assertEqual(len(first.context['previous_prescriptions']), 12)
+        self.assertEqual(len(second.context['previous_prescriptions']), 1)
+        self.assertContains(first, 'prescription_page=2')
+        self.assertContains(second, 'My active subscription')
+        self.assertContains(second, 'Previously prescribed')
 
     def test_weight_logged_on_home_returns_to_home(self):
         home = self.page('patient-dashboard')
@@ -209,7 +276,7 @@ class PatientWebAppTests(TestCase):
         self.assertContains(filtered, 'Nothing here yet')
 
     def test_brand_theme_is_loaded_last_on_patient_pages_only(self):
-        for name in ('patient-dashboard', 'patient-treatment', 'patient-appointments', 'patient-messages', 'patient-pharmacy', 'patient-profile'):
+        for name in ('patient-dashboard', 'patient-treatment', 'patient-appointments', 'patient-messages', 'patient-medical-profile', 'patient-profile'):
             with self.subTest(page=name):
                 html = self.page(name).content.decode()
                 self.assertIn('<body class="workspace-page patient-app">', html)
@@ -223,12 +290,9 @@ class PatientWebAppTests(TestCase):
 
     def test_brand_theme_fonts_are_served_from_the_app(self):
         theme = Path(finders.find('css/patient_theme.css')).read_text()
-        # The practice console's teal (console.css), not the brand blues the logo keeps. Colours are theme tokens
-        # (scripts/theme_tokens.py): var(--c-07877f) is #07877f in light mode.
-        console = Path(finders.find('css/console.css')).read_text()
-        for colour in ('#07877f', '#056f69', '#e4f5f1'):
-            self.assertIn(f'var(--c-{colour[1:]})', theme)
-            self.assertIn(f'var(--c-{colour[1:]})', console)
+        # Patient pages use the requested dark blue and pale cyan palette.
+        for colour in ('#1D4A5E', '#A5E3F0'):
+            self.assertIn(colour, theme)
         for colour in ('#29698b', '#0097b2', '#1599de', '#1072aa'):
             self.assertNotIn(f'--c-{colour[1:]}', theme)
         # Roboto is self-hosted and loaded on every page, the practice console's included.

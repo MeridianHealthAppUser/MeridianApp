@@ -8,7 +8,7 @@ timeline shows are the catalogue dose's reference prices, labelled as such.
 from datetime import timedelta
 from decimal import Decimal, InvalidOperation
 
-from django.db.models import DateTimeField, DurationField, ExpressionWrapper, F, IntegerField, Value
+from django.db.models import Case, DateTimeField, DurationField, ExpressionWrapper, F, IntegerField, OuterRef, Subquery, Value, When
 from django.db.models.functions import Cast
 from django.urls import reverse
 from django.utils import timezone
@@ -18,7 +18,7 @@ from care.models import (
     Appointment, LabRequest, Lead, PatientMedicalProfile, PatientSubscription,
     ScreeningQuestionnaire, Shipment, TreatmentAuthorization, WeightEntry,
 )
-from care.treatment import authorization_is_current
+from care.treatment import current_authorizations
 from video.access import attach_video_join
 
 
@@ -38,13 +38,72 @@ def current_plan(company, patient):
 
 def current_authorization(company, patient, plan=None):
     """The authorisation the patient is treated under today, preferring their plan's."""
-    if plan is not None and plan.authorization_id and authorization_is_current(plan.authorization):
-        return plan.authorization
-    today = timezone.localdate()
-    candidates = TreatmentAuthorization.objects.for_company(company).filter(
-        patient=patient, status=TreatmentAuthorization.Status.ACTIVE, starts_on__lte=today, expires_on__gte=today,
-    ).select_related('product', 'prescribed_by', 'company', 'patient').order_by('-expires_on', '-pk')
-    return next((item for item in candidates[:10] if authorization_is_current(item)), None)
+    candidates = current_authorizations().filter(company=company, patient=patient).select_related(
+        'product', 'prescribed_by', 'company', 'patient',
+    )
+    preference = [Case(When(pk=plan.authorization_id, then=Value(0)), default=Value(1))] if plan and plan.authorization_id else []
+    return candidates.order_by(*preference, '-expires_on', '-pk').first()
+
+
+def previous_prescriptions(company, patient):
+    """The other prescriptions previously shown in My Medications, including issued future plan steps."""
+    prescriptions = TreatmentAuthorization.objects.for_company(company).filter(
+        patient=patient, patient__company=company, product__company=company, product__requires_authorisation=True,
+    )
+    current_products = current_authorizations(prescriptions).order_by().values('product_id')
+    latest = prescriptions.filter(product_id=OuterRef('product_id')).order_by('-expires_on', '-pk').values('pk')[:1]
+    return prescriptions.exclude(product_id__in=current_products).filter(pk=Subquery(latest)).select_related(
+        'product', 'prescribed_by',
+    ).order_by('-starts_on', '-pk')
+
+
+def weight_reference_course(company, patient, authorization):
+    """Only the dates Home needs, from one scoped query regardless of renewal count.
+
+    Follow replacements and starting-plan steps in memory. Superseded prescriptions
+    retain their historical dates; an unreplaced cancelled prescription is not a course.
+    """
+    if authorization is None or authorization.status == TreatmentAuthorization.Status.CANCELLED:
+        return None
+    rows = list(TreatmentAuthorization.objects.for_company(company).filter(
+        patient=patient, patient__company=company, product__company=company,
+    ).values('pk', 'starts_on', 'expires_on', 'status', 'plan_key', 'replaces_id'))
+    by_id = {row['pk']: row for row in rows}
+    if authorization.pk not in by_id or by_id[authorization.pk]['status'] == TreatmentAuthorization.Status.CANCELLED:
+        return None
+    plans = {}
+    for row in rows:
+        if row['plan_key']:
+            plans.setdefault(row['plan_key'], []).append(row['pk'])
+    members, expanded_plans, pending = {}, set(), [authorization.pk]
+    while pending:
+        pk = pending.pop()
+        if pk in members or pk not in by_id:
+            continue
+        row = members[pk] = by_id[pk]
+        if row['replaces_id']:
+            pending.append(row['replaces_id'])
+        key = row['plan_key']
+        if key and key not in expanded_plans:
+            expanded_plans.add(key)
+            pending.extend(plans[key])
+    replaced_from = {}
+    for row in members.values():
+        if row['replaces_id']:
+            previous = row['replaces_id']
+            replaced_from[previous] = min(replaced_from.get(previous, row['starts_on']), row['starts_on'])
+    segments = []
+    for row in members.values():
+        if row['status'] == TreatmentAuthorization.Status.CANCELLED and row['pk'] not in replaced_from:
+            continue
+        end = row['expires_on']
+        if row['pk'] in replaced_from:
+            end = min(end, replaced_from[row['pk']] - timedelta(days=1))
+        if end >= row['starts_on']:
+            segments.append((row['starts_on'], end))
+    if not segments:
+        return None
+    return {'started_on': min(start for start, _ in segments), 'ends_on': max(end for _, end in segments)}
 
 
 HOW_OFTEN = {'weekly': 'once a week', 'daily': 'once a day'}

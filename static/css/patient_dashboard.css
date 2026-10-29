@@ -4,9 +4,9 @@
   padding: 1.75rem clamp(1rem, 3vw, 2.25rem) 2rem;
 }
 .patient-home > .patient-bar--join { margin-bottom: 1.4rem; }
-.patient-home__grid { align-items: start; display: grid; gap: 1.5rem 2rem; grid-template-columns: repeat(2, minmax(0, 1fr)); }
-.patient-home__left, .patient-home__right { display: grid; gap: 1.1rem; min-width: 0; }
-.patient-home__heading { display: grid; gap: 1.1rem; }
+.patient-home__grid { align-items: stretch; display: grid; gap: 1.4rem; grid-template-columns: minmax(0, .82fr) minmax(0, 1.4fr); }
+.patient-home__grid > .console-card { margin: 0; min-width: 0; }
+.patient-home__heading { display: grid; gap: 1.1rem; margin-bottom: 1.6rem; }
 .workspace-page .meridian-console .patient-home__heading h1 {
   color: var(--console-ink);
   font-family: inherit;
@@ -18,8 +18,10 @@
   overflow-wrap: anywhere;
 }
 .patient-home__actions { display: flex; flex-wrap: wrap; gap: .55rem; }
-.patient-home__status .console-card__body { padding: 1.15rem 1.2rem; }
-.patient-home__more { display: inline-block; font-size: .82rem; margin-top: .75rem; }
+.patient-home__status .console-card__body { padding: 1.35rem; }
+.patient-home__status .patient-kv { gap: .25rem; margin-top: .8rem; }
+.patient-home__status .patient-kv > div { align-items: start; flex-direction: column; gap: .35rem; padding: 1rem 0; }
+.patient-home__status .patient-kv dd { text-align: left; }
 .workspace-page .meridian-console .patient-home__display {
   color: var(--console-ink);
   font-family: inherit;
@@ -27,15 +29,13 @@
   font-weight: 500;
   letter-spacing: -.02em;
   line-height: 1.2;
-  margin: 0;
+  margin: .7rem 0 .5rem;
 }
-.patient-home__lead { color: var(--patient-text); font-size: .9rem; line-height: 1.6; margin: -.4rem 0 0; }
-.patient-home__chart-card .console-card__body { padding: 1.1rem 1.2rem 1.2rem; }
-.patient-home__chart-head { align-items: center; display: flex; flex-wrap: wrap; gap: .5rem; justify-content: space-between; }
+.patient-home__lead { color: var(--patient-text); font-size: .9rem; line-height: 1.6; margin: 0 0 .8rem; }
+.patient-home__chart-card .console-card__body { padding: 1.35rem; }
+.patient-home__chart-head { align-items: center; display: flex; flex-wrap: wrap; gap: .5rem; }
 .patient-home__chart-head h3 { color: var(--console-ink); font-size: .95rem; font-weight: 500; margin: 0; }
 .patient-home__chart-card .patient-weight-chart { margin-top: .85rem; }
-.patient-home__legend { align-items: center; color: var(--patient-text); display: flex; font-size: .78rem; gap: .45rem; margin: .5rem 0 0; }
-.patient-home__legend-dot { background: var(--console-teal); border-radius: 50%; height: .5rem; width: .5rem; }
 .patient-home__note { color: var(--console-muted); font-size: .74rem; line-height: 1.55; margin: .35rem 0 0; }
 
 .patient-weight-log { border-top: 1px solid var(--console-soft-line); margin-top: 1rem; padding-top: .85rem; }

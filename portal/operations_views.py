@@ -6,7 +6,7 @@ from urllib.parse import urlencode
 
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.core.exceptions import PermissionDenied, ValidationError
+from django.core.exceptions import ValidationError
 from django.core.paginator import Paginator
 from django.db import transaction
 from django.db.models import Count, Q
@@ -20,23 +20,21 @@ from django.views import View
 from django.views.decorators.cache import never_cache
 from django.views.decorators.csrf import csrf_exempt
 
-from care.models import MedicationDose, MedicationProduct, PharmacyOrder, Shipment, ShipmentItem, TreatmentAuthorization
+from care.models import MedicationDose, MedicationProduct, PharmacyOrder, Shipment, ShipmentItem
 from care.operations import (
     AVERAGE_WEEKS, UNDISPATCHED, can_ship, change_parcel, dispatch_shipment, dispatch_week, hold_or_cancel_shipment, lock_reasons,
-    lock_week, mark_delivered, prepare_shipment, prepare_week, product_allowance, require_operations_actor,
+    lock_week, mark_delivered, prepare_shipment, prepare_week, require_operations_actor,
     set_shipment_note, shipment_hold_reason, week_order, week_stock,
 )
-from care.pharmacy import accept_order, cancel_order, set_basket_quantity, submit_basket
+from care.pharmacy import accept_order, cancel_order
 from care.services import record_audit
-from care.treatment import dose_in_effect
 from care.shipment_intake import create_manual_shipment
 from practices.models import Company, CompanyMembership
 
 from .filter_menus import fields_section, list_tools, ticked_sections, without_all
 from .operations_forms import (
-    BasketQuantityForm, CatalogueFilterForm, ConfirmForm, DeliveryAddressForm, DoseForm, HistoryFilterForm, OrderFilterForm,
+    CatalogueFilterForm, ConfirmForm, DeliveryAddressForm, DoseForm, HistoryFilterForm, OrderFilterForm,
     OrderReviewForm, ProductForm, ShipmentActionForm, ShipmentChangeForm, ShipmentCreateForm, ShippingFilterForm,
-    SupplyRequestForm,
 )
 from .patient_views import patient_page_context
 from .views import PatientPortalRequiredMixin, StaffCompanyRequiredMixin
@@ -1058,133 +1056,64 @@ class StaffOrderDetailView(OperationsView):
         return self.display(request, order, form, status=400)
 
 
-class PatientPharmacyBase(LoginRequiredMixin, PatientPortalRequiredMixin, View):
+def retired_pharmacy_response(request, company, patient):
+    """Reject stale purchase forms without creating or changing requests or payments."""
+    return render(request, 'portal/patient_pharmacy_retired.html',
+                  patient_page_context(request, company, patient, 'treatment', 'My Treatment'), status=410)
+
+
+class PatientPharmacyView(LoginRequiredMixin, PatientPortalRequiredMixin, View):
+    """Keep old shop links usable while all patient medication supply moves to subscriptions."""
+
     http_method_names = ('get', 'post', 'head', 'options')
 
-    def context(self, **kwargs):
-        return dict(patient_page_context(self.request, self.patient_company, self.patient, 'pharmacy', 'My Medications'), **kwargs)
+    def get(self, request, **kwargs):
+        return redirect(f"{reverse('portal:patient-treatment')}#treatment-plan")
+
+    def post(self, request, **kwargs):
+        return retired_pharmacy_response(request, self.patient_company, self.patient)
+
+
+class PatientOrderBase(LoginRequiredMixin, PatientPortalRequiredMixin, View):
+    """Existing supply requests remain available after the catalogue closes."""
+
+    http_method_names = ('get', 'post', 'head', 'options')
 
     def orders(self):
-        return PharmacyOrder.objects.for_company(self.patient_company).filter(patient=self.patient).select_related('shipment')
+        return PharmacyOrder.objects.filter(company=self.patient_company, patient=self.patient).select_related('shipment')
 
-    def token(self, kind, record):
-        return make_workflow_context(self.request, self.patient_company, kind, record, patient=self.patient)
-
-
-class PatientPharmacyView(PatientPharmacyBase):
-    http_method_names = ('get', 'head', 'options')
-
-    def display(self, request, failed_product=None, failed_form=None, status=200):
-        from .patient_summary import current_plan
-
-        company, patient = self.patient_company, self.patient
-        products = list(MedicationProduct.objects.for_company(company).filter(is_active=True).order_by('name', 'strength', 'pk'))
-        basket = self.orders().filter(status='draft').first()
-        existing = {item.product_id: item.quantity for item in basket.items.all()} if basket else {}
-        plan = current_plan(company, patient)
-        # The latest authorisation for each product, to show what was prescribed before.
-        previous = {}
-        for authorization in TreatmentAuthorization.objects.for_company(company).filter(
-            patient=patient, product__in=[product for product in products if product.requires_authorisation],
-        ).select_related('prescribed_by').order_by('expires_on', 'pk'):
-            previous[authorization.product_id] = authorization
-        groups = {'authorised': [], 'open': [], 'previous': []}
-        for product in products:
-            product.authorization, product.remaining, product.locked_reason = product_allowance(patient, product)
-            product.workflow_context = self.token('basket-product', product)
-            if request.method == 'POST' and failed_product and product.pk == failed_product.pk:
-                product.workflow_context = request.POST.get('workflow_context', '')
-            product.quantity_form = failed_form if failed_product and product.pk == failed_product.pk else BasketQuantityForm(
-                initial={'quantity': existing.get(product.pk, 1)}, auto_id=f'product_{product.pk}_%s',
-            )
-            product.in_basket = existing.get(product.pk, 0)
-            product.plan = plan if plan and plan.authorization_id and plan.authorization.product_id == product.pk else None
-            product.plan_dose = dose_in_effect(product.plan) if product.plan else None
-            if not product.requires_authorisation:
-                groups['open'].append(product)
-            elif product.authorization is not None:
-                groups['authorised'].append(product)
-            elif product.pk in previous:
-                # Products never prescribed to this patient are not listed.
-                product.previous_authorization = previous[product.pk]
-                groups['previous'].append(product)
-        shown = {product.pk for group in groups.values() for product in group}
-        prescribers = {product.authorization.prescribed_by for product in groups['authorised']}
-        context = self.context(
-            products=products, product_groups=groups, basket=basket, basket_count=sum(existing.values()),
-            authorised_prescriber=next(iter(prescribers)) if len(prescribers) == 1 else None,
-            authorised_until=min((product.authorization.expires_on for product in groups['authorised']), default=None),
-            hidden_failed_form=failed_form if failed_product and failed_product.pk not in shown else None,
-        )
-        return render(request, 'portal/pharmacy_catalogue.html', context, status=status)
-
-    def get(self, request):
-        return self.display(request)
+    def context(self, **kwargs):
+        return dict(patient_page_context(self.request, self.patient_company, self.patient, 'orders',
+                                         'Previous supply requests'), **kwargs)
 
 
-class PatientBasketItemView(PatientPharmacyView):
-    http_method_names = ('post',)
-
-    @transaction.atomic
-    def post(self, request, pk):
-        self.patient_company = Company.objects.select_for_update().get(pk=self.patient_company.pk)
-        product = get_object_or_404(MedicationProduct.objects.for_company(self.patient_company), pk=pk)
-        form = BasketQuantityForm(request.POST, auto_id=f'product_{pk}_%s')
-        valid = form.is_valid()
-        try:
-            validate_workflow_context(request, self.patient_company, 'basket-product', product, patient=self.patient)
-            if valid:
-                set_basket_quantity(company=self.patient_company, patient=self.patient, actor=request.user, product=product,
-                                    quantity=form.cleaned_data['quantity'], request=request)
-                messages.success(request, 'Basket updated.')
-                return redirect('portal:patient-basket')
-        except ValidationError as error:
-            _errors(request, form, error)
-        return self.display(request, product, form, status=400)
-
-
-class PatientBasketView(PatientPharmacyBase):
-    http_method_names = ('get', 'head', 'options')
-
-    def display(self, request, order, form=None, status=200):
-        items = _order_items(order) if order else []
-        for item in items:
-            item.remove_context = self.token('basket-product', item.product)
-        return render(request, 'portal/pharmacy_basket.html', self.context(
-            order=order, items=items,
-            form=form if form is not None else SupplyRequestForm(initial={'city': self.patient.city, 'phone': self.patient.phone}),
-            workflow_context=request.POST.get('workflow_context', '') if request.method == 'POST' else self.token('patient-order', order) if order else '',
-        ), status=status)
-
-    def get(self, request):
-        return self.display(request, self.orders().filter(status='draft').first())
-
-
-class PatientOrderListView(PatientPharmacyBase):
+class PatientOrderListView(PatientOrderBase):
     http_method_names = ('get', 'head', 'options')
 
     def get(self, request):
-        context = self.context(**_paginate(request, self.orders().exclude(status='draft')))
-        context['patient_section'] = 'orders'
+        context = self.context(**_paginate(request, self.orders()))
         context['orders'] = list(context['page_obj'].object_list)
         return render(request, 'portal/pharmacy_orders.html', context)
 
 
-class PatientOrderDetailView(PatientPharmacyBase):
+class PatientOrderDetailView(PatientOrderBase):
     def display(self, request, order, form=None, status=200):
-        if order.status == 'draft':
-            return PatientBasketView.display(self, request, order, form, status)
         from care.payment_providers import current_provider
 
-        payable = (not order.paid_at and order.status in ('submitted', 'accepted') and order.subtotal > 0
-                   and current_provider() is not None)
+        payable = (order.status in (PharmacyOrder.Status.SUBMITTED, PharmacyOrder.Status.ACCEPTED)
+                   and not order.paid_at and order.subtotal > 0 and current_provider() is not None)
+        # No quantity controls or submission form, including for old draft baskets.
+        items = [item for item in _order_items(order) if item.company_id == self.patient_company.pk]
+        shipment = order.shipment if order.shipment_id else None
+        if shipment and (shipment.company_id != self.patient_company.pk or shipment.patient_id != self.patient.pk):
+            shipment = None
         return render(request, 'portal/pharmacy_order_detail.html', self.context(
-            order=order, items=_order_items(order), shipment=order.shipment,
-            cancel_form=form if form is not None else ConfirmForm(), can_cancel=order.status == 'submitted',
-            patient_section='orders', payable=payable,
+            order=order, items=items, shipment=shipment, payable=payable,
+            can_cancel=order.status in (PharmacyOrder.Status.DRAFT, PharmacyOrder.Status.SUBMITTED),
+            cancel_form=form if form is not None else ConfirmForm(),
             pay_context=make_workflow_context(request, self.patient_company, 'order-pay', order, patient=self.patient) if payable else '',
             workflow_context=(request.POST.get('workflow_context', '') if request.method == 'POST'
-                              else self.token('patient-order', order)),
+                              else make_workflow_context(request, self.patient_company, 'patient-order', order, patient=self.patient)),
         ), status=status)
 
     def get(self, request, pk):
@@ -1193,24 +1122,16 @@ class PatientOrderDetailView(PatientPharmacyBase):
     @transaction.atomic
     def post(self, request, pk):
         self.patient_company = Company.objects.select_for_update().get(pk=self.patient_company.pk)
-        order = get_object_or_404(self.orders(), pk=pk)
-        action = request.POST.get('action', '')
-        form = SupplyRequestForm(request.POST) if action == 'submit' else ConfirmForm(request.POST)
+        order = get_object_or_404(self.orders().select_for_update(of=('self',)), pk=pk)
+        if request.POST.get('action') != 'cancel':
+            return retired_pharmacy_response(request, self.patient_company, self.patient)
+        form = ConfirmForm(request.POST)
         valid = form.is_valid()
         try:
             validate_workflow_context(request, self.patient_company, 'patient-order', order, patient=self.patient)
-            if action not in ('submit', 'cancel'):
-                raise ValidationError('Choose submit request or cancel.')
             if valid:
-                if action == 'submit':
-                    data = dict(form.cleaned_data)
-                    note, confirm = data.pop('note'), data.pop('confirm')
-                    submit_basket(order=order, actor=request.user, delivery_address=data, note=note, confirm=confirm,
-                                  expected_revision=order.revision, request=request)
-                    messages.success(request, 'Request submitted. Pay for it below so the practice can send it.')
-                else:
-                    cancel_order(order=order, actor=request.user, confirm=True, request=request)
-                    messages.success(request, 'Supply request cancelled.')
+                cancel_order(order=order, actor=request.user, confirm=True, request=request)
+                messages.success(request, 'Supply request cancelled.')
                 return redirect('portal:patient-order-detail', pk=pk)
         except ValidationError as error:
             _errors(request, form, error)

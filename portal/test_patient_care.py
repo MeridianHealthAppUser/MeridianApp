@@ -2,6 +2,7 @@
 
 from django.test import override_settings
 from datetime import datetime, time, timedelta
+from html.parser import HTMLParser
 
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
@@ -57,7 +58,7 @@ class PatientCareTests(TestCase):
         return reverse(f'portal:{name}', kwargs=kwargs or None)
 
     def booking_page(self, **changes):
-        data = {'book': 1, 'date': self.day.isoformat(), 'clinician': self.doctor.pk, 'appointment_type': 'review'}
+        data = {'book': 1, 'date': self.day.isoformat(), 'clinician': self.doctor.pk, 'appointment_type': 'follow_up'}
         data.update(changes)
         return self.client.get(self.url('patient-appointments'), data)
 
@@ -69,7 +70,7 @@ class PatientCareTests(TestCase):
         response = self.booking_page()
         self.assertEqual(response.status_code, 200)
         self.assertIn('10:00', self.times().json()['times'])
-        return {'clinician': self.doctor.pk, 'appointment_type': 'review', 'date': self.day.isoformat(), 'time': '10:00',
+        return {'clinician': self.doctor.pk, 'appointment_type': 'follow_up', 'date': self.day.isoformat(), 'time': '10:00',
                 'patient_context': response.context['patient_context'], **changes}
 
     def profile_data(self, **answers):
@@ -123,8 +124,13 @@ class PatientCareTests(TestCase):
         self.assertContains(page, '<dialog class="app-dialog" id="book-appointment" aria-labelledby="book-appointment-title">')
         self.assertNotContains(page, 'Book a consult')
         form = page.context['booking_form']
-        # Clinician, type, date, then a time from the clinician's free times; their own clinician to start with.
+        # The type is fixed; patients choose a clinician, date and time.
         self.assertEqual(list(form.fields), ['clinician', 'appointment_type', 'date', 'time'])
+        self.assertEqual(list(form.fields['appointment_type'].choices), [('follow_up', 'Follow-up · 15 minutes')])
+        self.assertTrue(form['appointment_type'].is_hidden)
+        self.assertEqual(form['appointment_type'].value(), 'follow_up')
+        self.assertContains(page, 'Follow-up · 15 minutes')
+        self.assertNotContains(page, '<select name="appointment_type"')
         self.assertEqual(form['clinician'].value(), self.doctor.pk)
         self.assertContains(page, f'data-booking-form data-times-url="{self.url("patient-booking-times")}"')
         self.assertContains(page, f'action="{self.url("patient-book-appointment")}"')
@@ -229,6 +235,7 @@ class PatientCareTests(TestCase):
         appointment = Appointment.objects.get()
         self.assertEqual((appointment.company_id, appointment.patient_id, appointment.clinician_id), (self.company.pk, self.patient.pk, self.doctor.pk))
         self.assertEqual(appointment.duration_minutes, 15)
+        self.assertEqual(appointment.appointment_type, Appointment.Type.FOLLOW_UP)
         self.assertEqual(appointment.starts_at, self.starts_at)
         self.assertEqual(appointment.video_link, '')
         self.slot.refresh_from_db()
@@ -331,14 +338,61 @@ class PatientCareTests(TestCase):
         self.assertTrue(response.context['booking_form'].errors)
         self.assertFalse(Appointment.objects.exists())
 
-    def test_booking_service_rejects_arbitrary_unoffered_time_and_initial_type(self):
+    def test_patient_booking_rejects_other_types_even_when_the_form_is_forged(self):
+        self.login()
+        data = self.booking_data()
+        before = self.counts()
+        for appointment_type in ('initial', 'review', 'ad_hoc'):
+            with self.subTest(appointment_type=appointment_type):
+                response = self.client.post(self.url('patient-book-appointment'), {**data, 'appointment_type': appointment_type})
+                self.assertIn('appointment_type', response.context['booking_form'].errors)
+                self.assertContains(response, 'aria-labelledby="book-appointment-title" open>')
+        self.assertEqual(before, self.counts())
+        # A stale or hand-edited booking link cannot change the fixed form value.
+        form = self.booking_page(appointment_type='review').context['booking_form']
+        self.assertEqual(form['appointment_type'].value(), 'follow_up')
+
+    def test_booking_service_rejects_unoffered_time_and_non_follow_up_types(self):
         for values in (
-            {'starts_at': self.starts_at + timedelta(minutes=3), 'appointment_type': 'review'},
+            {'starts_at': self.starts_at + timedelta(minutes=3), 'appointment_type': 'follow_up'},
             {'starts_at': self.starts_at, 'appointment_type': 'initial'},
+            {'starts_at': self.starts_at, 'appointment_type': 'review'},
+            {'starts_at': self.starts_at, 'appointment_type': 'ad_hoc'},
         ):
             with self.assertRaises(ValidationError):
                 book_patient_appointment(company=self.company, patient=self.patient, actor=self.user, clinician_id=self.doctor.pk, **values)
         self.assertFalse(Appointment.objects.exists())
+
+    def test_stale_booking_type_can_retry_with_returned_follow_up_field(self):
+        class HiddenFields(HTMLParser):
+            def __init__(self):
+                super().__init__()
+                self.values = {}
+
+            def handle_starttag(self, tag, attrs):
+                attrs = dict(attrs)
+                if tag == 'input' and attrs.get('type') == 'hidden' and attrs.get('name') in ('appointment_type', 'patient_context'):
+                    self.values[attrs['name']] = attrs.get('value', '')
+
+        self.login()
+        data = self.booking_data(appointment_type='review')
+        before = self.counts()
+        response = self.client.post(self.url('patient-book-appointment'), data)
+        form = response.context['booking_form']
+        self.assertIn('appointment_type', form.errors)
+        self.assertEqual(form['appointment_type'].value(), 'review')
+        self.assertEqual(self.counts(), before)
+        for name in ('clinician', 'date', 'time'):
+            self.assertEqual(str(form[name].value()), str(data[name]))
+            self.assertContains(response, form[name].as_widget(), html=True)
+        fields = HiddenFields()
+        fields.feed(response.content.decode())
+        self.assertEqual(fields.values['appointment_type'], 'follow_up')
+        retry = self.client.post(self.url('patient-book-appointment'), {**data, **fields.values})
+        self.assertRedirects(retry, self.url('patient-appointments'), fetch_redirect_response=False)
+        appointment = Appointment.objects.get()
+        self.assertEqual((appointment.clinician_id, appointment.starts_at, appointment.appointment_type, appointment.duration_minutes),
+                         (self.doctor.pk, self.starts_at, Appointment.Type.FOLLOW_UP, 15))
 
     def test_profile_saves_snapshot_and_id_only_audit(self):
         self.login()

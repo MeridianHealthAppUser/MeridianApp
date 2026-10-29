@@ -78,11 +78,10 @@ PATIENT_PAGES = {
     'patient-messages': Page('Your messages', 'messages', 'patient_messages'),
     'patient-labs': Page('Blood results', 'labs'),
     'patient-treatment': Page('My Treatment', 'treatment'),
-    'patient-pharmacy': Page('My Medications', 'pharmacy'),
-    'patient-orders': Page('My orders', 'orders'),
-    'patient-medical-profile': Page('Medical profile', 'medical_profile'),
+    'patient-medical-profile': Page('My Medical Information', 'medical_profile'),
     'patient-updates': Page('Updates', 'updates'),
     'patient-profile': Page('My profile', 'profile'),
+    'patient-orders': Page('Previous supply requests', 'orders'),
 }
 
 
@@ -107,8 +106,8 @@ HTML_PAGE_ROUTES = frozenset(STAFF_PAGES) | frozenset(PATIENT_PAGES) | frozenset
     'ops-billing', 'ops-billing-detail', 'ops-delivery-address', 'ops-parcel-payment',
     'patient-appointment-detail', 'patient-book-appointment',
     'patient-data-request-create', 'patient-data-request-detail',
-    'patient-lab-detail', 'patient-basket', 'patient-order-detail', 'patient-subscription',
-    'patient-billing', 'patient-invoice', 'patient-delivery-address',
+    'patient-lab-detail', 'patient-subscription',
+    'patient-billing', 'patient-invoice', 'patient-delivery-address', 'patient-order-detail',
     'patient-billing-sandbox-mandate', 'patient-billing-sandbox-checkout',
     'patient-details-edit', 'policy-create', 'staff-data-request-detail', 'staff-menu-section',
     'staff-patient-record', 'task-create', 'task-edit',
@@ -119,8 +118,8 @@ HTML_PAGE_ROUTES = frozenset(STAFF_PAGES) | frozenset(PATIENT_PAGES) | frozenset
 PATIENT_HTML_PAGE_ROUTES = frozenset(PATIENT_PAGES) | frozenset((
     'patient-appointment-detail', 'patient-book-appointment',
     'patient-data-request-create', 'patient-data-request-detail',
-    'patient-lab-detail', 'patient-basket', 'patient-order-detail', 'patient-subscription',
-    'patient-billing', 'patient-invoice', 'patient-delivery-address',
+    'patient-lab-detail', 'patient-subscription',
+    'patient-billing', 'patient-invoice', 'patient-delivery-address', 'patient-order-detail',
     'patient-billing-sandbox-mandate', 'patient-billing-sandbox-checkout',
 ))
 STAFF_HTML_PAGE_ROUTES = HTML_PAGE_ROUTES - PATIENT_HTML_PAGE_ROUTES
@@ -139,9 +138,12 @@ NATIVE_GET_ROUTES = frozenset((
     'clinical-lab-result-download', 'patient-lab-result-download', 'patient-lab-form',
     'record-conversation-search', 'patient-blood-test-form', 'patient-blood-result-report',
     'email-unsubscribe', 'ops-shipment-label',
+    # Retired patient shop addresses redirect only on ordinary navigation.
+    'patient-pharmacy', 'patient-basket', 'patient-basket-item',
     # Preparing a provider card form or settling its return has GET side effects;
     # a content request must be rejected before either view runs.
     'patient-card-form', 'patient-payment-return',
+    'patient-invoice-download',
 ))
 
 

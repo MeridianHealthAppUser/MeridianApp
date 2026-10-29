@@ -2,12 +2,25 @@
 {% load static workspace_ui %}
 {% block patient_extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/patient_care.css' %}?v=20261017a">{% endblock %}
 
-{% block patient_breadcrumbs %}{% breadcrumbs 'My Treatment' 'portal:patient-treatment' 'Medical profile' %}{% endblock %}
+{% block patient_breadcrumbs %}{% breadcrumbs 'My Medical Information' %}{% endblock %}
 {% block patient_heading %}
-  <header class="patient-page-heading"><div><h1>Your medical profile</h1><p>Give your doctor more context before you meet. These are your own answers, not a diagnosis or a treatment decision.</p></div></header>
+  <header class="patient-page-heading"><div><h1>My Medical Information</h1><p>Your medical record and the health information you share with your doctor.</p></div></header>
 {% endblock %}
 
 {% block patient_content %}
+<div class="patient-page-stack">
+  <section class="console-card" aria-labelledby="medical-information-heading">
+    <div class="console-card__body">
+      <h2 class="patient-eyebrow" id="medical-information-heading">Medical information</h2>
+      <dl class="patient-kv">
+        {% for label, value in medical_rows %}<div{% if value|length > 48 %} class="is-long"{% endif %}><dt>{{ label }}</dt><dd{% if value == 'Not recorded' %} class="patient-kv__quiet"{% endif %}>{{ value }}</dd></div>{% endfor %}
+      </dl>
+      <div class="patient-card-actions">
+        <a class="console-button console-button--secondary patient-card-actions__wide" href="{{ medical_change_url }}">Tell my doctor something has changed</a>
+      </div>
+      <p class="patient-small">What your doctor has on file from your questionnaire and medical records. Only your doctor can change your treatment.</p>
+    </div>
+  </section>
   <div class="patient-care">
     <aside class="patient-care-notice"><strong>Save now, come back later.</strong> Every section is optional. Use “Save my profile” to keep your progress. Changes apply only to {{ patient_company.name }}; previous saved versions are retained in your record.</aside>
     <section class="console-card" aria-labelledby="medical-profile-heading">
@@ -33,4 +46,5 @@
     </section>
     <p class="patient-care-caption">For appointment changes or a question that needs a reply, <a class="patient-inline-link" href="{% url 'portal:patient-messages' %}">message your care team</a>. Saving this form does not send a message or request an urgent review.</p>
   </div>
+</div>
 {% endblock %}

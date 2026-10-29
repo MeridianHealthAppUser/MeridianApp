@@ -37,10 +37,10 @@ def validate_privacy_context(request, company, kind, *, record_id=None):
     return data
 
 
-class CommunicationPreferenceForm(forms.Form):
-    marketing_enabled = forms.BooleanField(required=False,
-        label='I would like to receive optional marketing communications from this practice',
-        help_text='You can turn this off here at any time. This does not change your recorded treatment consent.')
+class DetailsChangeForm(forms.Form):
+    description = forms.CharField(label='What needs changing?', max_length=5000,
+        help_text='Describe the personal details your practice administrator should review. Do not include passwords or payment-card details.',
+        widget=forms.Textarea(attrs={'rows': 6}))
 
 
 class DataRequestForm(forms.Form):

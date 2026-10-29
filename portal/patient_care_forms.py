@@ -15,19 +15,18 @@ from .staff_forms import DoctorChoiceField, practice_doctors
 
 BOOKING_DAYS = 90
 BOOKING_TYPES = (
-    (Appointment.Type.REVIEW, 'Review · 15 minutes'),
     (Appointment.Type.FOLLOW_UP, 'Follow-up · 15 minutes'),
-    (Appointment.Type.AD_HOC, 'Ad-hoc consultation · 15 minutes'),
 )
 
 
 class PatientBookingForm(forms.Form):
-    """Book appointment, as staff book one: a clinician, the type, a date, then a time from that clinician's free
+    """Book a follow-up: a clinician, a date, then a time from that clinician's free
     quarter hours (the Time list fills in once both are chosen; static/js/appointment_booking.js). Without scripts
     the list has every quarter hour, and booking checks the time."""
 
     clinician = DoctorChoiceField(label='Clinician', queryset=None, empty_label='Choose a clinician')
-    appointment_type = forms.ChoiceField(label='Appointment type', choices=BOOKING_TYPES)
+    appointment_type = forms.ChoiceField(label='Appointment type', choices=BOOKING_TYPES,
+                                          initial=Appointment.Type.FOLLOW_UP, widget=forms.HiddenInput)
     date = forms.DateField(label='Date', widget=forms.DateInput(format='%Y-%m-%d', attrs={'type': 'date'}))
     time = forms.ChoiceField(label='Time', choices=[('', 'Choose a time'), *QUARTER_HOUR_CHOICES],
                              error_messages={'required': 'Choose a time.'})

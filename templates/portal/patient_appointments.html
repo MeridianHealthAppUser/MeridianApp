@@ -66,13 +66,15 @@
 <dialog class="app-dialog" id="book-appointment" aria-labelledby="book-appointment-title"{% if booking_open %} open{% endif %}>
   <div class="app-dialog__body">
     <h2 id="book-appointment-title">Book an appointment</h2>
-    <p class="app-dialog__sub">15-minute appointments. Times are SAST, in your clinician’s working hours and clear of your other bookings. Booking doesn’t take payment.</p>
+    <p class="app-dialog__sub">Follow-up · 15 minutes. After your initial 30-minute consultation, book your follow-ups here. Times are SAST, in your clinician’s working hours and clear of your other bookings. Booking doesn’t take payment.</p>
     <form class="console-form" method="post" action="{% url 'portal:patient-book-appointment' %}">{% csrf_token %}
       <input type="hidden" name="patient_context" value="{{ patient_context }}">
       <div class="booking-fields" data-booking-form data-times-url="{% url 'portal:patient-booking-times' %}">
         {% if booking_form.non_field_errors %}<div role="alert">{{ booking_form.non_field_errors }}</div>{% endif %}
         {% include 'portal/includes/form_field.html' with field=booking_form.clinician %}
-        {% include 'portal/includes/form_field.html' with field=booking_form.appointment_type %}
+        {# Reject stale types, then render the supported type so the patient can retry without editing a hidden field. #}
+        <input type="hidden" name="{{ booking_form.appointment_type.html_name }}" id="{{ booking_form.appointment_type.id_for_label }}" value="{{ booking_form.appointment_type.field.initial }}">
+        {{ booking_form.appointment_type.errors }}
         <div class="booking-fields__when booking-fields__when--pair">
           {% include 'portal/includes/form_field.html' with field=booking_form.date %}
           {% include 'portal/includes/form_field.html' with field=booking_form.time %}

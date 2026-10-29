@@ -96,7 +96,7 @@ class EnrollmentForm(DeliveryAddressForm):
     authorization = forms.ModelChoiceField(label='Your prescription', queryset=TreatmentAuthorization.objects.none(),
                                            empty_label='Choose your current authorisation')
     method = forms.ChoiceField(label='Pay by', widget=forms.RadioSelect, initial=DebitMandate.Method.DEBICHECK, choices=(
-        (DebitMandate.Method.DEBICHECK, 'DebiCheck debit order: you approve it in your banking app'),
+        (DebitMandate.Method.DEBICHECK, 'DebiCheck debit order: you approve it in your banking app (preferred)'),
         (DebitMandate.Method.CARD, 'Card: kept safely by our payment provider'),
     ))
     confirm = forms.BooleanField(label='I agree to the practice collecting my subscription as shown, from today, until I '

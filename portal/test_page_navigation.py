@@ -26,7 +26,7 @@ from django.utils import timezone
 
 from care.models import (
     Appointment, AuditEvent, ClinicalNote, MessageThread, MessageThreadParticipant,
-    PatientMessage, PracticeSettings,
+    PatientMessage, PharmacyOrder, PracticeSettings,
 )
 from practices.models import Company, CompanyMembership, Patient
 from practices.services import ACTIVE_COMPANY_SESSION_KEY, ACTIVE_PATIENT_COMPANY_SESSION_KEY
@@ -142,6 +142,18 @@ class PageNavigationTests(TestCase):
         self.assertIn('text/html', response['Content-Type'])
         self.message.refresh_from_db()
         self.assertIsNone(self.message.read_at)
+
+    def test_previous_request_content_supports_navigation_and_rechecks_record_ownership(self):
+        own = PharmacyOrder.objects.create(company=self.company, patient=self.patient, status='submitted', subtotal=120)
+        foreign = PharmacyOrder.objects.create(company=self.other_company, patient=self.other_patient, status='submitted', subtotal=999)
+        self.login(self.patient_user, patient=True)
+        listing = self.content(reverse('portal:patient-orders'))
+        self.assertEqual(listing.status_code, 200)
+        self.assertIn('Previous supply requests', listing.json()['html'])
+        detail = self.content(reverse('portal:patient-order-detail', args=[own.pk]))
+        self.assertEqual(detail.status_code, 200)
+        self.assertIn(f'Request {own.pk}', detail.json()['html'])
+        self.assertEqual(self.content(reverse('portal:patient-order-detail', args=[foreign.pk])).status_code, 404)
 
     def test_content_contract_returns_authorized_html_and_private_uncached_metadata(self):
         self.login(self.patient_user, patient=True)
@@ -699,7 +711,7 @@ class RenderedNavigationBrowserTests(TestCase):
                                                  starts_at=timezone.now() + timedelta(days=2), duration_minutes=15)
         patient_urls = [reverse(name) for name in (
             'portal:patient-dashboard', 'portal:patient-appointments', 'portal:patient-messages',
-            'portal:patient-treatment', 'portal:patient-pharmacy')]
+            'portal:patient-treatment', 'portal:patient-medical-profile')]
         doctor_urls = [reverse(name) for name in (
             'portal:desktop-dashboard', 'portal:staff-inbox', 'portal:patient-list')]
         doctor_urls += [reverse('portal:patient-detail', args=[self.patient.pk]) + '?tab=overview',

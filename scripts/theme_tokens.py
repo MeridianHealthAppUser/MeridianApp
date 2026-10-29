@@ -36,6 +36,16 @@ DARK_OVERRIDES = {
     '1f2933': '#1f2933',   # text on a provider's own light form (Peach's card form), the same in both
 }
 
+# Patient pages choose their own light/dark semantic roles in patient_theme.css.
+# Keep these palette values stable so the global conversion does not invert the
+# explicit dark palette a second time. These colours are only used by patients.
+PATIENT_PALETTE = (
+    '101e27', '14384a', '172b36', '1d4a5e', '2b4655', '345363', '405f6e', '4e899c',
+    '506e7c', '557381', '8ccbdc', 'a5e3f0', 'aec7d3', 'b8ced8', 'c0d5df', 'c4eff8',
+    'd2e2e8', 'e3f1f6', 'e5eef2', 'f3f8fa',
+)
+DARK_OVERRIDES.update({colour: f'#{colour}' for colour in PATIENT_PALETTE})
+
 
 def parse(text):
     """(r, g, b, alpha) from a colour as written."""

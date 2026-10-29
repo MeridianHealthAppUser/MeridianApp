@@ -16,7 +16,7 @@ from django.views import View
 from django.views.decorators.cache import never_cache
 
 from care.availability import SAST, open_slots_for_day, start_slots
-from care.models import Appointment, PatientEvent, PatientMedicalProfile
+from care.models import Appointment, PatientClinicalSummary, PatientEvent
 from care.patient_care import book_patient_appointment, clinician_answers, patient_busy_intervals, save_patient_medical_profile
 from .appointment_detail_views import labelled_slots
 from .clinical_forms import make_clinical_context, validate_clinical_context
@@ -24,6 +24,7 @@ from .patient_care_forms import (
     PROFILE_FIELDS, BookingTimesQuery, PatientBookingForm, PatientMedicalProfileForm, PatientUpdatesFilterForm,
 )
 from .patient_context import validate_patient_context
+from .patient_summary import intake_answers, latest_weight, medical_information, medical_profile
 from .patient_views import JUST_BOOKED, patient_appointments_context, patient_page_context
 from .views import PatientPortalRequiredMixin
 
@@ -53,7 +54,7 @@ def booking_context(request, company, patient, booking_form=None):
     """Book appointment on My Appointments: a dialog behind the button, open when asked (?book=1, as links from
     other pages ask) or after a booking that didn't go through."""
     form = booking_form or PatientBookingForm(company=company, patient=patient, initial={
-        key: request.GET[key] for key in ('clinician', 'appointment_type', 'date') if request.GET.get(key)})
+        key: request.GET[key] for key in ('clinician', 'date') if request.GET.get(key)})
     return {'booking_form': form, 'booking_open': booking_form is not None or request.GET.get('book') == '1'}
 
 
@@ -112,15 +113,23 @@ class PatientBookingTimesView(LoginRequiredMixin, PatientPortalRequiredMixin, Vi
 
 class PatientMedicalProfileView(PatientCarePage):
     def profile(self):
-        return PatientMedicalProfile.objects.for_company(self.patient_company).filter(patient=self.patient).first()
+        return medical_profile(self.patient_company, self.patient)
 
     def locked(self):
         return clinician_answers(self.patient_company, self.patient)
 
     def display(self, request, profile, form=None):
         locked = self.locked()
+        medical_change_query = urlencode({'compose': 1, 'subject': 'Change to my medical information'})
         context = self.context(
-            'medical_profile', 'Your medical profile', profile=profile,
+            'medical_profile', 'My Medical Information', profile=profile,
+            medical_rows=medical_information(
+                profile=profile, intake=intake_answers(self.patient_company, self.patient),
+                weight=latest_weight(self.patient_company, self.patient),
+                recorded_height=PatientClinicalSummary.objects.for_company(self.patient_company).filter(
+                    patient=self.patient).values_list('height_cm', flat=True).first(),
+            ),
+            medical_change_url=f"{reverse('portal:patient-messages')}?{medical_change_query}#patient-conversation",
             profile_form=form if form is not None else PatientMedicalProfileForm(
                 initial=profile.answers if profile else {}, locked=locked),
             # What their care team keeps, in the profile's order, with a way to ask for a correction.

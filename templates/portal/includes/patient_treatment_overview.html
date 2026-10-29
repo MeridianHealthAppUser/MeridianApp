@@ -1,6 +1,6 @@
 {% load l10n %}{# The prescription in detail, for a catalogue dose: portal.patient_summary.treatment_overview. #}
 <div class="patient-course">
-  <div class="patient-course__head"><strong>{% if treatment.before_start %}Week 1 starts {{ treatment.first_week|date:"j M" }}, with your first pens{% else %}Week {{ treatment.week }} of {{ treatment.weeks }}{% endif %}</strong><span>{{ treatment.first_week|date:"j M Y" }} – {{ treatment.ends_on|date:"j M Y" }}</span></div>
+  <div class="patient-course__head"><strong>{% if treatment.before_start %}Week 1 starts {{ treatment.first_week|date:"j M" }}, with your first pens{% else %}Week {{ treatment.week }} of {{ treatment.weeks }} prescribed{% endif %}</strong><span>{{ treatment.first_week|date:"j M Y" }} – {{ treatment.ends_on|date:"j M Y" }}</span></div>
   <div class="patient-course__track" aria-hidden="true"><span style="width:{{ treatment.progress|unlocalize }}%"></span></div>
 </div>
 <div class="patient-plan__note">

@@ -9,6 +9,7 @@
       <h1>Billing and payments</h1>
       <p>Your subscription payments, the debit order they’re collected with, and your invoices. Your parcels go out once each payment is in.</p>
     </div>
+    {% if has_previous_orders %}<div class="patient-page-heading__actions"><a class="console-button console-button--secondary" href="{% url 'portal:patient-orders' %}">Previous supply requests</a></div>{% endif %}
   </header>
 {% endblock %}
 
@@ -89,7 +90,7 @@
               <td data-label="Period">{{ cycle.starts_on|date:"j M" }} – {{ cycle.ends_on|default:cycle.starts_on|date:"j M Y" }}</td>
               <td data-label="Amount">R{{ cycle.amount|floatformat:"-2" }}</td>
               <td data-label="Status">{% if cycle.status == 'paid' %}<span class="billing-pill billing-pill--paid">Paid {{ cycle.paid_at|date:"j M" }}</span>{% elif cycle.status == 'failed' %}<span class="billing-pill billing-pill--failed">Not paid</span>{% elif cycle.attempts %}<span class="billing-pill billing-pill--retrying">Retrying</span>{% elif cycle.status == 'cancelled' %}<span class="billing-pill">Cancelled</span>{% else %}<span class="billing-pill">Due {{ cycle.due_on|date:"j M" }}</span>{% endif %}</td>
-              <td class="patient-table__fit" data-label="Invoice">{% if cycle.invoice %}<a class="patient-inline-link billing-invoice-link" href="{% url 'portal:patient-invoice' cycle.invoice.pk %}">{{ cycle.invoice.invoice_number }}</a>{% else %}—{% endif %}</td>
+              <td class="patient-table__fit" data-label="Invoice">{% if cycle.patient_invoice %}<a class="patient-inline-link billing-invoice-link" href="{% url 'portal:patient-invoice' cycle.patient_invoice.pk %}">View invoice {{ cycle.patient_invoice.invoice_number }}</a>{% if cycle.invoice_downloadable %} · <a class="patient-inline-link" href="{% url 'portal:patient-invoice-download' cycle.patient_invoice.pk %}">Download PDF</a>{% endif %}{% else %}—{% endif %}</td>
             </tr>
           {% empty %}
             <tr><td class="patient-table__empty" colspan="4">No subscription payments yet. Your first is collected once your debit order is approved.</td></tr>
@@ -105,8 +106,8 @@
       <header class="console-card__header"><div class="console-card__heading"><h2 id="billing-other-heading">Other payments</h2><p>Consultations, requests and payments the practice recorded for you.</p></div></header>
       <div class="patient-table-wrap">
         <table class="patient-table" aria-labelledby="billing-other-heading">
-          <thead><tr><th scope="col">Date</th><th scope="col">For</th><th scope="col">Amount</th><th scope="col">Status</th></tr></thead>
-          <tbody>{% for payment in once_off %}<tr><td data-label="Date">{{ payment.paid_at|default:payment.created_at|date:"j M Y" }}</td><td data-label="For">{{ payment.get_kind_display }}</td><td data-label="Amount">R{{ payment.amount|floatformat:"-2" }}</td><td data-label="Status">{{ payment.get_status_display }}</td></tr>{% endfor %}</tbody>
+          <thead><tr><th scope="col">Date</th><th scope="col">For</th><th class="patient-table__fit" scope="col">Invoice</th></tr></thead>
+          <tbody>{% for payment in once_off %}<tr><td data-label="Date">{{ payment.paid_at|default:payment.created_at|date:"j M Y" }}</td><td data-label="For"><div>{{ payment.description }}</div><small>R{{ payment.amount|floatformat:"-2" }} · {{ payment.get_status_display }}</small></td><td class="patient-table__fit" data-label="Invoice">{% if payment.patient_invoice %}<a class="patient-inline-link billing-invoice-link" href="{% url 'portal:patient-invoice' payment.patient_invoice.pk %}">View invoice {{ payment.patient_invoice.invoice_number }}</a>{% if payment.invoice_downloadable %} · <a class="patient-inline-link" href="{% url 'portal:patient-invoice-download' payment.patient_invoice.pk %}">Download PDF</a>{% endif %}{% else %}Not issued{% endif %}</td></tr>{% endfor %}</tbody>
         </table>
       </div>
     </section>

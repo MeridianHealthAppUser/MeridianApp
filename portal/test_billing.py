@@ -6,6 +6,7 @@ from unittest.mock import patch
 
 from django.test import override_settings
 from django.urls import reverse
+from django.utils import timezone
 
 from care import courier
 from care.addresses import save_delivery_address
@@ -100,16 +101,93 @@ class PatientBillingPageTests(BillingPageFixture):
                              f'{reverse("portal:patient-profile")}#profile-delivery', fetch_redirect_response=False)
         self.assertContains(self.client.get(reverse('portal:patient-profile')), '12 Kloof Street')
 
-    def test_a_non_prescription_request_is_paid_from_its_page(self):
+    def test_existing_submitted_request_can_still_be_paid_from_its_page(self):
         order = PharmacyOrder.objects.create(company=self.company, patient=self.patient, status='submitted', subtotal='120.00')
         self.login(self.patient_user)
-        page = self.client.get(reverse('portal:patient-order-detail', args=[order.pk]))
-        self.assertContains(page, 'Pay R120 by card')
-        response = self.client.post(reverse('portal:patient-order-pay', args=[order.pk]), {'workflow_context': page.context['pay_context']})
-        checkout = self.client.get(response['Location'])
-        self.client.post(response['Location'], {'workflow_context': checkout.context['workflow_context'], 'choice': 'pay'})
+        detail = self.client.get(reverse('portal:patient-order-detail', args=[order.pk]))
+        self.assertContains(detail, 'Pay R120 by card')
+        response = self.client.post(reverse('portal:patient-order-pay', args=[order.pk]),
+                                    {'workflow_context': detail.context['pay_context']})
+        payment = Payment.objects.get(pharmacy_order=order)
+        checkout = self.client.get(response.url)
+        response = self.client.post(response.url, {'workflow_context': checkout.context['workflow_context'], 'choice': 'pay'})
+        self.assertRedirects(response, reverse('portal:patient-order-detail', args=[order.pk]), fetch_redirect_response=False)
         order.refresh_from_db()
+        payment.refresh_from_db()
         self.assertIsNotNone(order.paid_at)
+        self.assertEqual(payment.status, Payment.Status.PAID)
+        self.assertEqual(PharmacyOrder.objects.count(), 1)
+        self.assertContains(self.client.get(reverse('portal:patient-order-detail', args=[order.pk])), 'Paid on')
+
+    def test_draft_cancelled_and_paid_requests_cannot_start_new_payments(self):
+        from django.test import RequestFactory
+        from .workflow_context import make_workflow_context
+
+        self.login(self.patient_user)
+        request = RequestFactory().post('/')
+        request.user = self.patient_user
+        for status, paid_at in (('draft', None), ('cancelled', None), ('submitted', timezone.now())):
+            order = PharmacyOrder.objects.create(company=self.company, patient=self.patient, status=status,
+                                                 subtotal='120.00', paid_at=paid_at)
+            token = make_workflow_context(request, self.company, 'order-pay', order, patient=self.patient)
+            with patch('care.payment_providers.SandboxProvider.start_checkout') as checkout:
+                self.client.post(reverse('portal:patient-order-pay', args=[order.pk]), {'workflow_context': token})
+                checkout.assert_not_called()
+            self.assertFalse(Payment.objects.filter(pharmacy_order=order).exists())
+
+    def test_pending_existing_order_card_form_can_prepare_its_checkout(self):
+        order = PharmacyOrder.objects.create(company=self.company, patient=self.patient, status='submitted', subtotal='120.00')
+        payment = Payment.objects.create(company=self.company, patient=self.patient, pharmacy_order=order,
+                                         kind=Payment.Kind.ONCE_OFF, method=Payment.Method.CARD, provider='peach',
+                                         amount='120.00', due_on=self.today, checkout=True)
+        self.login(self.patient_user)
+        url = reverse('portal:patient-card-form', args=['payment', payment.pk])
+        with patch('care.peach.PeachProvider.card_form', return_value={'checkout_id': 'existing-checkout',
+                   'script_url': 'https://sandbox.invalid/payment.js', 'action': '/existing-return/'}) as card_form:
+            response = self.client.get(url)
+            self.assertEqual(response.status_code, 200)
+            card_form.assert_called_once()
+        self.assertContains(response, 'for your request')
+        order.status = PharmacyOrder.Status.CANCELLED
+        order.save()
+        with patch('care.peach.PeachProvider.card_form') as card_form:
+            self.assertRedirects(self.client.get(url), reverse('portal:patient-order-detail', args=[order.pk]),
+                                 fetch_redirect_response=False)
+            card_form.assert_not_called()
+
+    def test_paid_request_cancellation_preserves_payment_and_explains_refund_contact(self):
+        order = PharmacyOrder.objects.create(company=self.company, patient=self.patient, status='submitted',
+                                             subtotal='120.00', paid_at=timezone.now())
+        payment = Payment.objects.create(company=self.company, patient=self.patient, pharmacy_order=order,
+                                         kind=Payment.Kind.ONCE_OFF, method=Payment.Method.CARD, amount='120.00',
+                                         due_on=self.today, status=Payment.Status.PAID, paid_at=order.paid_at)
+        self.login(self.patient_user)
+        url = reverse('portal:patient-order-detail', args=[order.pk])
+        page = self.client.get(url)
+        self.assertContains(page, 'contact your care team about any refund')
+        self.client.post(url, {'workflow_context': page.context['workflow_context'], 'action': 'cancel', 'confirm': 'on'})
+        order.refresh_from_db()
+        payment.refresh_from_db()
+        self.assertEqual(order.status, PharmacyOrder.Status.CANCELLED)
+        self.assertIsNotNone(order.paid_at)
+        self.assertEqual(payment.status, Payment.Status.PAID)
+        self.assertContains(self.client.get(url), 'contact your care team about any refund')
+
+    def test_cancelled_order_pending_sandbox_checkout_cannot_collect(self):
+        from care.billing import start_order_payment
+
+        order = PharmacyOrder.objects.create(company=self.company, patient=self.patient, status='submitted', subtotal='120.00')
+        payment, url = start_order_payment(order=order, actor=self.patient_user)
+        order.status = PharmacyOrder.Status.CANCELLED
+        order.save()
+        self.login(self.patient_user)
+        for method in (self.client.get, self.client.post):
+            with patch('portal.billing_views.complete_card_payment') as collect:
+                self.assertRedirects(method(url), reverse('portal:patient-order-detail', args=[order.pk]),
+                                     fetch_redirect_response=False)
+                collect.assert_not_called()
+        payment.refresh_from_db()
+        self.assertEqual(payment.status, Payment.Status.PENDING)
 
 
 class StartSubscriptionTests(BillingPageFixture):

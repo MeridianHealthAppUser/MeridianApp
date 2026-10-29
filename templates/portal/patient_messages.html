@@ -10,8 +10,9 @@
   <header class="patient-page-heading patient-inbox-heading">
     <div>
       <h1>My Messages</h1>
-      <p class="patient-lead">Experiencing side effects, or wondering if your dose needs adjusting? Message your clinician here.</p>
-      <p>We aim to reply within 48 hours. For anything urgent, {% if support_email %}email <a class="patient-inline-link" href="mailto:{{ support_email }}">{{ support_email }}</a> and {% endif %}go to your nearest GP or emergency department.</p>
+      <p class="patient-lead">Experiencing side effects, or wondering if your dose needs adjusting? Message your doctor here.</p>
+      <p>We aim to reply within 48 hours.</p>
+      <p>For anything urgent, seek care at your GP or nearest emergency department. Notify your Meridian doctor as well, but do not wait for a message reply. Messages are not monitored for emergencies.</p>
     </div>
   </header>
 {% endblock %}
@@ -64,7 +65,7 @@
           </div>
         </header>
         {% if not thread_form.has_recipients %}
-        <p class="patient-empty" id="new-thread">You can message a clinician once {{ patient_company.name }} assigns one to you.{% if support_email %} For anything urgent, email <a class="patient-inline-link" href="mailto:{{ support_email }}">{{ support_email }}</a>.{% endif %}</p>
+        <p class="patient-empty" id="new-thread">You can message your doctor once {{ patient_company.name }} assigns one to you. For anything urgent, seek care at your GP or nearest emergency department.</p>
         {% else %}
         <form class="console-form patient-compose" id="new-thread" method="post" action="{% url 'portal:patient-thread-create' %}">
           {% csrf_token %}

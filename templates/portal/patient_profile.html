@@ -12,8 +12,8 @@
 {% endblock %}
 
 {% block patient_content %}
-  <div class="patient-two-up">
-    {# The practice keeps these; the patient asks for a change by email to support. #}
+  <div class="patient-page-stack">
+    {# The practice keeps personal details; changes are requested through secure messaging. #}
     <section class="console-card" aria-labelledby="profile-details-heading">
       <div class="console-card__body">
         <h2 class="patient-eyebrow" id="profile-details-heading">Personal details</h2>
@@ -24,28 +24,13 @@
           <div><dt>Contact number</dt><dd{% if not patient.phone %} class="patient-kv__quiet"{% endif %}>{{ patient.phone|default:"Not recorded" }}</dd></div>
           <div><dt>ID / passport</dt><dd{% if not patient.id_number %} class="patient-kv__quiet"{% endif %}>{{ patient.id_number|default:"Not recorded" }}</dd></div>
           <div><dt>Date of birth</dt><dd{% if not patient.date_of_birth %} class="patient-kv__quiet"{% endif %}>{{ patient.date_of_birth|date:"j F Y"|default:"Not recorded" }}</dd></div>
-          <div><dt>City</dt><dd{% if not patient.city %} class="patient-kv__quiet"{% endif %}>{{ patient.city|default:"Not recorded" }}</dd></div>
           <div id="profile-delivery"><dt>Delivery address</dt><dd{% if not shipping_address %} class="patient-kv__quiet"{% endif %}>{{ shipping_address|default:"Not recorded" }} <a class="patient-inline-link" href="{% url 'portal:patient-delivery-address' %}">{% if shipping_address %}Change{% else %}Add{% endif %}<span class="sr-only"> my delivery address</span></a></dd></div>
-          <div><dt>Practice</dt><dd>{{ patient_company.name }}</dd></div>
-          <div><dt>Your clinician</dt><dd>{% if patient.assigned_doctor %}{{ patient.assigned_doctor.full_name }}{% else %}Your practice will assign a clinician{% endif %}</dd></div>
+          <div><dt>Your doctor</dt><dd>{% if patient.assigned_doctor %}{{ patient.assigned_doctor.full_name }}{% else %}Your practice will assign a doctor{% endif %}</dd></div>
           {% if patient.medical_record_number %}<div><dt>Record number</dt><dd>{{ patient.medical_record_number }}</dd></div>{% endif %}
         </dl>
-        <div class="patient-card-actions"><a class="console-button console-button--secondary patient-card-actions__wide" href="{{ details_change_url }}">Request a change</a></div>
-        <p class="patient-small">Your care team keeps these details, so your record stays matched to your ID. Request a change emails {{ support_email }}. You can change your delivery address yourself.</p>
-      </div>
-    </section>
-
-    <section class="console-card" aria-labelledby="profile-security-heading">
-      <div class="console-card__body">
-        <h2 class="patient-eyebrow" id="profile-security-heading">Security and account settings</h2>
-        <p class="patient-small">Your password protects your account and personal information.</p>
-        <dl class="patient-kv">
-          <div><dt>Account created</dt><dd>{{ user.date_joined|date:"j M Y" }}</dd></div>
-          <div><dt>Last sign-in</dt><dd{% if not user.last_login %} class="patient-kv__quiet"{% endif %}>{% if user.last_login %}{{ user.last_login|date:"j M Y, H:i" }} SAST{% else %}Not recorded{% endif %}</dd></div>
-          <div><dt>Password last changed</dt><dd{% if not user.last_change_password %} class="patient-kv__quiet"{% endif %}>{% if user.last_change_password %}{{ user.last_change_password|date:"j M Y, H:i" }} SAST{% else %}Not changed yet{% endif %}</dd></div>
-          <div><dt>Last reset with Forgot password</dt><dd{% if not user.last_forgot_password_reset %} class="patient-kv__quiet"{% endif %}>{% if user.last_forgot_password_reset %}{{ user.last_forgot_password_reset|date:"j M Y, H:i" }} SAST{% else %}Never{% endif %}</dd></div>
-        </dl>
-        <div class="patient-card-actions patient-card-actions--stack">
+        <div class="patient-card-actions"><a class="console-button console-button--secondary patient-card-actions__wide" href="{% url 'portal:patient-profile' %}?change=1#request-details-change" data-modal-open="request-details-change" aria-haspopup="dialog">Request a change</a></div>
+        <p class="patient-small">Your practice administrators review requests in My Messages and arrange updates to your personal details. You can change your delivery address yourself.</p>
+        <div class="patient-card-actions" role="group" aria-label="Account security">
           <a class="console-button console-button--secondary" href="{% url 'accounts:password-change' %}">Change password</a>
           <form method="post" action="{% url 'accounts:logout' %}">{% csrf_token %}<button class="console-button patient-button--red" type="submit">Sign out</button></form>
         </div>
@@ -81,9 +66,10 @@
   </section>
   {% include 'portal/includes/patient_pagination.html' with pagination_label='Data request' pagination_fragment='profile-requests' %}
 
-  <section class="console-card patient-page-section" aria-labelledby="profile-consents-heading">
-    <header class="console-card__header"><div class="console-card__heading"><h2 id="profile-consents-heading">Recorded consent</h2><p>These historical records are unchanged by your marketing preference.</p></div></header>
+  <section class="console-card patient-page-section" id="profile-consents" aria-labelledby="profile-consents-heading">
+    <header class="console-card__header"><div class="console-card__heading"><h2 id="profile-consents-heading">Recorded consent</h2></div></header>
     <div class="console-card__body">
+      {% if withdrawal_errors %}<div role="alert">{% for error in withdrawal_errors %}<p>{{ error }}</p>{% endfor %}</div>{% endif %}
       <ul class="patient-consent-list">
         {% for consent in consents %}
           <li>
@@ -95,11 +81,19 @@
           <li><div class="patient-empty">No consent records available here yet.</div></li>
         {% endfor %}
       </ul>
+      {% if can_withdraw_marketing %}
+        <p class="patient-small">Your saved preference allows marketing messages. You can withdraw it here without changing emails about your care or your recorded consent history.</p>
+        <form class="patient-card-actions" method="post" action="{% url 'portal:patient-profile' %}">
+          {% csrf_token %}<input type="hidden" name="section" value="withdraw-marketing">
+          <input type="hidden" name="privacy_context" value="{{ withdrawal_context }}">
+          <button class="console-button console-button--secondary" type="submit">Withdraw marketing consent</button>
+        </form>
+      {% endif %}
     </div>
   </section>
 
   <section class="console-card patient-page-section" id="profile-journeys" aria-labelledby="profile-journeys-heading">
-    <header class="console-card__header"><div class="console-card__heading"><h2 id="profile-journeys-heading">Emails about your care</h2><p>Guidance and reminders as your treatment goes on: what to expect, check-ins and your reviews. Emails about appointments, messages and payments always come.</p></div></header>
+    <header class="console-card__header"><div class="console-card__heading"><h2 id="profile-journeys-heading">Emails about your care</h2><p>Guidance and useful information as your treatment progresses. Emails about appointments, messages and payments will always be sent.</p></div></header>
     <div class="console-card__body">
       <form class="console-form" method="post" action="{% url 'portal:patient-profile' %}">
         {% csrf_token %}<input type="hidden" name="section" value="journeys">
@@ -114,25 +108,24 @@
     </div>
   </section>
 
-  <section class="console-card patient-page-section" id="profile-marketing" aria-labelledby="profile-marketing-heading">
-    <header class="console-card__header"><div class="console-card__heading"><h2 id="profile-marketing-heading">Optional marketing communications</h2><p>Manage your marketing preference without changing the consent already recorded for your care. This application does not currently send marketing emails.</p></div></header>
-    <div class="console-card__body">
+  <dialog class="app-dialog" id="request-details-change" aria-labelledby="request-details-change-title"{% if change_dialog_open %} open{% endif %}>
+    <div class="app-dialog__body">
+      <h2 id="request-details-change-title">Request a change</h2>
+      <p class="app-dialog__sub">Tell your practice administrators which personal details need updating. Your request and their reply stay in My Messages.</p>
       <form class="console-form" method="post" action="{% url 'portal:patient-profile' %}">
-        {% csrf_token %}
-        <input type="hidden" name="privacy_context" value="{{ privacy_context }}">
-        {{ form.non_field_errors }}
-        <div class="patient-preference">
-          <div class="console-form__field">
-            {{ form.marketing_enabled }}
-            <label for="{{ form.marketing_enabled.id_for_label }}">{{ form.marketing_enabled.label }}</label>
-            <span class="helptext">{{ form.marketing_enabled.help_text }}</span>
-            {{ form.marketing_enabled.errors }}
-          </div>
-          <button class="console-button console-button--primary" type="submit">Save preferences</button>
+        {% csrf_token %}<input type="hidden" name="section" value="details-change">
+        <input type="hidden" name="privacy_context" value="{{ change_context }}">
+        {% if change_form.non_field_errors %}<div role="alert">{{ change_form.non_field_errors }}</div>{% endif %}
+        <div class="console-form__field">
+          <label for="{{ change_form.description.id_for_label }}">{{ change_form.description.label }}</label>
+          {{ change_form.description }}
+          <span class="helptext" id="{{ change_form.description.auto_id }}_helptext">{{ change_form.description.help_text }}</span>
+          {{ change_form.description.errors }}
         </div>
+        <div class="app-dialog__actions"><a class="console-button console-button--secondary" href="{% url 'portal:patient-profile' %}" data-dialog-close>Cancel</a><button class="console-button console-button--primary" type="submit">Send request</button></div>
       </form>
     </div>
-  </section>
+  </dialog>
 
   {% for consent in consents %}{% if consent.text %}
     <dialog class="app-dialog app-dialog--wide" id="consent-text-{{ consent.pk }}" aria-labelledby="consent-text-{{ consent.pk }}-title">

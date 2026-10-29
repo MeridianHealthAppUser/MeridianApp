@@ -176,21 +176,6 @@ a.patient-chip { display: inline-block; text-decoration: none; }
 .patient-book__actions { align-items: center; display: flex; flex-wrap: wrap; gap: .5rem 1rem; }
 .patient-book__actions .patient-small { margin: 0; }
 
-/* Collapsed history kept below the main content. */
-.patient-history { background: var(--c-ffffff); border: 1px solid var(--console-line); border-radius: .9rem; margin-top: 1.4rem; }
-.patient-history > summary { color: var(--console-teal-dark); cursor: pointer; font-size: .88rem; font-weight: 500; list-style: none; padding: .95rem 1.15rem; }
-.patient-history > summary::-webkit-details-marker { display: none; }
-.patient-history > summary::after { content: '+'; float: right; font-weight: 500; }
-.patient-history[open] > summary::after { content: '–'; }
-.patient-history > summary:focus-visible { outline: 3px solid var(--console-teal); outline-offset: -3px; }
-.patient-history__body { border-top: 1px solid var(--console-soft-line); display: grid; gap: 1.2rem; padding: 1rem 1.15rem 1.2rem; }
-.patient-history__body h3 { color: var(--console-ink); font-size: .9rem; font-weight: 500; margin: 0 0 .5rem; }
-.patient-history .treatment-table { font-size: .82rem; }
-.patient-history .treatment-table th { padding: .6rem .75rem; }
-.patient-history .treatment-table td { padding: .7rem .75rem; }
-.patient-history .patient-history__detail td { border-top: 0; color: var(--patient-text); font-size: .78rem; padding-top: 0; }
-.patient-history__detail span { color: var(--console-muted); font-weight: 500; }
-
 @media (max-width: 52rem) {
   .patient-navigation__prefix { display: none; }
   .patient-navigation a { flex: 1 0 4.2rem; }

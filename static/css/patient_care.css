@@ -30,7 +30,16 @@
 .patient-weight-chart__grid { stroke: var(--console-soft-line); stroke-width: 1; }
 .patient-weight-chart__line { stroke: var(--console-teal); stroke-width: 2.5; fill: none; }
 .patient-weight-chart__point { stroke: var(--console-teal); stroke-width: 1.5; fill: var(--c-ffffff); }
+.patient-weight-chart__reference { fill: var(--patient-accent-soft, var(--console-teal-soft)); }
+.patient-weight-chart__reference-edge { fill: none; stroke: var(--patient-ink-2, var(--console-teal-dark)); stroke-dasharray: 5 4; stroke-width: 1.2; }
+.patient-weight-chart__starter { stroke: var(--console-muted); stroke-dasharray: 2 5; stroke-width: 1; }
 .patient-weight-chart figcaption { color: var(--console-muted); font-size: .8rem; line-height: 1.5; margin-top: .5rem; }
+.patient-weight-chart figcaption p { margin: .6rem 0 0; }
+.patient-weight-chart__legend { color: var(--patient-text); display: flex; flex-wrap: wrap; gap: .5rem 1rem; font-size: .78rem; }
+.patient-weight-chart__legend > span { align-items: center; display: inline-flex; gap: .4rem; }
+.patient-weight-chart__key { display: inline-block; flex: 0 0 auto; height: .65rem; width: 1.2rem; }
+.patient-weight-chart__key--recorded { background: var(--console-teal); border-radius: 999px; height: .2rem; }
+.patient-weight-chart__key--reference { background: var(--patient-accent-soft, var(--console-teal-soft)); border: 1px dashed var(--patient-ink-2, var(--console-teal-dark)); }
 .patient-weight-chart__range { display: none; }
 @media (max-width: 46rem) {
   .patient-care-profile-fields { grid-template-columns: minmax(0, 1fr); gap: 1.2rem; }

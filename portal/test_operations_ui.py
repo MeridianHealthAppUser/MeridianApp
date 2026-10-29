@@ -88,28 +88,25 @@ class OperationsTemplateTests(OperationsFixture):
         for route, pk in (('ops-product-detail', self.product.pk), ('ops-shipment-detail', shipment.pk), ('ops-order-detail', order.pk)):
             self.assertEqual(self.client.get(reverse(f'portal:{route}', args=[pk])).status_code, 403)
 
-    def test_patient_catalogue_and_basket_say_how_a_request_is_paid(self):
+    def test_patient_catalogue_and_basket_links_open_my_treatment(self):
         self.login(self.patient_user)
-        catalogue = self.assert_page('patient-pharmacy', 'My Medications')
-        self.assertContains(catalogue, 'Add to basket')
-        empty = self.assert_page('patient-basket', 'Your basket is empty')
-        self.assertNotContains(empty, 'Submit supply request')
-        self.basket()
-        populated = self.assert_page('patient-basket', 'Submit supply request')
-        self.assertContains(populated, 'name="workflow_context"')
-        self.assertContains(populated, 'pay for it by card on the request’s page')
+        for route in ('patient-pharmacy', 'patient-basket'):
+            response = self.client.get(reverse(f'portal:{route}'), follow=True)
+            self.assertContains(response, '<h1>My Treatment</h1>', html=True)
+            self.assertNotContains(response, 'Add to basket')
+            self.assertNotContains(response, 'Submit supply request')
 
-    def test_patient_order_detail_and_history_render_without_staff_actions(self):
+    def test_patient_order_detail_and_history_remain_available_without_a_shop(self):
         order = self.submitted_order()
         self.login(self.patient_user)
-        self.assert_page('patient-orders', 'Your supply requests')
-        detail = self.assert_page('patient-order-detail', 'Cancel supply request', (order.pk,))
-        self.assertNotContains(detail, 'Accept for preparation')
-        self.assertContains(detail, 'name="action" value="cancel"')
-        order.status = PharmacyOrder.Status.CANCELLED
-        order.save(update_fields=('status',))
-        detail = self.client.get(reverse('portal:patient-order-detail', args=[order.pk]))
-        self.assertNotContains(detail, 'Cancel supply request')
+        for route, args in (('patient-orders', ()), ('patient-order-detail', (order.pk,))):
+            response = self.client.get(reverse(f'portal:{route}', args=args), follow=True)
+            self.assertEqual(response.status_code, 200)
+            self.assertNotContains(response, 'Accept for preparation')
+            self.assertNotContains(response, 'Add to basket')
+            self.assertNotContains(response, 'Open current basket')
+        order.refresh_from_db()
+        self.assertEqual(order.status, PharmacyOrder.Status.SUBMITTED)
 
     def test_dispatch_page_uses_original_snapshot_product_and_patient_names(self):
         dispatched = dispatch_shipment(shipment=self.locked(), actor=self.admin, tracking_number='TRACK-SNAPSHOT', confirm=True)
@@ -207,8 +204,7 @@ class OperationsTemplateTests(OperationsFixture):
             self.assertEqual(response.status_code, 200)
             pages.append(dict(name=route, html=response.content.decode()))
         self.login(self.patient_user)
-        self.basket()
-        for route, args in (('patient-pharmacy', ()), ('patient-basket', ()), ('patient-orders', ()), ('patient-order-detail', (order.pk,))):
+        for route, args in (('patient-treatment', ()), ('patient-medical-profile', ())):
             response = self.client.get(reverse(f'portal:{route}', args=args))
             self.assertEqual(response.status_code, 200)
             pages.append(dict(name=route, html=response.content.decode()))
@@ -216,4 +212,4 @@ class OperationsTemplateTests(OperationsFixture):
                                 input=json.dumps(pages), text=True, capture_output=True, timeout=90, cwd=settings.BASE_DIR)
         self.assertEqual(result.returncode, 0, result.stderr)
         data = json.loads(result.stdout)
-        self.assertEqual(data['checked'], 30)
+        self.assertEqual(data['checked'], 24)

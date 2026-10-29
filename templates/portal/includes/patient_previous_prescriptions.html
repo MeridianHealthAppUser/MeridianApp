@@ -1,0 +1,20 @@
+<section class="patient-prescriptions" id="previous-prescriptions" aria-labelledby="previous-prescriptions-heading">
+  <div class="patient-section-head">
+    <div class="patient-section-head__copy">
+      <h2 id="previous-prescriptions-heading">Previously prescribed</h2>
+      <p>Other medication your doctor has prescribed, with its prescribed dates. Book a consult to discuss your treatment or ask about a renewal.</p>
+    </div>
+    <a class="console-button console-button--secondary" href="{% url 'portal:patient-appointments' %}?book=1">Book a consult</a>
+  </div>
+  <div class="patient-prescriptions__grid">
+    {% for prescription in previous_prescriptions %}
+      <article class="patient-prescriptions__card" aria-labelledby="previous-prescription-{{ prescription.pk }}">
+        <h3 id="previous-prescription-{{ prescription.pk }}">{{ prescription.product.name }}{% if prescription.product.strength %} <span>{{ prescription.product.strength }}</span>{% endif %}</h3>
+        <p>{{ prescription.max_dose }}</p>
+        <p class="patient-small">Prescribed {{ prescription.starts_on|date:"j M Y" }} – {{ prescription.expires_on|date:"j M Y" }}<br>{{ prescription.prescribed_by.full_name }}</p>
+        {% if prescription.status == 'active' and prescription.starts_on > today %}<p class="patient-small">Starts {{ prescription.starts_on|date:"j M Y" }}</p>{% else %}<p class="patient-small">No longer authorised</p>{% endif %}
+      </article>
+    {% endfor %}
+  </div>
+  {% include 'portal/includes/patient_pager.html' with pager=previous_prescriptions param='prescription_page' query=prescription_query anchor='previous-prescriptions' label='Previously prescribed medication' %}
+</section>

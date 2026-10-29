@@ -2,7 +2,7 @@
 {% load static workspace_ui %}
 
 {% block title %}My Treatment | Meridian{% endblock %}
-{% block patient_extra_css %}<link rel="stylesheet" href="{% static 'css/treatment.css' %}?v=20261022a"><link rel="stylesheet" href="{% static 'css/patient_billing.css' %}?v=20261025d"><link rel="stylesheet" href="{% static 'css/dialogs.css' %}?v=20261022a"><script src="{% static 'js/dialogs.js' %}?v=20261022a" defer></script>{% endblock %}
+{% block patient_extra_css %}<link rel="stylesheet" href="{% static 'css/treatment.css' %}?v=20261029a"><link rel="stylesheet" href="{% static 'css/patient_billing.css' %}?v=20261025d"><link rel="stylesheet" href="{% static 'css/dialogs.css' %}?v=20261022a"><script src="{% static 'js/dialogs.js' %}?v=20261022a" defer></script>{% endblock %}
 {% block patient_content_class %}patient-treatment{% endblock %}
 {% block patient_breadcrumbs %}{% breadcrumbs 'My Treatment' %}{% endblock %}
 {% block patient_heading %}<header class="patient-page-heading"><div><h1>My Treatment</h1></div></header>{% endblock %}
@@ -43,20 +43,7 @@
     </div>
   </section>
 
-  <div class="patient-two-up patient-treatment__cards">
-    <section class="console-card" aria-labelledby="medical-information-heading">
-      <div class="console-card__body">
-        <h2 class="patient-eyebrow" id="medical-information-heading">Medical information</h2>
-        <dl class="patient-kv">
-          {% for label, value in medical_rows %}<div{% if value|length > 48 %} class="is-long"{% endif %}><dt>{{ label }}</dt><dd{% if value == 'Not recorded' %} class="patient-kv__quiet"{% endif %}>{{ value }}</dd></div>{% endfor %}
-        </dl>
-        <div class="patient-card-actions">
-          <a class="console-button console-button--secondary patient-card-actions__wide" href="{{ medical_change_url }}">Tell my doctor something has changed</a>
-        </div>
-        <p class="patient-small">What your doctor has on file from your questionnaire and medical profile. Only your doctor can change your treatment. <a class="patient-inline-link" href="{% url 'portal:patient-medical-profile' %}">{% if medical_profile and medical_profile.revision %}Update your medical profile{% else %}Complete your medical profile{% endif %}</a></p>
-      </div>
-    </section>
-
+  <div class="patient-treatment__cards">
     <section class="console-card patient-plan" id="treatment-plan" aria-labelledby="treatment-plan-heading">
       <div class="console-card__body">
         {% if current_plan %}
@@ -66,7 +53,7 @@
             <p class="patient-plan__product">{% if treatment %}<strong>{{ treatment.medicine }} {{ treatment.dose }}</strong>{% elif plan_authorization %}<strong>{{ plan_authorization.product.name }} {{ plan_authorization.max_dose }}</strong> <span>· {{ plan_authorization.quantity_per_cycle }} per cycle</span>{% else %}<strong>{{ current_plan.plan_name }}</strong>{% endif %}</p>
             {% if plan_dose.price is not None %}<p class="patient-plan__amount">R{{ plan_dose.price|floatformat:"-2" }}<span>{{ plan_dose.billing_text }}</span></p>{% endif %}
           </div>
-          <p class="patient-small patient-plan__billing">{% if plan_billing %}{{ plan_billing.text }}. {% endif %}<a href="{% url 'portal:patient-billing' %}">Billing and payments</a></p>
+          <p class="patient-small patient-plan__billing">{% if plan_billing %}{{ plan_billing.text }}. {% endif %}<a class="patient-inline-link" href="{% url 'portal:patient-billing' %}">Billing and payments</a></p>
           {% if treatment %}{% include 'portal/includes/patient_treatment_overview.html' %}{% endif %}
           <dl class="patient-kv">
             <div><dt>Plan</dt><dd>{{ current_plan.plan_name }}</dd></div>
@@ -156,69 +143,7 @@
       </div>
     </section>
   </div>
-
-  <details class="patient-history" id="treatment-history"{% if history_open %} open{% endif %}>
-    <summary>Treatment and delivery history</summary>
-    <div class="patient-history__body">
-      <section aria-labelledby="authorisation-history-heading">
-        <h3 id="authorisation-history-heading">Treatment authorisations</h3>
-        <div class="treatment-table-wrap">
-          <table class="treatment-table">
-            <thead><tr><th scope="col">Medicine</th><th scope="col">Dose and quantity</th><th scope="col">Authorised dates</th><th scope="col">Status</th><th scope="col">Doctor</th></tr></thead>
-            <tbody>
-              {% for item in page_obj %}
-                <tr>
-                  <td>{{ item.product.name }}{% if item.product.strength %} {{ item.product.strength }}{% endif %}</td>
-                  <td>{{ item.max_dose }} · {{ item.quantity_per_cycle }} per cycle</td>
-                  <td>{{ item.starts_on|date:"j M Y" }} – {{ item.expires_on|date:"j M Y" }}</td>
-                  <td>{% if item.is_current %}Currently authorised{% else %}{{ item.get_status_display }} · not valid for dispensing{% endif %}</td>
-                  <td>{{ item.prescribed_by.full_name }}</td>
-                </tr>
-                {% if item.instructions %}<tr class="patient-history__detail"><td colspan="5"><span>Instructions:</span> {{ item.instructions|linebreaksbr }}</td></tr>{% endif %}
-              {% empty %}
-                <tr><td colspan="5">No treatment authorisations have been recorded yet.</td></tr>
-              {% endfor %}
-            </tbody>
-          </table>
-        </div>
-        {% include 'portal/includes/patient_pager.html' with pager=page_obj param='page' query=history_queries.page anchor='treatment-history' label='Treatment authorisation history' %}
-      </section>
-
-      <section aria-labelledby="plan-history-heading">
-        <h3 id="plan-history-heading">Subscriptions</h3>
-        <div class="treatment-table-wrap">
-          <table class="treatment-table">
-            <thead><tr><th scope="col">Plan</th><th scope="col">Started</th><th scope="col">Status</th><th scope="col">Cancelled</th></tr></thead>
-            <tbody>
-              {% for item in plans_page %}
-                <tr><td>{{ item.plan_name }}</td><td>{{ item.starts_on|date:"j M Y" }}</td><td>{{ item.get_status_display }}</td><td>{{ item.cancelled_at|date:"j M Y, H:i"|default:"—" }}{% if item.cancelled_at %} SAST{% endif %}</td></tr>
-              {% empty %}
-                <tr><td colspan="4">No subscriptions have been recorded yet.</td></tr>
-              {% endfor %}
-            </tbody>
-          </table>
-        </div>
-        {% include 'portal/includes/patient_pager.html' with pager=plans_page param='plans_page' query=history_queries.plans_page anchor='treatment-history' label='Subscription history' %}
-      </section>
-
-      <section aria-labelledby="delivery-history-heading">
-        <h3 id="delivery-history-heading">Deliveries</h3>
-        <div class="treatment-table-wrap">
-          <table class="treatment-table">
-            <thead><tr><th scope="col">Scheduled</th><th scope="col">Parcel</th><th scope="col">Status</th><th scope="col">Tracking reference</th></tr></thead>
-            <tbody>
-              {% for item in shipments_page %}
-                <tr><td>{{ item.scheduled_for|date:"j M Y" }}</td><td>{{ item.cycle_number }}</td><td>{{ item.get_status_display }}</td><td>{{ item.tracking_number|default:"Not dispatched" }}</td></tr>
-              {% empty %}
-                <tr><td colspan="4">No deliveries have been recorded.</td></tr>
-              {% endfor %}
-            </tbody>
-          </table>
-        </div>
-        {% include 'portal/includes/patient_pager.html' with pager=shipments_page param='shipments_page' query=history_queries.shipments_page anchor='treatment-history' label='Delivery history' %}
-      </section>
-    </div>
-  </details>
+  {% if previous_prescriptions %}{% include 'portal/includes/patient_previous_prescriptions.html' %}{% endif %}
 </div>
 {% if timeline %}{% include 'portal/includes/patient_treatment_timeline.html' %}{% endif %}
 {% if action_plan %}

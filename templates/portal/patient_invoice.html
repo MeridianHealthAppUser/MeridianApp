@@ -4,17 +4,18 @@
 {% block patient_extra_css %}<link rel="stylesheet" href="{% static 'css/patient_billing.css' %}?v=20261025d">{% endblock %}
 {% block patient_breadcrumbs %}{% breadcrumbs 'Billing and payments' 'portal:patient-billing' invoice.invoice_number %}{% endblock %}
 {% block patient_heading %}
-  <header class="patient-page-heading"><div><h1>Invoice {{ invoice.invoice_number }}</h1><p>{{ patient_company.name }} · Issued {{ invoice.issued_on|date:"j F Y" }}</p></div><button class="console-button console-button--secondary" type="button" onclick="window.print()">Print or save as PDF</button></header>
+  <header class="patient-page-heading"><div><h1>{% if invoice.status == 'void' %}Void invoice{% elif invoice.status == 'draft' %}Draft invoice{% else %}Invoice{% endif %} {{ invoice.invoice_number }}</h1><p>{{ patient_company.name }} · {{ invoice.get_status_display }} · {{ invoice.issued_on|date:"j F Y" }}</p></div><div class="patient-page-heading__actions">{% if downloadable %}<a class="console-button console-button--primary" href="{% url 'portal:patient-invoice-download' invoice.pk %}">Download PDF</a>{% endif %}<button class="console-button console-button--secondary" type="button" onclick="window.print()">Print</button></div></header>
 {% endblock %}
 {% block patient_content %}
   <section class="console-card billing-invoice" aria-label="Invoice">
     <div class="console-card__body">
+      {% if invoice.status == 'void' %}<p class="patient-plan__hold">This invoice is void. It does not require payment.</p>{% elif invoice.status == 'draft' %}<p class="patient-small">This is a draft and has not been issued.</p>{% endif %}
       <dl class="patient-kv">
         {# As issued (Invoice.billed_to), not as the patient record has them now. #}
         <div><dt>Billed to</dt><dd>{{ billed_to.name }}</dd></div>
         {% if billed_to.id_number %}<div><dt>ID / passport</dt><dd>{{ billed_to.id_number }}</dd></div>{% endif %}
         {% with cycle=invoice.subscription_cycle %}{% if cycle %}<div><dt>Period</dt><dd>{{ cycle.starts_on|date:"j M Y" }} – {{ cycle.ends_on|default:cycle.starts_on|date:"j M Y" }}</dd></div>{% endif %}{% endwith %}
-        <div><dt>Status</dt><dd>{% if paid %}Paid{% else %}{{ invoice.get_status_display }}, due {{ invoice.due_on|date:"j F Y" }}{% endif %}</dd></div>
+        <div><dt>Status</dt><dd>{% if paid %}Paid{% elif invoice.status == 'issued' %}Issued, due {{ invoice.due_on|date:"j F Y" }}{% else %}{{ invoice.get_status_display }}{% endif %}</dd></div>
       </dl>
       <table class="patient-table billing-invoice__lines">
         <thead><tr><th scope="col">Description</th><th scope="col">Amount</th></tr></thead>

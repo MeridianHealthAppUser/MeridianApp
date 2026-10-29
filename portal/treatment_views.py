@@ -16,13 +16,11 @@ from django.views import View
 from django.views.decorators.cache import never_cache
 
 from care.followups import request_help
-from care.models import AuditEvent, PatientClinicalSummary, PatientSubscription, Shipment, TreatmentAuthorization
+from care.models import AuditEvent, PatientSubscription, TreatmentAuthorization
 from care.treatment import (
-    authorization_is_current, change_authorization_status, change_subscription_status,
+    authorization_is_current, change_authorization_status, change_subscription_status, current_authorizations,
     create_authorization, dose_in_effect, enroll_local_subscription, other_treatments, subscription_hold_reason,
 )
-from practices.models import CompanyMembership
-
 from .clinical_views import StaffClinicalView, _error, _listing
 from .filter_menus import TickedChoiceField, list_tools, ticked_sections, without_all
 from .patient_views import patient_page_context
@@ -242,28 +240,8 @@ def _enrollment_form(company, patient):
 
 
 def _eligible_authorizations(company, patient):
-    today = timezone.localdate()
     # The service repeats all checks against locked records on submission.
-    return _authorizations(company, patient).filter(
-        status=TreatmentAuthorization.Status.ACTIVE, starts_on__lte=today, expires_on__gte=today,
-        product__is_active=True, prescribed_by__is_active=True,
-        prescribed_by__company_memberships__company=company,
-        prescribed_by__company_memberships__clinician_type__in=CompanyMembership.PRESCRIBER_TYPES,
-        prescribed_by__company_memberships__is_active=True,
-    ).distinct()
-
-
-def _compose_url(subject):
-    return f"{reverse('portal:patient-messages')}?{urlencode({'compose': 1, 'subject': subject})}#patient-conversation"
-
-
-HISTORY_PAGES = ('page', 'plans_page', 'shipments_page')
-
-
-def _query_without(request, name):
-    query = request.GET.copy()
-    query.pop(name, None)
-    return query.urlencode()
+    return current_authorizations(_authorizations(company, patient))
 
 
 def patient_treatment_context(request, company, patient, *, enrollment_form=None, action_form=None, action_plan=None,
@@ -272,8 +250,8 @@ def patient_treatment_context(request, company, patient, *, enrollment_form=None
     subscription each open a dialog, which opens again after a mistake (or from ?help=1 and ?cancel=1 without
     scripts)."""
     from .patient_summary import (
-        billing_tasks, current_authorization, intake_answers, latest_weight, medical_information, medical_profile,
-        next_consult, open_lab_requests, patient_tasks, treatment_overview, treatment_timeline,
+        billing_tasks, current_authorization, latest_weight, medical_profile,
+        next_consult, open_lab_requests, patient_tasks, previous_prescriptions, treatment_overview, treatment_timeline,
     )
 
     from care.billing import patient_summary as billing_summary, prescription_amount
@@ -284,21 +262,18 @@ def patient_treatment_context(request, company, patient, *, enrollment_form=None
     consult = next_consult(request, company, patient)
     profile = medical_profile(company, patient)
     weight = latest_weight(company, patient)
-    authorizations = Paginator(_authorizations(company, patient), 20).get_page(request.GET.get('page'))
     treatment_authorization = current.authorization if current and current.authorization_id else authorization
-    for item in authorizations.object_list:
-        item.is_current = authorization_is_current(item)
+    prescription_query = request.GET.copy()
+    prescription_query.pop('prescription_page', None)
     context.update(
         next_consult=consult,
         tasks=billing_tasks(current) + patient_tasks(
             authorization=authorization, plan=current, consult=consult, weight=weight, profile=profile,
             labs=open_lab_requests(company, patient),
         ),
-        medical_rows=medical_information(profile=profile, intake=intake_answers(company, patient), weight=weight,
-                                         recorded_height=PatientClinicalSummary.objects.for_company(company).filter(
-                                             patient=patient).values_list('height_cm', flat=True).first()),
-        medical_profile=profile,
-        medical_change_url=_compose_url('Change to my medical information'),
+        previous_prescriptions=Paginator(previous_prescriptions(company, patient), 12).get_page(request.GET.get('prescription_page')),
+        prescription_query=prescription_query.urlencode(),
+        today=timezone.localdate(),
         help_form=help_form if help_form is not None else HelpRequestForm(auto_id='help_%s'),
         help_open=help_form is not None or request.GET.get('help') == '1',
         help_context=request.POST.get('treatment_context', '') if help_form is not None else make_treatment_context(request, company, patient, 'help-request'),
@@ -307,12 +282,7 @@ def patient_treatment_context(request, company, patient, *, enrollment_form=None
         current_plan=current, current_authorization=authorization,
         plan_authorization=current.authorization if current and current.authorization_id else authorization,
         can_enroll=current is None and _eligible_authorizations(company, patient).exists(),
-        history_open=any(request.GET.get(name) for name in HISTORY_PAGES),
-        history_queries={name: _query_without(request, name) for name in HISTORY_PAGES},
         plan_hold_reason=subscription_hold_reason(current) if current else '',
-        page_obj=authorizations,
-        plans_page=Paginator(_plans(company, patient), 20).get_page(request.GET.get('plans_page')),
-        shipments_page=Paginator(Shipment.objects.for_company(company).filter(patient=patient).order_by('-scheduled_for', '-pk'), 20).get_page(request.GET.get('shipments_page')),
         enrollment_form=enrollment_form if enrollment_form is not None else _enrollment_form(company, patient),
         action_form=action_form if action_form is not None else ConfirmTreatmentForm(),
         action_plan=action_plan or current,

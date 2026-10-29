@@ -1,4 +1,13 @@
 .treatment-workspace { display: grid; gap: 1.25rem; }
+.patient-treatment__cards { min-width: 0; width: 100%; }
+.patient-prescriptions { min-width: 0; }
+.patient-prescriptions .patient-section-head { align-items: center; }
+.patient-prescriptions .patient-section-head h2 { color: var(--console-ink); font-size: 1.2rem; margin: 0; }
+.patient-prescriptions__grid { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fill, minmax(min(100%, 16rem), 1fr)); margin-top: 1rem; }
+.patient-prescriptions__card { background: var(--console-canvas); border: 1px dashed var(--console-line); border-radius: .9rem; min-width: 0; overflow-wrap: anywhere; padding: 1rem; }
+.patient-prescriptions__card h3 { color: var(--console-ink); font-size: .95rem; font-weight: 600; margin: 0 0 .45rem; }
+.patient-prescriptions__card h3 span { color: var(--patient-text); font-weight: 400; }
+.patient-prescriptions__card > p { color: var(--patient-text); font-size: .85rem; margin: .35rem 0; }
 .treatment-workspace .staff-page-card { min-width: 0; }
 .treatment-panel { padding: 1.5rem; }
 .treatment-grid { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(17rem, 1fr); gap: 1.25rem; align-items: start; }

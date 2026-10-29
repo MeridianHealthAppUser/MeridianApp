@@ -7,18 +7,21 @@ from datetime import timedelta
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
+from django.core import mail
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.test import Client, RequestFactory, TestCase
 from django.urls import reverse
 from django.utils import timezone
 
 from care.models import (
-    AuditEvent, ConsentDocument, ConsentRecord, PatientCommunicationPreference, PatientDataRequest,
-    PatientDataRequestReply, PracticeSettings, WeightEntry,
+    AuditEvent, ConsentDocument, ConsentRecord, MessageThread, PatientCommunicationPreference, PatientDataRequest,
+    PatientDataRequestReply, PatientMessage, PracticeSettings, WeightEntry,
 )
-from care.privacy import create_data_request, publish_policy_version, respond_to_data_request, save_communication_preference
+from care.messaging import staff_threads
+from care.privacy import create_data_request, publish_policy_version, request_details_change, respond_to_data_request, withdraw_marketing_preference
 from practices.models import Company, CompanyMembership, Patient
 from practices.services import ACTIVE_COMPANY_SESSION_KEY, ACTIVE_PATIENT_COMPANY_SESSION_KEY
+from .privacy_forms import privacy_context
 
 
 @override_settings(MULTI_PRACTICE_ENABLED=True)
@@ -76,12 +79,19 @@ class PrivacyTests(TestCase):
         self.assertEqual(response.status_code, 200)
         return {'privacy_context': response.context['request_context'], **fields}
 
+    def change_data(self, **fields):
+        response = self.get('patient-profile')
+        self.assertEqual(response.status_code, 200)
+        return {'section': 'details-change', 'privacy_context': response.context['change_context'],
+                'description': 'Please correct my contact number.', **fields}
+
     def post(self, name, data, pk=None):
         return self.client.post(self.url(name, pk), data)
 
     def privacy_counts(self):
         return {model.__name__: model.objects.count() for model in (
             PatientCommunicationPreference, PatientDataRequest, PatientDataRequestReply, ConsentRecord, AuditEvent,
+            MessageThread, PatientMessage,
         )}
 
     def test_patient_privacy_pages_require_owned_active_patient(self):
@@ -114,47 +124,209 @@ class PrivacyTests(TestCase):
         self.assertFalse(self.get('patient-profile').context['request_dialog_open'])
         self.assertEqual(self.privacy_counts(), before)
 
-    def test_marketing_defaults_off_without_creating_preference(self):
+    def test_profile_hides_marketing_controls_without_creating_preference(self):
         self.login()
         response = self.get('patient-profile')
-        self.assertFalse(response.context['form']['marketing_enabled'].value())
+        self.assertNotContains(response, 'name="marketing_enabled"')
+        self.assertNotContains(response, 'Optional marketing communications')
         self.assertFalse(PatientCommunicationPreference.objects.exists())
 
-    def test_preference_changes_are_separate_from_immutable_consent(self):
+    def test_stale_marketing_submissions_preserve_preferences_and_consent_history(self):
         self.login()
-        before = list(ConsentRecord.objects.values())
-        data = self.form_data('patient-profile', marketing_enabled='on')
-        self.assertEqual(self.post('patient-profile', data).status_code, 302)
-        self.assertTrue(PatientCommunicationPreference.objects.get(patient=self.patient).marketing_enabled)
-        data = self.form_data('patient-profile')
-        self.assertEqual(self.post('patient-profile', data).status_code, 302)
-        self.assertFalse(PatientCommunicationPreference.objects.get(patient=self.patient).marketing_enabled)
-        self.assertEqual(list(ConsentRecord.objects.values()), before)
-        self.assertFalse(PatientCommunicationPreference.objects.filter(patient=self.beta_patient).exists())
-
-    def test_replaying_preference_has_no_additional_audit_write(self):
-        self.login()
-        data = self.form_data('patient-profile', marketing_enabled='on')
-        self.post('patient-profile', data)
+        preference = PatientCommunicationPreference.objects.create(company=self.alpha, patient=self.patient, marketing_enabled=True)
+        factory_request = RequestFactory().get('/')
+        factory_request.user = self.user
+        token = privacy_context(factory_request, self.alpha, 'preference', record_id=self.patient.pk,
+                                version=preference.updated_at.isoformat())
+        consents = list(ConsentRecord.objects.values())
+        preferences = list(PatientCommunicationPreference.objects.values())
         before = self.privacy_counts()
+        for fields in ({'marketing_enabled': 'on'}, {'section': 'journeys', 'marketing_enabled': 'on'}):
+            self.assertEqual(self.post('patient-profile', {'privacy_context': token, **fields}).status_code, 410)
+        self.assertEqual(self.privacy_counts(), before)
+        self.assertEqual(list(PatientCommunicationPreference.objects.values()), preferences)
+        self.assertEqual(list(ConsentRecord.objects.values()), consents)
+
+    def test_existing_marketing_preference_can_only_be_withdrawn_without_changing_care_emails(self):
+        self.login()
+        stopped_at = timezone.now()
+        preference = PatientCommunicationPreference.objects.create(company=self.alpha, patient=self.patient,
+            marketing_enabled=True, journey_emails_off_at=stopped_at)
+        consents = list(ConsentRecord.objects.values())
+        page = self.get('patient-profile')
+        self.assertContains(page, 'Withdraw marketing consent')
+        self.assertNotContains(page, 'name="marketing_enabled"')
+        data = {'section': 'withdraw-marketing', 'privacy_context': page.context['withdrawal_context']}
         self.assertEqual(self.post('patient-profile', data).status_code, 302)
+        preference.refresh_from_db()
+        self.assertFalse(preference.marketing_enabled)
+        self.assertEqual(preference.journey_emails_off_at, stopped_at)
+        self.assertEqual(list(ConsentRecord.objects.values()), consents)
+        before = self.privacy_counts()
+        # A repeated or tampered submission can never turn marketing back on.
+        self.assertEqual(self.post('patient-profile', {**data, 'marketing_enabled': 'on'}).status_code, 302)
+        self.assertEqual(self.privacy_counts(), before)
+        self.assertNotContains(self.get('patient-profile'), 'Withdraw marketing consent')
+        event = AuditEvent.objects.get(action='privacy.preference_updated')
+        self.assertEqual(event.metadata, {'marketing_enabled': False})
+
+    def test_legacy_unchecked_preference_token_still_withdraws_after_a_care_email_change(self):
+        self.login()
+        preference = PatientCommunicationPreference.objects.create(company=self.alpha, patient=self.patient, marketing_enabled=True)
+        factory_request = RequestFactory().get('/')
+        factory_request.user = self.user
+        token = privacy_context(factory_request, self.alpha, 'preference', record_id=self.patient.pk,
+                                version=preference.updated_at.isoformat())
+        self.post('patient-profile', {'section': 'journeys'})
+        preference.refresh_from_db()
+        care_email_choice = preference.journey_emails_off_at
+        self.assertIsNotNone(care_email_choice)
+        self.assertEqual(self.post('patient-profile', {'privacy_context': token}).status_code, 302)
+        preference.refresh_from_db()
+        self.assertFalse(preference.marketing_enabled)
+        self.assertEqual(preference.journey_emails_off_at, care_email_choice)
+        before = self.privacy_counts()
+        self.assertEqual(self.post('patient-profile', {'privacy_context': token}).status_code, 302)
         self.assertEqual(self.privacy_counts(), before)
 
-    def test_preference_stale_other_tab_cannot_overwrite_new_setting(self):
+    def test_marketing_withdrawal_requires_current_actor_patient_practice_and_unexpired_context(self):
         self.login()
-        old = self.form_data('patient-profile')
-        data = self.form_data('patient-profile', marketing_enabled='on')
-        self.post('patient-profile', data)
-        response = self.post('patient-profile', old)
-        self.assertTrue(response.context['form'].non_field_errors())
-        self.assertTrue(PatientCommunicationPreference.objects.get(patient=self.patient).marketing_enabled)
+        preference = PatientCommunicationPreference.objects.create(company=self.alpha, patient=self.patient, marketing_enabled=True)
+        data = {'section': 'withdraw-marketing', 'privacy_context': self.get('patient-profile').context['withdrawal_context']}
+        before = self.privacy_counts()
+        for token in ('', 'invalid'):
+            response = self.post('patient-profile', {**data, 'privacy_context': token})
+            self.assertTrue(response.context['withdrawal_errors'])
+        with patch('django.core.signing.time.time', return_value=timezone.now().timestamp() + 13 * 60 * 60):
+            self.assertTrue(self.post('patient-profile', data).context['withdrawal_errors'])
+        for actor, company in ((self.other, self.alpha), (self.user, self.beta)):
+            self.login(actor, company)
+            self.assertTrue(self.post('patient-profile', data).context['withdrawal_errors'])
+        preference.refresh_from_db()
+        self.assertTrue(preference.marketing_enabled)
+        self.assertEqual(self.privacy_counts(), before)
+
+    def test_withdrawal_with_no_existing_preference_never_creates_one(self):
+        self.login()
+        page = self.get('patient-profile')
+        self.assertNotContains(page, 'Withdraw marketing consent')
+        self.assertEqual(self.post('patient-profile', {'section': 'withdraw-marketing',
+            'privacy_context': page.context['withdrawal_context']}).status_code, 302)
+        self.assertFalse(PatientCommunicationPreference.objects.exists())
+        self.assertFalse(AuditEvent.objects.filter(action='privacy.preference_updated').exists())
+        with self.assertRaises(PermissionDenied):
+            withdraw_marketing_preference(actor=self.other, company=self.alpha, patient=self.patient)
+
+    def test_detail_change_dialog_opens_without_creating_a_message(self):
+        self.login()
+        before = self.privacy_counts()
+        page = self.get('patient-profile', change=1)
+        self.assertTrue(page.context['change_dialog_open'])
+        self.assertContains(page, 'aria-labelledby="request-details-change-title" open')
+        self.assertContains(page, 'data-modal-open="request-details-change" aria-haspopup="dialog"')
+        self.assertFalse(self.get('patient-profile').context['change_dialog_open'])
+        self.assertEqual(self.privacy_counts(), before)
+
+    def test_detail_change_goes_to_active_practice_administrators_in_app_only(self):
+        self.login()
+        User = get_user_model()
+        second_admin = User.objects.create_user(email='second-admin@example.test')
+        inactive = User.objects.create_user(email='inactive-admin@example.test', is_active=False)
+        foreign = User.objects.create_user(email='foreign-admin@example.test')
+        for user, company in ((second_admin, self.alpha), (inactive, self.alpha), (foreign, self.beta)):
+            CompanyMembership.objects.create(company=company, user=user, role='practice_admin')
+        before = list(Patient.objects.values())
+        data = self.change_data(description='PRIVATE_CHANGE: please fix my phone.',
+                                recipient=self.doctor.pk, patient=self.other_patient.pk, company=self.beta.pk)
+        with self.captureOnCommitCallbacks(execute=True), patch('care.tasks.send_notification.delay') as send_email:
+            response = self.post('patient-profile', data)
+        thread = MessageThread.objects.get()
+        self.assertRedirects(response, f"{self.url('patient-messages')}?thread={thread.pk}#patient-conversation",
+                             fetch_redirect_response=False)
+        self.assertEqual((thread.company_id, thread.patient_id, thread.opened_by_id),
+                         (self.alpha.pk, self.patient.pk, self.user.pk))
+        self.assertEqual(set(thread.participants.all()), {self.admin, second_admin})
+        self.assertEqual(thread.messages.get().body, data['description'])
+        for administrator in (self.admin, second_admin):
+            self.assertTrue(staff_threads(self.alpha, administrator).filter(pk=thread.pk).exists())
+        self.assertFalse(staff_threads(self.alpha, self.doctor).filter(pk=thread.pk).exists())
+        self.assertFalse(staff_threads(self.beta, foreign).filter(pk=thread.pk).exists())
+        self.assertEqual(list(Patient.objects.values()), before)
+        self.assertNotIn('PRIVATE_CHANGE', str(list(AuditEvent.objects.values('metadata'))))
+        self.assertEqual(len(mail.outbox), 0)
+        send_email.assert_not_called()
+
+    def test_detail_change_retry_is_idempotent_and_cannot_replace_the_sent_request(self):
+        self.login()
+        data = self.change_data()
+        first = self.post('patient-profile', data)
+        before = self.privacy_counts()
+        self.assertEqual(self.post('patient-profile', data).url, first.url)
+        changed = self.post('patient-profile', {**data, 'description': 'Different request'})
+        self.assertTrue(changed.context['change_form'].non_field_errors())
+        self.assertTrue(changed.context['change_dialog_open'])
+        self.assertContains(changed, 'Different request')
+        self.assertEqual(self.privacy_counts(), before)
+
+    def test_detail_change_falls_back_to_active_super_admins_without_adding_clinicians(self):
+        self.login()
+        CompanyMembership.objects.filter(company=self.alpha, role='practice_admin').update(is_active=False)
+        inactive_super = get_user_model().objects.create_user(email='inactive-super@example.test', is_active=False)
+        CompanyMembership.objects.create(company=self.alpha, user=inactive_super, role='super_admin')
+        data = self.change_data()
+        with self.captureOnCommitCallbacks(execute=True), patch('care.tasks.send_notification.delay') as send_email:
+            response = self.post('patient-profile', data)
+        self.assertEqual(response.status_code, 302)
+        thread = MessageThread.objects.get()
+        self.assertEqual(list(thread.participants.all()), [self.super_admin])
+        self.assertEqual(thread.messages.get().sender, self.user)
+        self.assertFalse(staff_threads(self.alpha, self.doctor).filter(pk=thread.pk).exists())
+        send_email.assert_not_called()
+
+    def test_detail_change_invalid_body_or_unavailable_administrators_preserves_draft(self):
+        self.login()
+        data = self.change_data()
+        before = self.privacy_counts()
+        for description in ('', 'x' * 5001):
+            response = self.post('patient-profile', {**data, 'description': description})
+            self.assertTrue(response.context['change_form'].errors)
+            self.assertTrue(response.context['change_dialog_open'])
+        CompanyMembership.objects.filter(company=self.alpha, role__in=('practice_admin', 'super_admin')).update(is_active=False)
+        response = self.post('patient-profile', data)
+        self.assertTrue(response.context['change_form'].non_field_errors())
+        self.assertContains(response, data['description'])
+        self.assertEqual(self.privacy_counts(), before)
+
+    def test_detail_change_missing_tampered_expired_and_foreign_patient_tokens_write_nothing(self):
+        self.login()
+        data = self.change_data()
+        before = self.privacy_counts()
+        for token in ('', 'invalid'):
+            response = self.post('patient-profile', {**data, 'privacy_context': token})
+            self.assertTrue(response.context['change_form'].non_field_errors())
+        with patch('django.core.signing.time.time', return_value=timezone.now().timestamp() + 13 * 60 * 60):
+            response = self.post('patient-profile', data)
+            self.assertTrue(response.context['change_form'].non_field_errors())
+        self.login(self.other)
+        response = self.post('patient-profile', data)
+        self.assertTrue(response.context['change_form'].non_field_errors())
+        self.assertEqual(self.privacy_counts(), before)
+
+    def test_detail_change_service_rechecks_patient_and_practice_ownership(self):
+        for actor, company, patient in ((self.doctor, self.alpha, self.patient),
+                                        (self.other, self.alpha, self.patient),
+                                        (self.user, self.beta, self.patient)):
+            with self.assertRaises(PermissionDenied):
+                request_details_change(actor=actor, company=company, patient=patient,
+                    description='Forbidden request', submission_key=uuid.uuid4())
+        self.assertFalse(MessageThread.objects.exists())
 
     def test_patient_forms_detect_changed_practice_and_preserve_draft(self):
         self.login()
-        for name, form_name, fields in (('patient-profile', 'form', {'marketing_enabled': 'on'}),
+        for name, form_name, fields in (('patient-profile', 'change_form', {'description': 'Keep my contact draft'}),
                                         ('patient-data-request-create', 'request_form', {'kind': 'question', 'description': 'Keep my draft'})):
             self.login()
-            data = self.form_data(name, **fields) if name == 'patient-profile' else self.request_data(**fields)
+            data = self.change_data(**fields) if name == 'patient-profile' else self.request_data(**fields)
             self.login(company=self.beta)
             before = self.privacy_counts()
             response = self.post(name, data)
@@ -163,7 +335,7 @@ class PrivacyTests(TestCase):
             if 'description' in fields:
                 # My profile again, with the dialog open on the draft.
                 self.assertTemplateUsed(response, 'portal/patient_profile.html')
-                self.assertTrue(response.context['request_dialog_open'])
+                self.assertTrue(response.context['change_dialog_open' if name == 'patient-profile' else 'request_dialog_open'])
                 self.assertContains(response, fields['description'])
 
     def test_missing_tampered_and_expired_tokens_write_nothing(self):

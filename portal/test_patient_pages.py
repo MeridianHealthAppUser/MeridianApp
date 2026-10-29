@@ -41,7 +41,7 @@ class PatientNavigationParser(HTMLParser):
 @override_settings(MULTI_PRACTICE_ENABLED=True)
 class PatientStandalonePagesTests(TestCase):
     page_names = ('patient-dashboard', 'patient-appointments', 'patient-messages', 'patient-progress', 'patient-profile')
-    nav_pages = ('patient-dashboard', 'patient-treatment', 'patient-appointments', 'patient-messages', 'patient-pharmacy')
+    nav_pages = ('patient-dashboard', 'patient-treatment', 'patient-appointments', 'patient-messages', 'patient-medical-profile')
 
     @classmethod
     def setUpTestData(cls):
@@ -184,7 +184,7 @@ class PatientStandalonePagesTests(TestCase):
             'patient-progress': 'portal/patient_progress.html',
             'patient-profile': 'portal/patient_profile.html',
             'patient-treatment': 'portal/treatment_patient.html',
-            'patient-pharmacy': 'portal/pharmacy_catalogue.html',
+            'patient-medical-profile': 'portal/patient_care_medical_profile.html',
         }
         for name, template in templates.items():
             with self.subTest(page=name):
@@ -421,7 +421,7 @@ class PatientStandalonePagesTests(TestCase):
         self.assertEqual((thread.company_id, thread.patient_id), (self.company.pk, self.patient.pk))
 
     def test_my_profile_shows_personal_details_without_editing_them(self):
-        """The care team keeps a patient's details; the patient asks support for a change by email."""
+        """Administrators keep personal details; the patient requests changes through secure messaging."""
         Patient.objects.filter(pk=self.patient.pk).update(title='MS')
         PharmacyOrder.objects.create(company=self.company, patient=self.patient, status=PharmacyOrder.Status.SUBMITTED,
                                      submitted_at=timezone.now(), delivery_address={
@@ -430,7 +430,7 @@ class PatientStandalonePagesTests(TestCase):
         self.login()
         response = self.page('patient-profile')
         for label, value in (('Title', 'Ms'), ('Name', 'Alice Alpha Patient'), ('Email', 'pages-patient@example.test'),
-                             ('Contact number', '082 000 0001'), ('ID / passport', 'ALPHA-IDENTITY'), ('City', 'Cape Town')):
+                             ('Contact number', '082 000 0001'), ('ID / passport', 'ALPHA-IDENTITY')):
             with self.subTest(label=label):
                 self.assertContains(response, f'<div><dt>{label}</dt><dd>{value}</dd></div>', html=True)
         # The delivery address (from the latest supply request until the patient saves one) is theirs to change.
@@ -438,9 +438,10 @@ class PatientStandalonePagesTests(TestCase):
                                       f'<a class="patient-inline-link" href="{reverse("portal:patient-delivery-address")}">Change')
         for field in ('title', 'phone', 'city', 'first_name', 'last_name'):
             self.assertNotContains(response, f'name="{field}"')
-        self.assertContains(response, '<a class="console-button console-button--secondary patient-card-actions__wide" '
-                                      'href="mailto:support@meridianhealth.co.za?subject=Request%20for%20Detail%20Change%3A%20Alice%20Alpha%20Patient">'
-                                      'Request a change</a>', html=True)
+        self.assertContains(response, 'data-modal-open="request-details-change" aria-haspopup="dialog">Request a change</a>')
+        self.assertContains(response, 'Your doctor')
+        for removed in ('<dt>City</dt>', '<dt>Practice</dt>', '<dt>Your clinician</dt>', 'mailto:'):
+            self.assertNotContains(response, removed)
         # What the old contact form sent changes nothing now.
         before = self.write_snapshot()
         self.client.post(reverse('portal:patient-profile'), {'patient_context': self.patient_token(),
@@ -452,18 +453,18 @@ class PatientStandalonePagesTests(TestCase):
     def test_my_profile_keeps_security_on_the_page_without_practice_access_or_activity(self):
         self.login()
         response = self.page('patient-profile')
-        self.assertContains(response, 'Security and account settings')
+        self.assertContains(response, 'aria-label="Account security"')
         self.assertContains(response, f'<a class="console-button console-button--secondary" href="{reverse("accounts:password-change")}">Change password</a>', html=True)
         self.assertContains(response, f'action="{reverse("accounts:logout")}"')
         self.assertContains(response, '<button class="console-button patient-button--red" type="submit">Sign out</button>', html=True)
-        # Personal details beside Security, then data requests, consents and marketing.
+        # Compact account controls follow personal details, then requests, consents and care emails.
         html = response.content.decode()
-        headings = ('Personal details', 'Security and account settings', 'My data requests', 'Recorded consent',
-                    'Optional marketing communications')
+        headings = ('Personal details', 'My data requests', 'Recorded consent', 'Emails about your care')
         self.assertEqual([html.index(f'>{heading}</h2>') for heading in headings],
                          sorted(html.index(f'>{heading}</h2>') for heading in headings))
         for removed in ('Your practice access', 'Your recent account activity', 'Questions about your information',
-                        'Title and contact details', 'Recorded consents'):
+                        'Title and contact details', 'Recorded consents', 'Optional marketing communications',
+                        'Account created', 'Last sign-in', 'Password last changed', 'Last reset with Forgot password'):
             self.assertNotContains(response, removed)
 
     def test_weight_and_message_writes_require_csrf(self):

@@ -1,0 +1,17 @@
+{% extends 'portal/patient_page_base.html' %}
+{% load workspace_ui %}
+
+{% block title %}My Treatment | Meridian{% endblock %}
+{% block patient_breadcrumbs %}{% breadcrumbs 'My Treatment' %}{% endblock %}
+{% block patient_content %}
+  <section class="console-card">
+    <div class="console-card__body">
+      <h1>Medication is supplied through your subscription</h1>
+      <p>Single-purchase medication requests are no longer available. Manage your subscription in My Treatment. For other medication, contact your care team about a prescription you can fill at a pharmacy.</p>
+      <div class="patient-card-actions">
+        <a class="console-button console-button--primary" href="{% url 'portal:patient-treatment' %}#treatment-plan">My Treatment</a>
+        <a class="console-button console-button--secondary" href="{% url 'portal:patient-messages' %}?compose=1">Contact my care team</a>
+      </div>
+    </div>
+  </section>
+{% endblock %}

@@ -66,8 +66,9 @@ class MessageFilterForm(forms.Form):
 # they belong to; account and privacy pages live in the account menu instead.
 PATIENT_NAV_GROUPS = {
     'overview': 'home', 'progress': 'home', 'updates': 'home',
-    'treatment': 'treatment', 'subscription': 'treatment', 'medical_profile': 'treatment', 'labs': 'treatment',
-    'appointments': 'appointments', 'messages': 'messages', 'pharmacy': 'medications', 'orders': 'medications',
+    'treatment': 'treatment', 'subscription': 'treatment', 'labs': 'treatment',
+    'appointments': 'appointments', 'messages': 'messages', 'medical_profile': 'medical_info',
+    'pharmacy': 'treatment', 'orders': 'treatment',
     'billing': 'treatment',
 }
 
@@ -88,8 +89,8 @@ def patient_page_context(request, company, patient, section, title):
 
 
 def patient_overview_context(request, company, patient, **overrides):
-    from .patient_progress import weight_chart
-    from .patient_summary import current_authorization, current_plan, latest_authorization, next_consult, next_delivery
+    from .patient_progress import weight_chart, weight_reference
+    from .patient_summary import current_authorization, current_plan, latest_authorization, next_consult, next_delivery, weight_reference_course
 
     context = patient_page_context(request, company, patient, 'overview', 'Home')
     plan = current_plan(company, patient)
@@ -99,6 +100,14 @@ def patient_overview_context(request, company, patient, **overrides):
     last = None if authorization else latest_authorization(company, patient)
     change = latest.weight_kg - first.weight_kg if latest and first and latest.pk != first.pk else None
     today = timezone.localdate()
+    reference_authorization = authorization or last
+    course = weight_reference_course(company, patient, reference_authorization) if first else None
+    baseline = first
+    if course:
+        # Prefer a recorded starting weight, otherwise the first later check-in.
+        # The anchor is queried outside the latest-300 slice so it never resets.
+        baseline = weights.filter(recorded_on__lte=course['started_on']).first() or first
+    chart_rows = list(weights[:301])
     context.update(
         current_authorization=authorization, last_authorization=last,
         last_authorization_state=('' if last is None else 'upcoming' if last.starts_on > today and last.status == 'active'
@@ -108,7 +117,8 @@ def patient_overview_context(request, company, patient, **overrides):
         care_doctor=patient.assigned_doctor or (authorization.prescribed_by if authorization else None),
         latest_weight=latest, first_weight=first,
         weight_change=change, weight_change_abs=abs(change) if change is not None else None,
-        weight_chart=weight_chart(reversed(list(weights[:300]))),
+        weight_chart=weight_chart(reversed(chart_rows[:300]), reference=weight_reference(baseline, course)),
+        chart_is_limited=len(chart_rows) > 300,
         weight_form=WeightEntryForm(company=company, patient=patient, recorded_by=request.user,
                                     initial={'recorded_on': timezone.localdate()}),
     )

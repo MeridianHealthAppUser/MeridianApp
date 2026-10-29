@@ -1,13 +1,13 @@
 """Separate privacy pages; no email delivery, automatic erasure or legal claims."""
 
-from urllib.parse import quote, urlencode
+from urllib.parse import urlencode
 
-from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.core.paginator import Paginator
-from django.db.models import F, Q
+from django.db.models import Q
+from django.http import HttpResponseGone
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
@@ -20,14 +20,13 @@ from care.models import (
     PatientDataRequestReply, PracticeSettings,
 )
 from care.privacy import (
-    create_data_request, publish_policy_version, require_privacy_admin, respond_to_data_request,
-    save_communication_preference,
+    create_data_request, publish_policy_version, request_details_change, require_privacy_admin, respond_to_data_request,
+    withdraw_marketing_preference,
 )
 from care.services import ACCESS_ACTIONS, record_audit
-from practices.models import Company
 from .patient_care_views import PatientCarePage, add_error
 from .privacy_forms import (
-    AccessHistoryFilterForm, CommunicationPreferenceForm, DataRequestFilterForm, DataRequestForm,
+    AccessHistoryFilterForm, DataRequestFilterForm, DataRequestForm, DetailsChangeForm,
     DataRequestReplyForm, PolicyVersionForm, PublicPracticeForm, privacy_context, validate_privacy_context,
 )
 from .record_views import ACCESS_AUDIT_LABELS, AUDIT_LABELS, staff_memberships
@@ -116,8 +115,8 @@ def patient_data_requests(request, company, patient):
 
 
 class PatientProfileView(PatientCarePage):
-    """My profile: their details as the practice holds them, account security, the marketing choice, recorded
-    consents and data requests. Details are changed by the care team, asked for by email to support."""
+    """Personal details, account controls, care-email preferences, consents and requests.
+    Requests to change personal details go to practice administrators through secure messaging."""
 
     def preference(self):
         return PatientCommunicationPreference.objects.filter(company=self.patient_company, patient=self.patient).first()
@@ -136,24 +135,20 @@ class PatientProfileView(PatientCarePage):
             consent.text = consent.document or published[consent.consent_type]
         return consents
 
-    def display(self, request, form=None, request_form=None):
+    def display(self, request, request_form=None, change_form=None, withdrawal_errors=()):
         """A form that didn't save is shown again with its own signed context; the other gets a fresh one."""
         from care.pathcare import patient_address
 
         preference = self.preference()
         posted = request.POST.get('privacy_context', '')
-        token = (posted if form is not None else '') or privacy_context(
-            request, self.patient_company, 'preference', record_id=self.patient.pk,
-            version=preference.updated_at.isoformat() if preference else None,
-        )
-        form = form if form is not None else CommunicationPreferenceForm(initial={
-            'marketing_enabled': preference.marketing_enabled if preference else False,
-        })
         request_token = (posted if request_form is not None else '') or privacy_context(
             request, self.patient_company, 'data-request', record_id=self.patient.pk)
-        # Request a change is an email to support, the patient's name in the subject.
-        subject = ' '.join(filter(None, ('Request for Detail Change:', self.patient.first_name, self.patient.last_name)))
-        context = self.context('account', 'My profile', form=form, privacy_context=token,
+        change_token = (posted if change_form is not None else '') or privacy_context(
+            request, self.patient_company, 'details-change', record_id=self.patient.pk)
+        context = self.context('account', 'My profile',
+            change_form=change_form if change_form is not None else DetailsChangeForm(auto_id='details_%s'),
+            change_context=change_token,
+            change_dialog_open=change_form is not None or request.GET.get('change') == '1',
             # New request opens its dialog; ?request=1 (the button without scripts) or a mistake opens it with the page.
             # ?kind=correction (from the medical profile) starts the dialog on that type.
             request_form=request_form if request_form is not None else DataRequestForm(initial={
@@ -161,8 +156,9 @@ class PatientProfileView(PatientCarePage):
             request_context=request_token,
             request_dialog_open=request_form is not None or request.GET.get('request') == '1',
             shipping_address=', '.join(part for part in patient_address(self.patient_company, self.patient) if part),
-            support_email=settings.SUPPORT_EMAIL,
-            details_change_url=f"mailto:{settings.SUPPORT_EMAIL}?{urlencode({'subject': subject}, quote_via=quote)}",
+            can_withdraw_marketing=bool(preference and preference.marketing_enabled),
+            withdrawal_context=privacy_context(request, self.patient_company, 'marketing-withdrawal', record_id=self.patient.pk),
+            withdrawal_errors=withdrawal_errors,
             consents=self.consents(), journey_emails=not (preference and preference.journey_emails_off_at),
             **patient_data_requests(request, self.patient_company, self.patient))
         return render(request, 'portal/patient_profile.html', context)
@@ -171,25 +167,53 @@ class PatientProfileView(PatientCarePage):
         return self.display(request)
 
     def post(self, request):
+        section = request.POST.get('section', '')
+        if section == 'withdraw-marketing':
+            return self.withdraw_marketing(request)
+        # The old unchecked preference form carried no checkbox value. Its valid
+        # signed context can still withdraw, even if care-email preferences changed.
+        if not section and 'privacy_context' in request.POST and 'marketing_enabled' not in request.POST:
+            return self.withdraw_marketing(request, legacy=True)
+        if 'marketing_enabled' in request.POST:
+            return HttpResponseGone('Marketing preferences are no longer available here. Reload My profile to continue.')
         if request.POST.get('section') == 'journeys':
             return self.save_journey_emails(request)
-        form = CommunicationPreferenceForm(request.POST)
+        if request.POST.get('section') == 'details-change':
+            return self.send_details_change(request)
+        return HttpResponseGone('This form is no longer available. Reload My profile to continue.')
+
+    def withdraw_marketing(self, request, *, legacy=False):
+        try:
+            validate_privacy_context(request, self.patient_company,
+                'preference' if legacy else 'marketing-withdrawal', record_id=self.patient.pk)
+            changed = withdraw_marketing_preference(actor=request.user, company=self.patient_company,
+                                                   patient=self.patient, request=request)
+        except ValidationError as error:
+            return self.display(request, withdrawal_errors=error.messages)
+        messages.success(request, 'Your marketing consent has been withdrawn. Your care-email preference is unchanged.'
+            if changed else 'Marketing messages are already turned off.')
+        return redirect(f"{reverse('portal:patient-profile')}#profile-consents")
+
+    def send_details_change(self, request):
+        form = DetailsChangeForm(request.POST, auto_id='details_%s')
         valid = form.is_valid()
         try:
-            token = validate_privacy_context(request, self.patient_company, 'preference', record_id=self.patient.pk)
+            token = validate_privacy_context(request, self.patient_company, 'details-change', record_id=self.patient.pk)
         except ValidationError as error:
             add_error(form, error)
             valid = False
         if valid:
             try:
-                _, changed = save_communication_preference(actor=request.user, company=self.patient_company,
-                    patient=self.patient, enabled=form.cleaned_data['marketing_enabled'], expected_updated_at=token.get('version'), request=request)
+                thread, created = request_details_change(actor=request.user, company=self.patient_company,
+                    patient=self.patient, description=form.cleaned_data['description'],
+                    submission_key=token.get('submission_key'), request=request)
             except ValidationError as error:
                 add_error(form, error)
             else:
-                messages.success(request, 'Your preferences have been saved. Recorded consent is unchanged.' if changed else 'Your preferences are already up to date.')
-                return redirect(f"{reverse('portal:patient-profile')}#profile-marketing")
-        return self.display(request, form)
+                messages.success(request, 'Your request was sent to your practice administrators. You can follow their reply in My Messages.'
+                    if created else 'This request was already sent. You can follow it in My Messages.')
+                return redirect(f"{reverse('portal:patient-messages')}?thread={thread.pk}#patient-conversation")
+        return self.display(request, change_form=form)
 
 
     def save_journey_emails(self, request):

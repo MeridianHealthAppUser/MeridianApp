@@ -9,12 +9,13 @@ from django.conf import settings
 from django.contrib import messages
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.core.paginator import Paginator
-from django.db.models import Q
+from django.db.models import Prefetch, Q
 from django.http import Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.defaultfilters import pluralize
 from django.urls import reverse
 from django.utils.decorators import method_decorator
+from django.utils.text import slugify
 from django.views import View
 from django.views.decorators.csrf import csrf_exempt
 
@@ -25,7 +26,7 @@ from care.billing import (
     settle_mandate, settle_payment, start_cycle_payment, start_debit_order, start_order_payment,
 )
 from care.models import (
-    DebitMandate, Invoice, PatientSubscription, Payment, PharmacyOrder, SubscriptionCycle,
+    Appointment, DebitMandate, Invoice, InvoiceLine, PatientSubscription, Payment, PharmacyOrder, SubscriptionCycle,
 )
 from care.payment_providers import HOSTED, SandboxProvider, current_provider, provider_named
 from care.stitch import debicheck_in_use, debicheck_waiting
@@ -39,7 +40,15 @@ from .treatment_forms import limit_methods
 from .workflow_context import make_workflow_context, validate_workflow_context
 
 logger = logging.getLogger(__name__)
+
+DOWNLOADABLE_INVOICE_STATES = (Invoice.Status.ISSUED, Invoice.Status.PAID)
 OPEN_CYCLES = (SubscriptionCycle.Status.PENDING, SubscriptionCycle.Status.FAILED)
+
+
+def _payable_order(payment, company, patient):
+    """A pending checkout must still belong to an outstanding, submitted request."""
+    order = get_object_or_404(PharmacyOrder.objects.filter(company=company, patient=patient), pk=payment.pharmacy_order_id)
+    return order if not order.paid_at and order.status in (PharmacyOrder.Status.SUBMITTED, PharmacyOrder.Status.ACCEPTED) else None
 
 
 def _messages(error):
@@ -74,17 +83,43 @@ class PatientBillingView(PatientCarePage):
         plan = _current_plan(company, patient)
         cycles = SubscriptionCycle.objects.filter(company=company, patient=patient).select_related('invoice').order_by('-due_on', '-pk')
         page = Paginator(cycles, 20).get_page(request.GET.get('page'))
+        for cycle in page:
+            invoice = getattr(cycle, 'invoice', None)
+            cycle.patient_invoice = (invoice if invoice and invoice.company_id == company.pk
+                                     and invoice.patient_id == patient.pk else None)
+            cycle.invoice_downloadable = bool(cycle.patient_invoice and cycle.patient_invoice.status in DOWNLOADABLE_INVOICE_STATES)
         due = [cycle for cycle in cycles.filter(status__in=OPEN_CYCLES) if cycle.attempts or cycle.status == SubscriptionCycle.Status.FAILED]
         for cycle in due:
             cycle.pay_context = make_workflow_context(request, company, 'cycle-pay', cycle, patient=patient)
-        once_off = Payment.objects.filter(company=company, patient=patient, kind__in=(Payment.Kind.ONCE_OFF, Payment.Kind.CONSULTATION,
-                                                                                         Payment.Kind.MANUAL)).order_by('-created_at')[:20]
+        once_off = list(Payment.objects.filter(company=company, patient=patient).filter(
+            Q(kind__in=(Payment.Kind.ONCE_OFF, Payment.Kind.CONSULTATION, Payment.Kind.MANUAL))
+            | Q(appointment__isnull=False) | Q(invoice__isnull=False, subscription_cycle__isnull=True),
+        ).select_related('appointment', 'invoice', 'pharmacy_order').prefetch_related(Prefetch(
+            'invoice__lines', queryset=InvoiceLine.objects.filter(company=company), to_attr='billing_lines',
+        )).order_by('-created_at', '-pk')[:20])
+        for payment in once_off:
+            payment.patient_invoice = (payment.invoice if payment.invoice_id
+                                       and payment.invoice.company_id == company.pk
+                                       and payment.invoice.patient_id == patient.pk else None)
+            payment.invoice_downloadable = bool(payment.patient_invoice and payment.patient_invoice.status in DOWNLOADABLE_INVOICE_STATES)
+            appointment = payment.appointment if payment.appointment_id else None
+            if appointment is not None and appointment.company_id == company.pk and appointment.patient_id == patient.pk:
+                title = 'Initial consult' if appointment.appointment_type == Appointment.Type.INITIAL else appointment.get_appointment_type_display()
+                payment.description = f'{title} ({appointment.duration_minutes} mins)'
+            elif payment.patient_invoice and payment.patient_invoice.billing_lines:
+                payment.description = payment.patient_invoice.billing_lines[0].description
+            elif (payment.pharmacy_order_id and payment.pharmacy_order.company_id == company.pk
+                  and payment.pharmacy_order.patient_id == patient.pk):
+                payment.description = f'Supply request {payment.pharmacy_order_id}'
+            else:
+                payment.description = payment.get_kind_display() or 'Payment'
         context = self.context('billing', 'Billing and payments', plan=plan,
                                summary=patient_summary(plan) if plan else None, mandate=current_mandate(plan) if plan else None,
                                due=due, page_obj=page, once_off=once_off, provider=current_provider(),
                                debit_form=DebitOrderForm(),
                                debit_context=make_workflow_context(request, company, 'debit-order', plan, patient=patient) if plan else '',
-                               address=address_for(patient))
+                               address=address_for(patient),
+                               has_previous_orders=PharmacyOrder.objects.filter(company=company, patient=patient).exists())
         return render(request, 'portal/patient_billing.html', context)
 
 
@@ -126,14 +161,14 @@ class PatientCyclePayView(PatientCarePage):
 
 
 class PatientOrderPayView(PatientCarePage):
-    """Pay for a non-prescription request by card."""
+    """Settle an existing submitted request; this never creates a new supply request."""
 
     http_method_names = ('post',)
 
     def post(self, request, pk):
         order = get_object_or_404(PharmacyOrder.objects.filter(company=self.patient_company, patient=self.patient), pk=pk)
         try:
-            validate_workflow_context(request, self.patient_company, 'order-pay', order, patient=self.patient, check_version=False)
+            validate_workflow_context(request, self.patient_company, 'order-pay', order, patient=self.patient)
             _, url = start_order_payment(order=order, actor=request.user, request=request)
             return redirect(url)
         except ValidationError as error:
@@ -150,9 +185,32 @@ class PatientInvoiceView(PatientCarePage):
         invoice = get_object_or_404(Invoice.objects.filter(company=self.patient_company, patient=self.patient).select_related(
             'subscription_cycle__subscription'), pk=pk)
         return render(request, 'portal/patient_invoice.html', self.context('billing', f'Invoice {invoice.invoice_number}',
-                                                                           invoice=invoice, lines=invoice.lines.all(),
+                                                                           invoice=invoice, lines=invoice.lines.filter(company=self.patient_company),
                                                                            billed_to=invoice.billed_to or billed_to(self.patient),
-                                                                           paid=invoice.status == Invoice.Status.PAID))
+                                                                           paid=invoice.status == Invoice.Status.PAID,
+                                                                           downloadable=invoice.status in DOWNLOADABLE_INVOICE_STATES))
+
+
+class PatientInvoiceDownloadView(PatientCarePage):
+    """Download only an invoice issued to this patient in their selected practice."""
+
+    http_method_names = ('get', 'head', 'options')
+
+    def get(self, request, pk):
+        from .invoice_pdf import invoice_pdf
+
+        invoice = get_object_or_404(Invoice.objects.filter(company=self.patient_company, patient=self.patient,
+                                                          status__in=DOWNLOADABLE_INVOICE_STATES).select_related(
+            'subscription_cycle'), pk=pk)
+        content = invoice_pdf(invoice=invoice, company=self.patient_company,
+                              recipient=invoice.billed_to or billed_to(self.patient),
+                              lines=invoice.lines.filter(company=self.patient_company))
+        response = HttpResponse(content, content_type='application/pdf')
+        filename = slugify(invoice.invoice_number) or str(invoice.pk)
+        response['Content-Disposition'] = f'attachment; filename="invoice-{filename}.pdf"'
+        response['Cache-Control'] = 'private, no-store'
+        response['X-Content-Type-Options'] = 'nosniff'
+        return response
 
 
 class PatientDeliveryAddressView(PatientCarePage):
@@ -245,6 +303,9 @@ class PatientCardFormView(PatientCarePage):
         elif kind == 'payment':
             record = get_object_or_404(Payment.objects.filter(company=self.patient_company, patient=self.patient, checkout=True,
                                                               provider__in=HOSTED, status=Payment.Status.PENDING), pk=pk)
+            if record.pharmacy_order_id:
+                if _payable_order(record, self.patient_company, self.patient) is None:
+                    return redirect('portal:patient-order-detail', pk=record.pharmacy_order_id)
             title, amount = 'Pay by card', record.amount
         else:
             raise Http404
@@ -332,12 +393,18 @@ class PatientSandboxCheckoutView(PatientCarePage):
 
     def get(self, request, pk):
         payment = self.payment(pk)
+        if payment.pharmacy_order_id:
+            if _payable_order(payment, self.patient_company, self.patient) is None:
+                return redirect('portal:patient-order-detail', pk=payment.pharmacy_order_id)
         return render(request, 'portal/patient_billing_sandbox.html', self.context(
             'billing', 'Pay by card', payment=payment, amount=money(payment.amount),
             workflow_context=make_workflow_context(request, self.patient_company, 'sandbox-checkout', payment, patient=self.patient)))
 
     def post(self, request, pk):
         payment = self.payment(pk)
+        if payment.pharmacy_order_id:
+            if _payable_order(payment, self.patient_company, self.patient) is None:
+                return redirect('portal:patient-order-detail', pk=payment.pharmacy_order_id)
         try:
             validate_workflow_context(request, self.patient_company, 'sandbox-checkout', payment, patient=self.patient)
             paid = request.POST.get('choice') == 'pay'

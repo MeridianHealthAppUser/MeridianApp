@@ -213,12 +213,15 @@ class TreatmentPageTests(TestCase):
         self.assertEqual(secure.post(url, dict(authorization=auth.pk, confirm='on')).status_code, 403)
         self.assertFalse(PatientSubscription.objects.exists())
 
-    def test_authorization_and_plan_history_paginate(self):
+    def test_staff_authorization_history_paginates_and_patient_history_is_not_shown(self):
         for _ in range(23):
             self.authorization()
         self.login(self.super_admin)
         response = self.client.get(reverse('portal:treatment-authorisations'))
         self.assertEqual(len(response.context['page_obj']), 20)
-        self.login(self.patient_user)
-        response = self.client.get(reverse('portal:patient-treatment'), {'page': 2})
+        response = self.client.get(reverse('portal:treatment-authorisations'), {'page': 2})
         self.assertEqual(len(response.context['page_obj']), 3)
+        self.login(self.patient_user)
+        response = self.client.get(reverse('portal:patient-treatment'), {'page': 2, 'plans_page': 2, 'shipments_page': 2})
+        self.assertNotContains(response, 'Treatment and delivery history')
+        self.assertNotContains(response, 'id="treatment-history"')

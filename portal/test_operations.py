@@ -401,137 +401,150 @@ class PatientPharmacyPortalTests(OperationsPortalFixture):
     def setUp(self):
         self.login(self.patient_user)
 
-    def product_token(self):
-        response = self.page('patient-pharmacy')
-        return next(p.workflow_context for p in response.context['products'] if p.pk == self.product.pk)
+    def retired_urls(self, pk=123):
+        return [reverse(f'portal:{name}', args=args) for name, args in (
+            ('patient-pharmacy', ()), ('patient-basket', ()),
+            ('patient-basket-item', (self.product.pk,)),
+        )]
 
-    def add_item(self, **extra):
-        return self.client.post(reverse('portal:patient-basket-item', args=[self.product.pk]),
-            {'workflow_context': self.product_token(), 'quantity': 2, **extra})
+    def test_old_shop_links_redirect_to_subscription_without_changing_existing_orders(self):
+        order = self.basket()
+        before = list(PharmacyOrder.objects.values())
+        events_before = AuditEvent.objects.count()
+        destination = reverse('portal:patient-treatment') + '#treatment-plan'
+        for url in self.retired_urls(order.pk):
+            with self.subTest(url=url):
+                self.assertRedirects(self.client.get(url), destination, fetch_redirect_response=False)
+                self.assertRedirects(self.client.head(url), destination, fetch_redirect_response=False)
+        self.assertEqual(list(PharmacyOrder.objects.values()), before)
+        self.assertEqual(AuditEvent.objects.count(), events_before)
+        self.assertFalse(Payment.objects.exists())
 
-    def test_catalogue_basket_and_order_history_are_distinct_pages_without_implicit_writes(self):
-        for name, template in (('patient-pharmacy', 'pharmacy_catalogue'), ('patient-basket', 'pharmacy_basket'),
-                               ('patient-orders', 'pharmacy_orders')):
-            response = self.page(name)
-            self.assertTemplateUsed(response, f'portal/{template}.html')
-            self.assertIn('no-store', response['Cache-Control'])
-            self.assertNotContains(response, self.beta_product.name)
-        self.assertEqual(self.page('patient-orders').context['patient_section'], 'orders')
+    def test_posts_from_old_pages_cannot_create_baskets_or_payments(self):
+        for url in self.retired_urls():
+            with self.subTest(url=url):
+                response = self.client.post(url, {'quantity': 2, 'action': 'submit', 'confirm': 'on', **ADDRESS})
+                self.assertEqual(response.status_code, 410)
         self.assertFalse(PharmacyOrder.objects.exists())
+        self.assertFalse(Payment.objects.exists())
         self.assertFalse(AuditEvent.objects.exists())
 
-    def test_staff_only_and_unrelated_patients_cannot_access_patient_orders(self):
+    def test_stale_signed_forms_cannot_change_or_submit_existing_baskets(self):
+        from django.test import RequestFactory
+        from .workflow_context import make_workflow_context
+
         order = self.basket()
+        request = RequestFactory().post('/')
+        request.user = self.patient_user
+        before = list(PharmacyOrder.objects.values())
+        items_before = list(order.items.values())
+        events_before = AuditEvent.objects.count()
+        for name, record, kind, action in (
+            ('patient-basket-item', self.product, 'basket-product', ''),
+            ('patient-order-detail', order, 'patient-order', 'submit'),
+        ):
+            token = make_workflow_context(request, self.company, kind, record, patient=self.patient)
+            url = reverse(f'portal:{name}', args=[record.pk])
+            response = self.client.post(url, {'workflow_context': token, 'quantity': 3, 'action': action,
+                                               'confirm': 'on', **ADDRESS})
+            self.assertEqual(response.status_code, 410)
+        self.assertEqual(list(PharmacyOrder.objects.values()), before)
+        self.assertEqual(list(order.items.values()), items_before)
+        self.assertEqual(AuditEvent.objects.count(), events_before)
+        self.assertFalse(Payment.objects.exists())
+
+    def test_retired_routes_still_require_an_authenticated_patient(self):
+        self.client.logout()
+        for url in self.retired_urls():
+            with self.subTest(url=url):
+                for method in (self.client.get, self.client.post):
+                    response = method(url)
+                    self.assertEqual(response.status_code, 302)
+                    self.assertTrue(response.url.startswith(reverse('accounts:login')))
         self.login(self.admin)
-        for name in ('patient-pharmacy', 'patient-basket', 'patient-orders'):
-            self.assertEqual(self.client.get(reverse(f'portal:{name}')).status_code, 403)
+        for url in self.retired_urls():
+            with self.subTest(url=url):
+                self.assertEqual(self.client.get(url).status_code, 403)
+                self.assertEqual(self.client.post(url).status_code, 403)
+
+    def test_foreign_order_links_and_posts_do_not_disclose_or_modify_the_record(self):
+        order = self.submitted()
+        before = list(PharmacyOrder.objects.values())
         self.login(self.other_user)
         url = reverse('portal:patient-order-detail', args=[order.pk])
         self.assertEqual(self.client.get(url).status_code, 404)
-        self.assertEqual(self.client.post(url, {}).status_code, 404)
-
-    def test_patient_add_submit_then_staff_accept_is_local_only(self):
-        users_before = get_user_model().objects.count()
-        self.assertRedirects(self.add_item(), reverse('portal:patient-basket'))
-        order = PharmacyOrder.objects.get()
-        basket = self.page('patient-basket')
-        response = self.client.post(reverse('portal:patient-order-detail', args=[order.pk]), {
-            'workflow_context': basket.context['workflow_context'], 'action': 'submit', 'confirm': 'on',
-            **ADDRESS, 'note': 'Keep this private delivery note', 'user': self.admin.pk, 'company': self.beta.pk})
-        self.assertEqual(response.status_code, 302)
-        order.refresh_from_db()
-        self.assertEqual(order.status, 'submitted')
-        self.assertEqual(order.patient, self.patient)
-        self.assertEqual(order.company, self.company)
-        detail = self.page('patient-order-detail', [order.pk])
-        self.assertEqual(detail.context['patient_section'], 'orders')
-        self.login()
-        response = self.client.post(reverse('portal:ops-order-detail', args=[order.pk]), {
-            'workflow_context': self.token('ops-order-detail', [order.pk]), 'action': 'accept',
-            'confirm': 'on', 'scheduled_for': self.today})
-        self.assertEqual(response.status_code, 302)
-        self.assertEqual(Shipment.objects.get().status, 'draft')
-        self.assertFalse(Payment.objects.exists())
-        self.assertEqual(get_user_model().objects.count(), users_before)
-
-    def test_quantity_repeat_is_set_once_and_bad_or_missing_context_never_writes(self):
-        url = reverse('portal:patient-basket-item', args=[self.product.pk])
-        for token in ('', 'invalid'):
-            response = self.client.post(url, {'workflow_context': token, 'quantity': 2})
-            self.assertEqual(response.status_code, 400)
-        self.assertFalse(PharmacyOrder.objects.exists())
-        token = self.product_token()
-        for _ in range(2):
-            self.assertEqual(self.client.post(url, {'workflow_context': token, 'quantity': 2}).status_code, 302)
-        self.assertEqual(PharmacyOrder.objects.count(), 1)
-        self.assertEqual(PharmacyOrder.objects.get().items.get().quantity, 2)
-        self.assertEqual(AuditEvent.objects.filter(action='basket.updated').count(), 1)
-
-    def test_stale_product_context_rejects_catalogue_changes_without_refreshing_failed_token(self):
-        token = self.product_token()
-        self.product.price = 150
-        self.product.save()
-        response = self.client.post(reverse('portal:patient-basket-item', args=[self.product.pk]),
-                                    {'workflow_context': token, 'quantity': 2})
-        self.assertEqual(response.status_code, 400)
-        failed = next(p for p in response.context['products'] if p.pk == self.product.pk)
-        self.assertEqual(failed.workflow_context, token)
-        self.assertFalse(PharmacyOrder.objects.exists())
-
-    def test_basket_submit_rejects_stale_contents_and_keeps_original_token_until_reload(self):
-        order = self.basket()
-        token = self.token('patient-basket')
-        set_basket_quantity(company=self.company, patient=self.patient, actor=self.patient_user, product=self.product, quantity=3)
-        response = self.client.post(reverse('portal:patient-order-detail', args=[order.pk]),
-            {'workflow_context': token, 'action': 'submit', 'confirm': 'on', **ADDRESS})
-        self.assertEqual(response.status_code, 400)
-        self.assertEqual(response.context['workflow_context'], token)
-        order.refresh_from_db()
-        self.assertEqual(order.status, 'draft')
-        self.assertEqual(order.items.get().quantity, 3)
-
-    def test_submit_retains_invalid_address_values_and_requires_confirmation(self):
-        order = self.basket()
-        token = self.token('patient-basket')
-        response = self.client.post(reverse('portal:patient-order-detail', args=[order.pk]), {
-            'workflow_context': token, 'action': 'submit', 'line1': 'Preserved draft address', 'city': 'Durban'})
-        self.assertEqual(response.status_code, 400)
-        self.assertEqual(response.context['form']['line1'].value(), 'Preserved draft address')
-        order.refresh_from_db()
-        self.assertEqual(order.status, 'draft')
-
-    def test_patient_can_cancel_own_submitted_order_but_cannot_forge_staff_accept(self):
-        order = self.submitted()
-        url = reverse('portal:patient-order-detail', args=[order.pk])
-        token = self.token('patient-order-detail', [order.pk])
-        response = self.client.post(url, {'workflow_context': token, 'action': 'accept', 'confirm': 'on'})
-        self.assertEqual(response.status_code, 400)
-        self.assertFalse(Shipment.objects.exists())
-        self.assertEqual(self.client.post(url, {'workflow_context': token, 'action': 'cancel', 'confirm': 'on'}).status_code, 302)
-        order.refresh_from_db()
-        self.assertEqual(order.status, 'cancelled')
+        self.assertEqual(self.client.post(url, {'action': 'cancel', 'confirm': 'on'}).status_code, 404)
+        self.login(self.patient_user, company=self.beta)
+        self.assertEqual(self.client.post(url, {'action': 'submit', 'confirm': 'on', **ADDRESS}).status_code, 404)
+        self.assertEqual(list(PharmacyOrder.objects.values()), before)
         self.assertFalse(Payment.objects.exists())
 
-    def test_foreign_practice_or_record_context_never_crosses_shared_sso_patient_records(self):
-        order = self.basket()
-        token = self.token('patient-basket')
-        self.select(self.beta)
-        url = reverse('portal:patient-order-detail', args=[order.pk])
-        self.assertEqual(self.client.get(url).status_code, 404)
-        self.assertEqual(self.client.post(url, {'workflow_context': token, 'action': 'submit', **ADDRESS, 'confirm': 'on'}).status_code, 404)
-        self.assertFalse(PharmacyOrder.objects.filter(company=self.beta).exists())
-
-    def test_inactive_patient_and_csrf_cannot_write_baskets(self):
+    def test_csrf_and_inactive_patient_guards_still_apply_to_old_write_urls(self):
         client = Client(enforce_csrf_checks=True)
         self.login(self.patient_user, client=client)
-        response = self.page('patient-pharmacy', client=client)
-        product = next(p for p in response.context['products'] if p.pk == self.product.pk)
         url = reverse('portal:patient-basket-item', args=[self.product.pk])
-        self.assertEqual(client.post(url, {'workflow_context': product.workflow_context, 'quantity': 2}).status_code, 403)
-        Patient.objects.filter(pk=self.patient.pk).update(is_active=False)
-        # The shared identity falls back to its other active patient practice;
-        # the previous practice's product URL must still fail closed.
-        self.assertEqual(self.client.post(url, {'workflow_context': product.workflow_context, 'quantity': 2}).status_code, 404)
-        Patient.objects.filter(pk=self.beta_patient.pk).update(is_active=False)
-        self.assertEqual(self.client.post(url, {'workflow_context': product.workflow_context, 'quantity': 2}).status_code, 403)
+        self.assertEqual(client.post(url, {'quantity': 2}).status_code, 403)
+        Patient.objects.filter(pk__in=(self.patient.pk, self.beta_patient.pk)).update(is_active=False)
+        self.assertEqual(self.client.post(url, {'quantity': 2}).status_code, 403)
         self.assertFalse(PharmacyOrder.objects.exists())
+
+    def test_existing_requests_remain_readable_without_new_request_controls(self):
+        order = self.submitted()
+        before = list(PharmacyOrder.objects.values())
+        listing = self.page('patient-orders')
+        self.assertContains(listing, reverse('portal:patient-order-detail', args=[order.pk]))
+        detail = self.page('patient-order-detail', [order.pk])
+        self.assertContains(detail, self.product.name)
+        self.assertContains(detail, 'Cancel supply request')
+        self.assertContains(detail, 'Pay R200 by card')
+        for removed in ('Add to basket', 'Open current basket', 'Submit supply request'):
+            self.assertNotContains(listing, removed)
+            self.assertNotContains(detail, removed)
+        self.assertEqual(list(PharmacyOrder.objects.values()), before)
+        billing = self.page('patient-billing')
+        self.assertContains(billing, 'Previous supply requests')
+
+    def test_owned_unaccepted_request_can_be_cancelled_only_with_confirmation_and_context(self):
+        order = self.submitted()
+        url = reverse('portal:patient-order-detail', args=[order.pk])
+        token = self.page('patient-order-detail', [order.pk]).context['workflow_context']
+        for data in ({'action': 'cancel', 'confirm': 'on'}, {'action': 'cancel', 'workflow_context': token}):
+            self.assertEqual(self.client.post(url, data).status_code, 400)
+            order.refresh_from_db()
+            self.assertEqual(order.status, 'submitted')
+        response = self.client.post(url, {'action': 'cancel', 'confirm': 'on', 'workflow_context': token})
+        self.assertRedirects(response, url, fetch_redirect_response=False)
+        order.refresh_from_db()
+        self.assertEqual(order.status, 'cancelled')
+        self.assertFalse(Shipment.objects.exists())
+
+    def test_accepted_request_cannot_be_cancelled_by_patient(self):
+        order = self.submitted()
+        order.status = PharmacyOrder.Status.ACCEPTED
+        order.save()
+        url = reverse('portal:patient-order-detail', args=[order.pk])
+        page = self.page('patient-order-detail', [order.pk])
+        self.assertNotContains(page, 'Cancel supply request')
+        self.assertContains(page, 'Message your care team')
+        response = self.client.post(url, {'action': 'cancel', 'confirm': 'on',
+                                          'workflow_context': page.context['workflow_context']})
+        self.assertEqual(response.status_code, 400)
+        order.refresh_from_db()
+        self.assertEqual(order.status, PharmacyOrder.Status.ACCEPTED)
+
+    def test_old_draft_is_readonly_and_cannot_be_submitted(self):
+        order = self.basket()
+        page = self.page('patient-order-detail', [order.pk])
+        self.assertContains(page, 'This draft was never submitted')
+        self.assertNotContains(page, 'name="quantity"')
+        self.assertNotContains(page, 'name="action" value="submit"')
+        self.assertNotContains(page, 'Pay R')
+        before = list(order.items.values())
+        response = self.client.post(reverse('portal:patient-order-detail', args=[order.pk]), {
+            'action': 'submit', 'confirm': 'on', 'workflow_context': page.context['workflow_context'], **ADDRESS})
+        self.assertEqual(response.status_code, 410)
+        order.refresh_from_db()
+        self.assertEqual(order.status, PharmacyOrder.Status.DRAFT)
+        self.assertEqual(list(order.items.values()), before)
+        self.assertEqual(PharmacyOrder.objects.count(), 1)
+        self.assertFalse(Payment.objects.exists())
