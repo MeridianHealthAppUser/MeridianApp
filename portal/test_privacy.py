@@ -104,8 +104,7 @@ class PrivacyTests(TestCase):
 
     def test_patient_can_only_view_own_current_practice_requests(self):
         self.login()
-        response = self.get('patient-profile')
-        self.assertEqual([item.pk for item in response.context['page_obj']], [self.request_record.pk])
+        self.assertEqual(self.get('patient-data-request-detail', self.request_record.pk).status_code, 200)
         for record in (self.foreign_request, self.other_request):
             self.assertEqual(self.get('patient-data-request-detail', record.pk).status_code, 404)
 
@@ -118,7 +117,7 @@ class PrivacyTests(TestCase):
                 self.assertEqual(response.status_code, 200)
                 self.assertIn('no-store', response.headers['Cache-Control'])
         # The old New request page opens My profile with its dialog open.
-        self.assertRedirects(self.get('patient-data-request-create'), f"{self.url('patient-profile')}?request=1#profile-requests",
+        self.assertRedirects(self.get('patient-data-request-create'), f"{self.url('patient-profile')}?request=1#new-data-request",
                              fetch_redirect_response=False)
         self.assertTrue(self.get('patient-profile', request=1).context['request_dialog_open'])
         self.assertFalse(self.get('patient-profile').context['request_dialog_open'])
@@ -354,7 +353,7 @@ class PrivacyTests(TestCase):
         self.login()
         data = self.request_data(kind='deletion', description='Please review deletion. PRIVATE_DESCRIPTION')
         response = self.post('patient-data-request-create', data)
-        self.assertRedirects(response, f"{self.url('patient-profile')}#profile-requests", fetch_redirect_response=False)
+        self.assertRedirects(response, self.url('patient-profile'), fetch_redirect_response=False)
         record = PatientDataRequest.objects.get(description=data['description'])
         self.assertEqual((record.company_id, record.patient_id, record.status), (self.alpha.pk, self.patient.pk, 'open'))
         before = self.privacy_counts()
@@ -583,36 +582,21 @@ class PrivacyTests(TestCase):
         self.assertEqual(AuditEvent.objects.filter(action='privacy.request_viewed').count(), before + 1)
         self.assertIn('no-store', response.headers['Cache-Control'])
 
-    def test_request_and_response_lists_paginate_without_leaks(self):
-        for index in range(22):
-            PatientDataRequest.objects.create(company=self.alpha, patient=self.patient, kind='question', description=f'Request {index}', submission_key=uuid.uuid4())
+    def test_response_list_paginates_without_leaks(self):
         self.login()
-        first = self.get('patient-profile', status='open', kind='question')
-        second = self.get('patient-profile', status='open', kind='question', page=2)
-        self.assertEqual(len(first.context['page_obj']), 20)
-        self.assertEqual(len(second.context['page_obj']), 2)
-        # Paging keeps the filters and comes back to My data requests.
-        self.assertContains(first, '?status=open&amp;kind=question&amp;page=2#profile-requests')
         for index in range(21):
             PatientDataRequestReply.objects.create(company=self.alpha, data_request=self.request_record, author=self.admin,
                 body=f'Response {index}', status='in_review', submission_key=uuid.uuid4())
         self.assertEqual(len(self.get('patient-data-request-detail', self.request_record.pk, page=2).context['page_obj']), 1)
 
-    def test_request_filters_are_status_and_type_and_never_show_other_requests(self):
-        PatientDataRequest.objects.create(company=self.alpha, patient=self.patient, kind='question', description='Mine too',
-                                          status='closed', submission_key=uuid.uuid4())
+    def test_profile_hides_the_request_list_but_keeps_the_dialog(self):
         self.login()
         response = self.get('patient-profile')
-        self.assertEqual([section['label'] for section in response.context['filter_menu']['sections']], ['Status', 'Type'])
-        self.assertContains(response, 'data-modal-open="new-data-request"')
+        self.assertNotContains(response, 'My data requests')
+        self.assertNotContains(response, 'id="profile-requests"')
+        self.assertNotIn('page_obj', response.context)
+        self.assertContains(response, 'id="new-data-request"')
         self.assertContains(response, f'action="{self.url("patient-data-request-create")}"')
-        self.assertEqual([item.kind for item in self.get('patient-profile', kind='question').context['page_obj']], ['question'])
-        self.assertEqual([item.kind for item in self.get('patient-profile', status='open').context['page_obj']], ['correction'])
-        # Values that aren't a status or type are ignored, and never reach another patient's or practice's requests.
-        response = self.get('patient-profile', status='invalid', kind=['access', 'nonsense'])
-        self.assertEqual(response.context['filter_menu']['count'], 1)
-        self.assertEqual(list(response.context['page_obj']), [])
-        self.assertContains(response, 'No requests match these filters.')
 
     def test_data_requests_cannot_be_edited_or_deleted_by_patient_post(self):
         self.login()

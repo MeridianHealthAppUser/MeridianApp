@@ -73,11 +73,6 @@ class PatientCareTests(TestCase):
         return {'clinician': self.doctor.pk, 'appointment_type': 'follow_up', 'date': self.day.isoformat(), 'time': '10:00',
                 'patient_context': response.context['patient_context'], **changes}
 
-    def profile_data(self, **answers):
-        response = self.client.get(self.url('patient-medical-profile'))
-        self.assertEqual(response.status_code, 200)
-        return {'clinical_context': response.context['clinical_context'], **answers}
-
     def create_appointment(self, **changes):
         values = dict(company=self.company, patient=self.patient, clinician=self.doctor,
                       starts_at=self.starts_at, duration_minutes=15, appointment_type=Appointment.Type.REVIEW)
@@ -193,11 +188,10 @@ class PatientCareTests(TestCase):
         self.assertEqual(menu['count'], 2)
         self.assertContains(page, 'class="filter-menu filter-menu--compact"')
 
-    def test_csrf_protects_booking_and_profile(self):
+    def test_csrf_protects_booking(self):
         client = Client(enforce_csrf_checks=True)
         client.force_login(self.user)
-        for name in ('patient-book-appointment', 'patient-medical-profile'):
-            self.assertEqual(client.post(self.url(name), {}).status_code, 403)
+        self.assertEqual(client.post(self.url('patient-book-appointment'), {}).status_code, 403)
 
     def test_booking_shows_only_active_practice_doctors(self):
         self.login()
@@ -394,111 +388,32 @@ class PatientCareTests(TestCase):
         self.assertEqual((appointment.clinician_id, appointment.starts_at, appointment.appointment_type, appointment.duration_minutes),
                          (self.doctor.pk, self.starts_at, Appointment.Type.FOLLOW_UP, 15))
 
-    def test_profile_saves_snapshot_and_id_only_audit(self):
-        self.login()
-        data = self.profile_data(medications='Private medicine context', allergies='Private allergy answer')
-        response = self.client.post(self.url('patient-medical-profile'), data)
-        self.assertRedirects(response, self.url('patient-medical-profile'))
-        profile = PatientMedicalProfile.objects.get()
-        self.assertEqual(profile.answers['medications'], 'Private medicine context')
-        self.assertEqual(profile.revision, 1)
-        self.assertEqual(profile.saved_by_id, self.user.pk)
-        self.assertEqual(profile.history.get().answers, profile.answers)
-        audit = AuditEvent.objects.get(action='patient.medical_profile_updated')
-        self.assertNotIn('Private', str(audit.metadata))
-        self.assertEqual(audit.metadata['revision'], 1)
-        self.assertFalse(PatientEvent.objects.exists())
-
-    def test_once_a_clinician_starts_summary_data_they_keep_the_shared_answers_with_every_version(self):
+    def test_medical_information_is_read_only_with_what_the_clinician_records(self):
         from care.clinical_summary import edit_summary
 
         CompanyMembership.objects.filter(company=self.company, user=self.doctor).update(clinician_type='doctor')
-        get_user_model().objects.filter(pk=self.doctor.pk).update(title='DR')
         doctor = get_user_model().objects.get(pk=self.doctor.pk)
-        self.login()
-        # Before a clinician starts Summary data, the patient fills in every answer themselves.
-        self.client.post(self.url('patient-medical-profile'), self.profile_data(allergies='None known', goals='Lose 10 kg'))
-        self.assertEqual(PatientMedicalProfile.objects.get().answers['allergies'], 'None known')
-        # The clinician records an allergy: it goes into the profile as a new version, saved by them.
+        # Answers a patient saved before the form was removed are kept.
+        PatientMedicalProfile.objects.create(company=self.company, patient=self.patient, revision=1, saved_by=self.user,
+                                             answers={'allergies': 'None known', 'goals': 'Lose 10 kg'})
         edit_summary(company=self.company, patient=self.patient, actor=doctor, field='allergies', value='Bees')
-        profile = PatientMedicalProfile.objects.get()
-        self.assertEqual((profile.answers['allergies'], profile.answers['goals'], profile.revision, profile.saved_by_id),
-                         ('Bees', 'Lose 10 kg', 2, self.doctor.pk))
-        self.assertEqual([(row.revision, row.answers['allergies'], row.saved_by_id) for row in profile.history.order_by('revision')],
-                         [(1, 'None known', self.user.pk), (2, 'Bees', self.doctor.pk)])
-        # The patient sees it read-only, with who saved it, and a way to ask for a correction; their other answers
-        # are still theirs to change.
-        page = self.client.get(self.url('patient-medical-profile'))
-        self.assertContains(page, 'Kept up to date by your care team')
-        self.assertContains(page, '<div><dt>Allergies and previous reactions</dt><dd>Bees</dd></div>', html=True)
-        self.assertContains(page, 'by Dr One')
-        self.assertContains(page, f"{self.url('patient-profile')}?request=1&amp;kind=correction#profile-requests")
-        self.assertNotIn('allergies', page.context['profile_form'].fields)
-        self.assertIn('goals', page.context['profile_form'].fields)
-        self.assertEqual(self.client.get(self.url('patient-profile'), {'request': 1, 'kind': 'correction'})
-                         .context['request_form']['kind'].value(), 'correction')
-        # A post that tries to change it anyway leaves it as the clinician saved it.
-        self.client.post(self.url('patient-medical-profile'), self.profile_data(allergies='None', goals='Lose 12 kg'))
-        profile.refresh_from_db()
-        self.assertEqual((profile.answers['allergies'], profile.answers['goals'], profile.revision), ('Bees', 'Lose 12 kg', 3))
-
-    def test_profile_updates_keep_original_snapshot(self):
         self.login()
-        self.client.post(self.url('patient-medical-profile'), self.profile_data(medications='Original answer'))
-        self.client.post(self.url('patient-medical-profile'), self.profile_data(medications='Updated answer'))
-        profile = PatientMedicalProfile.objects.get()
-        self.assertEqual(profile.revision, 2)
-        self.assertEqual(profile.history.get(revision=1).answers['medications'], 'Original answer')
-        self.assertEqual(profile.history.get(revision=2).answers['medications'], 'Updated answer')
-
-    def test_unchanged_or_empty_profile_does_not_create_revision(self):
-        self.login()
-        self.client.post(self.url('patient-medical-profile'), self.profile_data())
-        self.assertFalse(PatientMedicalProfile.objects.exists())
-        self.client.post(self.url('patient-medical-profile'), self.profile_data(medications='Same answer'))
         before = self.counts()
-        self.client.post(self.url('patient-medical-profile'), self.profile_data(medications='Same answer'))
+        page = self.client.get(self.url('patient-medical-profile'))
+        self.assertContains(page, '<div><dt>Allergies</dt><dd>Bees</dd></div>', html=True)
+        self.assertContains(page, 'Tell my doctor something has changed')
+        for removed in ('Save now, come back later', 'Your health and daily life', 'Save my profile', 'name="clinical_context"'):
+            self.assertNotContains(page, removed)
+        # Nothing the patient posts changes it.
+        self.assertEqual(self.client.post(self.url('patient-medical-profile'), {'allergies': 'None'}).status_code, 405)
+        self.assertEqual(PatientMedicalProfile.objects.get().answers['allergies'], 'Bees')
         self.assertEqual(before, self.counts())
 
-    def test_profile_stale_revision_does_not_overwrite_and_preserves_form(self):
+    def test_medical_information_scopes_other_practice_and_patient(self):
+        PatientMedicalProfile.objects.create(company=self.company, patient=self.patient, revision=1, saved_by=self.user,
+                                             answers={'medications': 'Alpha private answer'})
         self.login()
-        self.client.post(self.url('patient-medical-profile'), self.profile_data(medications='Original'))
-        stale = self.profile_data(medications='Stale unsaved answer')
-        self.client.post(self.url('patient-medical-profile'), self.profile_data(medications='Latest saved'))
-        response = self.client.post(self.url('patient-medical-profile'), stale)
-        self.assertTrue(response.context['profile_form'].non_field_errors())
-        self.assertContains(response, 'Stale unsaved answer')
-        self.assertEqual(PatientMedicalProfile.objects.get().answers['medications'], 'Latest saved')
-        self.assertEqual(PatientMedicalProfileRevision.objects.count(), 2)
-
-    def test_profile_stale_create_and_practice_tokens_cannot_overwrite(self):
-        self.login()
-        stale = self.profile_data(medications='Stale answer')
-        self.client.post(self.url('patient-medical-profile'), self.profile_data(medications='Saved answer'))
-        response = self.client.post(self.url('patient-medical-profile'), stale)
-        self.assertTrue(response.context['profile_form'].non_field_errors())
-        self.login(company=self.beta)
-        response = self.client.post(self.url('patient-medical-profile'), stale)
-        self.assertTrue(response.context['profile_form'].non_field_errors())
-        self.assertEqual(PatientMedicalProfile.objects.count(), 1)
-
-    def test_invalid_profile_keeps_answers_without_write(self):
-        self.login()
-        response = self.client.post(self.url('patient-medical-profile'), self.profile_data(medications='a' * 2001, goals='Keep this draft'))
-        self.assertTrue(response.context['profile_form'].errors)
-        self.assertContains(response, 'Keep this draft')
-        self.assertFalse(PatientMedicalProfile.objects.exists())
-
-    def test_profile_missing_or_tampered_context_is_rejected(self):
-        self.login()
-        for token in ('', 'invalid-signature'):
-            response = self.client.post(self.url('patient-medical-profile'), {'clinical_context': token, 'allergies': 'No known allergies'})
-            self.assertTrue(response.context['profile_form'].non_field_errors())
-        self.assertFalse(PatientMedicalProfile.objects.exists())
-
-    def test_profile_scopes_other_practice_and_patient(self):
-        self.login()
-        self.client.post(self.url('patient-medical-profile'), self.profile_data(medications='Alpha private answer'))
+        self.assertContains(self.client.get(self.url('patient-medical-profile')), 'Alpha private answer')
         self.login(company=self.beta)
         self.assertNotContains(self.client.get(self.url('patient-medical-profile')), 'Alpha private answer')
         self.login(self.other_user)

@@ -294,7 +294,7 @@ def patient_messages_context(request, company, patient, *, selected_thread_id=No
         message_form=PatientMessageForm(auto_id='patient_reply_%s'),
         thread_form=PatientThreadForm(auto_id='thread_%s', patient=patient, initial=initial or None),
         composing=composing or (selected is None and not all_threads.exists()),
-        subject_suggestions=('Side effects', 'My dose', 'My delivery', 'My appointment', 'Something else'),
+        subject_suggestions=('Side effects', 'My dose', 'My delivery', 'My appointment'),
         support_email=settings_row.support_email if settings_row else '',
     )
     context.update(overrides)

@@ -1,5 +1,4 @@
 .patient-care { min-width: 0; }
-.patient-care > .patient-care-notice { margin: 0 0 1.2rem; }
 .patient-care .console-form { min-width: 0; }
 .patient-care .console-form__field { min-width: 0; }
 .patient-care .console-form input:not([type="checkbox"]):not([type="radio"]),
@@ -12,16 +11,7 @@
 .patient-care-filters .console-form__field { flex: 1 1 11rem; }
 .patient-care .patient-care-filters button { flex: 0 1 auto; margin-bottom: 0; }
 .patient-care-filters .patient-inline-link { align-self: center; font-size: .84rem; }
-.patient-care-profile-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.5rem; }
-.patient-care-team-answers { border-bottom: 1px solid var(--console-soft-line); margin: 0 0 1.5rem; padding-bottom: 1.2rem; }
-.patient-care-team-answers h3 { font-size: 1rem; margin: 0 0 .35rem; }
-.patient-care-team-answers > p { color: var(--console-muted); font-size: .88rem; margin: 0; }
-.patient-care-team-answers dd { overflow-wrap: anywhere; white-space: pre-line; }
 .patient-care .helptext { color: var(--console-muted); font-size: .82rem; line-height: 1.5; }
-.patient-care-profile-footer { border-top: 1px solid var(--console-line); padding-top: 1.5rem; margin-top: 1.5rem; display: flex; justify-content: space-between; align-items: center; gap: 1.5rem; }
-.patient-care-profile-footer p { margin: 0; max-width: 44rem; color: var(--patient-text); font-size: .875rem; }
-.patient-care-profile-footer button { flex: 0 0 auto; }
-.patient-care-caption { color: var(--patient-text); font-size: .875rem; line-height: 1.65; margin: 1.3rem 0 0; }
 .patient-care .console-button--primary { color: var(--c-ffffff); }
 .patient-progress-chart-section { margin-bottom: 1.2rem; }
 .patient-weight-chart { margin: 1.5rem 0 0; }
@@ -42,9 +32,6 @@
 .patient-weight-chart__key--reference { background: var(--patient-accent-soft, var(--console-teal-soft)); border: 1px dashed var(--patient-ink-2, var(--console-teal-dark)); }
 .patient-weight-chart__range { display: none; }
 @media (max-width: 46rem) {
-  .patient-care-profile-fields { grid-template-columns: minmax(0, 1fr); gap: 1.2rem; }
-  .patient-care-profile-footer { flex-direction: column; align-items: stretch; gap: 1rem; }
-  .patient-care-profile-footer button { width: 100%; }
   .patient-care-filters .console-form__field { flex-basis: 100%; }
   .patient-care .patient-care-filters button { width: 100%; }
   .patient-weight-chart svg { min-height: 8rem; }

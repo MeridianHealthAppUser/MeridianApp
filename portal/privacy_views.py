@@ -94,29 +94,10 @@ def filtered_requests(request, queryset):
         sections=ticked_sections(form, request.GET, ('status', 'kind'), icons={'kind': 'type'}), placeholder='Patient name'))
 
 
-def patient_data_requests(request, company, patient):
-    """My data requests on My profile, newest first, with Filters for Status and Type."""
-    from .filter_menus import choice_section, filter_menu, ticked_values
-
-    statuses = [value for value in ticked_values(request.GET.getlist('status')) if value in PatientDataRequest.Status.values]
-    kinds = [value for value in ticked_values(request.GET.getlist('kind')) if value in PatientDataRequest.Kind.values]
-    queryset = PatientDataRequest.objects.filter(company=company, patient=patient)
-    if statuses:
-        queryset = queryset.filter(status__in=statuses)
-    if kinds:
-        queryset = queryset.filter(kind__in=kinds)
-    page = Paginator(queryset.order_by('-created_at', '-pk'), 20).get_page(request.GET.get('page'))
-    action = f"{reverse('portal:patient-profile')}#profile-requests"
-    return {'page_obj': page, 'pagination_query': urlencode({'status': statuses, 'kind': kinds}, doseq=True),
-            'filter_menu': filter_menu(action=action, clear_url=action, label='Filter data requests', sections=[
-                choice_section('status', 'Status', PatientDataRequest.Status.choices, statuses),
-                choice_section('kind', 'Type', PatientDataRequest.Kind.choices, kinds, icon='type'),
-            ])}
-
-
 class PatientProfileView(PatientCarePage):
-    """Personal details, account controls, care-email preferences, consents and requests.
-    Requests to change personal details go to practice administrators through secure messaging."""
+    """Personal details, account controls, care-email preferences and consents.
+    Requests to change personal details go to practice administrators through secure messaging.
+    The data request dialog stays for request a correction on the medical profile; the list isn't shown."""
 
     def preference(self):
         return PatientCommunicationPreference.objects.filter(company=self.patient_company, patient=self.patient).first()
@@ -149,7 +130,7 @@ class PatientProfileView(PatientCarePage):
             change_form=change_form if change_form is not None else DetailsChangeForm(auto_id='details_%s'),
             change_context=change_token,
             change_dialog_open=change_form is not None or request.GET.get('change') == '1',
-            # New request opens its dialog; ?request=1 (the button without scripts) or a mistake opens it with the page.
+            # ?request=1 or a mistake opens the data request dialog with the page.
             # ?kind=correction (from the medical profile) starts the dialog on that type.
             request_form=request_form if request_form is not None else DataRequestForm(initial={
                 'kind': request.GET.get('kind') if request.GET.get('kind') in PatientDataRequest.Kind.values else None}),
@@ -159,8 +140,7 @@ class PatientProfileView(PatientCarePage):
             can_withdraw_marketing=bool(preference and preference.marketing_enabled),
             withdrawal_context=privacy_context(request, self.patient_company, 'marketing-withdrawal', record_id=self.patient.pk),
             withdrawal_errors=withdrawal_errors,
-            consents=self.consents(), journey_emails=not (preference and preference.journey_emails_off_at),
-            **patient_data_requests(request, self.patient_company, self.patient))
+            consents=self.consents(), journey_emails=not (preference and preference.journey_emails_off_at))
         return render(request, 'portal/patient_profile.html', context)
 
     def get(self, request):
@@ -234,10 +214,10 @@ class PatientProfileView(PatientCarePage):
 
 
 class PatientDataRequestCreateView(PatientProfileView):
-    """A request from the New request dialog on My profile. This address also keeps old links working, opening it."""
+    """A request from the data request dialog on My profile. This address also keeps old links working, opening it."""
 
     def get(self, request):
-        return redirect(f"{reverse('portal:patient-profile')}?request=1#profile-requests")
+        return redirect(f"{reverse('portal:patient-profile')}?request=1#new-data-request")
 
     def post(self, request):
         form = DataRequestForm(request.POST)
@@ -255,7 +235,7 @@ class PatientDataRequestCreateView(PatientProfileView):
                 add_error(form, error)
             else:
                 messages.success(request, 'Your request is saved for the practice to review.' if created else 'This request was already submitted.')
-                return redirect(f"{reverse('portal:patient-profile')}#profile-requests")
+                return redirect(reverse('portal:patient-profile'))
         return self.display(request, request_form=form)
 
 

@@ -381,24 +381,26 @@ def _decimal(value):
     return number if number > 0 else None
 
 
-def medical_information(*, profile, intake, weight, recorded_height=None):
-    """Rows for the read-only Medical information card, from the patient's own record. Height is the one their
-    clinician recorded in Summary data, when there is one, so a corrected height shows here too."""
+def medical_information(*, profile, intake, weight, recorded_height=None, start_weight=None):
+    """Rows for the read-only Medical information card, from the patient's own record. Height and starting weight
+    are the ones in their clinician's Summary data, when there are some, so a correction shows here too; the
+    starting BMI comes from those two, as on the clinician's record."""
     answers = profile.answers if profile else {}
     height = _decimal(recorded_height) or _decimal(intake.get('height_cm'))
+    start = _decimal(start_weight) or _decimal(intake.get('weight_kg'))
     rows = [('Height', f'{format_kg(height)} cm' if height else 'Not recorded')]
     if weight is not None:
-        rows.append(('Weight', f'{format_kg(weight.weight_kg)} kg · logged {date_format(weight.recorded_on, "j M")}'))
+        rows.append(('Weight', f'{format_kg(weight.weight_kg)} kg' + (f' · (started at {format_kg(start)} kg)' if start else '')))
     elif _decimal(intake.get('weight_kg')):
         rows.append(('Weight', f'{format_kg(intake["weight_kg"])} kg · from your questionnaire'))
     else:
         rows.append(('Weight', 'Not recorded'))
     if height and weight is not None:
         bmi = (weight.weight_kg / ((height / 100) ** 2)).quantize(Decimal('0.1'))
-        intake_bmi = _decimal(intake.get('bmi'))
-        rows.append(('BMI', f'{bmi}' + (f' · {intake_bmi.quantize(Decimal("0.1"))} at your enquiry' if intake_bmi else '')))
+        start_bmi = (start / ((height / 100) ** 2)).quantize(Decimal('0.1')) if start else None
+        rows.append(('BMI', f'{bmi}' + (f' · (started at {format_kg(start_bmi)})' if start_bmi else '')))
     elif _decimal(intake.get('bmi')):
-        rows.append(('BMI', f'{_decimal(intake["bmi"]).quantize(Decimal("0.1"))} at your enquiry'))
+        rows.append(('BMI', f'{_decimal(intake["bmi"]).quantize(Decimal("0.1"))} · from your questionnaire'))
     medication = answers.get('medications') or ''
     if medication:
         rows.append(('Current medication', medication))
@@ -437,7 +439,7 @@ def billing_tasks(plan):
                   [(summary['action'], reverse('portal:patient-billing'), True)], urgent=summary['state'] != 'pending')]
 
 
-def patient_tasks(*, authorization, plan, consult, weight, profile, labs):
+def patient_tasks(*, authorization, plan, consult, weight, labs):
     """What needs doing, most urgent first. Each task disappears once its record changes."""
     today = timezone.localdate()
     book_url = reverse('portal:patient-appointments') + '?book=1'
@@ -465,13 +467,6 @@ def patient_tasks(*, authorization, plan, consult, weight, profile, labs):
             f'{lab.requested_by.full_name} asked for {lab.panel_name} on {date_format(lab.requested_on, "j F")}.{due} '
             'When you have the report, upload it so your doctor can review it.',
             [('Upload your results', reverse('portal:patient-lab-detail', args=[lab.pk]), True)],
-        ))
-    if profile is None or not profile.revision:
-        tasks.append(_task(
-            'Complete your medical profile',
-            'Tell your doctor about your medication, history and daily routine before you meet. Every section is '
-            'optional and you can come back to it.',
-            [('Complete my medical profile', reverse('portal:patient-medical-profile'), True)],
         ))
     if weight is None or (today - weight.recorded_on).days >= WEIGHT_PROMPT_DAYS:
         tasks.append(_task(

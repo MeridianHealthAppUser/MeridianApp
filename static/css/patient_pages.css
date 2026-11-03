@@ -39,6 +39,11 @@
 .patient-page-content .patient-hero p { color: var(--c-e2f5f0); }
 .patient-inline-link { color: var(--console-teal-dark); font-weight: 500; text-underline-offset: .18em; }
 .patient-inline-link:focus-visible { outline: 2px solid var(--console-teal); outline-offset: 3px; }
+.patient-icon-link { align-items: center; border-radius: .45rem; color: var(--console-teal-dark); display: inline-flex; height: 1.9rem; justify-content: center; margin: -.4rem -.35rem -.4rem 0; vertical-align: middle; width: 1.9rem; }
+.patient-icon-link svg { height: 1rem; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.8; width: 1rem; }
+.patient-icon-link:hover { background: var(--console-teal-soft); }
+.patient-icon-link:focus-visible { outline: 2px solid var(--console-teal); outline-offset: 2px; }
+.patient-profile-details > .console-card__body { padding: 1.35rem 1.6rem 1.6rem; }
 .patient-empty { color: var(--patient-text); font-size: .85rem; line-height: 1.65; margin: 0; padding: 1.1rem 0; }
 .patient-empty p { margin: 0 0 .8rem; }
 .patient-empty p:last-child { margin-bottom: 0; }
@@ -71,9 +76,6 @@
 .patient-table__empty { color: var(--patient-text); text-align: center; }
 .patient-pagination { align-items: center; display: flex; flex-wrap: wrap; gap: .85rem; justify-content: center; margin-top: 1.2rem; }
 .patient-pagination > span { color: var(--patient-text); font-size: .8rem; }
-.patient-care-notice { background: var(--console-teal-soft); border: 1px solid var(--patient-teal-line, var(--c-b9d9d3)); border-radius: .9rem; color: var(--patient-text); font-size: .84rem; line-height: 1.6; margin-top: 1.2rem; padding: 1rem 1.15rem; }
-.patient-care-notice p { margin: 0; }
-.patient-care-notice strong { color: var(--console-ink); }
 .patient-account-facts { display: grid; gap: 0; margin: 0; }
 .patient-account-facts > div { align-items: start; border-bottom: 1px solid var(--console-soft-line); display: grid; gap: .8rem; grid-template-columns: minmax(6rem, .8fr) minmax(0, 1.2fr); padding: .85rem 0; }
 .patient-account-facts > div:last-child { border-bottom: 0; }

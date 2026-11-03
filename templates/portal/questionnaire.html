@@ -7,13 +7,13 @@
 {% block content %}
   <section class="questionnaire-layout" aria-labelledby="questionnaire-title">
     <header class="questionnaire-heading">
-      <div class="questionnaire-step-row"><a class="page-breadcrumbs__back page-breadcrumbs__back--large" href="{% url 'landing' %}" aria-label="Back to home" title="Back to home"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M19 12H5"/><path d="m11 6-6 6 6 6"/></svg></a><p class="questionnaire-step">Step 1 of 3 · Screening · Stage 1 of 2</p></div>
+      <div class="questionnaire-step-row"><a class="page-breadcrumbs__back page-breadcrumbs__back--large" href="{% url 'landing' %}" aria-label="Back to home" title="Back to home"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M19 12H5"/><path d="m11 6-6 6 6 6"/></svg></a><p class="questionnaire-step">Step 1 of 3 · Screening</p></div>
       <h1 id="questionnaire-title">First, the questions that decide it</h1>
       <p>Start with a few details and the screening questions below. Your answers help the practice understand whether a consultation may be suitable. Your doctor makes the final decision about treatment.</p>
     </header>
     <aside class="questionnaire-callout questionnaire-callout--warm">
-      <span class="questionnaire-badge questionnaire-badge--blue">Stage 2</span>
-      <div><strong>The rest of your medical profile comes after you book</strong><p>These first questions record your enquiry. After you book your consultation, you complete the fuller medical profile in your patient portal.</p></div>
+      <span class="questionnaire-badge questionnaire-badge--blue">After you book</span>
+      <div><strong>Your doctor takes the rest of your history at your consultation</strong><p>These first questions record your enquiry. At your consultation, your doctor goes through your medication, allergies and medical history with you and records them in your patient portal.</p></div>
     </aside>
     <form method="post" class="questionnaire-form" id="screening-form" novalidate>
       {% csrf_token %}

@@ -304,7 +304,6 @@ class QuestionnaireCheckoutView(QuestionnaireResultView):
         when = timezone.localtime(result.appointment.starts_at, SAST)
         messages.success(request, (
             f'Your initial consultation with {result.appointment.clinician.full_name} is booked for '
-            f'{when:%d %B %Y at %H:%M} SAST. The test code covered the fee, so no money was taken. '
-            'Next, complete your medical profile.'
+            f'{when:%d %B %Y at %H:%M} SAST. The test code covered the fee, so no money was taken.'
         ))
-        return redirect('portal:patient-medical-profile')
+        return redirect('portal:patient-dashboard')

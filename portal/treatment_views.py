@@ -282,7 +282,7 @@ def patient_treatment_context(request, company, patient, *, enrollment_form=None
     subscription each open a dialog, which opens again after a mistake (or from ?help=1 and ?cancel=1 without
     scripts)."""
     from .patient_summary import (
-        billing_tasks, current_authorization, latest_weight, medical_profile,
+        billing_tasks, current_authorization, latest_weight,
         next_consult, open_lab_requests, patient_tasks, previous_prescriptions, treatment_overview, treatment_timeline,
     )
 
@@ -292,7 +292,6 @@ def patient_treatment_context(request, company, patient, *, enrollment_form=None
     current = _plans(company, patient).exclude(status=PatientSubscription.Status.CANCELLED).first()
     authorization = current_authorization(company, patient, current)
     consult = next_consult(request, company, patient)
-    profile = medical_profile(company, patient)
     weight = latest_weight(company, patient)
     treatment_authorization = current.authorization if current and current.authorization_id else authorization
     prescription_query = request.GET.copy()
@@ -300,7 +299,7 @@ def patient_treatment_context(request, company, patient, *, enrollment_form=None
     context.update(
         next_consult=consult,
         tasks=billing_tasks(current) + patient_tasks(
-            authorization=authorization, plan=current, consult=consult, weight=weight, profile=profile,
+            authorization=authorization, plan=current, consult=consult, weight=weight,
             labs=open_lab_requests(company, patient),
         ),
         previous_prescriptions=Paginator(previous_prescriptions(company, patient), 12).get_page(request.GET.get('prescription_page')),

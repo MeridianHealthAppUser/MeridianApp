@@ -14,7 +14,7 @@ from django.utils import timezone
 
 from care.messaging import add_participant
 from care.models import (
-    Appointment, AuditEvent, MedicationProduct, MessageThread, PatientEvent, PatientMessage,
+    Appointment, AuditEvent, MedicationProduct, MessageThread, PatientClinicalSummary, PatientEvent, PatientMessage,
     PracticeSettings, TreatmentAuthorization, WeightEntry,
 )
 from care.treatment import create_authorization, enroll_local_subscription
@@ -132,7 +132,8 @@ class PatientWebAppTests(TestCase):
         titles = [task['title'] for task in response.context['tasks']]
         self.assertTrue(titles[0].startswith('Book a follow-up consult before'))
         self.assertTrue(response.context['tasks'][0]['urgent'])
-        self.assertIn('Complete your medical profile', titles)
+        # Patients no longer fill in a medical profile, so it's never a task.
+        self.assertNotIn('Complete your medical profile', titles)
         self.assertIn('Log this week’s weight', titles)
         self.assertContains(response, 'Action needed')
         self.book()
@@ -140,7 +141,6 @@ class PatientWebAppTests(TestCase):
         titles = [task['title'] for task in self.page('patient-treatment').context['tasks']]
         self.assertFalse(any(title.startswith('Book a follow-up consult') for title in titles))
         self.assertNotIn('Log this week’s weight', titles)
-        self.assertIn('Complete your medical profile', titles)
 
     def test_my_treatment_shows_the_plan_without_history(self):
         authorization = self.authorize()
@@ -159,6 +159,26 @@ class PatientWebAppTests(TestCase):
         medical_info = self.page('patient-medical-profile')
         self.assertContains(medical_info, 'Height')
         self.assertContains(medical_info, 'subject=Change+to+my+medical+information')
+
+    def test_medical_information_weight_and_bmi_show_where_the_patient_started(self):
+        from portal.patient_summary import medical_information
+
+        # Height and starting weight from the clinician's Summary data; the starting BMI from those two.
+        PatientClinicalSummary.objects.create(company=self.company, patient=self.patient, height_cm='183.0', start_weight_kg='95.0')
+        WeightEntry.objects.create(company=self.company, patient=self.patient, weight_kg='50.00', recorded_on=timezone.localdate())
+        page = self.page('patient-medical-profile')
+        self.assertContains(page, '<div><dt>Weight</dt><dd>50 kg · started at 95 kg</dd></div>', html=True)
+        self.assertContains(page, '<div><dt>BMI</dt><dd>14.9 · started at 28.4</dd></div>', html=True)
+        self.assertNotContains(page, 'logged')
+        self.assertNotContains(page, 'at your enquiry')
+        # A whole starting BMI reads as the doctor writes it, and with nothing logged the questionnaire's answers show.
+        logged = WeightEntry(weight_kg=Decimal('85.00'), recorded_on=timezone.localdate())
+        rows = dict(medical_information(profile=None, intake={}, weight=logged, recorded_height='170', start_weight='101.15'))
+        self.assertEqual(rows['BMI'], '29.4 · started at 35')
+        rows = dict(medical_information(profile=None, intake={'height_cm': '165', 'weight_kg': '95', 'bmi': '34.9'}, weight=None))
+        self.assertEqual((rows['Weight'], rows['BMI']), ('95 kg · from your questionnaire', '34.9 · from your questionnaire'))
+        rows = dict(medical_information(profile=None, intake={}, weight=logged))
+        self.assertEqual(rows['Weight'], '85 kg')
 
     def test_my_treatment_keeps_previous_prescriptions_below_subscription_without_a_shop(self):
         authorization = self.authorize()

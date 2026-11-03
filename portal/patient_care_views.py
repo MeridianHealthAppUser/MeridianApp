@@ -16,13 +16,11 @@ from django.views import View
 from django.views.decorators.cache import never_cache
 
 from care.availability import SAST, open_slots_for_day, start_slots
-from care.models import Appointment, PatientClinicalSummary, PatientEvent
-from care.patient_care import book_patient_appointment, clinician_answers, patient_busy_intervals, save_patient_medical_profile
+from care.clinical_summary import get_summary
+from care.models import Appointment, PatientEvent
+from care.patient_care import book_patient_appointment, patient_busy_intervals
 from .appointment_detail_views import labelled_slots
-from .clinical_forms import make_clinical_context, validate_clinical_context
-from .patient_care_forms import (
-    PROFILE_FIELDS, BookingTimesQuery, PatientBookingForm, PatientMedicalProfileForm, PatientUpdatesFilterForm,
-)
+from .patient_care_forms import BookingTimesQuery, PatientBookingForm, PatientUpdatesFilterForm
 from .patient_context import validate_patient_context
 from .patient_summary import intake_answers, latest_weight, medical_information, medical_profile
 from .patient_views import JUST_BOOKED, patient_appointments_context, patient_page_context
@@ -112,59 +110,25 @@ class PatientBookingTimesView(LoginRequiredMixin, PatientPortalRequiredMixin, Vi
 
 
 class PatientMedicalProfileView(PatientCarePage):
-    def profile(self):
-        return medical_profile(self.patient_company, self.patient)
-
-    def locked(self):
-        return clinician_answers(self.patient_company, self.patient)
-
-    def display(self, request, profile, form=None):
-        locked = self.locked()
-        medical_change_query = urlencode({'compose': 1, 'subject': 'Change to my medical information'})
-        context = self.context(
-            'medical_profile', 'My Medical Information', profile=profile,
-            medical_rows=medical_information(
-                profile=profile, intake=intake_answers(self.patient_company, self.patient),
-                weight=latest_weight(self.patient_company, self.patient),
-                recorded_height=PatientClinicalSummary.objects.for_company(self.patient_company).filter(
-                    patient=self.patient).values_list('height_cm', flat=True).first(),
-            ),
-            medical_change_url=f"{reverse('portal:patient-messages')}?{medical_change_query}#patient-conversation",
-            profile_form=form if form is not None else PatientMedicalProfileForm(
-                initial=profile.answers if profile else {}, locked=locked),
-            # What their care team keeps, in the profile's order, with a way to ask for a correction.
-            care_team_answers=[(label, locked[name]) for name, label, _ in PROFILE_FIELDS if name in locked],
-            correction_url=f"{reverse('portal:patient-profile')}?request=1&kind=correction#profile-requests",
-            clinical_context=request.POST.get('clinical_context') or make_clinical_context(
-                request, self.patient_company, self.patient, 'medical-profile', profile,
-            ),
-        )
-        return render(request, 'portal/patient_care_medical_profile.html', context)
+    """What the doctor has on file, read-only. Patients tell their doctor about changes in a message; the doctor
+    records medication, allergies and history in Summary data."""
+    http_method_names = ('get', 'head', 'options')
 
     def get(self, request):
-        return self.display(request, self.profile())
-
-    def post(self, request):
-        profile = self.profile()
-        form = PatientMedicalProfileForm(request.POST, locked=self.locked())
-        valid = form.is_valid()
-        try:
-            token = validate_clinical_context(request, self.patient_company, self.patient, 'medical-profile', profile)
-        except ValidationError as error:
-            add_error(form, error)
-            valid = False
-        if valid:
-            try:
-                profile, changed = save_patient_medical_profile(
-                    company=self.patient_company, patient=self.patient, actor=request.user,
-                    answers=form.cleaned_data, expected_revision=token.get('revision'), request=request,
-                )
-            except ValidationError as error:
-                add_error(form, error)
-            else:
-                messages.success(request, 'Your medical profile is saved. You can return to update it.' if changed else 'No changes to save.')
-                return redirect('portal:patient-medical-profile')
-        return self.display(request, profile, form)
+        # Summary data as the clinician sees it: what they saved, or what it starts from before they do.
+        summary = get_summary(self.patient_company, self.patient)
+        medical_change_query = urlencode({'compose': 1, 'subject': 'Change to my medical information'})
+        context = self.context(
+            'medical_profile', 'My Medical Information',
+            medical_rows=medical_information(
+                profile=medical_profile(self.patient_company, self.patient),
+                intake=intake_answers(self.patient_company, self.patient),
+                weight=latest_weight(self.patient_company, self.patient),
+                recorded_height=summary.height_cm, start_weight=summary.start_weight_kg,
+            ),
+            medical_change_url=f"{reverse('portal:patient-messages')}?{medical_change_query}#patient-conversation",
+        )
+        return render(request, 'portal/patient_care_medical_profile.html', context)
 
 
 class PatientUpdatesView(PatientCarePage):

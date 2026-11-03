@@ -18,7 +18,7 @@
     <figcaption>
       <div class="patient-weight-chart__legend"><span><i class="patient-weight-chart__key patient-weight-chart__key--recorded" aria-hidden="true"></i>Your recorded weight</span>{% if chart.reference.polygon %}<span><i class="patient-weight-chart__key patient-weight-chart__key--reference" aria-hidden="true"></i>Illustrative reference · 500g–1kg/week</span>{% endif %}</div>
       {% if not chart.reference.polygon %}<p>The illustrative 500g–1kg/week reference falls outside the dates shown.</p>{% endif %}
-      <p>The reference starts after four starter weeks from your prescribed treatment start on {{ chart.reference.treatment_start|date:"j M Y" }}, and ends on {{ chart.reference.ends_on|date:"j M Y" }} (within the prescription dates, up to {{ chart.reference.weeks_limit }} weeks after the starter period). It uses {{ chart.reference.baseline_weight|kg }} kg recorded on {{ chart.reference.baseline_date|date:"j M Y" }}{% if chart.reference.baseline_date > chart.reference.treatment_start %}, beginning no earlier than that check-in{% endif %}. It is not a prediction or a personal target; your response may differ.</p>
+      <p>No weight loss is expected in the first four weeks. Thereafter, we aim for 500g to 1kg of weight loss per week (as shown in blue). Message your doctor if you are not in this range - a dose adjustment may be required.</p>
       {% if caption %}<p>{{ caption }}</p>{% endif %}
     </figcaption>
   {% elif caption %}<figcaption>{{ caption }}</figcaption>{% endif %}

@@ -76,7 +76,7 @@ class QuestionnaireCheckoutTests(TestCase):
     def test_test_code_converts_the_lead_into_a_booked_signed_in_patient(self):
         lead = self.submit_enquiry()
         response, page = self.pay()
-        self.assertRedirects(response, reverse('portal:patient-medical-profile'), fetch_redirect_response=False)
+        self.assertRedirects(response, reverse('portal:patient-dashboard'), fetch_redirect_response=False)
 
         user = get_user_model().objects.get(email=EMAIL)
         self.assertTrue(user.check_password(PASSWORD))
@@ -113,8 +113,8 @@ class QuestionnaireCheckoutTests(TestCase):
                           'appointment_id': appointment.pk})
 
         self.assertEqual(int(self.client.session['_auth_user_id']), user.pk)
-        profile = self.client.get(reverse('portal:patient-medical-profile'))
-        self.assertContains(profile, 'Your initial consultation with Sam Doctor is booked')
+        home = self.client.get(reverse('portal:patient-dashboard'))
+        self.assertContains(home, 'Your initial consultation with Sam Doctor is booked')
         self.assertContains(self.client.get(reverse('portal:patient-appointments')), 'Initial consultation')
         for name in ('questionnaire-checkout', 'questionnaire-result'):
             self.assertRedirects(self.client.get(reverse(f'portal:{name}')), reverse('portal:patient-dashboard'),
@@ -208,7 +208,7 @@ class QuestionnaireCheckoutTests(TestCase):
         page = self.checkout()
         self.assertEqual(page.context['identity'], 'signed_in')
         response = self.client.post(self.url, self.pay_data(page, password1='', password2=''))
-        self.assertRedirects(response, reverse('portal:patient-medical-profile'), fetch_redirect_response=False)
+        self.assertRedirects(response, reverse('portal:patient-dashboard'), fetch_redirect_response=False)
         patient = Patient.objects.get(user=existing)
         self.assertEqual(get_user_model().objects.filter(email__iexact=EMAIL).count(), 1)
         self.assertTrue(AuditEvent.objects.filter(patient=patient, action='patient.record_created').exists())
@@ -269,7 +269,7 @@ class QuestionnaireCheckoutTests(TestCase):
     def test_resubmitting_after_conversion_does_not_book_twice(self):
         self.submit_enquiry()
         data = self.pay_data(self.checkout())
-        self.assertRedirects(self.client.post(self.url, data), reverse('portal:patient-medical-profile'),
+        self.assertRedirects(self.client.post(self.url, data), reverse('portal:patient-dashboard'),
                              fetch_redirect_response=False)
         before = self.counts()
         self.assertRedirects(self.client.post(self.url, data), reverse('portal:patient-dashboard'),

@@ -435,7 +435,8 @@ class PatientStandalonePagesTests(TestCase):
                 self.assertContains(response, f'<div><dt>{label}</dt><dd>{value}</dd></div>', html=True)
         # The delivery address (from the latest supply request until the patient saves one) is theirs to change.
         self.assertContains(response, '<dt>Delivery address</dt><dd>12 Main Road, Gardens, Cape Town, 8001 '
-                                      f'<a class="patient-inline-link" href="{reverse("portal:patient-delivery-address")}">Change')
+                                      f'<a class="patient-icon-link" href="{reverse("portal:patient-delivery-address")}" '
+                                      'aria-label="Change my delivery address"')
         for field in ('title', 'phone', 'city', 'first_name', 'last_name'):
             self.assertNotContains(response, f'name="{field}"')
         self.assertContains(response, 'data-modal-open="request-details-change" aria-haspopup="dialog">Request a change</a>')
@@ -457,14 +458,15 @@ class PatientStandalonePagesTests(TestCase):
         self.assertContains(response, f'<a class="console-button console-button--secondary" href="{reverse("accounts:password-change")}">Change password</a>', html=True)
         self.assertContains(response, f'action="{reverse("accounts:logout")}"')
         self.assertContains(response, '<button class="console-button patient-button--red" type="submit">Sign out</button>', html=True)
-        # Compact account controls follow personal details, then requests, consents and care emails.
+        # Compact account controls follow personal details, then consents and care emails.
         html = response.content.decode()
-        headings = ('Personal details', 'My data requests', 'Recorded consent', 'Emails about your care')
+        headings = ('Personal details', 'Recorded consent', 'Emails about your care')
         self.assertEqual([html.index(f'>{heading}</h2>') for heading in headings],
                          sorted(html.index(f'>{heading}</h2>') for heading in headings))
         for removed in ('Your practice access', 'Your recent account activity', 'Questions about your information',
                         'Title and contact details', 'Recorded consents', 'Optional marketing communications',
-                        'Account created', 'Last sign-in', 'Password last changed', 'Last reset with Forgot password'):
+                        'Account created', 'Last sign-in', 'Password last changed', 'Last reset with Forgot password',
+                        'My data requests'):
             self.assertNotContains(response, removed)
 
     def test_weight_and_message_writes_require_csrf(self):

@@ -55,8 +55,9 @@
           <dl>{% for weight in record_weights %}<dt>{{ weight.recorded_on|date:"j M Y" }}</dt><dd>{{ weight.weight_kg }} kg</dd>{% empty %}<dt>No weight measurements recorded.</dt>{% endfor %}</dl>
           <p class="record-small">Actual recorded measurements. No estimated values or clinical interpretation.</p>
         </section>
-        {% if is_clinician %}<section class="staff-page-card record-summary"><p class="console-kicker">Self-reported medical profile</p><p class="record-small">{{ company.name }} only. Patient-provided history, not a clinical assessment.</p>
-          {% if profile_answers %}<details class="record-profile"><summary>Read current profile · version {{ medical_profile.revision }}</summary><dl>{% for answer in profile_answers %}<dt>{{ answer.label }}</dt><dd>{{ answer.answer }}</dd>{% endfor %}</dl></details>{% else %}<p>No medical profile has been completed here yet.</p>{% endif %}
+        {# Patients no longer fill in a medical profile; answers saved before that stay readable here. #}
+        {% if is_clinician and profile_answers %}<section class="staff-page-card record-summary"><p class="console-kicker">Self-reported medical profile</p><p class="record-small">{{ company.name }} only. Patient-provided history, not a clinical assessment.</p>
+          <details class="record-profile"><summary>Read current profile · version {{ medical_profile.revision }}</summary><dl>{% for answer in profile_answers %}<dt>{{ answer.label }}</dt><dd>{{ answer.answer }}</dd>{% endfor %}</dl></details>
         </section>{% endif %}
         <section class="staff-page-card record-summary"><p class="console-kicker">More for this patient</p><nav class="record-care-links" aria-label="Patient care actions">
           {% if is_clinician %}<a href="{% url 'portal:clinical-consultation-create' patient.pk %}">New consultation</a>{% endif %}{% if is_doctor %}<a href="{% url 'portal:clinical-lab-create' patient.pk %}">Request a blood test</a>{% endif %}

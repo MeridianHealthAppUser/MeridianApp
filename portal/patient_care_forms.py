@@ -70,6 +70,8 @@ class BookingTimesQuery(forms.Form):
     clean_date = PatientBookingForm.clean_date
 
 
+# Medical profile answers, with the labels the doctor's record shows them under. Patients no longer fill these in
+# themselves; earlier answers and the doctor's Summary data edits are kept in the profile.
 PROFILE_FIELDS = (
     ('medications', 'Current medication and supplements', 'Include names and how you currently take them, if known.'),
     ('allergies', 'Allergies and previous reactions', 'Include medicine or other allergies, or say if none are known.'),
@@ -82,17 +84,6 @@ PROFILE_FIELDS = (
     ('nutrition', 'Eating habits and dietary needs', 'Include any dietary restrictions or concerns you want to discuss.'),
     ('goals', 'Your goals and questions', 'What would you like to discuss at your consultation?'),
 )
-
-
-class PatientMedicalProfileForm(forms.Form):
-    """The patient's own answers. Those in locked are their clinician's now, so they're shown, not asked."""
-
-    def __init__(self, *args, locked=(), **kwargs):
-        super().__init__(*args, **kwargs)
-        for name, label, help_text in PROFILE_FIELDS:
-            if name not in locked:
-                self.fields[name] = forms.CharField(label=label, required=False, max_length=2000,
-                                                    help_text=help_text, widget=forms.Textarea(attrs={'rows': 3}))
 
 
 class PatientUpdatesFilterForm(forms.Form):
