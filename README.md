@@ -38,6 +38,8 @@ All four patients are Sam's. Nadia has the full demo history (consultations, not
 
 `seed_billing_demo` (run once, after `seed_demo`, with the sandbox payment provider) adds billing and Weekly shipping demo data. It gives each patient a subscription in a different billing state, and adds four more patients: Lerato, Ruan, Megan and Thabo (`lerato.d@`, `ruan.b@`, `megan.f@` and `thabo.n@example.co.za`, same password). The coming shipping week gets its parcels, earlier parcels go into Dispatch history, and there are creatine requests and the default email journeys (all off).
 
+`seed_operations_demo` adds an isolated Inventory/Operations walkthrough with stock, two doctors, ten patients and subscriptions, mixed shipment states and two non-prescription requests. It leaves existing demo records intact and preserves your testing progress on reruns. See [local test accounts and scenarios](docs/OPERATIONS_DEMO.md).
+
 ## Separate staff pages checkpoint
 
 **Current deployment:** `MULTI_PRACTICE_ENABLED=false` and `SINGLE_PRACTICE_SLUG=meridian-health` are the defaults, including on PostgreSQL/DigitalOcean. No migration, password reset or reseed is needed. Other-practice records cannot be reached through old sessions, direct links, report filters, intake forms or video rooms. Existing other-practice data is not automatically deleted or merged. The historical multi-practice workflows described below are retained in code only and require explicitly enabling the environment flag. See [single-practice operation](docs/SINGLE_PRACTICE.md).

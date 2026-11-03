@@ -13,12 +13,13 @@
     {# Roboto, Meridian's typeface, on every page. #}
     <link rel="preload" href="{% static 'fonts/roboto/roboto-latin.woff2' %}" as="font" type="font/woff2" crossorigin>
     <link rel="stylesheet" href="{% static 'css/fonts.css' %}?v=20261007">
-    <link rel="stylesheet" href="{% static 'css/theme.css' %}?v=20261029a">
+    <link rel="stylesheet" href="{% static 'css/theme.css' %}?v=20261103a">
     <link rel="stylesheet" href="{% static 'css/base.css' %}?v=20261011a">
     {% if page_navigation_config %}<link rel="stylesheet" href="{% static 'css/page_navigation.css' %}"><script src="{% static 'js/page_lifecycle.js' %}" defer></script>{% endif %}
     {% block extra_css %}{% endblock %}
     {% if is_workspace_page %}<link rel="stylesheet" href="{% static 'css/workspace_polish.css' %}?v=20261007"><script src="{% static 'js/workspace_polish.js' %}" defer></script>{% endif %}
     {% if user.is_authenticated %}<link rel="stylesheet" href="{% static 'css/account_menu.css' %}?v=20261024a"><script src="{% static 'js/account_menu.js' %}" defer></script><script src="{% static 'js/theme.js' %}?v=20261024a" defer></script>{% endif %}
+    {% if active_membership.role == 'super_admin' and not is_patient_portal %}<link rel="stylesheet" href="{% static 'css/demo_data.css' %}?v=20261103a"><script src="{% static 'js/demo_data.js' %}?v=20261103a" defer></script>{% endif %}
     {% if can_switch_practice_role %}<link rel="stylesheet" href="{% static 'css/practice_role_switcher.css' %}">{% endif %}
     {% if video_notifications_enabled %}<link rel="stylesheet" href="{% static 'css/call_notifications.css' %}"><script src="{% static 'js/call_notifications.js' %}" defer></script>{% endif %}
     {% if request.realtime_scope %}<link rel="stylesheet" href="{% static 'css/live_messages.css' %}?v=20261018"><script src="{% static 'js/live_messages.js' %}?v=20261018" defer></script>{% endif %}
@@ -69,11 +70,13 @@
           </form>
           {% endif %}
           {% endif %}
+          {% if active_membership.role == 'super_admin' and not is_patient_portal %}<a href="{% url 'portal:demo-data' %}?next={{ request.get_full_path|urlencode }}" class="demo-data-trigger" data-demo-data-open data-native-navigation aria-haspopup="dialog"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M9 3h6M10 3v6L4.7 18a2 2 0 0 0 1.7 3h11.2a2 2 0 0 0 1.7-3L14 9V3M8 13h8M10 17h.01M14 18h.01"/></svg><span>Demo data</span></a>{% endif %}
           {% include 'includes/account_menu.html' %}
         </div>
       {% endif %}
     </header>
     {% endblock %}
+    {% if active_membership.role == 'super_admin' and not is_patient_portal %}<dialog class="demo-data-dialog" data-demo-data-dialog aria-label="Demo data"><div data-demo-data-content></div></dialog>{% endif %}
     {% if messages %}
       {# Toasts at the top right, above everything: confirmations fade after 5 seconds, errors stay until closed. #}
       <div class="toast-stack">

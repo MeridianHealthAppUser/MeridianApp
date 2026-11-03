@@ -1,0 +1,1 @@
+<span class="console-status shipping-progress-status">{% if shipment.status == 'delivered' %}Delivered{% elif shipment.courier_status_label %}{{ shipment.courier_status_label }}{% elif shipment.status == 'dispatched' %}Dispatched{% else %}Awaiting collection{% endif %}</span>

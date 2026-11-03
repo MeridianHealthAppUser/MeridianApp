@@ -9,6 +9,7 @@ from decimal import Decimal
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
+from django.core.validators import MinValueValidator
 from django.db import models
 from django.db.models.functions import Lower
 from django.utils import timezone
@@ -242,6 +243,9 @@ class MedicationProduct(CompanyScopedModel):
     """What the dispensary orders and sends: for a main medicine, a pen (Semaglutide 0.25 mg). What a doctor prescribes
     is a dose (MedicationDose), and several doses can come in the same pen."""
 
+    demo_data_set = models.ForeignKey('practices.DemoDataSet', null=True, blank=True,
+                                      on_delete=models.PROTECT, related_name='products')
+
     class Category(models.TextChoices):
         WEIGHT_MANAGEMENT = 'weight_management', 'Weight management'
         HORMONE = 'hormone', 'Hormone therapy'
@@ -252,6 +256,11 @@ class MedicationProduct(CompanyScopedModel):
     category = models.CharField(max_length=24, choices=Category.choices, default=Category.WEIGHT_MANAGEMENT)
     strength = models.CharField(max_length=80, blank=True)
     price = models.DecimalField(max_digits=10, decimal_places=2)
+    starting_awc = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True, default=None,
+                                        validators=[MinValueValidator(Decimal('0'))])
+    lead_time_weeks = models.DecimalField(max_digits=6, decimal_places=2, null=True, blank=True, default=None,
+                                          validators=[MinValueValidator(Decimal('0'))])
+    safety_stock = models.PositiveIntegerField(null=True, blank=True, default=None)
     allowance = models.CharField(max_length=120, blank=True)
     requires_authorisation = models.BooleanField(default=True)
     is_active = models.BooleanField(default=True)
@@ -1317,6 +1326,7 @@ class Shipment(PatientCompanyScopedModel):
     waybill = models.CharField(max_length=60, blank=True)
     courier_shipment_id = models.CharField(max_length=60, blank=True)
     courier_status = models.CharField(max_length=60, blank=True)
+    courier_status_updated_at = models.DateTimeField(null=True, blank=True)
     courier_error = models.CharField(max_length=500, blank=True)
     waybill_created_at = models.DateTimeField(null=True, blank=True)
     # The name, address and number The Courier Guy was given when the parcel was booked (care.courier.booked_delivery):
@@ -1345,8 +1355,8 @@ class ShipmentItem(CompanyScopedModel):
     product = models.ForeignKey(MedicationProduct, on_delete=models.PROTECT, related_name='shipment_items')
     dose = models.CharField(max_length=80)
     quantity = models.PositiveIntegerField()
-    # Pens are ordered for each week's parcels, not kept in stock. The batch and expiry that went into a parcel are
-    # noted when it is dispatched, so a recall can be traced to the patients who received it.
+    # The actual batch and expiry packed are noted at dispatch for recall tracing.
+    # Product-level stock deductions live in StockMovement.
     batch_note = models.CharField(max_length=120, blank=True)
 
     class Meta:
@@ -2044,3 +2054,168 @@ class AppointmentProposal(PatientCompanyScopedModel):
 
 # Imported after the shared patient-scoped base and clinical models exist.
 from .compounding_models import AuthorizationReviewReminder, CompoundingRecord  # noqa: E402, F401
+
+
+class StockMovement(CompanyScopedModel):
+    """Signed stock movement; receipts are positive and dispatches negative."""
+    product = models.ForeignKey(MedicationProduct, on_delete=models.PROTECT, related_name='stock_movements')
+    shipment = models.ForeignKey(Shipment, null=True, blank=True, on_delete=models.PROTECT, related_name='stock_movements')
+    purchase_order_item = models.ForeignKey('PurchaseOrderItem', null=True, blank=True, on_delete=models.PROTECT,
+                                           related_name='stock_movements')
+    quantity = models.IntegerField()
+    actor = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT)
+    batch = models.CharField(max_length=120, blank=True)
+    expires_on = models.DateField(null=True, blank=True)
+    reason = models.CharField(max_length=500, blank=True)
+    is_override = models.BooleanField(default=False)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=('shipment', 'product'), name='one_stock_dispatch_per_product')]
+        ordering = ('-created_at', '-pk')
+
+    def clean(self):
+        super().clean()
+        if self.product_id and self.product.company_id != self.company_id:
+            raise ValidationError('Stock product must belong to this practice.')
+        if self.shipment_id and self.shipment.company_id != self.company_id:
+            raise ValidationError('Shipment must belong to this practice.')
+        if self.purchase_order_item_id:
+            item = self.purchase_order_item
+            if item.company_id != self.company_id or item.purchase_order.company_id != self.company_id:
+                raise ValidationError('The purchase order line must belong to this practice.')
+            if item.product_id != self.product_id:
+                raise ValidationError('The stock product must match its purchase order line.')
+            if self.shipment_id or self.quantity <= 0:
+                raise ValidationError('A purchase order receipt must add stock without a shipment.')
+        if not self.quantity:
+            raise ValidationError('Stock quantity cannot be zero.')
+
+
+class PurchaseOrder(CompanyScopedModel):
+    """A practice's supplier order; placing it does not receive or reserve physical stock."""
+
+    class Status(models.TextChoices):
+        OPEN = 'open', 'Open'
+        RECEIVED = 'received', 'Received'
+        CANCELLED = 'cancelled', 'Cancelled'
+
+    demo_data_set = models.ForeignKey('practices.DemoDataSet', null=True, blank=True,
+                                      on_delete=models.PROTECT, related_name='purchase_orders')
+    number = models.PositiveIntegerField(validators=[MinValueValidator(1)])
+    submission_key = models.UUIDField(editable=False)
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL,
+                                   related_name='created_purchase_orders')
+    supplier = models.ForeignKey('Supplier', null=True, blank=True, on_delete=models.SET_NULL,
+                                 related_name='purchase_orders')
+    supplier_name = models.CharField(max_length=255, blank=True)
+    supplier_email = models.EmailField(blank=True)
+    eta = models.DateField(null=True, blank=True)
+    received_at = models.DateTimeField(null=True, blank=True)
+    status = models.CharField(max_length=10, choices=Status.choices, default=Status.OPEN)
+
+    class Meta:
+        ordering = ('-created_at', '-pk')
+        constraints = [
+            models.UniqueConstraint(fields=('company', 'number'), name='unique_purchase_order_number'),
+            models.UniqueConstraint(fields=('company', 'submission_key'), name='unique_purchase_order_submission'),
+            models.CheckConstraint(condition=models.Q(number__gt=0, number__lte=2147483647),
+                                   name='purchase_order_number_limit'),
+            models.CheckConstraint(condition=models.Q(status__in=('open', 'received', 'cancelled')),
+                                   name='purchase_order_valid_status'),
+        ]
+        indexes = [models.Index(fields=('company', 'status', '-created_at'), name='purchase_order_open_lookup')]
+
+    @property
+    def reference(self):
+        return f'PO-{self.number:05d}'
+
+    def __str__(self):
+        return self.reference
+
+    def clean(self):
+        super().clean()
+        if self.supplier_id and self.supplier.company_id != self.company_id:
+            raise ValidationError({'supplier': 'The supplier must belong to this practice.'})
+
+
+class PurchaseOrderItem(CompanyScopedModel):
+    """A whole-unit supplier order line, retaining the catalogue wording at creation."""
+
+    purchase_order = models.ForeignKey(PurchaseOrder, on_delete=models.PROTECT, related_name='items')
+    product = models.ForeignKey(MedicationProduct, on_delete=models.PROTECT, related_name='purchase_order_items')
+    quantity = models.PositiveIntegerField(validators=[MinValueValidator(1)])
+    quantity_received = models.PositiveIntegerField(default=0)
+    product_name = models.CharField(max_length=255)
+    strength = models.CharField(max_length=80, blank=True)
+    category = models.CharField(max_length=24, choices=MedicationProduct.Category.choices)
+    supplier_code = models.CharField(max_length=100, blank=True)
+
+    class Meta:
+        ordering = ('pk',)
+        constraints = [
+            models.UniqueConstraint(fields=('purchase_order', 'product'), name='one_product_per_purchase_order'),
+            models.CheckConstraint(condition=models.Q(quantity__gt=0, quantity__lte=2147483647),
+                                   name='purchase_order_quantity_limit'),
+            models.CheckConstraint(condition=models.Q(quantity_received__gte=0,
+                                                      quantity_received__lte=models.F('quantity')),
+                                   name='purchase_order_received_limit'),
+        ]
+
+    def clean(self):
+        super().clean()
+        errors = {}
+        if self.purchase_order_id and self.purchase_order.company_id != self.company_id:
+            errors['purchase_order'] = 'The purchase order must belong to this practice.'
+        if self.product_id and self.product.company_id != self.company_id:
+            errors['product'] = 'The product must belong to this practice.'
+        if errors:
+            raise ValidationError(errors)
+
+
+class Supplier(CompanyScopedModel):
+    """A practice's supplier contact, managed by its Super Admins."""
+
+    demo_data_set = models.ForeignKey('practices.DemoDataSet', null=True, blank=True,
+                                      on_delete=models.PROTECT, related_name='suppliers')
+    name = models.CharField(max_length=255)
+    contact_name = models.CharField(max_length=120, blank=True)
+    email = models.EmailField(blank=True)
+    phone = models.CharField(max_length=40, blank=True)
+
+    class Meta:
+        ordering = ('name', 'pk')
+        constraints = [
+            models.UniqueConstraint(Lower('name'), 'company', name='unique_supplier_name_per_company'),
+            models.CheckConstraint(condition=~models.Q(name=''), name='supplier_name_not_empty'),
+        ]
+
+    def __str__(self):
+        return self.name
+
+
+class SupplierProduct(CompanyScopedModel):
+    """A catalogue product and the code used for it by this supplier."""
+
+    supplier = models.ForeignKey(Supplier, on_delete=models.CASCADE, related_name='product_links')
+    product = models.ForeignKey(MedicationProduct, on_delete=models.PROTECT, related_name='supplier_links')
+    supplier_code = models.CharField(max_length=100)
+
+    class Meta:
+        ordering = ('pk',)
+        constraints = [
+            models.UniqueConstraint(fields=('supplier', 'product'), name='unique_supplier_product'),
+            models.UniqueConstraint(Lower('supplier_code'), 'supplier', name='unique_supplier_product_code'),
+            models.CheckConstraint(condition=~models.Q(supplier_code=''), name='supplier_code_not_empty'),
+        ]
+
+    def clean(self):
+        super().clean()
+        errors = {}
+        if self.supplier_id and self.supplier.company_id != self.company_id:
+            errors['supplier'] = 'The supplier must belong to this practice.'
+        if self.product_id and self.product.company_id != self.company_id:
+            errors['product'] = 'The product must belong to this practice.'
+        if not isinstance(self.supplier_code, str) or not self.supplier_code.strip():
+            errors['supplier_code'] = 'Enter the supplier’s product code.'
+        if errors:
+            raise ValidationError(errors)

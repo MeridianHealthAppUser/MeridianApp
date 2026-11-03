@@ -56,7 +56,7 @@ def _messages(error):
 
 
 def _current_plan(company, patient):
-    plans = PatientSubscription.objects.filter(company=company, patient=patient).select_related('authorization__dose')
+    plans = PatientSubscription.objects.filter(company=company, patient=patient, patient__demo_data_set__isnull=True).select_related('authorization__dose')
     return plans.exclude(status=PatientSubscription.Status.CANCELLED).order_by('-created_at', '-pk').first()
 
 
@@ -429,6 +429,52 @@ class BillingFilterForm(forms.Form):
     ))
 
 
+def billing_listing(data, company):
+    """The unpaginated, read-only billing summaries shared by the list and its download."""
+    form = BillingFilterForm(without_all(data, 'state'))
+    plans = PatientSubscription.objects.filter(company=company, patient__company=company, patient__demo_data_set__isnull=True).exclude(
+        status=PatientSubscription.Status.CANCELLED).select_related('patient', 'authorization__dose__pen').order_by(
+        'patient__last_name', 'patient__first_name', 'pk')
+    states = []
+    if form.is_valid():
+        for term in form.cleaned_data['q'].split():
+            plans = plans.filter(Q(patient__first_name__icontains=term) | Q(patient__last_name__icontains=term))
+        states = form.cleaned_data['state']
+    else:
+        plans = plans.none()
+    rows = []
+    for plan in plans:
+        plan.state, plan.state_text = billing_state(plan)
+        if states and plan.state not in states:
+            continue
+        plan.mandate = current_mandate(plan)
+        plan.owed = outstanding(plan)
+        plan.last_paid = plan.cycles.filter(company=company, patient=plan.patient,
+                                           status=SubscriptionCycle.Status.PAID).order_by('-paid_at', '-pk').first()
+        rows.append(plan)
+    order = {'failed': 0, 'retrying': 1, 'update': 2, 'pending': 3, 'no_mandate': 4, 'due': 5, 'paid': 6}
+    rows.sort(key=lambda plan: order.get(plan.state, 9))
+    return form, rows
+
+
+def billing_detail_plan(company, pk):
+    return get_object_or_404(PatientSubscription.objects.filter(company=company, patient__company=company, patient__demo_data_set__isnull=True)
+                             .select_related('patient', 'authorization__dose__pen'), pk=pk)
+
+
+def billing_cycle_rows(plan, company):
+    """Cycles and attempts belonging to this subscription's patient and practice."""
+    cycles = plan.cycles.filter(company=company, patient=plan.patient).select_related('invoice').order_by('-cycle_number')
+    for cycle in cycles:
+        cycle.attempt_rows = list(cycle.payments.filter(company=company, patient=plan.patient)
+                                 .select_related('recorded_by').order_by('attempt', 'pk'))
+        yield cycle
+
+
+def billing_other_payments(plan, company):
+    return Payment.objects.filter(company=company, patient=plan.patient, subscription_cycle__isnull=True).order_by('-created_at', '-pk')
+
+
 class BillingListView(OperationsView):
     """Every subscription's billing: paid up, due, retrying, failed (the failure queue), or waiting on the patient.
     Practice administrators and Super Admins; totals owed are for Super Admins."""
@@ -437,29 +483,7 @@ class BillingListView(OperationsView):
     http_method_names = ('get', 'head', 'options')
 
     def get(self, request):
-        form = BillingFilterForm(without_all(request.GET, 'state'))
-        plans = PatientSubscription.objects.filter(company=self.company, patient__company=self.company).exclude(
-            status=PatientSubscription.Status.CANCELLED).select_related('patient', 'authorization__dose__pen').order_by(
-            'patient__last_name', 'patient__first_name', 'pk')
-        states = []
-        if form.is_valid():
-            for term in form.cleaned_data['q'].split():
-                plans = plans.filter(Q(patient__first_name__icontains=term) | Q(patient__last_name__icontains=term))
-            states = form.cleaned_data['state']
-        else:
-            plans = plans.none()
-        rows = []
-        for plan in plans:
-            plan.state, plan.state_text = billing_state(plan)
-            if states and plan.state not in states:
-                continue
-            plan.mandate = current_mandate(plan)
-            plan.owed = outstanding(plan)
-            plan.last_paid = plan.cycles.filter(status=SubscriptionCycle.Status.PAID).order_by('-paid_at').first()
-            rows.append(plan)
-        # The failure queue first, then what's waiting on someone, then the rest.
-        order = {'failed': 0, 'retrying': 1, 'update': 2, 'pending': 3, 'no_mandate': 4, 'due': 5, 'paid': 6}
-        rows.sort(key=lambda plan: order.get(plan.state, 9))
+        form, rows = billing_listing(request.GET, self.company)
         page = Paginator(rows, 50).get_page(request.GET.get('page'))
         query = request.GET.copy()
         query.pop('page', None)
@@ -559,26 +583,28 @@ class BillingDetailView(OperationsView):
     nav_section, page_title = 'billing', 'Billing'
 
     def plan(self, pk):
-        return get_object_or_404(PatientSubscription.objects.filter(company=self.company, patient__company=self.company)
-                                 .select_related('patient', 'authorization__dose__pen'), pk=pk)
+        return billing_detail_plan(self.company, pk)
 
     def display(self, request, plan, *, payment_form=None, payment_cycle=None, next_form=None, status=200):
-        cycles = list(plan.cycles.select_related('invoice').order_by('-cycle_number'))
+        from .export_support import export_url
+
+        cycles = list(billing_cycle_rows(plan, self.company))
         for cycle in cycles:
-            cycle.attempt_rows = list(cycle.payments.order_by('attempt', 'pk'))
             if self.can_edit and cycle.status in OPEN_CYCLES:
                 cycle.retry_context = make_workflow_context(request, self.company, 'cycle-retry', cycle)
                 cycle.record_context = make_workflow_context(request, self.company, 'cycle-record', cycle)
         state, state_text = billing_state(plan)
+        other_payments = list(billing_other_payments(plan, self.company)[:20])
         return render(request, 'portal/operations_billing_detail.html', self.context(
             plan=plan, cycles=cycles, mandates=plan.mandates.order_by('-created_at')[:10], state=state, state_text=state_text,
+            cycles_count=len(cycles), cycles_export_url=export_url('billing-cycles', pk=plan.pk),
+            other_payments_count=len(other_payments), other_payments_export_url=export_url('billing-payments', pk=plan.pk),
             owed=outstanding(plan), provider=current_provider(), address=address_for(plan.patient),
             payment_form=payment_form or ManualPaymentForm(), payment_cycle=payment_cycle,
             next_form=next_form or NextDebitForm(initial={'day': plan.next_debit_on}),
             next_context=make_workflow_context(request, self.company, 'next-debit', plan),
             ask_context=make_workflow_context(request, self.company, 'ask-debit-order', plan),
-            other_payments=Payment.objects.filter(company=self.company, patient=plan.patient, subscription_cycle__isnull=True)
-            .order_by('-created_at')[:20]), status=status)
+            other_payments=other_payments), status=status)
 
     def get(self, request, pk):
         return self.display(request, self.plan(pk))

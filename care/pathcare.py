@@ -252,6 +252,10 @@ def resend_pathcare_form(*, form, actor, request=None):
 
 
 def _queue(form):
+    from .demo_safety import is_demo_record
+
+    if is_demo_record(form):
+        return
     from .tasks import send_pathcare_form_email
 
     def send():
@@ -271,6 +275,10 @@ def _queue(form):
 def deliver(form_id):
     """Send one queued form. Errors propagate so the task can retry."""
     form = PathCareRequestForm.objects.select_related('company', 'patient', 'lab_request__requested_by').get(pk=form_id)
+    from .demo_safety import is_demo_record
+
+    if is_demo_record(form):
+        return
     PathCareRequestForm.objects.filter(pk=form.pk).update(email_attempts=form.email_attempts + 1)
     doctor = form.lab_request.requested_by
     message = build_email(to=form.email_to, subject=f'Your blood test request from {form.company.name}', template='pathcare_form',

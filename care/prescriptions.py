@@ -18,6 +18,8 @@ import re
 from datetime import timedelta
 from decimal import Decimal, InvalidOperation
 
+from .demo_safety import require_same_demo_data
+
 from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.db.models import Max, Q
@@ -234,6 +236,7 @@ def renew_prescription(*, company, patient, actor, current, weeks, acknowledge_f
     midway = last is not None and last.pk != previous.pk
     if midway:
         previous = TreatmentAuthorization.objects.select_related('product', 'dose__pen', 'prescribed_by').get(pk=last.pk)
+    require_same_demo_data(patient, previous.product)
     if not previous.product.is_active:
         raise ValidationError('This medicine is no longer in the catalogue. Change the prescription instead.')
     if previous.dose_id and not previous.dose.is_prescribable:
@@ -282,6 +285,7 @@ def change_prescription(*, company, patient, actor, current, dose, weeks, reason
     if getattr(dose, 'pk', None) not in allowed:
         raise ValidationError('Choose a medicine and dose from this patient’s authorised medications.')
     dose = MedicationDose.objects.select_related('pen').get(pk=dose.pk, company=company)
+    require_same_demo_data(patient, dose.pen)
     if previous is not None and previous.dose_id == dose.pk:
         raise ValidationError('That is the current prescription. Use Renew to extend it.')
     flags = _check_flags(company, patient, acknowledge_flags)

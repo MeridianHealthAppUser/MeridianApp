@@ -41,6 +41,10 @@ class Page:
 # Main destinations, including their GET-level gates. Object editors/downloads
 # keep normal SSR until they explicitly provide a lightweight access resolver.
 STAFF_PAGES = {
+    'purchasing': Page('Purchasing', 'purchasing', 'admin'),
+    'supplier-list': Page('Suppliers', 'suppliers', 'super_admin'),
+    'inventory': Page('Inventory', 'inventory', 'admin'),
+    'inventory-consumption': Page('Consumption', 'inventory', 'admin'),
     'desktop-dashboard': Page('Overview', 'overview'),
     'mobile-dashboard': Page('Overview', 'overview'),
     'staff-tasks': Page('My tasks', 'tasks'),
@@ -101,6 +105,7 @@ HTML_PAGE_ROUTES = frozenset(STAFF_PAGES) | frozenset(PATIENT_PAGES) | frozenset
     'management-user-create', 'management-membership-edit',
     'management-practice-create', 'management-practice-edit',
     'ops-product-create', 'ops-product-detail', 'ops-dose-create', 'ops-dose-detail',
+    'supplier-create', 'supplier-edit', 'supplier-delete',
     'ops-starting-plan-create', 'ops-starting-plan-detail',
     'ops-shipping-create', 'ops-shipment-detail', 'ops-order-detail', 'ops-stock',
     'ops-billing', 'ops-billing-detail', 'ops-delivery-address', 'ops-parcel-payment',
@@ -127,6 +132,7 @@ STAFF_HTML_PAGE_ROUTES = HTML_PAGE_ROUTES - PATIENT_HTML_PAGE_ROUTES
 # An intentional native/API classification makes new GET endpoints fail the
 # registry inventory check until their transport is chosen explicitly.
 NATIVE_GET_ROUTES = frozenset((
+    'demo-data',
     'patient-appointment-video-status', 'staff-message-status', 'patient-message-status',
     'public-terms', 'public-privacy', 'public-contact',
     'questionnaire', 'questionnaire-result', 'questionnaire-checkout',
@@ -134,7 +140,11 @@ NATIVE_GET_ROUTES = frozenset((
     'compounding-print', 'metrics-export', 'activity-statement-export',
     'staff-patient-record-export', 'staff-patient-record-history',
     'staff-patient-record-excel', 'staff-patient-record-workbook',
-    'ops-manifest', 'ops-week-order', 'ops-history-export',
+    'ops-manifest', 'ops-week-order', 'ops-history-export', 'ops-table-export',
+    'purchase-order-excel', 'purchase-order-pdf',
+    'inventory-movements', 'inventory-movements-export',
+    'supplier-export',
+    'inventory-consumption-detail', 'inventory-consumption-export', 'inventory-consumption-detail-export',
     'clinical-lab-result-download', 'patient-lab-result-download', 'patient-lab-form',
     'record-conversation-search', 'patient-blood-test-form', 'patient-blood-result-report',
     'email-unsubscribe', 'ops-shipment-label',

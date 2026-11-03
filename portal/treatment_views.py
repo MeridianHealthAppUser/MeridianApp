@@ -16,7 +16,7 @@ from django.views import View
 from django.views.decorators.cache import never_cache
 
 from care.followups import request_help
-from care.models import AuditEvent, PatientSubscription, TreatmentAuthorization
+from care.models import AuditEvent, PatientSubscription, Shipment, TreatmentAuthorization
 from care.treatment import (
     authorization_is_current, change_authorization_status, change_subscription_status, current_authorizations,
     create_authorization, dose_in_effect, enroll_local_subscription, other_treatments, subscription_hold_reason,
@@ -195,19 +195,9 @@ class SubscriptionListView(LoginRequiredMixin, StaffCompanyRequiredMixin, View):
     http_method_names = ('get', 'head', 'options')
 
     def get(self, request):
-        form = SubscriptionFilterForm(without_all(request.GET, 'status'))
-        plans = _plans(self.company)
-        if form.is_valid():
-            for term in form.cleaned_data['q'].split():
-                plans = plans.filter(Q(patient__first_name__icontains=term) | Q(patient__last_name__icontains=term)
-                                     | Q(plan_name__icontains=term))
-            if form.cleaned_data['status']:
-                plans = plans.filter(status__in=form.cleaned_data['status'])
-        else:
-            plans = plans.none()
+        form, plans = subscription_listing(request.GET, self.company)
         page = Paginator(plans, 20).get_page(request.GET.get('page'))
-        for plan in page:
-            plan.dose = dose_in_effect(plan)
+        page.object_list = list(prepare_subscription_rows(page.object_list, self.company))
         query = request.GET.copy()
         query.pop('page', None)
         count = page.paginator.count
@@ -227,6 +217,48 @@ class SubscriptionFilterForm(forms.Form):
 
     q = forms.CharField(label='Search subscriptions', required=False, max_length=100)
     status = TickedChoiceField(label='Status', choices=PatientSubscription.Status.choices)
+
+
+def subscription_listing(data, company):
+    """The unpaginated subscription selection shared by the table and its download."""
+    form = SubscriptionFilterForm(without_all(data, 'status'))
+    plans = _plans(company)
+    if form.is_valid():
+        for term in form.cleaned_data['q'].split():
+            plans = plans.filter(Q(patient__first_name__icontains=term) | Q(patient__last_name__icontains=term)
+                                 | Q(plan_name__icontains=term))
+        if form.cleaned_data['status']:
+            plans = plans.filter(status__in=form.cleaned_data['status'])
+    else:
+        plans = plans.none()
+    return form, plans
+
+
+def prepare_subscription_rows(plans, company):
+    """Attach the current course's supply progress without creating or changing parcels."""
+    from care.operations import dose_run
+
+    for plan in plans:
+        plan.dose = dose_in_effect(plan)
+        plan.supply_dispatched = plan.supply_remaining = 0
+        plan.next_shipment = None
+        if plan.authorization_id:
+            course = dose_run(plan.authorization)
+            course_filter = Q(authorization_id__in=[item.pk for item in course])
+            plan_keys = {item.plan_key for item in course if item.plan_key}
+            if plan_keys:
+                course_filter |= Q(authorization__plan_key__in=plan_keys)
+            parcels = Shipment.objects.for_company(company).filter(
+                course_filter, subscription=plan, patient=plan.patient,
+            ).exclude(status=Shipment.Status.CANCELLED).order_by('scheduled_for', 'pk')
+            for parcel in parcels:
+                if parcel.status in (Shipment.Status.DISPATCHED, Shipment.Status.DELIVERED):
+                    plan.supply_dispatched += 1
+                else:
+                    plan.supply_remaining += 1
+                    if plan.next_shipment is None:
+                        plan.next_shipment = parcel
+        yield plan
 
 
 def _enrollment_form(company, patient):

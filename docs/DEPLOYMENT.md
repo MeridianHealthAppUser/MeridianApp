@@ -40,6 +40,38 @@ Recommended release order:
 4. Start the web service and verify health, HTTPS, login, Meridian-only access and static files. Confirm practice switching/management are unavailable.
 5. Perform a role-separated smoke test before granting real users access.
 
+### Inventory and purchasing rollout
+
+Apply care migrations `0043` through `0050` and practices migration `0005` before starting this version. The new stock ledger starts empty:
+historical dispatches are not deducted again. Enter counted opening stock in Inventory after deployment;
+local demo stock and purchasing settings are database records and are not transferred with the code.
+Super Admin sets lead time, safety stock and any starting AWC needed for purchasing. Unset values show as
+requiring setup in **To order**. Super Admin must create suppliers and their product/code links in
+**Purchasing → Suppliers** before new purchase orders can be created. Every new order requires a supplier
+that supplies all selected products. Existing orders retain their receipt workflow and display an unassigned
+supplier where none was recorded. Supplier names, email addresses and product codes are saved on new orders.
+Local demo suppliers are not transferred with the code. Purchase order emails use the configured Django email backend and require
+SMTP for inbox delivery. The normal Docker build installs the XLSX dependency and collects the new static assets.
+
+### Client demonstrations in production
+
+Super Admin can open **Demo data** beside the account menu to review and create a managed demonstration set.
+This feature works with `DEBUG=False`. It adds separate labelled patients, products, suppliers, purchase orders,
+stock movements, clinical notes/tasks, prescriptions/subscriptions when an existing prescriber is available,
+and shipping/consumption history. It does not create login accounts or alter existing users, settings, billing
+or email records. Without an active prescriber, non-prescription workflows remain available.
+
+Managed demo patients cannot be billed or sent notifications, and demo purchase orders cannot be emailed.
+Courier booking is simulated; the **Simulate demo courier** action only processes managed demo parcels, even
+when live parcels share the week. Demo products cannot be mixed with live patients or supplier orders.
+Demo purchase exports are marked **DEMO – NOT FOR ORDERING**. Billing lists/exports exclude demo subscriptions.
+
+**Delete demo data** removes only the explicitly owned set and its demo transactions; **Rebuild** atomically
+replaces it with fresh examples. Audit history is retained. Both actions require confirmation in the popup.
+If a protected financial/email record, login or unrelated record has been linked to the demo set, deletion
+stops without removing anything. Resolve that dependency before trying again. Older manually seeded demo data
+is not adopted or deleted by this tool. These controls do not disable normal live workflows for existing records.
+
 HSTS preload is deliberately not enabled automatically. A deployment check may report that the domain is not configured for browser preload; review domain-wide HTTPS policy before opting in.
 
 Payments and the courier are switched on by settings (see [Billing, debit orders and the courier](#billing-debit-orders-and-the-courier)); third-party Zoom integration is not configured. Transactional email (password reset links, PathCare forms and notifications; see [Emails and appointment reminders](#emails-and-appointment-reminders)) uses the `DJANGO_EMAIL_*` settings. Native WebRTC video is included; production Redis and TURN must be provisioned separately. Configure any future integration separately; never infer payment success from a browser flag. The local review-reminder command can be scheduled only after choosing an authorised operational account and reviewing its scope.
@@ -212,12 +244,8 @@ Billing (`care/billing.py`) and The Courier Guy (`care/courier.py`) were added o
   before go-live, to confirm that the account's service level (ECO by default) and the waybill printed on the label
   match what the practice expects. Holding or cancelling a booked parcel cancels its booking. The Courier Guy refuses
   that once the parcel has been collected.
-- `TCG_WEBHOOK_TOKEN` switches on The Courier Guy's tracking webhook. Subscribe to "Tracking event" on its portal
-  (Settings > Webhook subscriptions) with `https://<site>/courier/webhooks/<token>/`.
-  - Each parcel's courier status (collected, at the hub, delivered) is shown on Weekly shipping and in Dispatch
-    history, and a dispatched parcel the courier delivers is marked delivered.
-  - The Courier Guy doesn't sign its webhooks, so the token in the address is what keeps others out. Make it long and
-    random.
+- `TCG_WEBHOOK_TOKEN` enables the tracking callback. See [Courier Guy webhook setup](COURIER_WEBHOOK.md) for the
+  exact live URL, provider setup, payload examples, response codes and delivery behaviour.
 - Schedule `python manage.py send_journey_emails` once a day (the `journey-emails` job) for the email journeys
   (`care/journeys.py`). Every journey email starts switched off: a Super Admin rewrites and switches each on under
   Settings > Email journeys.

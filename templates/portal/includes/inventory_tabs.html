@@ -1,0 +1,5 @@
+<nav class="patient-order-subtabs inventory-subtabs" aria-label="Inventory views">
+  <a href="{% url 'portal:inventory' %}"{% if inventory_view == 'inventory' %} class="is-active" aria-current="page"{% endif %}>Inventory</a>
+  <a href="{% url 'portal:inventory-consumption' %}"{% if inventory_view == 'consumption' %} class="is-active" aria-current="page"{% endif %}>Consumption</a>
+  <a href="{% url 'portal:ops-catalogue' %}"{% if inventory_view == 'catalogue' %} class="is-active" aria-current="page"{% endif %}>Catalogue</a>
+</nav>

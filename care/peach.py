@@ -25,6 +25,8 @@ from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.urls import reverse
 
+from .demo_safety import block_demo_billing
+
 from .payment_providers import (
     Approval, Collection, Notice, ProviderUnavailable, http_call, payment_reference, record_id, return_url, webhook_secret,
 )
@@ -127,11 +129,13 @@ class PeachProvider:
 
     # Debit orders (a kept card)
 
+    @block_demo_billing('mandate')
     def start_mandate(self, mandate):
         if mandate.method != 'card':
             raise ValidationError('Peach Payments takes cards only. Choose a card.')
         return reverse('portal:patient-card-form', args=['mandate', mandate.pk])
 
+    @block_demo_billing('mandate')
     def finish_mandate(self, mandate, params):
         try:
             response = self._call('GET', f'/v1/checkouts/{self._checkout(mandate)}/registration')
@@ -144,6 +148,7 @@ class PeachProvider:
             return Approval('pending')
         return Approval('declined', reason=_reason(response))
 
+    @block_demo_billing('payment', 'mandate')
     def collect(self, payment, mandate):
         """Charge the kept card. Its first charge is the patient's own (they have just entered the card); every later
         one is the practice's, on Peach's recurring entity."""
@@ -166,6 +171,7 @@ class PeachProvider:
         state = outcome(response['result'].get('code'))
         return Collection(state, response.get('id', ''), '' if state != 'failed' else _reason(response))
 
+    @block_demo_billing('payment')
     def check_payment(self, payment):
         """What happened to a charge Peach didn't answer at the time (it timed out): Peach's transaction search by
         the payment's reference, on both entities. Nothing found means it never reached Peach, so it wasn't taken."""
@@ -184,6 +190,7 @@ class PeachProvider:
             return Collection('failed', states[-1][1].get('id', ''), _reason(states[-1][1]))
         return Collection('failed', reason='Peach has no record of this charge, so it wasn’t taken.')
 
+    @block_demo_billing('mandate')
     def cancel_mandate(self, mandate):
         """Ask Peach to forget the card."""
         if mandate.provider_reference and not mandate.provider_reference.startswith(CHECKOUT_PREFIX):
@@ -194,9 +201,11 @@ class PeachProvider:
 
     # Once-off card payments
 
+    @block_demo_billing('payment')
     def start_checkout(self, payment):
         return reverse('portal:patient-card-form', args=['payment', payment.pk])
 
+    @block_demo_billing('payment')
     def finish_checkout(self, payment, params):
         try:
             response = self._call('GET', f'/v1/checkouts/{self._checkout(payment)}/payment')

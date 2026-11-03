@@ -1,0 +1,6 @@
+{% if shipment.note_context or shipment.note %}
+<a class="shipping-action-icon shipment-note-button{% if shipment.note %} has-note{% endif %}" href="{{ shipment.note_url }}" data-modal-open="shipment-note-dialog" aria-haspopup="dialog" data-shipment-note data-note="{{ shipment.note }}" data-note-patient="{{ shipment.patient }}" data-note-action="{% url 'portal:ops-shipment-note' shipment.pk %}" data-note-token="{{ shipment.note_context|default:'' }}" data-note-query="{{ list_query }}" data-note-editable="{% if shipment.note_context %}true{% else %}false{% endif %}" aria-label="{% if not shipment.note_context %}View{% elif shipment.note %}Edit{% else %}Add{% endif %} note for {{ shipment.patient }}" data-tooltip="{% if not shipment.note_context %}View note{% elif shipment.note %}Edit note{% else %}Add note{% endif %}">
+  <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" focusable="false"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9Z"/><path d="M14 3v6h6M8 13h8M8 17h5"/></svg>
+  {% if shipment.note %}<span class="shipment-note-indicator" aria-hidden="true"></span>{% endif %}
+</a>
+{% else %}<span class="ops-notes-empty" aria-label="No note">—</span>{% endif %}

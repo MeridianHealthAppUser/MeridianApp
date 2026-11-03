@@ -69,6 +69,10 @@ class Member:
 
 
 def _patient_member(track, patient, joined_on, entry_key):
+    from .demo_safety import is_demo_record
+
+    if is_demo_record(patient):
+        return None
     user = patient.user if patient.user_id else None
     if user is None or not user.is_active or not user.email or not patient.is_active:
         return None
@@ -187,7 +191,11 @@ def send_due(company, today=None):
     if not settings.EMAIL_ENABLED:
         return 0
     count = 0
+    from .demo_safety import is_demo_record
+
     for journey, member in due(company, today):
+        if is_demo_record(member.patient):
+            continue
         message = render(journey, member)
         try:
             with transaction.atomic():

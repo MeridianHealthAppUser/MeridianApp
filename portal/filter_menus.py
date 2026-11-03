@@ -89,7 +89,23 @@ def list_tools(*, action, data, sections, label, form=None, placeholder=''):
         else:
             kept[section['name']] = ','.join(option['value'] for option in section['options'] if option['checked'])
     kept = {name: value for name, value in kept.items() if value}
+    from .export_support import export_url
+    from django.urls import reverse
+    export_tables = {
+        'portal:purchasing': 'to-order',
+        'portal:inventory': 'inventory',
+        'portal:treatment-subscriptions': 'subscriptions', 'portal:ops-orders': 'requests',
+        'portal:ops-shipping': 'shipping', 'portal:ops-history': 'dispatch-history',
+        'portal:ops-catalogue': 'catalogue-products', 'portal:ops-billing': 'billing',
+    }
+    table = next((table for name, table in export_tables.items() if action == reverse(name)), None)
+    download = ''
+    if table:
+        # Use the supplied filter QueryDict, without copying transient page/editor parameters.
+        from types import SimpleNamespace
+        download = export_url(table, SimpleNamespace(GET=data))
     return dict(
+        table_export_url=download, table_export_disabled=bool(form is not None and form.errors),
         search=search, search_action=action, search_hidden=kept, search_placeholder=placeholder,
         search_clear_url=f'{action}?{urlencode(kept)}' if kept else action,
         filter_menu=filter_menu(action=action, hidden=[('q', search)], form=form, label=label, sections=sections,

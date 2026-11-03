@@ -14,6 +14,7 @@ GET /v2/shipments/label?id= for a link to the label PDF; POST /v2/shipments/canc
 
 import json
 import logging
+import re
 from datetime import UTC, datetime, time, timedelta
 from decimal import Decimal
 from urllib import error as urlerror
@@ -22,12 +23,15 @@ from urllib import request as urlrequest
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import transaction
+from django.db.models import Q
 from django.utils import timezone
+from django.utils.dateparse import parse_datetime
 
 from .addresses import FIELDS as ADDRESS_FIELDS
 from .availability import SAST
 from .billing import practice_settings
 from .models import DeliveryAddress, Shipment
+from .demo_safety import is_demo_record
 from .services import record_audit
 
 logger = logging.getLogger(__name__)
@@ -132,25 +136,29 @@ def changed_since_booking(shipment, address):
         address is None or any(booked.get(name, '') != getattr(address, name) for name in ADDRESS_FIELDS))
 
 
-def book_waybills(*, company, actor, week_start, request=None):
+def book_waybills(*, company, actor, week_start, request=None, demo_only=False):
     """Book a shipment with The Courier Guy for each of the week's locked parcels that has no waybill yet. Each parcel
     is booked on its own, so one that fails (its error is kept on the parcel) doesn't stop the rest. Returns
     (booked, failed) parcels."""
     from .operations import _lock_company
 
-    if not courier_enabled():
-        raise ValidationError('The Courier Guy isn’t connected yet. Add TCG_API_KEY to the app’s settings to book waybills.')
-    problem = collection_problem(company)
-    if problem:
-        raise ValidationError(problem)
     with transaction.atomic():
         company = _lock_company(company, actor, shipping=True)
-        parcels = list(Shipment.objects.filter(
-            company=company, status=Shipment.Status.READY, locked_at__isnull=False, waybill='',
+        candidates = Shipment.objects.filter(
+            company=company, patient__company=company, status=Shipment.Status.READY, locked_at__isnull=False, waybill='', tracking_number='',
             scheduled_for__range=(week_start, week_start + timedelta(days=6)),
-        ).select_related('patient__user', 'company').order_by('scheduled_for', 'pk'))
+        ).select_related('patient__user', 'company').order_by('scheduled_for', 'pk')
+        if demo_only:
+            candidates = candidates.filter(patient__demo_data_set__isnull=False)
+        parcels = list(candidates)
     if not parcels:
         raise ValidationError('There are no locked parcels without a waybill this week. Check and lock the week first.')
+    if any(not is_demo_record(parcel) for parcel in parcels):
+        if not courier_enabled():
+            raise ValidationError('The Courier Guy isn’t connected yet. Add TCG_API_KEY to the app’s settings to book waybills.')
+        problem = collection_problem(company)
+        if problem:
+            raise ValidationError(problem)
     row = practice_settings(company)
     booked, failed = [], []
     for parcel in parcels:
@@ -158,7 +166,13 @@ def book_waybills(*, company, actor, week_start, request=None):
         try:
             if address is None or address.missing():
                 raise CourierError('The delivery address is incomplete.')
-            response = _call('POST', '/v2/shipments', shipment_payload(parcel, address, row))
+            if is_demo_record(parcel):
+                response = {'short_tracking_reference': f'DEMO-{parcel.pk:08d}',
+                            'id': f'demo-{parcel.pk}', 'status': 'booked'}
+            elif demo_only:
+                raise CourierError('This parcel is no longer part of demo data.')
+            else:
+                response = _call('POST', '/v2/shipments', shipment_payload(parcel, address, row))
             # The short reference ("3BM3") is the waybill The Courier Guy's own plugin keeps; the custom one
             # ("SLX3BM3") is the same shipment with the account's prefix.
             waybill = str(response.get('short_tracking_reference') or response.get('custom_tracking_reference') or '')
@@ -172,7 +186,7 @@ def book_waybills(*, company, actor, week_start, request=None):
             continue
         Shipment.objects.filter(pk=parcel.pk).update(
             waybill=waybill[:60], courier_shipment_id=str(response.get('id', ''))[:60],
-            courier_status=str(response.get('status', ''))[:60], courier_error='', waybill_created_at=timezone.now(),
+            courier_status=str(response.get('status', ''))[:60], courier_status_updated_at=None, courier_error='', waybill_created_at=timezone.now(),
             booked_address=booked_snapshot(parcel, address), updated_at=timezone.now())
         record_audit(company=company, actor=actor, patient=parcel.patient, action='courier.booked', target=parcel,
                      request=request, metadata={'waybill': waybill})
@@ -182,6 +196,8 @@ def book_waybills(*, company, actor, week_start, request=None):
 
 def label_url(shipment):
     """A short-lived link to the parcel's waybill label, from The Courier Guy."""
+    if is_demo_record(shipment):
+        raise ValidationError('Demo courier bookings are simulated and have no courier label.')
     if not (courier_enabled() and shipment.courier_shipment_id):
         raise ValidationError('This parcel has no booking with The Courier Guy.')
     try:
@@ -200,6 +216,8 @@ def cancel_booking(shipment):
     was cancelled; clearing the waybill is left to the caller, inside its own change."""
     if not shipment.waybill:
         return False
+    if is_demo_record(shipment):
+        return True
     if not courier_enabled():
         raise ValidationError('This parcel has a waybill with The Courier Guy, but the courier isn’t connected any more. '
                               'Cancel the booking on The Courier Guy’s portal first.')
@@ -214,8 +232,9 @@ def cancel_booking(shipment):
 # Tracking: The Courier Guy's "Tracking event" webhook (Settings > Webhook subscriptions on its portal)
 
 STATUS_LABELS = {
-    'submitted': 'Booked', 'collection-assigned': 'Collection assigned', 'collected': 'Collected',
-    'at-hub': 'At the hub', 'in-transit': 'In transit', 'out-for-delivery': 'Out for delivery',
+    'submitted': 'Awaiting collection', 'booked': 'Awaiting collection',
+    'collection-assigned': 'Collection assigned', 'collected': 'Collected',
+    'at-hub': 'At the hub', 'returned-to-hub': 'Returned to the hub', 'in-transit': 'In transit', 'out-for-delivery': 'Out for delivery',
     'delivered': 'Delivered', 'cancelled': 'Cancelled', 'collection-failed-attempt': 'Collection attempt failed',
     'delivery-failed-attempt': 'Delivery attempt failed', 'returned-to-sender': 'Returned to the practice',
 }
@@ -229,35 +248,108 @@ def webhook_token_ok(token):
     """The tracking webhook's address carries a secret (TCG_WEBHOOK_TOKEN): The Courier Guy doesn't sign webhooks."""
     import hmac
 
-    return bool(settings.TCG_WEBHOOK_TOKEN) and hmac.compare_digest(str(token), settings.TCG_WEBHOOK_TOKEN)
+    return bool(settings.TCG_WEBHOOK_TOKEN) and hmac.compare_digest(str(token).encode('utf-8'), settings.TCG_WEBHOOK_TOKEN.encode('utf-8'))
 
 
+def _tracking_data(payload):
+    """Validate the Tracking event shape published by The Courier Guy. Unknown status codes remain supported."""
+    if not isinstance(payload, dict):
+        raise ValidationError('Each tracking event must be an object.')
+    status = payload.get('status')
+    if not isinstance(status, str) or not re.fullmatch(r'[a-z][a-z0-9-]{0,59}', status):
+        raise ValidationError('A tracking event needs a valid status.')
+    references = []
+    for key in ('shipment_id', 'short_tracking_reference'):
+        value = payload.get(key)
+        if value is None or value == '':
+            references.append('')
+        elif isinstance(value, bool) or not isinstance(value, (str, int)) or len(str(value)) > 120:
+            raise ValidationError('Invalid courier shipment reference.')
+        else:
+            references.append(str(value).strip())
+    if not any(references):
+        raise ValidationError('A shipment ID or short tracking reference is required.')
+    dates = []
+    for key in ('shipment_time_modified', 'shipment_delivered_date'):
+        value = payload.get(key)
+        if value is None or value == '':
+            dates.append(None)
+            continue
+        try:
+            parsed = parse_datetime(value) if isinstance(value, str) else None
+        except (ValueError, TypeError):
+            parsed = None
+        if parsed is None:
+            raise ValidationError(f'{key} must be an ISO 8601 date and time.')
+        dates.append(timezone.make_aware(parsed, UTC) if timezone.is_naive(parsed) else parsed)
+    return status, *references, *dates
+
+
+def validate_tracking_event(payload):
+    _tracking_data(payload)
+
+
+def _tracking_matches(parcel, shipment_id, waybill):
+    # Both identifiers must agree with the stored booking. An externally booked parcel may only have tracking_number.
+    if shipment_id and parcel.courier_shipment_id and parcel.courier_shipment_id != shipment_id:
+        return False
+    if waybill and waybill not in (parcel.waybill, parcel.tracking_number):
+        return False
+    return bool((shipment_id and parcel.courier_shipment_id == shipment_id)
+                or (waybill and waybill in (parcel.waybill, parcel.tracking_number)))
+
+
+@transaction.atomic
 def apply_tracking(payload):
-    """A tracking event from The Courier Guy: the parcel's courier status is kept (shown on Weekly shipping and in
-    Dispatch history), and a dispatched parcel the courier delivered is marked delivered. Returns the parcel, or None
-    when it isn't one of the app's."""
+    """Apply a tracking event to one unambiguous parcel. Replays and older updates do not regress tracking.
+
+    Delivery changes an already dispatched parcel only. Webhooks never dispatch stock or end subscriptions.
+    """
     from .models import PatientEvent
 
-    if not isinstance(payload, dict) or not payload.get('status'):
+    status, shipment_id, waybill, modified_at, delivered_at = _tracking_data(payload)
+    matches = Q(pk__in=[])
+    if shipment_id:
+        matches |= Q(courier_shipment_id=shipment_id)
+    if waybill:
+        matches |= Q(waybill=waybill) | Q(tracking_number=waybill, status__in=(Shipment.Status.DISPATCHED, Shipment.Status.DELIVERED))
+    candidates = list(Shipment.objects.filter(matches).values_list('pk', flat=True)[:2])
+    if len(candidates) != 1:
         return None
-    shipment_id, waybill = str(payload.get('shipment_id') or ''), str(payload.get('short_tracking_reference') or '')
-    parcels = Shipment.objects.select_related('company', 'patient')
-    parcel = (parcels.filter(courier_shipment_id=shipment_id).first() if shipment_id else None) or (
-        parcels.filter(waybill=waybill).first() if waybill else None)
-    if parcel is None:
+    parcel = Shipment.objects.select_for_update(of=('self',)).select_related('company', 'patient').get(pk=candidates[0])
+    if is_demo_record(parcel) or not _tracking_matches(parcel, shipment_id, waybill):
         return None
-    status = str(payload['status'])[:60]
-    with transaction.atomic():
-        parcel = Shipment.objects.select_for_update(of=('self',)).select_related('company', 'patient').get(pk=parcel.pk)
+    latest = parcel.courier_status_updated_at
+    completing_delivery = status == 'delivered' and parcel.status == Shipment.Status.DISPATCHED
+    if latest and modified_at:
+        if modified_at < latest or (modified_at == latest and not completing_delivery):
+            return parcel
+    elif latest and not modified_at:
+        # A dated snapshot cannot be replaced by an event with unknown ordering. A delivery can still complete it.
+        if not completing_delivery:
+            return parcel
+    if parcel.status == Shipment.Status.DELIVERED and status != 'delivered' and not modified_at:
+        return parcel
+    previous = parcel.courier_status
+    fields = []
+    if previous != status:
         parcel.courier_status = status
-        fields = ['courier_status', 'updated_at']
-        if status == 'delivered' and parcel.status == Shipment.Status.DISPATCHED:
-            parcel.status, parcel.delivered_at = Shipment.Status.DELIVERED, timezone.now()
-            fields += ['status', 'delivered_at']
-            record_audit(company=parcel.company, actor=None, patient=parcel.patient, action='shipment.delivered',
-                         target=parcel, metadata={'source': 'courier', 'waybill': parcel.waybill})
-            PatientEvent.objects.create(company=parcel.company, patient=parcel.patient, category=PatientEvent.Category.DELIVERY,
-                                        title='Shipment delivered', detail='The Courier Guy delivered your parcel.',
-                                        source_type='care.shipment', source_id=str(parcel.pk))
-        parcel.save(update_fields=fields)
+        fields.append('courier_status')
+        record_audit(company=parcel.company, actor=None, patient=parcel.patient, action='shipment.tracking_updated',
+                     target=parcel, metadata={'source': 'courier', 'waybill': parcel.waybill or parcel.tracking_number,
+                                             'previous_status': previous, 'status': status,
+                                             'event_at': modified_at.isoformat() if modified_at else None})
+    if modified_at and modified_at != latest:
+        parcel.courier_status_updated_at = modified_at
+        fields.append('courier_status_updated_at')
+    if completing_delivery:
+        parcel.status, parcel.delivered_at = Shipment.Status.DELIVERED, delivered_at or modified_at or timezone.now()
+        fields += ['status', 'delivered_at']
+        record_audit(company=parcel.company, actor=None, patient=parcel.patient, action='shipment.delivered',
+                     target=parcel, metadata={'source': 'courier', 'waybill': parcel.waybill or parcel.tracking_number})
+        PatientEvent.objects.create(company=parcel.company, patient=parcel.patient, category=PatientEvent.Category.DELIVERY,
+                                    title='Shipment delivered', detail='The Courier Guy delivered your parcel.',
+                                    source_type='care.shipment', source_id=str(parcel.pk))
+    if fields:
+        parcel.save(update_fields=(*fields, 'updated_at'))
     return parcel

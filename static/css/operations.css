@@ -50,6 +50,9 @@
 .ops-empty p { margin: 0 0 1rem; }
 .ops-pagination { align-items: center; display: flex; flex-wrap: wrap; gap: .85rem; justify-content: center; margin-top: .5rem; }
 .ops-pagination span { color: var(--c-607c87); font-size: .85rem; }
+.ops-numbered-pagination > a[aria-label^="Page "] { align-items:center; box-sizing:border-box; display:inline-flex; justify-content:center; min-height:2.4rem; min-width:2.4rem; padding:.45rem .65rem; }
+.ops-numbered-pagination > .ops-page-current { align-items:center; background:var(--c-087e75); border-radius:.5rem; box-sizing:border-box; color:var(--c-ffffff); display:inline-flex; font-weight:750; justify-content:center; min-height:2.4rem; min-width:2.4rem; padding:.45rem .65rem; }
+.ops-numbered-pagination > .ops-page-ellipsis { padding-inline:.15rem; }
 .ops-address { font-style: normal; line-height: 1.65; overflow-wrap: anywhere; }
 .ops-note { overflow-wrap: anywhere; white-space: normal; }
 .ops-total { border-top: 1px solid var(--c-e5edef); display: flex; gap: 1rem; justify-content: space-between; padding: 1.2rem; }
@@ -75,22 +78,23 @@
 .ops-stock-table td:not(:first-child), .ops-stock-table th:not(:first-child) { text-align: right; }
 .ops-tbc { background: var(--c-f3f6f6); border: 1px solid var(--c-dce7e9); border-radius: 99rem; color: var(--c-79939d); font-size: .68rem; font-weight: 750; letter-spacing: .04em; padding: .15rem .5rem; }
 .ops-stock-note { color: var(--c-607c87); font-size: .82rem; line-height: 1.6; margin: 0; padding: .9rem 1rem 1.1rem; }
-/* Weekly shipping: selectable steps and one guidance/action panel. */
-.ops-shipping-card .ops-week-header { padding: 1rem 1.2rem; }
+/* Weekly shipping: compact stage tabs and their action panels. */
+.ops-shipping-card .shipping-primary-toolbar { align-items:center; background:var(--c-ffffff); border-bottom:1px solid var(--c-edf3f4); display:flex; flex-wrap:wrap; gap:.35rem 1.5rem; padding:.3rem 1.2rem 0; }
+.ops-shipping-card .shipping-primary-toolbar > #shipping-workflow { flex:0 1 auto; min-width:0; }
+.ops-shipping-card .shipping-primary-toolbar .ops-week-nav { flex:0 1 auto; gap:.4rem; justify-content:flex-end; margin-left:auto; padding-bottom:.3rem; }
+.ops-shipping-card .shipping-primary-toolbar .ops-week-nav h2 { font-size:.82rem; line-height:1.4; }
+.ops-shipping-card .shipping-primary-toolbar .ops-week-step { flex:0 0 auto; height:1.9rem; width:1.9rem; }
 .ops-shipping-card .ops-table-wrap { position: relative; }
-.ops-steps { background: var(--c-ffffff); border-bottom: 1px solid var(--c-edf3f4); display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); list-style: none; margin: 0; padding: 0; }
-.ops-steps > li { min-width: 0; }
-.ops-steps > li + li { border-left: 1px solid var(--c-edf3f4); }
-.ops-step { align-items: center; border-bottom: 2px solid transparent; box-sizing: border-box; color: var(--c-173b42); display: flex; gap: .7rem; height: 100%; min-width: 0; padding: .85rem 1.2rem; text-decoration: none; }
-.ops-step:hover { background: var(--c-f8fbfb); }
-.ops-step[aria-selected="true"] { border-bottom-color: var(--c-087e75); }
-.ops-step:focus-visible { outline: 2px solid var(--c-087e75); outline-offset: -2px; }
-.ops-step__number { align-items: center; background: var(--c-e4f5f1); border-radius: 50%; color: var(--c-056f69); display: inline-flex; flex: 0 0 1.5rem; font-size: .75rem; font-weight: 750; height: 1.5rem; justify-content: center; }
-.ops-step__number svg { height: 1rem; width: 1rem; }
-.ops-step.is-current:not(.is-complete) .ops-step__number { background: var(--console-teal); color: var(--c-ffffff); }
-.ops-step__copy { display: grid; gap: .15rem; min-width: 0; }
-.ops-step__title { font-size: .82rem; font-weight: 750; line-height: 1.3; }
-.ops-step__summary { color: var(--c-607c87); font-size: .75rem; line-height: 1.35; }
+.ops-shipping-card .ops-steps { align-items:stretch; background:var(--c-ffffff); display:flex; gap:1.25rem; list-style:none; margin:0; padding:0; }
+.ops-shipping-card .ops-steps > li { min-width:0; }
+.ops-shipping-card .ops-step { align-items:center; border-bottom:2px solid transparent; box-sizing:border-box; color:var(--c-607c87); display:flex; gap:.45rem; height:100%; min-height:3.15rem; min-width:0; padding:.65rem .1rem; text-decoration:none; }
+.ops-shipping-card .ops-step:hover { color:var(--c-087e75); }
+.ops-shipping-card .ops-step[aria-selected="true"] { border-bottom-color:var(--c-087e75); color:var(--c-087e75); }
+.ops-shipping-card .ops-step:focus-visible { border-radius:.3rem; outline:2px solid var(--c-087e75); outline-offset:-3px; }
+.ops-shipping-card .ops-step__label { display:block; min-width:0; }
+.ops-shipping-card .ops-step__title { min-width:0; font-size:.95rem; font-weight:650; line-height:1.35; }
+.ops-shipping-card .ops-step__count { background:var(--c-f3f6f6); border-radius:99rem; box-sizing:border-box; color:var(--c-607c87); display:inline-block; font-size:.68rem; font-variant-numeric:tabular-nums; font-weight:700; line-height:1.4; margin-left:.15rem; min-width:1.3rem; padding:.08rem .35rem; text-align:center; vertical-align:middle; }
+.ops-shipping-card .ops-step[aria-selected="true"] .ops-step__count { background:var(--c-e4f5f1); color:var(--c-087e75); }
 .ops-step-panel { align-items: center; background: var(--c-f8fbfb); border-bottom: 1px solid var(--c-edf3f4); display: flex; gap: 1rem; justify-content: space-between; min-height: 5rem; padding: .9rem 1.2rem; }
 .ops-step-panel[hidden] { display: none; }
 .ops-step-panel > :is(p, div:first-child:not(.ops-step__actions)) { flex: 1 1 auto; min-width: 0; }
@@ -133,13 +137,10 @@
 .ops-explainer summary { color: var(--c-087e75); cursor: pointer; font-size: .82rem; font-weight: 700; }
 .ops-explainer p { color: var(--c-587580); font-size: .82rem; line-height: 1.6; }
 @media (max-width: 74rem) {
-  .ops-step { gap: .5rem; padding: .8rem .7rem; }
   .ops-step-panel { flex-wrap: wrap; }
   .ops-step-panel > :is(form, a, .ops-step__actions) { margin-left: auto; max-width: 100%; }
 }
 @media (max-width: 55rem) {
-  .ops-steps { grid-template-columns: repeat(5, minmax(10rem, 1fr)); overflow-x: auto; scroll-padding-inline: .5rem; }
-  .ops-step { min-height: 4.5rem; padding: .8rem 1rem; }
   .ops-step-panel { gap: .7rem; padding: .9rem 1rem; }
   .ops-step-panel > :is(p, div:first-child:not(.ops-step__actions)) { flex-basis: 100%; }
   .workspace-page .meridian-console :is(.ops-step-panel, .ops-shipping-table) .console-button { min-height: 2.75rem; }
@@ -174,3 +175,155 @@
 .starting-plan-step { align-items: center; display: grid; gap: .3rem .6rem; grid-template-columns: 4rem minmax(0, 1fr) 8rem; margin-bottom: .5rem; }
 .starting-plan-step .errorlist { grid-column: 2 / -1; }
 @media (max-width: 36rem) { .starting-plan-step { grid-template-columns: minmax(0, 1fr) 7rem; } .starting-plan-step > label:first-child { grid-column: 1 / -1; } }
+
+@media (min-width: 761px) { .shipping-medication-customers { min-width: 650px; } .shipping-medication-customers th { white-space: nowrap; word-break: normal; } }
+
+/* Keep shipping view tabs aligned with the card header and workflow content. */
+.ops-shipping-card > .patient-order-subtabs { padding-inline: 1.2rem; }
+@media (max-width: 760px) {
+  .ops-shipping-card > .patient-order-subtabs { padding-inline: 1rem; }
+}
+
+/* Medication groups expand from the left and give their customer table the whole card width. */
+.shipping-medication-heading, .shipping-medication-summary { display:grid; grid-template-columns:2rem minmax(0,2fr) minmax(6.5rem,.85fr) minmax(0,1.65fr); gap:1rem; align-items:center; padding:1rem 1.2rem; }
+.shipping-medication-heading { background:var(--c-f7fbfa, var(--c-f7fbfa)); color:var(--c-79939d); font-size:.68rem; font-weight:750; letter-spacing:.07em; text-transform:uppercase; }
+.shipping-medication-group { border-top:1px solid var(--c-edf3f4); }
+.shipping-medication-summary { cursor:pointer; list-style:none; color:var(--c-23454e); }
+.shipping-medication-summary::-webkit-details-marker { display:none; }
+.shipping-medication-summary::marker { content:''; }
+.shipping-medication-summary:hover { background:var(--c-f7fbfa, var(--c-f7fbfa)); }
+.shipping-medication-summary:focus-visible { outline:2px solid var(--c-0b958b); outline-offset:-4px; border-radius:.5rem; }
+.shipping-medication-toggle { display:grid; place-items:center; width:2rem; height:2rem; border-radius:.5rem; background:var(--c-e7f5f3); color:var(--c-087e75); }
+.shipping-medication-toggle svg { width:1rem; height:1rem; stroke:currentColor; stroke-width:3; stroke-linecap:round; stroke-linejoin:round; }
+.shipping-medication-group[open] > summary .shipping-medication-toggle svg { transform:rotate(90deg); }
+.shipping-medication-group[open] > summary .shipping-medication-toggle { color:var(--c-ffffff); background:var(--c-087e75); }
+.shipping-medication-name { font-weight:600; }
+.shipping-medication-count { color:var(--c-34565f); font-size:.85rem; }
+.shipping-medication-hide, .shipping-medication-group[open] .shipping-medication-show { display:none; }
+.shipping-medication-group[open] .shipping-medication-hide { display:inline; }
+.shipping-medication-expanded { border-top:1px solid var(--c-edf3f4); }
+.shipping-medication-selection, .shipping-medication-empty { padding:1rem 1.2rem; }
+.shipping-medication-selection p { color:var(--c-34565f); font-size:.82rem; margin:.6rem 0 0; }
+@media(max-width:760px) {
+  .shipping-medication-heading, .shipping-medication-summary { grid-template-columns:2rem minmax(0,1fr) 4.5rem; gap:.5rem .75rem; padding:1rem; }
+  .shipping-medication-heading > :last-child { display:none; }
+  .shipping-medication-count { grid-column:2 / -1; }
+  .shipping-medication-selection, .shipping-medication-empty { padding:1rem; }
+}
+
+.patient-order-subtabs .shipping-all-stages { margin-left:auto; font-size:.82rem; align-self:center; text-decoration:underline; text-underline-offset:.2em; }
+.patient-order-subtabs .shipping-all-stages[aria-current] { font-weight:700; color:var(--c-087e75); }
+
+/* Compact note affordance; the note itself stays in its accessible dialog. */
+.shipment-note-button { position:relative; display:inline-flex; align-items:center; justify-content:center; width:2.25rem; height:2.25rem; box-sizing:border-box; border:1px solid var(--c-deebe8); border-radius:.55rem; color:var(--c-087e75); background:var(--c-ffffff); text-decoration:none; }
+.shipment-note-button svg { width:1.15rem; height:1.15rem; stroke:currentColor; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; }
+.shipment-note-button.has-note { border-color:var(--c-bfe7e2); background:var(--c-e7f5f3); }
+.shipment-note-button:hover { background:var(--c-e7f5f3); border-color:var(--c-087e75); }
+.shipment-note-button:focus-visible { outline:2px solid var(--c-0b958b); outline-offset:3px; }
+.shipment-note-indicator { position:absolute; top:.25rem; right:.25rem; width:.35rem; height:.35rem; border-radius:50%; background:var(--c-087e75); }
+@media(max-width:760px) { .shipment-note-button { width:2.75rem; height:2.75rem; } }
+
+#shipment-note-dialog [hidden] { display:none; }
+
+/* Parcel actions stay together as compact, labelled icons. */
+.shipment-row-actions { display:inline-flex; flex-wrap:nowrap; align-items:center; gap:.4rem; white-space:nowrap; }
+.shipment-row-actions form { display:inline-flex; margin:0; }
+.shipping-action-icon { position:relative; display:inline-flex; align-items:center; justify-content:center; flex:0 0 auto; width:2.25rem; height:2.25rem; box-sizing:border-box; padding:0; border:1px solid var(--c-deebe8); border-radius:.55rem; background:var(--c-ffffff); color:var(--c-087e75); text-decoration:none; cursor:pointer; font:inherit; }
+.shipping-action-icon svg { width:1.15rem; height:1.15rem; stroke:currentColor; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; }
+.shipping-action-icon:hover { background:var(--c-e7f5f3); border-color:var(--c-087e75); }
+.shipping-action-icon--ready { background:var(--c-087e75); border-color:var(--c-087e75); color:var(--c-ffffff); }
+.shipping-action-icon--ready:hover { background:var(--c-0b716a, var(--c-0b716a)); color:var(--c-ffffff); }
+.shipping-action-icon:focus-visible { outline:2px solid var(--c-0b958b); outline-offset:3px; }
+.shipping-action-icon[data-tooltip]::after { content:attr(data-tooltip); position:absolute; z-index:20; bottom:calc(100% + .4rem); left:50%; transform:translate(-50%, .2rem); background:var(--c-12383c); color:var(--c-ffffff); border-radius:.4rem; padding:.35rem .55rem; font-size:.75rem; font-weight:500; line-height:1.3; white-space:nowrap; pointer-events:none; visibility:hidden; opacity:0; transition:opacity .12s ease, transform .12s ease; }
+.shipping-action-icon[data-tooltip]:is(:hover,:focus-visible)::after { visibility:visible; opacity:1; transform:translate(-50%, 0); }
+.shipment-row-actions > .shipping-action-icon:last-child[data-tooltip]::after { left:auto; right:0; transform:translateY(.2rem); }
+.shipment-row-actions > .shipping-action-icon:last-child[data-tooltip]:is(:hover,:focus-visible)::after { transform:translateY(0); }
+@media(max-width:760px) { .shipping-action-icon { width:2.75rem; height:2.75rem; } }
+@media(prefers-reduced-motion:reduce) { .shipping-action-icon[data-tooltip]::after { transition:none; } }
+
+.ops-delivery-address-line { display:flex; align-items:flex-start; gap:.35rem; flex-basis:100%; min-width:0; }
+.ops-delivery-address-line > .ops-deliver { min-width:0; }
+.shipping-action-icon.shipping-address-edit { width:1.65rem; height:1.65rem; border-color:transparent; background:transparent; }
+.shipping-address-edit svg { width:1rem; height:1rem; }
+.shipping-action-icon.shipping-address-edit:hover { color:var(--c-087e75); background:var(--c-e7f5f3); }
+@media(max-width:760px) { .shipping-action-icon.shipping-address-edit { width:2.75rem; height:2.75rem; margin-top:-.45rem; } }
+
+/* Shipping actions and table tools have their own rows beneath the workflow. */
+.ops-shipping-card .shipping-table-toolbar { display:grid; gap:0; margin:0; padding:0; border-bottom:1px solid var(--c-edf3f4); background:var(--c-ffffff); }
+.ops-shipping-card .shipping-toolbar-actions { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:.8rem 1rem; padding:1rem 1.2rem; }
+.ops-shipping-card .shipping-table-toolbar .patient-order-subtabs { flex:0 0 auto; padding:0; border:0; margin:0; }
+.ops-shipping-card .shipping-toolbar-controls { display:flex; flex-wrap:wrap; align-items:center; justify-content:flex-end; gap:.65rem; min-width:0; }
+.ops-shipping-card .shipping-toolbar-controls .ops-step-panel { min-height:0; padding:0; border:0; background:transparent; gap:.5rem; flex-wrap:wrap; justify-content:flex-start; }
+.ops-shipping-card .shipping-toolbar-controls .ops-step-panel > :is(form, a, .ops-step__actions) { margin-left:0; max-width:100%; }
+.ops-shipping-card .shipping-toolbar-controls .ops-step-panel > .shipping-help { flex:0 0 auto; }
+.ops-shipping-card .shipping-toolbar-controls .ops-step-panel p { flex:none; }
+.ops-shipping-card .shipping-mobile-select-all { display:none; }
+.ops-shipping-card .shipping-toolbar-tools { display:flex; flex-wrap:wrap; align-items:center; gap:.8rem 1rem; min-width:0; padding:.85rem 1.2rem; border-top:1px solid var(--c-edf3f4); background:var(--c-f8fbfb); }
+.ops-shipping-card .shipping-toolbar-tools > .shipping-all-stages { flex:0 0 auto; color:var(--c-087e75); font-size:.8rem; font-weight:600; text-underline-offset:.2em; white-space:nowrap; }
+.ops-shipping-card .shipping-toolbar-tools > .shipping-all-stages[aria-current] { font-weight:750; }
+.ops-shipping-card .shipping-toolbar-tools > .staff-list-tools { flex:1 1 32rem; flex-wrap:wrap; gap:.65rem; min-width:0; }
+.ops-shipping-card .shipping-toolbar-tools .staff-page-card__count { white-space:nowrap; }
+.ops-shipping-card .shipping-toolbar-tools .conversation-search { flex:1 1 16rem; min-width:min(100%,14rem); max-width:26rem; }
+.shipping-help { position:relative; flex:0 0 auto; }
+.shipping-help-trigger { display:inline-flex; align-items:center; justify-content:center; flex:0 0 auto; width:2rem; height:2rem; padding:0; border:0; border-radius:.5rem; background:transparent; color:var(--c-087e75); cursor:pointer; }
+.shipping-help-trigger svg { width:1.15rem; height:1.15rem; stroke:currentColor; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; }
+.shipping-help-trigger:hover, .shipping-help-trigger[aria-expanded=true] { background:var(--c-e7f5f3); }
+.shipping-help-trigger:focus-visible { outline:2px solid var(--c-0b958b); outline-offset:2px; }
+.shipping-warning-trigger { width:auto; gap:.35rem; padding:0 .5rem; color:var(--c-8a5a00); background:var(--c-fff6e4); font:inherit; font-size:.75rem; font-weight:650; white-space:nowrap; }
+.shipping-help-popover { position:fixed; inset:auto; margin:0; width:min(24rem,calc(100vw - 2rem)); max-height:calc(100vh - 2rem); overflow:auto; box-sizing:border-box; padding:1rem; border:1px solid var(--c-deebe8); border-radius:.8rem; background:var(--c-ffffff); color:var(--c-23454e); box-shadow:0 12px 36px var(--c-12383c-180); font-size:.82rem; line-height:1.5; }
+.shipping-help-popover::backdrop { background:transparent; }
+.shipping-help-popover strong { display:block; color:var(--c-087e75); margin-bottom:.4rem; }
+.shipping-help-popover p { margin:.35rem 0 0; }
+.shipping-help-popover ul { margin:.35rem 0 .5rem; padding-left:1.1rem; }
+.shipping-help--warning .shipping-help-popover { background:var(--c-fff6e4); border-color:var(--c-f0d9a8); }
+.shipping-help--warning .shipping-help-popover strong { color:var(--c-8a5a00); }
+.shipping-help:not(.has-native-popover) .shipping-help-popover { display:none; position:absolute; top:calc(100% + .5rem); right:0; z-index:40; }
+.shipping-help:not(.has-native-popover):is(:hover,:focus-within) .shipping-help-popover { display:block; }
+@media(max-width:760px) {
+ .ops-shipping-card .shipping-primary-toolbar { gap:.25rem; padding:.25rem 1rem 0; }
+ .ops-shipping-card .shipping-primary-toolbar > #shipping-workflow { flex:1 1 100%; }
+ .ops-shipping-card .shipping-primary-toolbar .ops-week-nav { flex:1 1 100%; padding:.25rem 0 .65rem; }
+ .ops-shipping-card .shipping-primary-toolbar .ops-week-nav h2 { flex:1 1 8rem; min-width:0; text-align:center; }
+ .ops-shipping-card .shipping-primary-toolbar .ops-week-step { height:2.75rem; width:2.75rem; }
+ .ops-shipping-card .shipping-primary-toolbar .ops-week-today { margin-left:auto; }
+ .ops-shipping-card .ops-steps { border-bottom:1px solid var(--c-edf3f4); display:grid; gap:.3rem; grid-template-columns:minmax(0,1fr) minmax(0,1.45fr) minmax(0,1fr); }
+ .ops-shipping-card .ops-step { justify-content:center; min-height:3.4rem; padding:.5rem .1rem; text-align:center; }
+ .ops-shipping-card .ops-step__title { display:inline; }
+ .ops-shipping-card .ops-step__count { display:inline-block; margin-left:.15rem; min-width:1.2rem; padding:.05rem .25rem; vertical-align:middle; }
+ .ops-shipping-card .shipping-toolbar-actions { padding:.85rem 1rem; }
+ .ops-shipping-card .shipping-toolbar-controls { flex:1 1 100%; justify-content:flex-start; }
+ .ops-shipping-card .shipping-toolbar-tools { padding:.85rem 1rem; }
+ .ops-shipping-card .shipping-toolbar-tools > .staff-list-tools { flex:1 1 100%; justify-content:flex-start; }
+ .ops-shipping-card .shipping-toolbar-tools .conversation-search { flex:1 1 100%; max-width:none; }
+ .shipping-help-trigger { min-width:2.75rem; height:2.75rem; }
+ .ops-shipping-card .shipping-toolbar-controls .ops-step__actions { flex-wrap:wrap; justify-content:flex-start; }
+}
+@media(max-width:42rem) {
+ .ops-shipping-card .shipping-select-all-header { display:none; }
+ .ops-shipping-card .shipping-mobile-select-all { align-items:center; color:var(--c-34565f); display:inline-flex; flex:0 0 auto; gap:.45rem; min-height:2.75rem; font-size:.78rem; font-weight:600; cursor:pointer; }
+ .ops-shipping-card .shipping-mobile-select-all input { accent-color:var(--c-087e75); flex:0 0 auto; height:1.05rem; margin:0; width:1.05rem; }
+ .ops-shipping-card .shipping-mobile-select-all input:focus-visible { outline:2px solid var(--c-087e75); outline-offset:3px; }
+ .ops-shipping-card .shipping-mobile-select-all input:disabled + span { opacity:.55; }
+}
+@media(max-width:360px) {
+ .ops-shipping-card .ops-steps { gap:.15rem; }
+ .ops-shipping-card .ops-step { padding-inline:0; }
+ .ops-shipping-card .ops-step__count { font-size:.64rem; min-width:1.05rem; padding-inline:.2rem; }
+}
+
+.shipping-waybill { overflow-wrap:anywhere; }
+.shipping-patient-name { display:flex; align-items:flex-start; gap:.4rem; }
+.shipping-patient-name > :is(strong, a) { min-width:0; }
+.shipping-patient-name > a { color:var(--c-087e75); font-weight:650; text-underline-offset:.18em; }
+.shipping-patient-warning { display:inline-flex; }
+.shipping-patient-warning-trigger { background:var(--c-fff6e4); color:var(--c-8a5a00); width:1.85rem; height:1.85rem; margin-top:-.2rem; }
+.shipping-patient-warning-trigger:hover, .shipping-patient-warning-trigger[aria-expanded=true] { background:var(--c-f0d9a8); }
+.shipping-patient-warning .shipping-help-popover { white-space:normal; }
+@media(max-width:760px) { .shipping-patient-warning-trigger { min-width:2.75rem; height:2.75rem; margin-top:-.45rem; } }
+@media (min-width:42.01rem) {
+  .ops-shipping-table { min-width:72rem; }
+  .ops-shipping-table :is(th, td) { padding-inline:.85rem; }
+  .ops-shipping-table td { overflow-wrap:normal; }
+  .ops-shipping-table td[data-label="Deliver to"] { min-width:13rem; }
+  .ops-shipping-table td[data-label="Due date"] { min-width:6rem; }
+}

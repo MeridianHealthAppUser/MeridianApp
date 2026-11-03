@@ -1,12 +1,15 @@
 from decimal import Decimal
+import re
 
 from django import forms
+from django.contrib.auth import get_user_model
+from django.db.models import Q
 from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.utils import timezone
 
 from care.models import PROVINCES, MedicationDose, MedicationProduct, PharmacyOrder, Shipment
-from practices.models import Patient
+from practices.models import CompanyMembership, Patient
 
 from .filter_menus import TickedChoiceField
 
@@ -131,21 +134,52 @@ class OrderFilterForm(forms.Form):
                                                          if choice[0] != PharmacyOrder.Status.DRAFT])
 
 
+SHIPPING_FILTER_FIELDS = ('status', 'product', 'doctor', 'payment')
+
+
 class ShippingFilterForm(forms.Form):
     q = forms.CharField(label='Search shipments', required=False, max_length=100)
     week = forms.DateField(label='Week beginning', widget=forms.DateInput(attrs={'type': 'date'}))
     status = TickedChoiceField(label='Status', choices=Shipment.Status.choices)
+    product = TickedChoiceField(label='Product', choices=())
+    doctor = TickedChoiceField(label='Doctor', choices=())
+    payment = TickedChoiceField(label='Payment', choices=(('paid', 'Paid'), ('unpaid', 'Not paid')))
+
+    def __init__(self, *args, company=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        if company is None:
+            return
+        self.fields['product'].choices = [(str(product.pk), str(product))
+            for product in MedicationProduct.objects.for_company(company).order_by('name', 'strength', 'pk')]
+        memberships = CompanyMembership.objects.filter(company=company, clinician_type='doctor').values('user_id')
+        prescribers = Shipment.objects.for_company(company).filter(patient__company=company).values('authorization__prescribed_by_id')
+        assigned = Patient.objects.for_company(company).values('assigned_doctor_id')
+        doctors = get_user_model().objects.filter(
+            Q(pk__in=memberships) | Q(pk__in=prescribers) | Q(pk__in=assigned),
+        ).order_by('first_name', 'last_name', 'pk')
+        self.fields['doctor'].choices = [(str(doctor.pk), doctor.titled_name) for doctor in doctors]
+
+
+class YearMonthField(forms.DateField):
+    def to_python(self, value):
+        if isinstance(value, str) and value and not re.fullmatch(r'[0-9]{4}-(?:0[1-9]|1[0-2])', value):
+            raise ValidationError(self.error_messages['invalid'], code='invalid')
+        return super().to_python(value)
 
 
 class HistoryFilterForm(forms.Form):
     q = forms.CharField(label='Search dispatches', required=False, max_length=100)
-    start = forms.DateField(label='From', required=False, widget=forms.DateInput(attrs={'type': 'date'}))
-    end = forms.DateField(label='Until', required=False, widget=forms.DateInput(attrs={'type': 'date'}))
+    start_month = YearMonthField(label='From month', required=False, input_formats=('%Y-%m',),
+        widget=forms.DateInput(format='%Y-%m', attrs={'type': 'month', 'placeholder': 'YYYY-MM'}),
+        error_messages={'invalid': 'Enter a month in YYYY-MM format.'})
+    end_month = YearMonthField(label='To month', required=False, input_formats=('%Y-%m',),
+        widget=forms.DateInput(format='%Y-%m', attrs={'type': 'month', 'placeholder': 'YYYY-MM'}),
+        error_messages={'invalid': 'Enter a month in YYYY-MM format.'})
 
     def clean(self):
         data = super().clean()
-        if data.get('start') and data.get('end') and data['end'] < data['start']:
-            raise ValidationError('The end date must not be before the start date.')
+        if data.get('start_month') and data.get('end_month') and data['end_month'] < data['start_month']:
+            raise ValidationError('To month must not be before From month.')
         return data
 
 
@@ -185,15 +219,28 @@ class ShipmentChangeForm(forms.Form):
 
 
 class ShipmentActionForm(forms.Form):
-    action = forms.ChoiceField(choices=(('prepare', 'Mark ready'),
+    stock_override = forms.BooleanField(label='Allow dispatch despite insufficient stock', required=False)
+    stock_override_reason = forms.CharField(label='Stock override reason', max_length=500, required=False)
+
+    action = forms.ChoiceField(choices=(('confirm', 'Confirm & lock'),
                                        ('hold', 'Hold'), ('cancel', 'Cancel before dispatch'),
                                        ('dispatch', 'Record actual dispatch'), ('deliver', 'Record actual delivery')))
     reason = forms.CharField(required=False, max_length=500, widget=forms.Textarea(attrs={'rows': 3}))
     tracking_number = forms.CharField(required=False, max_length=120)
     confirm = forms.BooleanField(label='I confirm this action and have checked the shipment')
 
-    def __init__(self, *args, items=(), **kwargs):
+    def __init__(self, *args, shipment, items=(), **kwargs):
         super().__init__(*args, **kwargs)
+        allowed = set()
+        if shipment.status in (Shipment.Status.DRAFT, Shipment.Status.HELD, Shipment.Status.READY):
+            allowed.update(('hold', 'cancel'))
+            if shipment.status == Shipment.Status.HELD or not shipment.locked_at:
+                allowed.add('confirm')
+            if shipment.status == Shipment.Status.READY and shipment.locked_at:
+                allowed.add('dispatch')
+        elif shipment.status == Shipment.Status.DISPATCHED:
+            allowed.add('deliver')
+        self.fields['action'].choices = [(value, label) for value, label in self.fields['action'].choices if value in allowed]
         # An optional batch and expiry for each line, noted when the parcel is dispatched, for tracing a recall.
         self.items = list(items)
         for item in self.items:

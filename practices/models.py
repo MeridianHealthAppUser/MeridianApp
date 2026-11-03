@@ -1,3 +1,5 @@
+from uuid import uuid4
+
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models
@@ -141,9 +143,37 @@ class CompanyMembership(TimeStampedModel):
         return self.get_role_display()
 
 
+class DemoDataSet(CompanyScopedModel):
+    """Persistent ownership for an explicitly created, removable synthetic dataset."""
+
+    class Status(models.TextChoices):
+        ACTIVE = 'active', 'Active'
+        CLEARED = 'cleared', 'Cleared'
+
+    id = models.UUIDField(primary_key=True, default=uuid4, editable=False)
+    status = models.CharField(max_length=12, choices=Status.choices, default=Status.ACTIVE)
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True,
+                                   on_delete=models.SET_NULL, related_name='created_demo_data_sets')
+    cleared_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True,
+                                   on_delete=models.SET_NULL, related_name='cleared_demo_data_sets')
+    cleared_at = models.DateTimeField(null=True, blank=True)
+    summary = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        ordering = ('-created_at',)
+        constraints = [
+            models.UniqueConstraint(fields=('company',), condition=models.Q(status='active'),
+                                    name='one_active_demo_set_per_company'),
+            models.CheckConstraint(condition=models.Q(status__in=('active', 'cleared')),
+                                   name='demo_data_set_valid_status'),
+        ]
+
+
 class Patient(CompanyScopedModel):
     """A company-local patient record optionally linked to a portal sign-on."""
 
+    demo_data_set = models.ForeignKey(DemoDataSet, null=True, blank=True, on_delete=models.PROTECT,
+                                      related_name='patients')
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,

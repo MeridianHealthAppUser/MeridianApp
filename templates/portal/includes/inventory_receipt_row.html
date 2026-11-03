@@ -1,0 +1,12 @@
+<fieldset class="inventory-receipt-row" data-receipt-row{% if line.DELETE.value %} hidden{% endif %}>
+  <legend data-receipt-legend>Medication {{ forloop.counter|default:'1' }}</legend>
+  {{ line.non_field_errors }}
+  <div class="inventory-receipt-fields">
+    <div class="ops-form-field">{{ line.product.label_tag }}{{ line.product }}{{ line.product.errors }}</div>
+    <div class="ops-form-field">{{ line.quantity.label_tag }}{{ line.quantity }}{{ line.quantity.errors }}</div>
+    <div class="ops-form-field">{{ line.batch.label_tag }}{{ line.batch }}{{ line.batch.errors }}</div>
+    <div class="ops-form-field">{{ line.expires_on.label_tag }}{{ line.expires_on }}{{ line.expires_on.errors }}</div>
+  </div>
+  <span hidden>{{ line.DELETE }}</span>
+  <button class="console-button console-button--secondary" type="button" data-remove-receipt-row>Remove medication</button>
+</fieldset>

@@ -84,6 +84,11 @@
       });
     }
     document.querySelectorAll('input[type="hidden"][name="q"]').forEach((field) => { field.value = query; });
+    document.querySelectorAll('.filter-menu__clear').forEach((link) => {
+      const destination = new URL(link.href, window.location.href);
+      if (query) destination.searchParams.set('q', query); else destination.searchParams.delete('q');
+      link.href = `${destination.pathname}${destination.search}${destination.hash}`;
+    });
     const address = new URL(window.location.href);
     if (query) address.searchParams.set('q', query); else address.searchParams.delete('q');
     address.searchParams.delete('page');

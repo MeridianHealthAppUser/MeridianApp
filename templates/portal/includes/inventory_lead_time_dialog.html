@@ -1,0 +1,12 @@
+{% load l10n %}
+<dialog class="app-dialog inventory-safety-dialog" id="inventory-lead-time-{{ row.product.pk }}" aria-labelledby="inventory-lead-time-title-{{ row.product.pk }}"{% if row.lead_time_open %} open{% endif %}>
+  <div class="app-dialog__body">
+    <header class="inventory-reservations-header"><div><h2 id="inventory-lead-time-title-{{ row.product.pk }}">Lead time</h2><p class="app-dialog__sub">{{ row.product }}</p></div><a href="{{ inventory_return_url }}" class="inventory-dialog-close" data-dialog-close aria-label="Close lead time"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false"><path d="m6 6 12 12M18 6 6 18"/></svg></a></header>
+    <form method="post" action="{% url 'portal:inventory-lead-time' row.product.pk %}" class="ops-form">
+      {% csrf_token %}<input type="hidden" name="workflow_context" value="{{ row.lead_time_context }}"><input type="hidden" name="q" value="{{ search }}">
+      {{ row.lead_time_form.non_field_errors }}
+      <div class="ops-form-field"><label for="lead-time-weeks-{{ row.product.pk }}">Lead time (weeks)</label><input type="number" id="lead-time-weeks-{{ row.product.pk }}" name="weeks" min="0" max="9999.99" step="0.01" value="{{ row.lead_time_form.weeks.value|default_if_none:''|unlocalize }}" aria-describedby="lead-time-help-{{ row.product.pk }}"{% if row.lead_time_form.weeks.errors %} aria-invalid="true"{% endif %}><span class="helptext" id="lead-time-help-{{ row.product.pk }}">{{ row.lead_time_form.weeks.help_text }}</span>{{ row.lead_time_form.weeks.errors }}</div>
+      <div class="app-dialog__actions"><a class="console-button console-button--secondary" href="{{ inventory_return_url }}" data-dialog-close>Cancel</a><button class="console-button console-button--primary" type="submit">Save lead time</button></div>
+    </form>
+  </div>
+</dialog>

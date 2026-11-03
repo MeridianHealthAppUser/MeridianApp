@@ -31,6 +31,7 @@
 
   // Conversation headers can refresh while their existing dialogs stay in place.
   listen(document, 'click', (event) => {
+    if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return;
     const trigger = event.target.closest('[data-modal-open]');
     if (!trigger) return;
     const dialog = document.getElementById(trigger.dataset.modalOpen);

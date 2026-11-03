@@ -1,6 +1,8 @@
 """The default deployment keeps all data but exposes only Meridian Health."""
 
 from io import StringIO
+from datetime import date
+from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.core.exceptions import PermissionDenied
@@ -172,7 +174,8 @@ class SinglePracticeDemoTests(TestCase):
 
 @override_settings(DEBUG=True, MULTI_PRACTICE_ENABLED=False, SINGLE_PRACTICE_SLUG='meridian-health', PAYMENT_PROVIDER='sandbox')
 class BillingDemoSeedTests(TestCase):
-    def test_the_billing_demo_puts_each_patient_in_a_different_billing_and_shipping_state(self):
+    @patch('django.utils.timezone.localdate', return_value=date(2026, 11, 3))
+    def test_the_billing_demo_puts_each_patient_in_a_different_billing_and_shipping_state(self, localdate):
         from care.billing import billing_state
         from care.models import ClinicalTask, PatientSubscription, Shipment
         from care.operations import lock_reasons

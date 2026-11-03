@@ -1,0 +1,48 @@
+<details class="staff-page-card inventory-section" open aria-labelledby="inventory-stock-heading">
+  <summary class="staff-page-card__header"><div><h2 id="inventory-stock-heading">Inventory</h2><p>Demand for the shipping week starting {{ planning_week|date:"j M Y" }}.</p></div><span class="inventory-section-chevron" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" focusable="false"><path d="m6 9 6 6 6-6"/></svg></span></summary>
+  <div class="inventory-section-tools">{% include 'portal/includes/list_tools.html' with search_label='Search inventory' %}</div>
+  <div data-search-region="list">
+  {% if filter_form.errors %}<div class="staff-filter-error" role="alert">{{ filter_form.q.errors }}Correct the search to view products.</div>{% else %}
+  <div class="ops-table-wrap">
+    <table class="ops-table">
+      <thead><tr>
+        <th scope="col">Product</th><th scope="col">Category</th><th scope="col">On hand | Reserved</th><th scope="col">Available</th>
+        <th scope="col"><div class="inventory-metric-heading"><span>AWC</span>{% include 'portal/includes/inventory_awc_help.html' with help_suffix='header' %}</div></th>
+        <th scope="col">Lead time (weeks)</th>
+        <th scope="col">Safety stock</th>
+        <th scope="col">{% include 'portal/includes/inventory_week_label.html' with label='This week’s parcels' start=planning_week end=planning_week_end %}</th>
+        <th scope="col">{% include 'portal/includes/inventory_week_label.html' with label='Next week’s parcels' start=next_week_start end=next_week_end %}</th>
+      </tr></thead>
+      <tbody>
+        {% for row in rows %}
+        <tr>
+          <td data-label="Product"><div><strong>{{ row.product.name }}</strong><small>{{ row.product.strength }}</small></div></td>
+          <td data-label="Category">{{ row.product.get_category_display }}</td>
+          <td data-label="On hand | Reserved">
+            <div class="inventory-stock-counts">
+              <span aria-label="{{ row.on_hand }} on hand">{{ row.on_hand }}</span>
+              <span class="inventory-stock-counts__separator" aria-hidden="true">|</span>
+              {% if row.reservations %}
+              <a class="inventory-reserved-trigger" href="?{% if search %}q={{ search|urlencode }}&amp;{% endif %}reserved={{ row.product.pk }}" data-modal-open="inventory-reservations-{{ row.product.pk }}" aria-haspopup="dialog" aria-controls="inventory-reservations-{{ row.product.pk }}" aria-label="View {{ row.reserved }} reserved for {{ row.product }}" title="View reservations">
+              {% else %}
+              <span class="inventory-reserved-count" aria-label="0 reserved" title="No stock reserved">
+              {% endif %}
+                <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" focusable="false"><path d="m12 3 9 5-9 5-9-5 9-5Z"/><path d="m3 12 9 5 9-5M3 16l9 5 9-5"/></svg>
+                <span>{{ row.reserved }}</span>
+              {% if row.reservations %}</a>{% else %}</span>{% endif %}
+            </div>
+          </td>
+          <td data-label="Available"{% if row.available < 0 %} class="ops-step__warning"{% endif %}>{{ row.available }}</td>
+          <td data-label="AWC"><div class="inventory-awc-value" title="{% if row.awc_source == 'starting' %}Starting AWC{% else %}Calculated eight-week average{% endif %}">{% if can_edit_awc %}<a class="inventory-safety-trigger inventory-awc-trigger" href="?{% if search %}q={{ search|urlencode }}&amp;{% endif %}awc={{ row.product.pk }}" data-modal-open="inventory-starting-awc-{{ row.product.pk }}" aria-haspopup="dialog" aria-controls="inventory-starting-awc-{{ row.product.pk }}" aria-label="Edit starting AWC for {{ row.product }}" title="Edit starting AWC"><span class="inventory-awc-number">{{ row.awc|floatformat:2 }}</span><svg viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false"><path d="m15 5 4 4M4 20l4-1 12-12a2.8 2.8 0 0 0-4-4L4 15l-1 6Z"/></svg></a>{% else %}<span class="inventory-awc-number">{{ row.awc|floatformat:2 }}</span>{% endif %}<div class="inventory-awc-mobile-help">{% include 'portal/includes/inventory_awc_help.html' with help_suffix=row.product.pk %}</div></div></td>
+          <td data-label="Lead time (weeks)">{% if can_edit_metrics %}<a class="inventory-safety-trigger inventory-lead-time-trigger" href="?{% if search %}q={{ search|urlencode }}&amp;{% endif %}lead-time={{ row.product.pk }}" data-modal-open="inventory-lead-time-{{ row.product.pk }}" aria-haspopup="dialog" aria-controls="inventory-lead-time-{{ row.product.pk }}" aria-label="Edit lead time for {{ row.product }}" title="Edit lead time"><span>{% if row.product.lead_time_weeks is None %}—{% else %}{{ row.product.lead_time_weeks|floatformat:'-2' }}{% endif %}</span><svg viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false"><path d="m15 5 4 4M4 20l4-1 12-12a2.8 2.8 0 0 0-4-4L4 15l-1 6Z"/></svg></a>{% else %}<span>{% if row.product.lead_time_weeks is None %}—{% else %}{{ row.product.lead_time_weeks|floatformat:'-2' }}{% endif %}</span>{% endif %}</td>
+          <td data-label="Safety stock">{% if can_edit_metrics %}<a class="inventory-safety-trigger" href="?{% if search %}q={{ search|urlencode }}&amp;{% endif %}safety-stock={{ row.product.pk }}" data-modal-open="inventory-safety-stock-{{ row.product.pk }}" aria-haspopup="dialog" aria-controls="inventory-safety-stock-{{ row.product.pk }}" aria-label="Edit safety stock for {{ row.product }}" title="Edit safety stock"><span>{{ row.product.safety_stock|default_if_none:'—' }}</span><svg viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false"><path d="m15 5 4 4M4 20l4-1 12-12a2.8 2.8 0 0 0-4-4L4 15l-1 6Z"/></svg></a>{% else %}<span>{{ row.product.safety_stock|default_if_none:'—' }}</span>{% endif %}</td>
+          <td class="inventory-weekly-cell" data-label="This week’s parcels"><div class="inventory-weekly-mobile-label" aria-hidden="true">{% include 'portal/includes/inventory_week_label.html' with label='This week’s parcels' start=planning_week end=planning_week_end %}</div><span>{{ row.demand.to_ship|default:0 }}</span></td>
+          <td class="inventory-weekly-cell" data-label="Next week’s parcels"><div class="inventory-weekly-mobile-label" aria-hidden="true">{% include 'portal/includes/inventory_week_label.html' with label='Next week’s parcels' start=next_week_start end=next_week_end %}</div><span>{{ row.demand.next_week|default:0 }}</span></td>
+        </tr>
+        {% empty %}<tr><td colspan="9">{% if search %}No products match this search.{% else %}No catalogue products yet.{% endif %}</td></tr>{% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+  </div>
+</details>

@@ -1,0 +1,11 @@
+{% if shipment.pending_problems %}
+<div class="shipping-help shipping-help--warning shipping-patient-warning" data-shipping-help data-shipment-warning>
+  <button type="button" class="shipping-help-trigger shipping-patient-warning-trigger" aria-label="{% if shipping_step == 'pending' %}Issues to fix{% else %}Courier booking issue{% endif %} for {{ shipment.patient }}" aria-describedby="shipping-warning-{{ shipment.pk }}-{{ warning_key }}" aria-expanded="false">
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false"><path d="m12 3 10 18H2Z"/><path d="M12 9v5M12 17h.01"/></svg>
+  </button>
+  <div class="shipping-help-popover" id="shipping-warning-{{ shipment.pk }}-{{ warning_key }}" role="tooltip" popover="auto">
+    <strong>{% if shipping_step == 'pending' %}Needs attention before confirmation{% else %}Courier booking needs attention{% endif %}</strong>
+    <ul>{% for problem in shipment.pending_problems %}<li>{{ problem }}</li>{% endfor %}</ul>
+  </div>
+</div>
+{% endif %}

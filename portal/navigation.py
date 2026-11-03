@@ -11,12 +11,10 @@ from care.operations import can_ship
 
 # Each tab: its nav_section key, label and page. Super Admins see the same pages listed in their sections.
 OPERATIONS_TABS = (
-    ('subscriptions', 'Subscriptions', 'portal:treatment-subscriptions'),
-    ('orders', 'Non-prescription requests', 'portal:ops-orders'),
+    ('subscriptions', 'Patient orders', 'portal:treatment-subscriptions'),
     # Weekly shipping holds what was Dispatch stock (the week's pens) since 24 Oct 2026.
     ('shipping', 'Weekly shipping', 'portal:ops-shipping'),
     ('history', 'Dispatch history', 'portal:ops-history'),
-    ('catalogue', 'Catalogue', 'portal:ops-catalogue'),
     ('billing', 'Billing', 'portal:ops-billing'),
 )
 ADMINISTRATION_TABS = (
@@ -28,6 +26,8 @@ ADMINISTRATION_TABS = (
 )
 TAB_GROUPS = {'operations': ('Operations', OPERATIONS_TABS), 'administration': ('Administration', ADMINISTRATION_TABS)}
 # The Operations tabs a doctor has when the practice lets doctors ship (Practice settings).
+PATIENT_ORDER_TABS = (('subscriptions', 'Subscriptions', 'portal:treatment-subscriptions'),
+                      ('orders', 'Non-prescription requests', 'portal:ops-orders'))
 SHIPPING_TABS = ('shipping', 'history')
 
 
@@ -59,25 +59,30 @@ def page_tabs(nav_section, *, data_requests=0, membership=None):
     """The Operations or Administration tabs for the page at nav_section, with the current one marked; None for any
     other page. Data requests carries its count, as the menu does. A doctor sees only Weekly shipping and Dispatch
     history."""
+    order_section = nav_section in ('subscriptions', 'orders')
+    active_section = 'subscriptions' if order_section else nav_section
     for key, (label, tabs) in TAB_GROUPS.items():
         if membership is not None and membership.role == 'doctor':
             tabs = tuple(tab for tab in tabs if tab[0] in SHIPPING_TABS)
-        if nav_section in (tab[0] for tab in tabs):
-            items = [dict(key=tab_key, label=tab_label, url=reverse(url_name), active=tab_key == nav_section,
+        if active_section in (tab[0] for tab in tabs):
+            items = [dict(key=tab_key, label=tab_label, url=reverse(url_name), active=tab_key == active_section,
                           badge=data_requests if tab_key == 'privacy_requests' else 0, badge_label='open data request')
                      for tab_key, tab_label, url_name in tabs]
-            return {'key': key, 'label': label, 'tabs': items}
+            return {'key': key, 'label': label, 'tabs': items,
+                    'subtabs': [dict(label=title, url=reverse(url), active=section == nav_section)
+                                for section, title, url in PATIENT_ORDER_TABS] if order_section else []}
     return None
 
 
 def _tab_items(group):
-    return [_item(key, label, url_name) for key, label, url_name in TAB_GROUPS[group][1]]
+    return [_item(key, label, url_name, also=('orders',) if key == 'subscriptions' else ())
+            for key, label, url_name in TAB_GROUPS[group][1]]
 
 
 def _group_item(group, short_label):
     """Operations or Administration as one menu entry: it opens the first tab and stays current on all of them."""
     label, tabs = TAB_GROUPS[group]
-    return _item(group, label, tabs[0][2], also=tuple(tab[0] for tab in tabs), short_label=short_label)
+    return _item(group, label, tabs[0][2], also=tuple(tab[0] for tab in tabs) + (('orders',) if group == 'operations' else ()), short_label=short_label)
 
 
 RECORDS_TITLE = 'Patient Records & Messages'
@@ -109,7 +114,9 @@ def build_flat_menu(membership, *, nav_section='', unread=0, data_requests=0):
         _item('schedule', 'Calendar & Bookings', 'portal:staff-schedule', short_label='Calendar'),
     ]
     if membership.is_admin:
-        items += [_group_item('operations', 'Operations'), _group_item('administration', 'Admin')]
+        items += [_item('purchasing', 'Purchasing', 'portal:purchasing', short_label='Purchase'),
+                  _item('inventory', 'Inventory', 'portal:inventory', also=('catalogue',)),
+                  _group_item('operations', 'Operations'), _group_item('administration', 'Admin')]
     elif membership.role == 'doctor' and can_ship(membership.company, membership):
         items.append(_item('operations', 'Weekly shipping', 'portal:ops-shipping', also=SHIPPING_TABS, short_label='Shipping'))
     for item in items:
@@ -142,6 +149,11 @@ def build_staff_menu(membership, *, multi_practice=False, nav_section='', unread
               if clinical and MedicationProduct.objects.filter(company=membership.company, is_compounded=True).exists() else []),
             _item('schedule', 'Calendar & Bookings', 'portal:staff-schedule'),
         ]),
+        ('purchasing', 'Purchasing', 'Purchase', [
+            _item('purchasing', 'Purchasing', 'portal:purchasing'),
+            *([_item('suppliers', 'Suppliers', 'portal:supplier-list')] if super_admin else []),
+        ] if admin else []),
+        ('inventory', 'Inventory', 'Inventory', [_item('inventory', 'Inventory', 'portal:inventory', also=('catalogue',))] if admin else []),
         ('operations', 'Operations', 'Operations', _tab_items('operations') if admin else []),
         ('administration', 'Administration', 'Admin', _tab_items('administration') if admin else []),
         # Insights is for Super Admins only.

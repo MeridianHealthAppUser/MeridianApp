@@ -1,0 +1,12 @@
+<div class="shipment-row-actions">
+  {% if shipment.confirm_context %}<form method="post" action="{% url 'portal:ops-shipping-confirm' %}">
+    {% csrf_token %}<input type="hidden" name="workflow_context" value="{{ shipment.confirm_context }}"><input type="hidden" name="list_query" value="{{ list_query }}"><input type="hidden" name="week" value="{{ shipment.confirm_week|date:'Y-m-d' }}"><input type="hidden" name="shipment_ids" value="{{ shipment.pk }}"><input type="hidden" name="single_shipment" value="{{ shipment.pk }}">
+    <button class="shipping-action-icon shipping-action-icon--ready" type="submit" data-tooltip="Confirm &amp; lock" aria-label="Confirm &amp; lock parcel for {{ shipment.patient }} on {{ shipment.scheduled_for|date:'j M' }}">
+      <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" focusable="false"><circle cx="12" cy="12" r="8.5"/><path d="m8 12 2.5 2.5L16 9"/></svg>
+    </button>
+  </form>{% endif %}
+  <a class="shipping-action-icon" href="{% url 'portal:ops-shipment-detail' shipment.pk %}" data-tooltip="Open shipment" aria-label="Open shipment for {{ shipment.patient }}">
+    <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" focusable="false"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg>
+  </a>
+  {% include 'portal/includes/shipping_note_icon.html' %}
+</div>

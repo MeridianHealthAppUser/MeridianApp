@@ -1,0 +1,25 @@
+<div class="shipping-medication-groups">
+  <div class="shipping-medication-heading" aria-hidden="true"><span></span><span>Medication</span><span>Quantity on this page</span><span>Customers / parcels</span></div>
+  {% for group in medication_groups %}
+    <details class="shipping-medication-group">
+      <summary class="shipping-medication-summary">
+        <span class="shipping-medication-toggle" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" focusable="false"><path d="m8 4 8 8-8 8"/></svg></span>
+        <strong class="shipping-medication-name">{{ group.product }}</strong>
+        <span class="shipping-medication-quantity"><span class="sr-only">Quantity: </span>{{ group.quantity }}</span>
+        <span class="shipping-medication-count">{{ group.parcels|length }} parcel line{{ group.parcels|length|pluralize }} · <span class="shipping-medication-show">Show customers</span><span class="shipping-medication-hide">Hide customers</span></span>
+      </summary>
+      <div class="ops-table-wrap shipping-medication-expanded">
+        <table class="ops-table shipping-medication-customers">
+          <thead><tr>{% if can_bulk_confirm %}<th scope="col">Select</th>{% endif %}<th scope="col">Customer</th><th scope="col">Dose</th><th scope="col">Quantity</th>{% if show_workflow_status %}<th scope="col">Status</th>{% endif %}{% if show_shipping_status %}<th scope="col">Shipping status</th>{% endif %}<th scope="col">Due date</th><th scope="col">Waybill</th><th scope="col">Payment</th><th scope="col">Actions</th></tr></thead>
+          <tbody>{% for line in group.parcels %}<tr>
+            {% if can_bulk_confirm %}<td data-label="Select">{% if line.shipment.confirm_context %}<input type="checkbox" name="shipment_ids" value="{{ line.shipment.pk }}" form="shipping-bulk-confirm" data-select-shipment aria-label="Select {{ line.shipment.patient }}">{% endif %}</td>{% endif %}
+            <td data-label="Customer"><div class="shipping-patient-name"><a href="{% url 'portal:ops-shipment-detail' line.shipment.pk %}">{{ line.shipment.patient }}</a>{% include 'portal/includes/shipping_patient_warning.html' with shipment=line.shipment warning_key=line.warning_key %}</div></td>
+            <td data-label="Dose">{{ line.dose }}</td><td data-label="Quantity">{{ line.quantity }}</td>
+            {% if show_workflow_status %}<td data-label="Status">{{ line.shipment.shipping_status_label }}</td>{% endif %}{% if show_shipping_status %}<td data-label="Shipping status">{% include 'portal/includes/shipping_status.html' with shipment=line.shipment %}</td>{% endif %}<td data-label="Due date">{{ line.shipment.scheduled_for|date:'j M Y' }}</td><td data-label="Waybill">{% include 'portal/includes/shipping_info.html' with shipment=line.shipment %}</td><td data-label="Payment">{{ line.shipment.payment_text }}</td><td data-label="Actions">{% include 'portal/includes/shipping_row_actions.html' with shipment=line.shipment %}</td>
+          </tr>{% endfor %}</tbody>
+        </table>
+      </div>
+    </details>
+  {% empty %}<p class="ops-empty shipping-medication-empty">No shipments match this stage and your filters. Use All shipments to view the whole week.</p>{% endfor %}
+</div>
+{% if can_bulk_confirm %}<div class="shipping-medication-selection"><label class="ops-check"><input type="checkbox" data-select-all-shipments> Select all pending parcels on this page</label><p>Selecting a customer selects their whole parcel, including any other medication in it.</p></div>{% endif %}

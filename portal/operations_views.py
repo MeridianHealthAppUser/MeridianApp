@@ -1,8 +1,10 @@
 """Separate practice operations and patient pharmacy pages."""
 
 import csv
+from calendar import monthrange
 from datetime import date, timedelta
 from urllib.parse import urlencode
+from zoneinfo import ZoneInfo
 
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
@@ -10,7 +12,8 @@ from django.core.exceptions import ValidationError
 from django.core.paginator import Paginator
 from django.db import transaction
 from django.db.models import Count, Q
-from django.http import HttpResponse, QueryDict
+from django.db.models.functions import TruncDate
+from django.http import FileResponse, HttpResponse, QueryDict
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.defaultfilters import pluralize
 from django.urls import reverse
@@ -33,7 +36,7 @@ from practices.models import Company, CompanyMembership
 
 from .filter_menus import fields_section, list_tools, ticked_sections, without_all
 from .operations_forms import (
-    CatalogueFilterForm, ConfirmForm, DeliveryAddressForm, DoseForm, HistoryFilterForm, OrderFilterForm,
+    SHIPPING_FILTER_FIELDS, CatalogueFilterForm, ConfirmForm, DeliveryAddressForm, DoseForm, HistoryFilterForm, OrderFilterForm,
     OrderReviewForm, ProductForm, ShipmentActionForm, ShipmentChangeForm, ShipmentCreateForm, ShippingFilterForm,
 )
 from .patient_views import patient_page_context
@@ -117,6 +120,8 @@ class CatalogueView(OperationsView):
     http_method_names = ('get', 'head', 'options')
 
     def get(self, request):
+        from .export_support import export_url
+
         form = CatalogueFilterForm(without_all(request.GET, 'status'))
         queryset = MedicationProduct.objects.for_company(self.company).order_by('name', 'strength', 'pk')
         if form.is_valid():
@@ -142,6 +147,7 @@ class CatalogueView(OperationsView):
         context['starting_plans'] = list(StartingPlan.objects.for_company(self.company).select_related('then_dose__pen').prefetch_related('steps__dose__pen'))
         for plan in context['starting_plans']:
             plan.summary = plan_summary(plan)
+        context.update(doses_export_url=export_url('catalogue-doses'), plans_export_url=export_url('catalogue-plans'))
         return render(request, 'portal/operations_catalogue.html', context)
 
 
@@ -228,7 +234,7 @@ class DoseEditorView(OperationsView):
         return self.display(request, dose, form, status=400)
 
 
-def _shipping_filter(request, queryset, default_week=None):
+def _shipping_filter(request, queryset, default_week=None, *, company):
     # A shipping week runs Monday to Sunday: any day in ?week= means its week. One that isn't a date is reported.
     data = _form_data(request)
     try:
@@ -236,13 +242,30 @@ def _shipping_filter(request, queryset, default_week=None):
         data['week'] = (day - timedelta(days=day.weekday())).isoformat()
     except ValueError:
         pass
-    form = ShippingFilterForm(without_all(data, 'status'))
+    form = ShippingFilterForm(without_all(data, *SHIPPING_FILTER_FIELDS), company=company)
     if form.is_valid():
         week = form.cleaned_data['week']
         queryset = queryset.filter(scheduled_for__range=(week, week + timedelta(days=6)))
         if form.cleaned_data['status']:
             queryset = queryset.filter(status__in=form.cleaned_data['status'])
+        if form.cleaned_data['product']:
+            queryset = queryset.filter(items__product_id__in=form.cleaned_data['product']).distinct()
+        if form.cleaned_data['doctor']:
+            doctors = form.cleaned_data['doctor']
+            queryset = queryset.filter(Q(authorization__prescribed_by_id__in=doctors) | Q(
+                authorization__prescribed_by__isnull=True, patient__assigned_doctor_id__in=doctors))
         queryset = _shipment_search(queryset, form.cleaned_data['q'])
+        payments = set(form.cleaned_data['payment'])
+        form.payment_states = {}
+        if len(payments) == 1:
+            from care.billing import parcel_payment
+            matches = []
+            for shipment in queryset:
+                state = parcel_payment(shipment)
+                if ('paid' if state[0] == 'paid' else 'unpaid') in payments:
+                    matches.append(shipment.pk)
+                    form.payment_states[shipment.pk] = state
+            queryset = queryset.filter(pk__in=matches)
     else:
         queryset = queryset.none()
     return form, queryset
@@ -260,10 +283,6 @@ def chosen_week(request, default=None):
     except ValueError:
         return default or this_week()
     return day - timedelta(days=day.weekday())
-
-
-def last_week():
-    return this_week() - timedelta(days=7)
 
 
 def shipping_week(company):
@@ -292,61 +311,74 @@ def shipment_doctor(shipment):
     return authorization.prescribed_by if authorization and authorization.prescribed_by_id else shipment.patient.assigned_doctor
 
 
+SHIPPING_STAGES = ('pending', 'confirmed', 'tracking')
+SHIPPING_STAGE_ALIASES = {'ready': 'pending', 'lock': 'pending', 'courier': 'confirmed', 'collection': 'tracking'}
+
+
+def selected_shipping_stage(request):
+    stage = request.GET.get('shipping_step', 'pending')
+    stage = SHIPPING_STAGE_ALIASES.get(stage, stage)
+    return stage if stage in (*SHIPPING_STAGES, 'all') else 'pending'
+
+
+def shipping_stage_parcels(queryset, stage):
+    """The work waiting at a stage. Viewing a stage never advances a parcel."""
+    stage = SHIPPING_STAGE_ALIASES.get(stage, stage)
+    if stage == 'pending':
+        return queryset.filter(Q(status__in=(Shipment.Status.DRAFT, Shipment.Status.HELD)) |
+                               Q(status=Shipment.Status.READY, locked_at__isnull=True))
+    if stage == 'confirmed':
+        return queryset.filter(status=Shipment.Status.READY, locked_at__isnull=False, waybill='', tracking_number='')
+    if stage == 'tracking':
+        return queryset.filter(Q(status__in=(Shipment.Status.DISPATCHED, Shipment.Status.DELIVERED)) |
+            (Q(status=Shipment.Status.READY, locked_at__isnull=False) & (~Q(waybill='') | ~Q(tracking_number=''))))
+    return queryset
+
+
 def _shipping_workflow_context(request, week, order, parcels, *, to_collect):
-    """Presentation state for the week's steps; selecting a step never performs work."""
     counts = parcels.aggregate(
         active=Count('pk', filter=~Q(status=Shipment.Status.CANCELLED)),
-        collected=Count('pk', filter=Q(status__in=(Shipment.Status.DISPATCHED, Shipment.Status.DELIVERED))),
-        booked=Count('pk', filter=~Q(status=Shipment.Status.CANCELLED) & (~Q(waybill='') | ~Q(tracking_number=''))),
+        delivered=Count('pk', filter=Q(status=Shipment.Status.DELIVERED)),
     )
-    ready_done = bool(counts['active'] and not order['drafts'] and not order['held'])
-    lock_done = ready_done and order['parcels'] == order['locked']
-    collected_done = bool(counts['active'] and counts['active'] == counts['collected'])
-    if not ready_done:
-        current = 'ready'
-    elif not lock_done:
-        current = 'lock'
-    elif collected_done:
-        current = None
-    elif to_collect:
-        current = 'collection'
-    else:
-        current = 'order'
+    pending = shipping_stage_parcels(parcels, 'pending').count()
+    confirmed = shipping_stage_parcels(parcels, 'confirmed').count()
+    tracking = shipping_stage_parcels(parcels, 'tracking').count()
+    current = 'pending' if pending else ('confirmed' if confirmed else ('tracking' if tracking and counts['delivered'] < counts['active'] else None))
     definitions = (
-        ('ready', 'Mark ready', f"{order['drafts']} draft parcel{'s' if order['drafts'] != 1 else ''}", ready_done),
-        ('lock', 'Check and lock', f"{order['parcels'] - order['locked']} ready · {order['locked']} locked", lock_done),
-        ('order', 'Order pens', f"{order['parcels']} ready parcel{'s' if order['parcels'] != 1 else ''}", False),
-        ('courier', 'Book courier', f"{counts['booked']} booked" if counts['booked'] else 'Not booked', False),
-        ('collection', 'Record collection', 'Collected' if collected_done else
-         (f'{to_collect} awaiting collection' if to_collect else 'Pending'), collected_done),
+        ('pending', 'Pending', f'{pending} awaiting confirmation', bool(counts['active'] and not pending)),
+        ('confirmed', 'Confirmed & Locked', f'{confirmed} awaiting courier', bool(tracking and not pending and not confirmed)),
+        ('tracking', 'Tracking', f'{tracking} shipment' + ('s' if tracking != 1 else ''),
+         bool(counts['active'] and counts['active'] == counts['delivered'])),
     )
-    selected = request.GET.get('shipping_step', 'ready')
-    if selected not in {step[0] for step in definitions}:
-        selected = 'ready'
+    selected = selected_shipping_stage(request)
+    stage_counts = {'pending': pending, 'confirmed': confirmed, 'tracking': tracking}
     query = request.GET.copy()
-    for name in ('create', 'collect', '__shell', '__full', 'shipping_step'):
+    for name in ('create', 'collect', 'collect_demo', 'note', '__shell', '__full', 'shipping_step', 'page'):
         query.pop(name, None)
     query['week'] = week.isoformat()
-    query['__full'] = '1'  # The native fallback remains usable when scripts are unavailable.
+    query['__full'] = '1'
     steps = []
     for key, title, summary, complete in definitions:
         query['shipping_step'] = key
-        steps.append(dict(key=key, title=title, summary=summary, complete=complete,
+        steps.append(dict(key=key, title=title, count=stage_counts[key], summary=summary, complete=complete,
                           current=current == key, selected=selected == key,
                           url=f"{reverse('portal:ops-shipping')}?{query.urlencode()}#shipping-workflow"))
-    query['shipping_step'] = 'collection'
+    query['shipping_step'] = 'all'
+    all_shipments_url = f"{reverse('portal:ops-shipping')}?{query.urlencode()}"
+    query['shipping_step'] = 'tracking'
+    collection_close_url = steps[-1]['url']
     query['collect'] = '1'
-    return dict(shipping_steps=steps, shipping_step=selected,
-                collection_url=f"{reverse('portal:ops-shipping')}?{query.urlencode()}#record-collection",
-                collection_close_url=steps[-1]['url'],
-                collect_open=request.GET.get('collect') == '1')
+    collection_url = f"{reverse('portal:ops-shipping')}?{query.urlencode()}#record-collection"
+    query['collect_demo'] = '1'
+    return dict(shipping_steps=steps, shipping_step=selected, all_shipments_url=all_shipments_url,
+                collection_url=collection_url,
+                demo_collection_url=f"{reverse('portal:ops-shipping')}?{query.urlencode()}#record-collection",
+                collect_demo_mode=request.GET.get('collect_demo') == '1',
+                collection_close_url=collection_close_url, collect_open=request.GET.get('collect') == '1')
 
 
 class ShippingListView(OperationsView):
-    """Weekly shipping, one shipping week at a time: its parcels (drafted from prescriptions, or added by hand with
-    Create shipment), where each goes and whether it's paid for, the steps that get them out (mark ready, check and
-    lock, order the pens, book The Courier Guy, record the collection) and the week's pens. Dispatch stock was a page
-    of its own until 24 Oct 2026."""
+    """A shipping week split into actionable stage queues, with shared product, doctor and payment filters."""
     shipping = True
 
     nav_section, page_title = 'shipping', 'Weekly shipping'
@@ -354,19 +386,27 @@ class ShippingListView(OperationsView):
     per_page = 100
 
     def display(self, request, create_form=None, status=200):
-        from care.billing import parcel_payment, practice_settings
+        from care.billing import parcel_payment, parcel_payment_reason, practice_settings
         from care.courier import changed_since_booking, collection_problem, courier_enabled
         from care.models import DeliveryAddress
         from care.operations import delivery_problem
 
         home = shipping_week(self.company)
         week = chosen_week(request, home)
-        form, queryset = _shipping_filter(request, self.shipments(), home)
-        queryset = queryset.order_by('scheduled_for', 'patient__last_name', 'pk')
+        form, queryset = _shipping_filter(request, self.shipments(), home, company=self.company)
+        stage = selected_shipping_stage(request)
+        queryset = shipping_stage_parcels(queryset, stage).order_by('scheduled_for', 'patient__last_name', 'pk')
         fresh = lambda kind: make_workflow_context(request, self.company, kind)
         context = self.context(filter_form=form, lock_context=fresh('shipping-week'), **_paginate(request, queryset, self.per_page),
                                **week_navigation('portal:ops-shipping', week, home=home,
-                                                 **{key: value for key, value in request.GET.items() if key in ('status', 'q')}))
+                                                 **{key: ','.join(request.GET.getlist(key)) if key in SHIPPING_FILTER_FIELDS else value
+                                                    for key, value in request.GET.items()
+                                                    if key in (*SHIPPING_FILTER_FIELDS, 'q', 'view', 'shipping_step')}))
+        context['is_all_shipments'] = stage == 'all'
+        context['can_bulk_confirm'] = self.can_edit and stage == 'pending'
+        context['show_workflow_status'] = stage == 'all'
+        context['show_shipping_status'] = stage == 'tracking'
+        context['shipping_column_count'] = 9 + int(context['can_bulk_confirm']) + int(stage in ('all', 'tracking'))
         context['shipments'] = list(context['page_obj'].object_list)
         addresses = {address.patient_id: address for address in DeliveryAddress.objects.filter(
             company=self.company, patient__in={shipment.patient_id for shipment in context['shipments']})}
@@ -379,7 +419,8 @@ class ShippingListView(OperationsView):
             shipment.address = addresses.get(shipment.patient_id)
             # Changed after The Courier Guy was booked: the waybill still has the old address.
             shipment.address_changed = open_parcel and changed_since_booking(shipment, shipment.address)
-            shipment.payment_state, shipment.payment_text = parcel_payment(shipment)
+            shipment.payment_state, shipment.payment_text = (getattr(form, 'payment_states', {}).get(shipment.pk)
+                                                                or parcel_payment(shipment))
             # What Check and lock week would hold it back for, besides its prescription; payment is in its own column.
             shipment.lock_problems = [delivery_problem(shipment)] if open_parcel and delivery_problem(shipment) else []
             if self.can_edit and shipment.status not in (Shipment.Status.CANCELLED, Shipment.Status.DELIVERED):
@@ -387,18 +428,62 @@ class ShippingListView(OperationsView):
             # Mark ready on its line, for a draft or held parcel.
             if self.can_edit and shipment.status in (Shipment.Status.DRAFT, Shipment.Status.HELD):
                 shipment.ready_context = make_workflow_context(request, self.company, 'shipment-ready', shipment)
+            if self.can_edit and (shipment.status == Shipment.Status.HELD or
+                    (shipment.status in (Shipment.Status.DRAFT, Shipment.Status.READY) and not shipment.locked_at)):
+                shipment.confirm_context = make_workflow_context(request, self.company, 'shipping-confirm', shipment)
+                shipment.confirm_week = shipment.scheduled_for - timedelta(days=shipment.scheduled_for.weekday())
+            shipment.shipping_status_label = ('Pending' if shipment.status == Shipment.Status.DRAFT or
+                (shipment.status == Shipment.Status.READY and not shipment.locked_at) else
+                ('Confirmed & Locked' if shipment.status == Shipment.Status.READY else shipment.get_status_display()))
+            shipment.pending_problems = []
+            if stage == 'pending':
+                problems = [shipment.current_hold_reason, *shipment.lock_problems, parcel_payment_reason(shipment)]
+                if shipment.status == Shipment.Status.HELD:
+                    problems.append(shipment.hold_reason or 'This parcel is on hold and needs review.')
+                shipment.pending_problems = list(dict.fromkeys(problem for problem in problems if problem))
+            elif stage == 'confirmed' and shipment.courier_error:
+                shipment.pending_problems = [shipment.courier_error]
             # Its note, in the Notes column, until it's delivered or cancelled.
             if self.can_edit and shipment.status not in (Shipment.Status.CANCELLED, Shipment.Status.DELIVERED):
                 shipment.note_context = make_workflow_context(request, self.company, 'shipment-note', shipment)
-        context['list_query'] = request.GET.urlencode()
+        context['shipping_view'] = 'medication' if request.GET.get('view') == 'medication' else 'customers'
+        grouped = {}
+        selected_products = set(form.cleaned_data.get('product', ())) if form.is_valid() else set()
+        for parcel in context['shipments']:
+            for item in parcel.items.all():
+                if selected_products and str(item.product_id) not in selected_products:
+                    continue
+                group = grouped.setdefault(item.product_id, dict(product=item.product, quantity=0, parcels=[]))
+                group['quantity'] += item.quantity
+                group['parcels'].append(dict(shipment=parcel, quantity=item.quantity, dose=item.dose,
+                                            warning_key=f"{item.product_id}-{len(group['parcels']) + 1}"))
+        context['medication_groups'] = list(grouped.values())
+        for mode in ('customers', 'medication'):
+            query = request.GET.copy()
+            query.pop('note', None)
+            query['view'] = mode
+            context[f'{mode}_view_url'] = '?' + query.urlencode()
+        list_query = request.GET.copy()
+        list_query.pop('note', None)
+        context['list_query'] = list_query.urlencode()
+        for shipment in context['shipments']:
+            note_query = list_query.copy()
+            note_query['note'] = str(shipment.pk)
+            shipment.note_url = f"{reverse('portal:ops-shipping')}?{note_query.urlencode()}#shipment-note-dialog"
+        note_record = next((shipment for shipment in context['shipments']
+                            if str(shipment.pk) == request.GET.get('note')
+                            and (getattr(shipment, 'note_context', None) or shipment.note)), None)
+        context.update(note_record=note_record, note_open=note_record is not None,
+                       note_read_only=note_record is not None and not bool(getattr(note_record, 'note_context', None)))
         tools = _list_tools(request, form, url_name='portal:ops-shipping', label='Filter shipments',
-                            sections=ticked_sections(form, request.GET, ('status',)), placeholder='Patient or tracking',
+                            sections=ticked_sections(form, request.GET, SHIPPING_FILTER_FIELDS,
+                                                     icons={'product': 'tag', 'doctor': 'person'}), placeholder='Patient or tracking',
                             count=context['page_obj'].paginator.count, noun='shipment')
         # The search and the Filters keep the week; clearing either stays on it.
-        kept = {'week': week.isoformat()}
+        kept = {'week': week.isoformat(), 'view': context['shipping_view']}
         tools['search_hidden'] = {**tools['search_hidden'], **kept}
         tools['search_clear_url'] = f"{reverse('portal:ops-shipping')}?{urlencode({**{k: v for k, v in tools['search_hidden'].items() if k != 'q'}})}"
-        tools['filter_menu'].update(hidden=[*tools['filter_menu']['hidden'], ('week', week.isoformat())],
+        tools['filter_menu'].update(hidden=[*tools['filter_menu']['hidden'], *kept.items()],
                                     clear_url=f"{reverse('portal:ops-shipping')}?{urlencode({**kept, 'q': tools['search']})}")
         context.update(tools)
         # The week's steps and pens, from what was Dispatch stock.
@@ -407,17 +492,23 @@ class ShippingListView(OperationsView):
                                                scheduled_for__range=(week, week + timedelta(days=6)))
         locked = week_parcels.filter(status=Shipment.Status.READY, locked_at__isnull=False)
         context.update(
-            week_order=order, stock_rows=week_stock(self.company, week), average_weeks=AVERAGE_WEEKS,
+            week_order=order, average_weeks=AVERAGE_WEEKS,
             show_stock_detail=self.membership.role == CompanyMembership.Role.SUPER_ADMIN,
             ready_unlocked=order['parcels'] - order['locked'],
             lock_blocked=sum(1 for shipment in week_parcels.filter(status=Shipment.Status.READY, locked_at__isnull=True)
                              if lock_reasons(shipment)),
             courier_enabled=courier_enabled(), courier_problem=collection_problem(self.company) if courier_enabled() else '',
-            to_book=locked.filter(waybill='').count(), to_collect=locked.exclude(waybill='').count(),
+            to_book=shipping_stage_parcels(week_parcels, 'confirmed').count(),
+            to_book_demo=shipping_stage_parcels(week_parcels, 'confirmed').filter(patient__demo_data_set__isnull=False).count(),
+            to_collect=week_parcels.filter(status=Shipment.Status.READY, locked_at__isnull=False).exclude(waybill='', tracking_number='').count(),
+            to_collect_demo=week_parcels.filter(status=Shipment.Status.READY, locked_at__isnull=False, patient__demo_data_set__isnull=False).exclude(waybill='', tracking_number='').count(),
             payment_required=payment_required,
             order_csv_url=f'{reverse("portal:ops-week-order")}?{urlencode({"week": week.isoformat()})}',
             manifest_url=f'{reverse("portal:ops-manifest")}?{urlencode({"week": week.isoformat()})}',
         )
+        from care.inventory import stock_rows
+        context['stock_shortages'] = [row for row in stock_rows(self.company) if row['shortage']]
+        context['stock_shortage_count'] = sum(row['shortage'] for row in context['stock_shortages'])
         context.update(_shipping_workflow_context(request, week, order, week_parcels,
                                                   to_collect=context['to_collect']))
         # Search/filter requests retain the selected workflow panel without changing its actions.
@@ -426,13 +517,17 @@ class ShippingListView(OperationsView):
         context['search_clear_url'] += f"&shipping_step={context['shipping_step']}"
         context['filter_menu']['clear_url'] += f"&shipping_step={context['shipping_step']}"
         if self.can_edit:
+            collection_parcels = week_parcels.filter(status=Shipment.Status.READY, locked_at__isnull=False).exclude(waybill='', tracking_number='')
+            if context['collect_demo_mode']:
+                collection_parcels = collection_parcels.filter(patient__demo_data_set__isnull=False)
+            context['collect_count'] = context['to_collect_demo'] if context['collect_demo_mode'] else context['to_collect']
             # A dialog reopened after a mistake keeps the token it was sent with.
             context.update(create_form=create_form or ShipmentCreateForm(company=self.company),
                            create_context=self.token('shipment-create') if create_form else fresh('shipment-create'),
-                           prepare_context=fresh('shipping-prepare'), courier_context=fresh('shipping-courier'),
+                           prepare_context=fresh('shipping-prepare'), confirm_context=fresh('shipping-confirm'), courier_context=fresh('shipping-courier'),
                            collect_context=fresh('shipping-collect'),
                            collect_products=MedicationProduct.objects.filter(
-                               pk__in=ShipmentItem.objects.filter(shipment__in=locked.exclude(waybill='')).values('product')),
+                               pk__in=ShipmentItem.objects.filter(shipment__in=collection_parcels).values('product')),
                            create_open=create_form is not None or request.GET.get('create') == '1')
         return render(request, 'portal/operations_shipping.html', context, status=status)
 
@@ -441,9 +536,13 @@ class ShippingListView(OperationsView):
 
 
 def _shipping_list_url(query):
-    """Back to the Weekly shipping list as it was: its week, status and page only."""
-    kept = {key: value for key, value in QueryDict(query or '').items() if key in ('week', 'status', 'page')}
-    return f'{reverse("portal:ops-shipping")}?{urlencode(kept)}' if kept else reverse('portal:ops-shipping')
+    """Return to the filtered shipping list, preserving repeated selections."""
+    kept = QueryDict(query or '').copy()
+    allowed = (*SHIPPING_FILTER_FIELDS, 'week', 'page', 'q', 'view', 'shipping_step')
+    for key in list(kept):
+        if key not in allowed:
+            kept.pop(key)
+    return f'{reverse("portal:ops-shipping")}?{kept.urlencode()}' if kept else reverse('portal:ops-shipping')
 
 
 class ShipmentReadyView(OperationsView):
@@ -487,18 +586,60 @@ class ShipmentNoteView(OperationsView):
 
 
 class DispatchStockView(OperationsView):
-    """Dispatch stock is part of Weekly shipping now: its old address opens that page on the same week."""
-    shipping = True
+    """The former stock screen now lives in Inventory."""
+    shipping = False
 
     http_method_names = ('get', 'head', 'options')
 
     def get(self, request):
-        week = chosen_week(request, shipping_week(self.company))
-        return redirect(f'{reverse("portal:ops-shipping")}?{urlencode({"week": week.isoformat()})}#week-pens')
+        return redirect('portal:inventory')
+
+
+class ShippingConfirmView(OperationsView):
+    """Confirm and reserve selected parcels with one explicit, fully validated action."""
+    shipping = True
+    http_method_names = ('post',)
+
+    @transaction.atomic
+    def post(self, request):
+        from care.operations import confirm_shipments
+
+        self.company = Company.objects.select_for_update().get(pk=self.company.pk)
+        require_operations_actor(self.company, request.user, shipping=True)
+        form = ShippingFilterForm({'week': request.POST.get('week')})
+        try:
+            try:
+                selected = {int(value) for value in request.POST.getlist('shipment_ids')}
+            except (ValueError, TypeError):
+                raise ValidationError('Select valid parcels to confirm.')
+            single = request.POST.get('single_shipment')
+            if single:
+                if len(selected) != 1 or single != str(next(iter(selected))):
+                    raise ValidationError('The confirmation does not match this parcel.')
+                parcel = get_object_or_404(self.shipments(), pk=single)
+                validate_workflow_context(request, self.company, 'shipping-confirm', parcel)
+            else:
+                validate_workflow_context(request, self.company, 'shipping-confirm')
+            if not form.is_valid():
+                raise ValidationError('Choose a valid shipping week.')
+            week = form.cleaned_data['week']
+            week -= timedelta(days=week.weekday())
+            confirmed = confirm_shipments(company=self.company, actor=request.user, week_start=week,
+                                          shipment_ids=selected, request=request)
+            message = f'{len(confirmed)} parcel{pluralize(len(confirmed))} confirmed and locked. Stock reserved.'
+            from care.inventory import stock_rows
+            shortages = [f"{row['product']}: {row['shortage']} short" for row in stock_rows(self.company) if row['shortage']]
+            if shortages:
+                messages.warning(request, message + ' Stock shortages: ' + '; '.join(shortages) + '.')
+            else:
+                messages.success(request, message)
+        except ValidationError as error:
+            messages.error(request, 'Not confirmed: ' + ' · '.join(error.messages))
+        return _week_redirect(request, 'pending')
 
 
 class ShippingPrepareView(OperationsView):
-    """Mark drafts ready: every draft parcel of the week that passes its checks."""
+    """Mark selected draft parcels ready after their clinical and supply checks."""
     shipping = True
 
     http_method_names = ('post',)
@@ -510,14 +651,19 @@ class ShippingPrepareView(OperationsView):
             validate_workflow_context(request, self.company, 'shipping-prepare')
             if not form.is_valid():
                 raise ValidationError('Choose a valid shipping week.')
-            ready, left = prepare_week(company=self.company, actor=request.user, week_start=form.cleaned_data['week'], request=request)
+            try:
+                selected = {int(value) for value in request.POST.getlist('shipment_ids')}
+            except ValueError:
+                raise ValidationError('Select valid parcels.')
+            ready, left = prepare_week(company=self.company, actor=request.user, week_start=form.cleaned_data['week'],
+                                       shipment_ids=selected, request=request)
             message = f'{len(ready)} draft parcel{"" if len(ready) == 1 else "s"} marked ready.'
             if left:
                 message += f' {len(left)} could not be: see the hold reason beside {"it" if len(left) == 1 else "them"}.'
             (messages.warning if left else messages.success)(request, message)
         except ValidationError as error:
             messages.error(request, ' '.join(error.messages))
-        return redirect(f'{reverse("portal:ops-shipping")}?{urlencode({"week": request.POST.get("week", "")})}')
+        return redirect(_shipping_list_url(request.POST.get('list_query') or urlencode({'week': request.POST.get('week', '')})))
 
 
 class WeekOrderDownloadView(OperationsView):
@@ -527,7 +673,7 @@ class WeekOrderDownloadView(OperationsView):
     http_method_names = ('get', 'head', 'options')
 
     def get(self, request):
-        form, _ = _shipping_filter(request, self.shipments(), shipping_week(self.company))
+        form, _ = _shipping_filter(request, self.shipments(), shipping_week(self.company), company=self.company)
         if not form.is_valid():
             return HttpResponse('Choose a valid shipping week.', status=400)
         week = form.cleaned_data['week']
@@ -559,7 +705,7 @@ class ShipmentCreateView(ShippingListView):
                 data.pop('confirm')
                 shipment = create_manual_shipment(company=self.company, actor=request.user, submission_key=intent['key'], request=request, **data)
                 day = shipment.scheduled_for
-                messages.success(request, f'Draft parcel added for {shipment.patient} on {day:%-d %b %Y}. Mark it ready to include it in the week’s order.')
+                messages.success(request, f'Draft parcel added for {shipment.patient} on {day:%-d %b %Y}. Confirm & lock it when it is ready for shipping.')
                 return redirect(f'{reverse("portal:ops-shipping")}?{urlencode({"week": (day - timedelta(days=day.weekday())).isoformat()})}')
         except ValidationError as error:
             for message in error.messages:
@@ -573,12 +719,13 @@ class ShipmentDetailView(OperationsView):
 
     def display(self, request, shipment, form=None, status=200, change_form=None):
         from .patient_action_context import patient_action_context
+        from .export_support import export_url
 
         items = list(shipment.items.select_related('product'))
         # Each form keeps the token it was sent with after a mistake; the other gets a current one.
         changing = change_form is not None
         context = self.context(shipment=shipment, items=items, change_form=None,
-                               form=form if form is not None else ShipmentActionForm(items=self.batch_items(shipment, items)),
+                               form=form if form is not None else ShipmentActionForm(shipment=shipment, items=self.batch_items(shipment, items)),
                                workflow_context=make_workflow_context(request, self.company, 'shipment', shipment) if changing
                                else self.token('shipment', shipment),
                                current_hold_reason=shipment_hold_reason(shipment) if shipment.status in UNDISPATCHED else '')
@@ -592,6 +739,9 @@ class ShipmentDetailView(OperationsView):
         context.update(patient_action_context(self, shipment.patient, 'deliveries',
             content_template='portal/includes/shipment_detail_content.html', stylesheets=('css/operations.css',),
             title=f'Shipment {shipment.pk}'))
+        if not context.get('patient_workspace'):
+            context['shipment_items_export_url'] = export_url('shipment-items', pk=shipment.pk)
+            context['shipment_items_count'] = len(shipment.dispatch_snapshot.get('items', ())) if shipment.dispatch_snapshot else len(items)
         return render(request, 'portal/patient_workspace_action.html' if context.get('patient_workspace') else 'portal/operations_shipment_detail.html', context, status=status)
 
     @staticmethod
@@ -607,22 +757,40 @@ class ShipmentDetailView(OperationsView):
         self.company = Company.objects.select_for_update().get(pk=self.company.pk)
         require_operations_actor(self.company, request.user, shipping=True)
         shipment = get_object_or_404(self.shipments(), pk=pk)
-        form = ShipmentActionForm(request.POST, items=self.batch_items(shipment, list(shipment.items.select_related('product'))))
+        form = ShipmentActionForm(request.POST, shipment=shipment,
+                                  items=self.batch_items(shipment, list(shipment.items.select_related('product'))))
         valid = form.is_valid()
         try:
             validate_workflow_context(request, self.company, 'shipment', shipment)
             if valid:
                 action = form.cleaned_data['action']
-                if action == 'prepare':
-                    prepare_shipment(shipment=shipment, actor=request.user, request=request)
+                if action == 'confirm':
+                    from care.operations import confirm_shipments
+
+                    week = shipment.scheduled_for - timedelta(days=shipment.scheduled_for.weekday())
+                    confirm_shipments(company=self.company, actor=request.user, week_start=week,
+                                      shipment_ids=[shipment.pk], request=request)
                 elif action in ('hold', 'cancel'):
                     hold_or_cancel_shipment(shipment=shipment, actor=request.user, cancel=action == 'cancel', reason=form.cleaned_data['reason'], request=request)
                 elif action == 'dispatch':
                     dispatch_shipment(shipment=shipment, actor=request.user, tracking_number=form.cleaned_data['tracking_number'],
-                                      confirm=True, batch_notes=form.batch_notes(), request=request)
+                                      confirm=True, batch_notes=form.batch_notes(), stock_override=form.cleaned_data['stock_override'],
+                                      stock_override_reason=form.cleaned_data['stock_override_reason'], request=request)
                 elif action == 'deliver':
                     mark_delivered(shipment=shipment, actor=request.user, confirm=True, request=request)
-                messages.success(request, 'Shipment action recorded.')
+                if action == 'confirm':
+                    from care.inventory import stock_rows
+
+                    product_ids = set(shipment.items.values_list('product_id', flat=True))
+                    shortages = [f"{row['product']}: {row['shortage']} short" for row in stock_rows(self.company)
+                                 if row['product'].pk in product_ids and row['shortage']]
+                    message = 'Parcel confirmed and locked. Stock reserved.'
+                    if shortages:
+                        messages.warning(request, message + ' Stock shortages: ' + '; '.join(shortages) + '.')
+                    else:
+                        messages.success(request, message)
+                else:
+                    messages.success(request, 'Shipment action recorded.')
                 from .patient_action_context import workspace_redirect
                 return workspace_redirect(request, 'portal:ops-shipment-detail', pk=pk)
         except ValidationError as error:
@@ -646,15 +814,19 @@ class ShipmentChangeView(ShipmentDetailView):
             if form.is_valid():
                 change_parcel(shipment=shipment, actor=request.user, scheduled_for=form.cleaned_data['scheduled_for'],
                               quantities=form.quantities(), request=request)
-                messages.success(request, 'Parcel changed. Mark it ready again to include it in the week’s order.')
+                messages.success(request, 'Parcel changed. Confirm & lock it again when it is ready for shipping.')
                 return redirect('portal:ops-shipment-detail', pk=pk)
         except ValidationError as error:
             _errors(request, form, error)
         return self.display(request, shipment, status=400, change_form=form)
 
 
-def _week_redirect(request):
-    return redirect(f'{reverse("portal:ops-shipping")}?{urlencode({"week": request.POST.get("week", "")})}')
+def _week_redirect(request, stage):
+    query = QueryDict(request.POST.get('list_query', '')).copy()
+    query['week'] = request.POST.get('week', '')
+    query['shipping_step'] = stage
+    query.pop('page', None)
+    return redirect(_shipping_list_url(query.urlencode()))
 
 
 class ShippingLockView(OperationsView):
@@ -676,12 +848,16 @@ class ShippingLockView(OperationsView):
             message = f'{locked} ready parcel{pluralize(locked)} checked and locked. Nothing was dispatched.'
             if held:
                 message += f' {held} held with the reason beside {"it" if held == 1 else "them"}.'
-            (messages.warning if held else messages.success)(request, message)
+            from care.inventory import stock_rows
+            shortages = [f"{row['product']}: {row['shortage']} short" for row in stock_rows(self.company) if row['shortage']]
+            if shortages:
+                message += ' Stock reserved despite shortages: ' + '; '.join(shortages) + '.'
+            (messages.warning if held or shortages else messages.success)(request, message)
         except ValidationError as error:
             problems = error.messages
             messages.error(request, 'The week isn’t locked. Fix these, or hold them and lock the rest: ' + ' · '.join(problems)
                            if len(problems) > 1 or ':' in problems[0] else problems[0])
-        return _week_redirect(request)
+        return _week_redirect(request, 'pending')
 
 
 class ShippingCourierView(OperationsView):
@@ -699,15 +875,23 @@ class ShippingCourierView(OperationsView):
             validate_workflow_context(request, self.company, 'shipping-courier')
             if not form.is_valid():
                 raise ValidationError('Choose a valid shipping week.')
+            demo_only = request.POST.get('demo_only') == '1'
+            booking_options = {'demo_only': True} if demo_only else {}
             booked, failed = book_waybills(company=self.company, actor=request.user, week_start=form.cleaned_data['week'],
-                                           request=request)
-            message = f'{len(booked)} waybill{pluralize(len(booked))} booked with The Courier Guy for collection.'
+                                           request=request, **booking_options)
+            simulated = sum(bool(parcel.patient.demo_data_set_id) for parcel in booked)
+            if demo_only:
+                message = f'{len(booked)} demo waybill{pluralize(len(booked))} created. No courier was contacted.'
+            elif simulated:
+                message = f'{len(booked)} waybill{pluralize(len(booked))} created, including {simulated} simulated demo booking{pluralize(simulated)}.'
+            else:
+                message = f'{len(booked)} waybill{pluralize(len(booked))} booked with The Courier Guy for collection.'
             if failed:
                 message += f' {len(failed)} couldn’t be booked: see the reason beside {"it" if len(failed) == 1 else "them"}.'
             (messages.warning if failed else messages.success)(request, message)
         except ValidationError as error:
             messages.error(request, ' '.join(error.messages))
-        return _week_redirect(request)
+        return _week_redirect(request, 'confirmed')
 
 
 class ShippingCollectView(OperationsView):
@@ -734,15 +918,20 @@ class ShippingCollectView(OperationsView):
                     raise ValidationError('Keep each batch note to 120 characters or fewer.')
                 if note:
                     notes[product.pk] = note
+            demo_only = request.POST.get('demo_only') == '1'
+            dispatch_options = {'demo_only': True} if demo_only else {}
             dispatched, failed = dispatch_week(company=self.company, actor=request.user,
-                                               week_start=form.cleaned_data['week'], batch_notes=notes, request=request)
-            message = f'{len(dispatched)} parcel{pluralize(len(dispatched))} recorded as collected.'
+                                               week_start=form.cleaned_data['week'], batch_notes=notes,
+                                               stock_override=request.POST.get('stock_override') == 'on',
+                                               stock_override_reason=request.POST.get('stock_override_reason', ''), request=request,
+                                               **dispatch_options)
+            message = f'{len(dispatched)} {"demo " if demo_only else ""}parcel{pluralize(len(dispatched))} recorded as collected.'
             if failed:
                 message += ' Not recorded: ' + ' · '.join(f'{parcel.patient}: {reason}' for parcel, reason in failed)
             (messages.warning if failed else messages.success)(request, message)
         except ValidationError as error:
             messages.error(request, ' '.join(error.messages))
-        return _week_redirect(request)
+        return _week_redirect(request, 'tracking')
 
 
 class ShipmentLabelView(OperationsView):
@@ -774,7 +963,7 @@ class CourierWebhookView(View):
     def post(self, request, token):
         import json
 
-        from care.courier import apply_tracking, webhook_token_ok
+        from care.courier import apply_tracking, validate_tracking_event, webhook_token_ok
 
         if not webhook_token_ok(token):
             return HttpResponse(status=404)
@@ -783,7 +972,13 @@ class CourierWebhookView(View):
         except ValueError:
             return HttpResponse(status=400)
         events = payload if isinstance(payload, list) else [payload]
-        matched = sum(1 for event in events if apply_tracking(event) is not None)
+        try:
+            for event in events:
+                validate_tracking_event(event)
+        except ValidationError:
+            return HttpResponse(status=400)
+        with transaction.atomic():
+            matched = sum(1 for event in events if apply_tracking(event) is not None)
         return HttpResponse(f'{matched}', content_type='text/plain')
 
 
@@ -837,17 +1032,16 @@ class DeliveryAddressView(OperationsView):
         return self.display(request, patient, form, status=400)
 
 
-def _history_filter(request, queryset, *, by_week=False):
+def _history_filter(request, queryset):
     form = HistoryFilterForm(request.GET)
-    if by_week:
-        # Week view: what was dispatched in the chosen week, Monday to Sunday; last week unless another is chosen.
-        week = chosen_week(request, last_week())
-        form = HistoryFilterForm({'q': request.GET.get('q', ''), 'start': week, 'end': week + timedelta(days=6)})
     if form.is_valid():
-        if form.cleaned_data.get('start'):
-            queryset = queryset.filter(dispatched_at__date__gte=form.cleaned_data['start'])
-        if form.cleaned_data.get('end'):
-            queryset = queryset.filter(dispatched_at__date__lte=form.cleaned_data['end'])
+        start, end = form.cleaned_data.get('start_month'), form.cleaned_data.get('end_month')
+        if start or end:
+            queryset = queryset.alias(history_dispatch_date=TruncDate('dispatched_at', tzinfo=ZoneInfo('Africa/Johannesburg')))
+        if start:
+            queryset = queryset.filter(history_dispatch_date__gte=start)
+        if end:
+            queryset = queryset.filter(history_dispatch_date__lte=end.replace(day=monthrange(end.year, end.month)[1]))
         queryset = _shipment_search(queryset, form.cleaned_data['q'])
     else:
         queryset = queryset.none()
@@ -855,50 +1049,112 @@ def _history_filter(request, queryset, *, by_week=False):
 
 
 class DispatchHistoryView(OperationsView):
-    """What was dispatched: one shipping week at a time (Week, the default, opening on last week), or a list with a
-    date range (List, ?view=list). Export takes whichever is shown."""
+    """A paginated dispatch list, with an optional inclusive month range."""
     shipping = True
 
     nav_section, page_title = 'history', 'Dispatch history'
     http_method_names = ('get', 'head', 'options')
 
     def get(self, request):
-        by_week = request.GET.get('view') != 'list'
-        form, queryset = _history_filter(request, self.shipments().filter(status__in=('dispatched', 'delivered')).order_by('-dispatched_at', '-pk'),
-                                         by_week=by_week)
-        context = self.context(filter_form=form, by_week=by_week, **_paginate(request, queryset))
+        from care.models import DeliveryAddress
+        from .pagination import numbered_pagination
+
+        form, queryset = _history_filter(request, self.shipments().filter(
+            status__in=('dispatched', 'delivered')).order_by('-dispatched_at', '-pk'))
+        context = self.context(filter_form=form, **_paginate(request, queryset, per_page=25))
         context['shipments'] = list(context['page_obj'].object_list)
+        addresses = {address.patient_id: address for address in DeliveryAddress.objects.filter(
+            company=self.company, patient_id__in=[shipment.patient_id for shipment in context['shipments']])}
         for shipment in context['shipments']:
             shipment.doctor = shipment_doctor(shipment)
+            shipment.history_delivery = dispatch_delivery(shipment, addresses.get(shipment.patient_id))
         count = context['page_obj'].paginator.count
-        week_url = reverse('portal:ops-history')
-        list_url = f'{week_url}?view=list'
-        if by_week:
-            week = chosen_week(request, last_week())
-            context.update(week_navigation('portal:ops-history', week))
-            # Only the search: the week is the date range. The search keeps the week.
-            kept = {'week': week.isoformat()}
-            search = request.GET.get('q', '')
-            context.update(search=search, search_action=week_url, search_hidden=kept, search_placeholder='Patient or tracking',
-                           search_clear_url=f'{week_url}?{urlencode(kept)}', filter_menu=None,
-                           count_label=f'{count} shipment{pluralize(count)}',
-                           export_query=urlencode({'start': week.isoformat(), 'end': (week + timedelta(days=6)).isoformat(), 'q': search}),
-                           list_view_url=list_url, week_view_url=week_url)
-        else:
-            dated = int(bool(form['start'].value() or form['end'].value()))
-            tools = _list_tools(request, form, url_name='portal:ops-history', label='Filter dispatches',
-                                sections=[fields_section('dispatched', 'Dispatched', [form['start'], form['end']], count=dated)],
-                                placeholder='Patient or tracking', count=count, noun='shipment')
-            # The search and Filters, and clearing either, keep List.
-            dates = tools['search_hidden']
-            tools.update(search_hidden={**dates, 'view': 'list'}, search_clear_url=f'{list_url}&{urlencode(dates)}' if dates else list_url)
-            tools['filter_menu'].update(hidden=[*tools['filter_menu']['hidden'], ('view', 'list')],
-                                        clear_url=f"{list_url}&{urlencode({'q': tools['search']})}" if tools['search'] else list_url)
-            export = request.GET.copy()
-            for name in ('view', 'page'):
-                export.pop(name, None)
-            context.update(tools, export_query=export.urlencode(), list_view_url=list_url, week_view_url=week_url)
+        dated = int(bool(form['start_month'].value() or form['end_month'].value()))
+        tools = _list_tools(request, form, url_name='portal:ops-history', label='Filter dispatches',
+                            sections=[fields_section('dispatched', 'Dispatch month',
+                                [form['start_month'], form['end_month']], count=dated)],
+                            placeholder='Patient or tracking', count=count, noun='shipment')
+        filters = {name: request.GET[name] for name in ('start_month', 'end_month', 'q') if request.GET.get(name)}
+        query = urlencode(filters)
+        context.update(tools, export_query=query, pagination_query=query,
+                       **numbered_pagination(context['page_obj'], base_url=reverse('portal:ops-history'), query=filters))
         return render(request, 'portal/operations_history.html', context)
+
+
+class DispatchHistoryExportView(OperationsView):
+    shipping = True
+    nav_section, page_title = 'history', 'Dispatch history'
+    http_method_names = ('get', 'head', 'options')
+
+    def get(self, request):
+        from care.dispatch_export import dispatch_history_workbook
+
+        form, queryset = _history_filter(request, self.shipments().filter(
+            status__in=('dispatched', 'delivered')).order_by('-dispatched_at', '-pk'))
+        if not form.is_valid():
+            return HttpResponse('Correct the export month filters.', status=400, content_type='text/plain')
+        if queryset.count() > 10000:
+            return HttpResponse('Narrow the export months to at most 10,000 shipments.', status=400, content_type='text/plain')
+        row_count = 0
+
+        def rows():
+            nonlocal row_count
+            for row in history_export_rows(queryset, self.company):
+                row_count += 1
+                yield row
+
+        output = dispatch_history_workbook(rows())
+        start, end = form.cleaned_data.get('start_month'), form.cleaned_data.get('end_month')
+        filename = 'dispatch-history.xlsx'
+        if start or end:
+            filename = f'dispatch-history-{start:%Y-%m}-to-{end:%Y-%m}.xlsx' if start and end else (
+                f'dispatch-history-{start:%Y-%m}-to-latest.xlsx' if start else f'dispatch-history-start-to-{end:%Y-%m}.xlsx')
+        try:
+            if request.method != 'HEAD':
+                record_audit(company=self.company, actor=request.user, action='dispatch.history_exported',
+                    request=request, metadata={'rows': row_count})
+            return FileResponse(output, as_attachment=True, filename=filename,
+                content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+        except Exception:
+            output.close()
+            raise
+
+
+def dispatch_delivery(shipment, address=None):
+    """The saved dispatch address, then the booked address, then a legacy record's current address."""
+    from care.courier import booked_delivery
+
+    snapshot = shipment.dispatch_snapshot or {}
+    delivery = snapshot.get('delivery_address') or {}
+    if not delivery.get('lines'):
+        delivery = booked_delivery(shipment)
+    if delivery.get('lines'):
+        return delivery
+    if address is not None:
+        return {'lines': address.lines(), 'phone': address.phone, 'recipient': address.recipient}
+    return {}
+
+
+def history_export_rows(queryset, company):
+    """One row per dispatched product, using its saved snapshot before current records."""
+    from care.models import DeliveryAddress
+
+    addresses = {address.patient_id: address for address in DeliveryAddress.objects.filter(
+        company=company, patient__in=queryset.values('patient'))}
+    for shipment in queryset.iterator(chunk_size=500):
+        snapshot = shipment.dispatch_snapshot or {}
+        sent_to = dispatch_delivery(shipment, addresses.get(shipment.patient_id))
+        deliver_to, phone = ', '.join(sent_to.get('lines', ())), sent_to.get('phone', '')
+        doctor = shipment_doctor(shipment)
+        items = snapshot.get('items') or [dict(product=str(item.product), dose=item.dose,
+            quantity=item.quantity, batch_note=item.batch_note) for item in shipment.items.all()]
+        for item in items:
+            yield (shipment.pk, shipment.scheduled_for, shipment.dispatched_at,
+                snapshot.get('company_name', company.name), snapshot.get('patient_name', str(shipment.patient)),
+                snapshot.get('patient_id_number', shipment.patient.id_number), doctor.titled_name if doctor else '',
+                item.get('product', ''), item.get('dose', ''), item.get('quantity'), batch_text(item),
+                shipment.get_status_display(), shipment.tracking_number, shipment.hold_reason, shipment.note,
+                deliver_to, phone, shipment.waybill or snapshot.get('waybill', ''))
 
 
 def _csv_response(filename, headings, rows):
@@ -929,14 +1185,9 @@ def batch_text(item):
 class ManifestDownloadView(OperationsView):
     shipping = True
     http_method_names = ('get', 'head', 'options')
-    history = False
 
     def get(self, request):
-        queryset = self.shipments()
-        if self.history:
-            form, queryset = _history_filter(request, queryset.filter(status__in=('dispatched', 'delivered')))
-        else:
-            form, queryset = _shipping_filter(request, queryset, shipping_week(self.company))
+        form, queryset = _shipping_filter(request, self.shipments(), shipping_week(self.company), company=self.company)
         if not form.is_valid():
             return HttpResponse('Correct the export date filters.', status=400)
         if queryset.count() > 10000:
@@ -948,7 +1199,7 @@ class ManifestDownloadView(OperationsView):
         addresses = {address.patient_id: address for address in DeliveryAddress.objects.filter(
             company=self.company, patient__in=queryset.values('patient'))}
         rows = []
-        for shipment in queryset.order_by('dispatched_at' if self.history else 'scheduled_for', 'pk'):
+        for shipment in queryset.order_by('scheduled_for', 'pk'):
             snapshot = shipment.dispatch_snapshot or {}
             # Where it went: the address saved at dispatch, else the one it was booked with, else the patient's now.
             sent_to = snapshot.get('delivery_address') or booked_delivery(shipment)
@@ -959,37 +1210,25 @@ class ManifestDownloadView(OperationsView):
                 deliver_to, phone = ', '.join(address.lines()), address.phone
             else:
                 deliver_to, phone = '', ''
-            paid = parcel_payment(shipment)[1] if not self.history else ''
+            paid = parcel_payment(shipment)[1]
             waybill = shipment.waybill or snapshot.get('waybill', '')
             patient_name = snapshot.get('patient_name', str(shipment.patient))
             id_number = snapshot.get('patient_id_number', shipment.patient.id_number)
             doctor = shipment_doctor(shipment)
-            dispatched = ()
-            if self.history:
-                dispatched = (timezone.localtime(shipment.dispatched_at).strftime('%Y-%m-%d %H:%M') if shipment.dispatched_at else '',)
             items = snapshot.get('items') or [dict(product=str(item.product), dose=item.dose, quantity=item.quantity,
                                                        batch_note=item.batch_note) for item in shipment.items.all()]
             for item in items:
-                rows.append((shipment.pk, shipment.scheduled_for, *dispatched, snapshot.get('company_name', self.company.name), patient_name,
+                rows.append((shipment.pk, shipment.scheduled_for, snapshot.get('company_name', self.company.name), patient_name,
                              id_number, doctor.titled_name if doctor else '', item['product'], item['dose'], item['quantity'],
                              batch_text(item), shipment.get_status_display(), shipment.tracking_number, shipment.hold_reason, shipment.note,
-                             deliver_to, phone, *((paid,) if not self.history else ()), waybill))
+                             deliver_to, phone, paid, waybill))
         if request.method != 'HEAD':
-            record_audit(company=self.company, actor=request.user, action='dispatch.history_exported' if self.history else 'shipping.manifest_exported',
+            record_audit(company=self.company, actor=request.user, action='shipping.manifest_exported',
                          request=request, metadata={'rows': len(rows)})
-        dates = ('Planned date', 'Dispatched') if self.history else ('Planned date',)
-        return _csv_response(self.filename(form) if self.history else 'shipping-manifest.csv',
-                             ('Shipment', *dates, 'Practice', 'Patient', 'ID / passport', 'Doctor', 'Product', 'Dose', 'Quantity',
+        return _csv_response('shipping-manifest.csv',
+                             ('Shipment', 'Planned date', 'Practice', 'Patient', 'ID / passport', 'Doctor', 'Product', 'Dose', 'Quantity',
                               'Batch and expiry', 'Status', 'Tracking', 'Hold reason', 'Note', 'Deliver to', 'Contact number',
-                              *(('Paid',) if not self.history else ()), 'Waybill'), rows)
-
-    @staticmethod
-    def filename(form):
-        """dispatch-history-2026-10-19-to-2026-10-25.csv for a week or other date range."""
-        start, end = form.cleaned_data.get('start'), form.cleaned_data.get('end')
-        if not (start or end):
-            return 'dispatch-history.csv'
-        return f'dispatch-history-{start.isoformat() if start else "start"}-to-{end.isoformat() if end else "today"}.csv'
+                              'Paid', 'Waybill'), rows)
 
 
 class StaffOrderListView(OperationsView):
@@ -1024,8 +1263,11 @@ class StaffOrderDetailView(OperationsView):
     nav_section, page_title = 'orders', 'Non-prescription request'
 
     def display(self, request, order, form=None, status=200):
+        from .export_support import export_url
+
         context = self.context(order=order, items=_order_items(order), form=form if form is not None else OrderReviewForm(),
                                workflow_context=self.token('supply-request', order))
+        context['request_items_export_url'] = export_url('request-items', pk=order.pk)
         context['can_edit'] = self.can_edit and order.status == 'submitted'
         return render(request, 'portal/operations_order_detail.html', context, status=status)
 

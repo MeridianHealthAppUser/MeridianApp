@@ -4,6 +4,8 @@ from datetime import date, datetime
 from uuid import UUID
 
 from django.conf import settings
+from .demo_safety import require_same_demo_data
+
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
 from django.db.models import Exists, F, OuterRef, Q
@@ -151,6 +153,7 @@ def create_authorization(*, company, patient, actor, product, max_dose, quantity
     product = MedicationProduct.objects.for_company(company).filter(pk=product.pk, is_active=True).first()
     if product is None:
         raise ValidationError('Choose an active product from this practice.')
+    require_same_demo_data(patient, product)
     # A safety flag in the patient's summary data is ticked as reviewed first, as on the Overview's prescriptions.
     flags = _check_flags(company, patient, acknowledge_flags)
     if not isinstance(max_dose, str) or not max_dose.strip() or len(max_dose) > 80:

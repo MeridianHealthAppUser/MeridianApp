@@ -277,7 +277,7 @@ class WeeklyShippingPaymentTests(BillingPageFixture):
     def test_the_list_shows_where_each_parcel_goes_and_whether_its_paid(self):
         shipment = self.parcel()
         self.login(self.admin)
-        page = self.client.get(reverse('portal:ops-shipping'), {'week': self.today})
+        page = self.client.get(reverse('portal:ops-shipping'), {'week': self.today, 'shipping_step': 'all'})
         row = page.context['shipments'][0]
         self.assertEqual(row.payment_state, 'unpaid')
         self.assertContains(page, 'No address')
@@ -286,7 +286,7 @@ class WeeklyShippingPaymentTests(BillingPageFixture):
         self.client.post(row.address_url.split('?')[0], {**ADDRESS, 'next': reverse('portal:ops-shipping')})
         self.assertTrue(DeliveryAddress.objects.filter(patient=self.patient, updated_by=self.admin).exists())
         self.client.post(reverse('portal:ops-parcel-payment', args=[shipment.pk]), {'amount': '3295', 'method': 'eft'})
-        page = self.client.get(reverse('portal:ops-shipping'), {'week': self.today})
+        page = self.client.get(reverse('portal:ops-shipping'), {'week': self.today, 'shipping_step': 'all'})
         self.assertEqual(page.context['shipments'][0].payment_state, 'paid')
         self.assertEqual(page.context['lock_blocked'], 0)
         response = self.client.post(reverse('portal:ops-shipping-lock'), {'workflow_context': page.context['lock_context'],
@@ -295,11 +295,13 @@ class WeeklyShippingPaymentTests(BillingPageFixture):
         self.assertIsNotNone(shipment.locked_at)
         self.assertEqual(response.status_code, 302)
 
-    def test_hold_and_lock_the_rest_from_the_list(self):
+    def test_legacy_hold_and_lock_endpoint_remains_available_under_merged_confirmation_ui(self):
         self.parcel()
         self.login(self.admin)
-        page = self.client.get(reverse('portal:ops-shipping'), {'week': self.today})
-        self.assertContains(page, 'Hold 1 and lock the rest')
+        page = self.client.get(reverse('portal:ops-shipping'), {'week': self.today, 'shipping_step': 'all'})
+        self.assertContains(page, reverse('portal:ops-shipping-confirm'))
+        self.assertContains(page, 'Confirm &amp; lock')
+        self.assertNotContains(page, 'Hold 1 and lock the rest')
         self.client.post(reverse('portal:ops-shipping-lock'), {'workflow_context': page.context['lock_context'],
                                                                'week': page.context['week_start'], 'hold_failing': '1'})
         self.assertEqual(Shipment.objects.get().status, 'held')
@@ -313,16 +315,16 @@ class WeeklyShippingPaymentTests(BillingPageFixture):
         self.approved()
         shipment = self.parcel()
         self.login(self.admin)
-        page = self.client.get(reverse('portal:ops-shipping'), {'week': self.today})
+        page = self.client.get(reverse('portal:ops-shipping'), {'week': self.today, 'shipping_step': 'all'})
         self.client.post(reverse('portal:ops-shipping-lock'), {'workflow_context': page.context['lock_context'], 'week': page.context['week_start']})
-        page = self.client.get(reverse('portal:ops-shipping'), {'week': self.today})
+        page = self.client.get(reverse('portal:ops-shipping'), {'week': self.today, 'shipping_step': 'all'})
         self.assertEqual(page.context['to_book'], 1)
         with patch.object(courier, '_call', return_value={'id': 5, 'short_tracking_reference': 'TCG5'}):
             self.client.post(reverse('portal:ops-shipping-courier'), {'workflow_context': page.context['courier_context'],
                                                                       'week': page.context['week_start']})
-        page = self.client.get(reverse('portal:ops-shipping'), {'week': self.today})
+        page = self.client.get(reverse('portal:ops-shipping'), {'week': self.today, 'shipping_step': 'all'})
         self.assertEqual((page.context['to_book'], page.context['to_collect']), (0, 1))
-        self.assertContains(page, 'Waybill TCG5')
+        self.assertContains(page, 'TCG5')
         self.client.post(reverse('portal:ops-shipping-collect'), {
             'workflow_context': page.context['collect_context'], 'week': page.context['week_start'], 'confirm': 'on',
             f'batch_{self.dose.pen_id}': 'SG-2612, expiry 04/2027'})

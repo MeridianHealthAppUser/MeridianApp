@@ -1,8 +1,8 @@
 {% extends 'portal/operations_base.html' %}
 {% load workspace_ui %}
 {% block title %}{% if plan %}{{ plan.medicine }} starting plan{% else %}New starting plan{% endif %} | Meridian{% endblock %}
-{% block breadcrumbs %}{% if plan %}{% breadcrumbs 'Catalogue' 'portal:ops-catalogue' 'Starting plan' %}{% else %}{% breadcrumbs 'Catalogue' 'portal:ops-catalogue' 'Add a starting plan' %}{% endif %}{% endblock %}
-{% block page_heading %}<header class="staff-page-header"><div><h1>{% if plan %}{{ plan.medicine }} starting plan{% else %}Add a starting plan{% endif %}</h1><p>{{ company.name }}</p></div></header>{% endblock %}
+{% block breadcrumbs %}{% if plan %}{% breadcrumbs 'Inventory' 'portal:inventory' 'Catalogue' 'portal:ops-catalogue' 'Starting plan' %}{% else %}{% breadcrumbs 'Inventory' 'portal:inventory' 'Catalogue' 'portal:ops-catalogue' 'Add a starting plan' %}{% endif %}{% endblock %}
+{% block page_heading %}<header class="staff-page-header"><div><h1>{% if plan %}{{ plan.medicine }} starting plan{% else %}Add a starting plan{% endif %}</h1><p>{{ company.name }}</p></div><a class="console-button console-button--secondary" href="{% url 'portal:ops-catalogue' %}">Back to catalogue</a></header>{% endblock %}
 {% block operations_content %}
   <div class="ops-notice">A starting plan is offered by Initiate prescription on the patient record. Each step is one dose for some weeks; the last dose runs until the prescription ends, and the doctor chooses how long that is. A plan uses the doses below the products in the catalogue, so add those first. Prescriptions already written from a plan keep their own steps when it changes.</div>
   <section class="staff-page-card ops-panel">

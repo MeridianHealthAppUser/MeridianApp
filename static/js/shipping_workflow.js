@@ -1,5 +1,5 @@
 (window.MeridianPages?.register || ((_name, initialize) => initialize(null)))('shipping_workflow', (lifecycle) => {
-  const steps = ['ready', 'lock', 'order', 'courier', 'collection'];
+  const steps = ['pending', 'confirmed', 'tracking'];
   const listen = lifecycle ? lifecycle.on : (target, ...args) => target.addEventListener(...args);
 
   document.querySelectorAll('[data-shipping-workflow]').forEach(workflow => {
@@ -34,6 +34,8 @@
 
     function syncLinks() {
       const address = new URL(window.location.href);
+      address.searchParams.delete('note');
+      address.searchParams.delete('page');
       address.searchParams.delete('create');
       address.searchParams.delete('collect');
       address.searchParams.delete('__shell');
@@ -51,6 +53,14 @@
         destination.searchParams.set('shipping_step', tab.dataset.shippingStep);
         tab.href = destination.href;
       });
+      const all = workflow.querySelector('.shipping-all-stages');
+      if (all) {
+        const destination = new URL(address);
+        destination.pathname = fallbackAddresses.get(tabs[0]).pathname;
+        if (!destination.searchParams.has('week')) destination.searchParams.set('week', fallbackAddresses.get(tabs[0]).searchParams.get('week'));
+        destination.searchParams.set('shipping_step', 'all');
+        all.href = destination.href;
+      }
     }
 
     function activate(selected) {
@@ -71,14 +81,6 @@
     }
     activate(tabs.find(tab => tab.getAttribute('aria-selected') === 'true'));
 
-    listen(workflow, 'click', event => {
-      if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return;
-      const tab = event.target.closest('[data-shipping-step]');
-      if (!tabs.includes(tab)) return;
-      event.preventDefault();
-      activate(tab);
-      tab.focus({ preventScroll: true });
-    });
     listen(workflow, 'keydown', event => {
       if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return;
       const tab = event.target.closest('[data-shipping-step]');
@@ -86,7 +88,7 @@
       if (index < 0) return;
       if (event.key === ' ') {
         event.preventDefault();
-        activate(tab);
+        tab.click();
         return;
       }
       let next;
@@ -102,4 +104,32 @@
     listen(document, 'messages:searched', syncLinks);
     lifecycle?.cleanup(() => { delete workflow.meridianShippingWorkflow; });
   });
+});
+
+(window.MeridianPages?.register || ((_name, initialize) => initialize(null)))('shipping_selection', (lifecycle) => {
+  const listen = lifecycle ? lifecycle.on : (target, ...args) => target.addEventListener(...args);
+  function refresh() {
+    const boxes = [...document.querySelectorAll('[data-select-shipment]')].filter(box => !box.disabled);
+    const controls = [...document.querySelectorAll('[data-select-all-shipments]')];
+    const button = document.querySelector('#shipping-bulk-confirm button');
+    const count = new Set(boxes.filter(box => box.checked).map(box => box.value)).size;
+    if (button) { button.disabled = !count; button.textContent = count ? `Confirm & lock ${count} selected` : 'Confirm & lock selected'; }
+    controls.forEach(control => {
+      control.disabled = boxes.length === 0;
+      control.checked = boxes.length > 0 && boxes.every(box => box.checked);
+      control.indeterminate = count > 0 && !control.checked;
+    });
+  }
+  listen(document, 'change', event => {
+    const box = event.target;
+    const boxes = [...document.querySelectorAll('[data-select-shipment]')].filter(other => !other.disabled);
+    if (box.matches('[data-select-shipment]')) {
+      boxes.filter(other => other.value === box.value).forEach(other => { other.checked = box.checked; });
+    } else if (box.matches('[data-select-all-shipments]')) {
+      boxes.forEach(other => { other.checked = box.checked; });
+    } else return;
+    refresh();
+  });
+  listen(document, 'messages:searched', refresh);
+  refresh();
 });

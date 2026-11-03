@@ -1,0 +1,102 @@
+.inventory-receipt-dialog { max-width: min(64rem, calc(100vw - 2rem)); }
+.inventory-receipt-header { display:flex; gap:1rem; align-items:flex-start; justify-content:space-between; }
+.inventory-receipt-header h2 { margin-bottom:.75rem; }
+.inventory-receipt-header > a { flex-shrink:0; }
+.inventory-receipt-row { border:1px solid var(--c-deebe8); border-radius:.8rem; padding:1rem; margin:0 0 1rem; background:var(--c-f7fbfa, var(--c-f7fbfa)); min-width:0; }
+.inventory-receipt-row[hidden] { display:none; }
+.inventory-receipt-row legend { color:var(--console-ink); font-weight:700; padding:0 .35rem; }
+.inventory-receipt-fields { display:grid; grid-template-columns:minmax(0,2fr) minmax(5rem,.65fr) minmax(0,1fr) minmax(0,1fr); gap:.85rem; margin-bottom:.85rem; }
+.inventory-receipt-fields .ops-form-field { min-width:0; }
+.inventory-receipt-fields label { display:block; margin-bottom:.4rem; }
+.inventory-receipt-add { display:flex; gap:1rem; align-items:center; flex-wrap:wrap; }
+.inventory-receipt-add span { color:var(--console-muted); font-size:.85rem; }
+.inventory-reserved-trigger { align-items:center; background:var(--c-e4f5f1); border:1px solid var(--c-bfe7e2); border-radius:.6rem; color:var(--c-08726c); display:inline-flex; gap:.45rem; line-height:1.3; padding:.45rem .6rem; text-decoration:none; white-space:nowrap; }
+.inventory-stock-counts { align-items:center; display:inline-flex; gap:.65rem; white-space:nowrap; }
+.inventory-stock-counts__separator { color:var(--c-79939d); }
+.inventory-metric-heading { align-items:center; display:inline-flex; gap:.2rem; white-space:nowrap; }
+.inventory-week-dates { color:var(--c-607c87); display:block; font-size:.65rem; font-weight:500; letter-spacing:normal; line-height:1.4; margin-top:.3rem; text-transform:none; }
+.inventory-weekly-mobile-label { display:none; }
+.inventory-metric-heading .shipping-help-popover { font-weight:400; letter-spacing:normal; text-transform:none; white-space:normal; }
+.inventory-awc-value { align-items:center; display:inline-flex; gap:.25rem; white-space:nowrap; }
+.inventory-awc-mobile-help { display:none; }
+.inventory-awc-value .shipping-help-popover { white-space:normal; }
+@media(max-width:42rem) {
+  .inventory-metric-heading .shipping-help { display:none; }
+  .inventory-awc-mobile-help { display:block; }
+  .ops-table .inventory-weekly-cell::before { display:none; }
+  .inventory-weekly-mobile-label { color:var(--c-718c96); display:block; font-size:.66rem; font-weight:700; letter-spacing:.05em; text-transform:uppercase; }
+  .ops-table .inventory-weekly-mobile-label .inventory-week-dates { font-size:.62rem; margin-top:.25rem; }
+}
+.inventory-safety-trigger { align-items:center; color:var(--c-08726c); display:inline-flex; gap:.5rem; min-height:2rem; padding:0 .25rem; text-decoration:none; }
+.inventory-safety-trigger svg { height:1rem; width:1rem; stroke:currentColor; stroke-linecap:round; stroke-linejoin:round; stroke-width:1.8; }
+.inventory-safety-trigger:hover { color:var(--c-087e75); }
+.inventory-safety-trigger:focus-visible { outline:2px solid var(--c-087e75); outline-offset:3px; border-radius:.25rem; }
+.inventory-safety-dialog { max-width:min(32rem,calc(100vw - 2rem)); }
+.inventory-reserved-count { align-items:center; color:var(--c-607c87); display:inline-flex; gap:.45rem; line-height:1.3; padding:.45rem .6rem; }
+.inventory-reserved-trigger svg, .inventory-reserved-count svg { height:1rem; stroke:currentColor; stroke-linecap:round; stroke-linejoin:round; stroke-width:1.8; width:1rem; }
+.inventory-reserved-trigger:hover { background:var(--c-e3f5f0); border-color:var(--c-087e75); }
+.inventory-reserved-trigger:focus-visible, .inventory-dialog-close:focus-visible { outline:2px solid var(--c-087e75); outline-offset:3px; }
+.inventory-reservations-dialog { max-width:min(72rem, calc(100vw - 2rem)); }
+.inventory-reservations-header { align-items:flex-start; display:flex; gap:1rem; justify-content:space-between; margin-bottom:1.3rem; }
+.inventory-reservations-header h2 { margin:0 0 .75rem; }
+.inventory-reservations-eyebrow { color:var(--c-08726c); font-size:.7rem; font-weight:750; letter-spacing:.07em; margin:0 0 .45rem; text-transform:uppercase; }
+.inventory-reservations-header .app-dialog__sub { margin-bottom:0; }
+.inventory-dialog-close { align-items:center; background:var(--c-f7fbfa, var(--c-f7fbfa)); border:1px solid var(--c-dce8eb); border-radius:50%; color:var(--c-08726c); display:inline-flex; flex-shrink:0; height:2.2rem; justify-content:center; width:2.2rem; }
+.inventory-dialog-close:hover { background:var(--c-e4f5f1); }
+.inventory-dialog-close svg { height:1.1rem; stroke:currentColor; stroke-linecap:round; stroke-width:2; width:1.1rem; }
+.inventory-reservations-summary { display:grid; gap:.75rem; grid-template-columns:repeat(4, minmax(0, 1fr)); margin:0 0 1.3rem; }
+.inventory-reservations-summary > div { background:var(--c-f7fbfa, var(--c-f7fbfa)); border:1px solid var(--c-dce8eb); border-radius:.75rem; padding:.85rem 1rem; }
+.inventory-reservations-summary dt { color:var(--c-607c87); font-size:.75rem; line-height:1.4; }
+.inventory-reservations-summary dd { color:var(--c-173b42); font-size:1.5rem; font-weight:750; line-height:1.3; margin:.4rem 0 0; }
+.inventory-reservations-summary > .inventory-reservations-summary__reserved { background:var(--c-e4f5f1); border-color:var(--c-bfe7e2); }
+.inventory-reservations-summary__reserved dd { color:var(--c-08726c); }
+.inventory-reservations-summary > .inventory-reservations-summary__shortage { background:var(--c-fff6e4); border-color:var(--c-f0d9a8); }
+.inventory-reservations-summary__shortage dd { color:var(--c-8a5a00); }
+.inventory-reservations-warning { margin-bottom:1.3rem; }
+.inventory-reservations-table-heading { align-items:center; display:flex; flex-wrap:wrap; gap:.5rem; justify-content:space-between; margin:0 0 .75rem; }
+.inventory-reservations-table-heading h3 { color:var(--c-173b42); font-size:.95rem; margin:0; }
+.inventory-reservations-table-heading span { color:var(--c-607c87); font-size:.75rem; }
+.inventory-reservations-table-wrap { border:1px solid var(--c-dce8eb); border-radius:.75rem; }
+.inventory-reservations-table th { background:var(--c-f7fbfa, var(--c-f7fbfa)); }
+.inventory-reservations-table .console-button { align-items:center; display:inline-flex; gap:.35rem; padding:.4rem .65rem; }
+.inventory-reservations-table .console-button svg { height:.95rem; stroke:currentColor; stroke-linecap:round; stroke-linejoin:round; stroke-width:1.8; width:.95rem; }
+.inventory-reservations-footer { margin-top:1.3rem; }
+@media(max-width:760px) { .inventory-reservations-summary { grid-template-columns:repeat(2, minmax(0, 1fr)); } }
+@media(max-width:760px) { .inventory-receipt-fields { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+@media(max-width:480px) { .inventory-receipt-fields { grid-template-columns:minmax(0,1fr); } }
+
+.inventory-movements > summary { cursor:pointer; list-style:none; margin:0; }
+.inventory-movements > summary::-webkit-details-marker { display:none; }
+.inventory-movements > summary::marker { content:''; }
+.inventory-movements > summary:focus-visible { outline:2px solid var(--c-087e75); outline-offset:-4px; border-radius:.8rem; }
+.inventory-movements:not([open]) > summary { border-bottom:0; }
+.inventory-movements-toggle { display:inline-flex; align-items:center; gap:.5rem; color:var(--c-087e75); font-size:.82rem; font-weight:650; white-space:nowrap; }
+.inventory-movements-toggle svg { width:1.1rem; height:1.1rem; stroke:currentColor; stroke-width:2.3; stroke-linecap:round; stroke-linejoin:round; }
+.inventory-movements[open] .inventory-movements-toggle svg { transform:rotate(180deg); }
+.inventory-movements-placeholder { padding:1.2rem; margin:0; color:var(--console-muted); }
+.inventory-movements-tools { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:.75rem; padding:1rem 1.2rem; }
+.inventory-movements-tools h3 { margin:0; font-size:1rem; }
+.inventory-movements-tools p { margin:.25rem 0 0; font-size:.8rem; color:var(--console-muted); }
+.inventory-movements-actions, .inventory-movements-error-actions { display:flex; flex-wrap:wrap; gap:.5rem; }
+.inventory-movements-error-actions { padding:0 1.2rem 1.2rem; }
+.inventory-movement-quantity { color:var(--c-087e75); font-weight:650; }
+.inventory-movement-quantity.is-dispatch { color:var(--c-8a5a00); }
+.inventory-movements-pagination { flex-wrap:wrap; padding:1rem 1.2rem; }
+.inventory-page-current { display:inline-flex; justify-content:center; align-items:center; min-width:2.4rem; min-height:2.4rem; border-radius:.5rem; color:var(--c-ffffff); background:var(--c-087e75); }
+@media(max-width:760px) { .inventory-movements > summary { gap:.7rem; } .inventory-movements-tools { padding:1rem; } }
+
+.inventory-subtabs { padding-inline:.35rem; margin-bottom:.15rem; }
+
+/* Native section toggles keep tables, filters and editing controls together without extra requests. */
+.inventory-section > summary { cursor:pointer; list-style:none; margin:0; }
+.inventory-section > summary::-webkit-details-marker { display:none; }
+.inventory-section > summary::marker { content:''; }
+.inventory-section > summary:hover { background:var(--c-f7fbfa, var(--c-f7fbfa)); }
+.inventory-section > summary:focus-visible { outline:2px solid var(--c-087e75); outline-offset:-4px; border-radius:.8rem; }
+.inventory-section:not([open]) > summary { border-bottom:0; }
+.inventory-section-chevron { align-items:center; color:var(--c-087e75); display:inline-flex; flex:0 0 auto; }
+.inventory-section-chevron svg { height:1.2rem; width:1.2rem; stroke:currentColor; stroke-width:2.3; stroke-linecap:round; stroke-linejoin:round; }
+.inventory-section[open] > summary .inventory-section-chevron svg { transform:rotate(180deg); }
+.inventory-section-tools { align-items:center; border-bottom:1px solid var(--console-soft-line); display:flex; flex-wrap:wrap; gap:.8rem; justify-content:flex-end; padding:.85rem 1.15rem; }
+.inventory-section-pagination .ops-pagination { margin:0; padding:1rem 1.15rem; }
+@media(max-width:42rem) { .inventory-section > summary { gap:.7rem; } .inventory-section-tools { padding:.8rem; } }

@@ -1,0 +1,9 @@
+<dialog class="app-dialog purchasing-order-dialog" id="purchase-order-email-{{ email_order.pk }}" aria-labelledby="purchase-email-title" open data-purchase-return-url="{{ purchasing_return_url }}">
+  <div class="app-dialog__body"><header class="purchasing-order-dialog-header"><div><h2 id="purchase-email-title">Email purchase order</h2><p class="app-dialog__sub">{{ email_order.reference }} · PDF attached</p></div><button type="button" class="purchasing-dialog-close" data-dialog-close aria-label="Close email"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button></header>
+    <form method="post" action="{% url 'portal:purchase-order-email' email_order.pk %}" class="ops-form">
+      {% csrf_token %}<input type="hidden" name="workflow_context" value="{{ purchase_email_context }}"><input type="hidden" name="view" value="{{ purchasing_view }}"><input type="hidden" name="group" value="{{ purchasing_group }}"><input type="hidden" name="q" value="{{ search }}">
+      {{ email_form.non_field_errors }}{% for field in email_form %}<div class="ops-form-field">{{ field.label_tag }}{{ field }}{{ field.errors }}</div>{% endfor %}
+      <div class="app-dialog__actions"><button type="button" class="console-button console-button--secondary" data-dialog-close>Cancel</button><button type="submit" class="console-button console-button--primary">Send email</button></div>
+    </form>
+  </div>
+</dialog>

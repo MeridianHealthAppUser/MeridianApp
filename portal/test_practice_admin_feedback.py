@@ -1,16 +1,15 @@
-"""The practice administrator's view after the owner's feedback (22 Oct 2026): their menu and account menu, read-only
-working hours, moving and cancelling bookings from Day view, the Weekly shipping list, Dispatch stock, Dispatch
-history by week, and Dropouts with Please call."""
+"""Practice administrator menus, bookings, shipping, inventory, history and follow-ups."""
 
-import csv
-import io
 import re
 from datetime import datetime, time, timedelta
+from io import BytesIO
+from unittest.mock import patch
 
 from django.core import mail
 from django.test import override_settings
 from django.urls import reverse
 from django.utils import timezone
+from openpyxl import load_workbook
 
 from care.followups import close_callbacks, request_callback
 from care.messaging import add_participant
@@ -42,7 +41,8 @@ class PracticeAdminMenuTests(SessionMixin, OperationsFixture):
         self.login(self.admin)
         page = self.client.get(reverse('portal:staff-inbox'))
         labels = re.findall(r'<span class="console-nav__text">([^<]+)</span>', self.sidebar(page))
-        self.assertEqual(labels, ['Overview', 'My tasks', 'Messages', 'Calendar &amp; Bookings', 'Operations', 'Administration'])
+        self.assertEqual(labels, ['Overview', 'My tasks', 'Messages', 'Calendar &amp; Bookings',
+                                  'Purchasing', 'Inventory', 'Operations', 'Administration'])
         self.assertContains(page, '<h1>Messages</h1>', html=True)
         self.assertNotContains(page, '>All patients<')
         self.assertNotContains(page, 'My access history')
@@ -242,7 +242,7 @@ class PracticeAdminCalendarTests(SessionMixin, AppointmentLifecycleFixture):
 
 
 class OperationsFeedbackTests(SessionMixin, OperationsFixture):
-    def test_shipping_list_has_the_patients_doctor_product_quantity_status_and_notes(self):
+    def test_pending_shipping_list_has_delivery_details_due_date_and_note_action(self):
         shipment = self.ready()
         self.login(self.admin)
         page = self.client.get(reverse('portal:ops-shipping'), {'week': timezone.localdate()})
@@ -251,9 +251,8 @@ class OperationsFeedbackTests(SessionMixin, OperationsFixture):
         html = page.content.decode()
         table = html[html.index('ops-shipping-table'):]
         headings = [re.sub(r'<[^>]+>', '', heading) for heading in re.findall(r'<th scope="col">(.*?)</th>', table[:table.index('</thead>')])]
-        # Where it goes and whether it's paid joined the owner's columns on 24 Oct 2026.
-        # Since 26 Oct, Notes, like Actions, is labelled for screen readers only.
-        self.assertEqual(headings, ['Patient', 'Doctor', 'Deliver to', 'Product', 'Qty', 'Paid', 'Status', 'Notes', 'Actions'])
+        # Pending parcels have a selection checkbox and one actions column; their workflow status is the tab itself.
+        self.assertEqual(headings, ['', 'Patient', 'Doctor', 'Deliver to', 'Product', 'Qty', 'Paid', 'Due date', 'Waybill', 'Actions'])
         self.assertContains(page, self.doctor.titled_name)
         row = page.context['shipments'][0]
         response = self.client.post(reverse('portal:ops-shipment-note', args=[shipment.pk]), {
@@ -267,64 +266,66 @@ class OperationsFeedbackTests(SessionMixin, OperationsFixture):
         self.login(self.doctor)
         self.assertEqual(self.client.post(reverse('portal:ops-shipment-note', args=[shipment.pk]), {'note': 'x'}).status_code, 403)
 
-    def test_dispatch_stock_lists_each_catalogue_item_with_to_be_shipped_and_to_order(self):
+    def test_stock_and_weekly_demand_are_in_inventory_instead_of_shipping(self):
         self.ready(self.shipment(quantity=2))
-        self.shipment(quantity=3)  # A draft: going out, but not ordered until it's ready.
+        self.shipment(quantity=3)
         self.shipment(quantity=5, status='cancelled')
         self.login(self.admin)
-        # The week's pens are under its parcels on Weekly shipping.
         page = self.client.get(reverse('portal:ops-shipping'), {'week': timezone.localdate()})
-        rows = {row['product'].pk: row for row in page.context['stock_rows']}
+        self.assertNotIn('stock_rows', page.context)
+        self.assertNotContains(page, 'Pens this week')
+        week = self.today - timedelta(days=self.today.weekday())
+        with patch('portal.operations_views.shipping_week', return_value=week):
+            inventory = self.client.get(reverse('portal:inventory'))
+        rows = {row['product'].pk: row for row in inventory.context['rows']}
         self.assertEqual(set(rows), {self.product.pk, self.open_product.pk})
-        self.assertEqual((rows[self.product.pk]['to_ship'], rows[self.product.pk]['to_order']), (5, 2))
-        self.assertEqual((rows[self.open_product.pk]['to_ship'], rows[self.open_product.pk]['to_order']), (0, 0))
-        self.assertNotContains(page, 'How To order is worked out')
-        self.assertNotContains(page, 'In draft parcels')
-        self.assertContains(page, '<th scope="col">On hand</th>', html=True)
-        self.assertNotContains(page, 'Safety stock')
-        self.assertContains(page, '<span class="ops-tbc">TBC</span>', count=2)
-        self.assertContains(page, f'Week {page.context["week_number"]}')
-        # Super Admins see how it's worked out.
+        self.assertEqual(rows[self.product.pk]['demand']['to_ship'], 5)
+        self.assertEqual(rows[self.open_product.pk]['demand']['to_ship'], 0)
+        self.assertEqual((rows[self.product.pk]['on_hand'], rows[self.product.pk]['reserved'],
+                          rows[self.product.pk]['available']), (100, 0, 100))
+        self.assertContains(inventory, 'On hand | Reserved')
+        self.assertContains(inventory, 'Safety stock')
+        self.assertNotContains(inventory, 'ops-tbc')
+        # Inventory and demand are shared with Super Admins; their additional controls edit planning inputs.
         self.login(self.super_admin)
-        page = self.client.get(reverse('portal:ops-shipping'), {'week': timezone.localdate()})
-        self.assertContains(page, 'How To order is worked out')
-        self.assertContains(page, '<th scope="col">Safety stock</th>', html=True)
-        self.assertEqual({row['product'].pk: row['draft'] for row in page.context['stock_rows']}[self.product.pk], 3)
-        # Next week is empty.
-        later = self.client.get(page.context['next_week_url'])
-        self.assertEqual(sum(row['to_ship'] for row in later.context['stock_rows']), 0)
+        with patch('portal.operations_views.shipping_week', return_value=week):
+            inventory = self.client.get(reverse('portal:inventory'))
+        self.assertTrue(inventory.context['can_edit_metrics'])
+        self.assertEqual({row['product'].pk: row['demand']['draft'] for row in inventory.context['rows']}[self.product.pk], 3)
+        self.assertEqual(sum(row['demand']['next_week'] for row in inventory.context['rows']), 0)
 
-    def test_dispatch_history_by_week_without_tracking_and_exported(self):
+    def test_dispatch_history_list_without_tracking_and_month_filtered_excel(self):
         shipment = self.locked()
         Shipment.objects.filter(pk=shipment.pk).update(status='dispatched', dispatched_at=timezone.now(), tracking_number='TRK-1',
                                                        note='Fragile', dispatch_snapshot={'patient_name': 'Alpha Patient', 'items': [
                                                            {'product': 'Explicit prescribed product', 'dose': 'Explicit physician dose', 'quantity': 4}]})
         self.login(self.admin)
-        week = timezone.localdate() - timedelta(days=timezone.localdate().weekday())
-        # Week is the default view, on last week.
+        month = timezone.localdate().strftime('%Y-%m')
+        # All recorded dispatches are shown by default; month bounds are optional.
         default = self.client.get(reverse('portal:ops-history'))
-        self.assertTrue(default.context['by_week'])
-        self.assertEqual(default.context['week_start'], week - timedelta(days=7))
-        self.assertEqual(list(default.context['shipments']), [])
-        page = self.client.get(default.context['this_week_url'])
-        self.assertTrue(page.context['by_week'])
+        self.assertEqual([item.pk for item in default.context['shipments']], [shipment.pk])
+        self.assertNotContains(default, 'Dispatch history view')
+        self.assertNotContains(default, 'Previous week')
+        page = self.client.get(reverse('portal:ops-history'), {'start_month': month, 'end_month': month})
         self.assertEqual([item.pk for item in page.context['shipments']], [shipment.pk])
         self.assertNotContains(page, 'Tracking reference')
         self.assertNotContains(page, 'TRK-1')
-        self.assertContains(page, 'Export week CSV')
-        self.assertEqual(page.context['week_start'], week)
+        self.assertContains(page, 'Download Excel')
         export = self.client.get(f"{reverse('portal:ops-history-export')}?{page.context['export_query']}")
-        self.assertIn(f'dispatch-history-{week.isoformat()}-to-{(week + timedelta(days=6)).isoformat()}.csv', export['Content-Disposition'])
-        rows = list(csv.reader(io.StringIO(export.content.decode())))
-        self.assertEqual(rows[0][:3], ['Shipment', 'Planned date', 'Dispatched'])
-        self.assertEqual(rows[1][rows[0].index('Note')], 'Fragile')
-        self.assertEqual(rows[1][rows[0].index('Doctor')], self.doctor.titled_name)
-        # The list keeps its date range, and its export takes it.
-        listed = self.client.get(reverse('portal:ops-history'), {'view': 'list', 'start': week.isoformat()})
-        self.assertFalse(listed.context['by_week'])
+        self.assertIn('.xlsx', export['Content-Disposition'])
+        self.assertEqual(export['Content-Type'], 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+        content = b''.join(export.streaming_content)
+        export.close()
+        workbook = load_workbook(BytesIO(content))
+        self.addCleanup(workbook.close)
+        rows = list(workbook.active.iter_rows(values_only=True))
+        self.assertEqual(list(rows[0][:3]), ['Shipment', 'Planned date', 'Dispatched (SAST)'])
+        row = dict(zip(rows[0], rows[1]))
+        self.assertEqual(row['Note'], 'Fragile')
+        self.assertEqual(row['Doctor'], self.doctor.titled_name)
+        listed = self.client.get(reverse('portal:ops-history'), {'start_month': month})
         self.assertEqual([item.pk for item in listed.context['shipments']], [shipment.pk])
-        self.assertEqual(listed.context['export_query'], f'start={week.isoformat()}')
-        self.assertIn(('view', 'list'), listed.context['filter_menu']['hidden'])
+        self.assertEqual(listed.context['export_query'], f'start_month={month}')
 
 
 @override_settings(EMAIL_ENABLED=True, EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend')

@@ -32,6 +32,8 @@ from django.db import transaction
 from django.db.models import Exists, F, OuterRef, Q
 from django.utils import timezone
 
+from .demo_safety import is_demo_record
+
 from practices.models import CompanyMembership
 from practices.tenancy import enabled_companies
 from .emails import appointment_details, build_email, greeting_name, person_name, site_link
@@ -58,6 +60,8 @@ def queue(kind, object_id, actor_id=None):
     """Email about this once the change is saved. Nothing is sent when it isn't, or without email set up."""
     if not settings.EMAIL_ENABLED or _paused.get():
         return
+    if is_demo_record(_about_patient(KINDS[kind][0](object_id))):
+        return
     from .tasks import send_notification
 
     def send():
@@ -71,12 +75,18 @@ def queue(kind, object_id, actor_id=None):
 
 def recipients(kind, object_id, actor_id=None):
     """Who to email, as user ids. For messages this also records that they were emailed."""
-    return KINDS[kind][1](KINDS[kind][0](object_id), actor_id)
+    obj = KINDS[kind][0](object_id)
+    if is_demo_record(_about_patient(obj)):
+        return []
+    return KINDS[kind][1](obj, actor_id)
 
 
 def deliver(kind, object_id, recipient_id, actor_id=None):
     load, _, build = KINDS[kind]
-    obj, recipient = load(object_id), get_user_model().objects.get(pk=recipient_id)
+    obj = load(object_id)
+    if is_demo_record(_about_patient(obj)):
+        return
+    recipient = get_user_model().objects.get(pk=recipient_id)
     message = build(obj, recipient, actor_id)
     message.send(fail_silently=False)
     log_delivery(kind, obj, recipient, message.subject)
@@ -120,7 +130,7 @@ def send_due_reminders(*, retry_delays=()):
         status=Appointment.Status.BOOKED, reminder_sent_at__isnull=True,
         starts_at__gt=now + timedelta(minutes=settings.APPOINTMENT_START_REMINDER_MINUTES),
         starts_at__lte=now + timedelta(hours=settings.APPOINTMENT_REMINDER_HOURS),
-        patient__is_active=True, company__in=enabled_companies(),
+        patient__is_active=True, patient__demo_data_set__isnull=True, company__in=enabled_companies(),
     )
     reminded = set()
     for appointment_id in due.values_list('pk', flat=True):
@@ -144,7 +154,7 @@ def _send_start_reminders(*, appointment_ids=None):
     due = Appointment.objects.filter(
         status=Appointment.Status.BOOKED, starts_at__gt=now,
         starts_at__lte=now + timedelta(minutes=settings.APPOINTMENT_START_REMINDER_MINUTES),
-        patient__is_active=True, company__in=enabled_companies(),
+        patient__is_active=True, patient__demo_data_set__isnull=True, company__in=enabled_companies(),
     )
     if appointment_ids is not None:
         due = due.filter(pk__in=appointment_ids)
@@ -167,7 +177,7 @@ def _send_start_reminder(appointment_id):
     appointment = Appointment.objects.select_for_update(of=('self',)).filter(
         pk=appointment_id, status=Appointment.Status.BOOKED, starts_at__gt=now,
         starts_at__lte=now + timedelta(minutes=settings.APPOINTMENT_START_REMINDER_MINUTES),
-        patient__is_active=True, company__in=enabled_companies(),
+        patient__is_active=True, patient__demo_data_set__isnull=True, company__in=enabled_companies(),
     ).first()
     if appointment is None or appointment.patient.company_id != appointment.company_id:
         return False, False
@@ -294,6 +304,8 @@ def _appointment(pk):
 
 
 def _appointment_people(appointment, actor_id):
+    if is_demo_record(appointment):
+        return []
     if appointment.status != Appointment.Status.BOOKED:
         return []
     patient_user = _patient_login(appointment.patient)
@@ -306,6 +318,8 @@ def _appointment_people(appointment, actor_id):
 
 
 def _cancellation_recipients(appointment, actor_id):
+    if is_demo_record(appointment):
+        return []
     if appointment.status != Appointment.Status.CANCELLED:
         return []
     patient_user = _patient_login(appointment.patient)

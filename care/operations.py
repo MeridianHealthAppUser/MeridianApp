@@ -1,7 +1,7 @@
 """Audited dispatch operations for the weekly shipping list.
 
-Pens aren't kept in stock: once a week's parcels are ready and the week is locked, just enough is ordered for them
-(week_order), and the parcels are dispatched. Nothing waits on stock, and each parcel notes its batch at dispatch.
+Inventory tracks receipts and dispatches. Locked ready parcels reserve stock; shortages may be reserved,
+but dispatching beyond physical stock requires an explicit, audited override and reason.
 
 Marking a parcel ready checks its prescription, care plan and supply allowance. Locking the week checks those again
 and what the courier and the practice need: a delivery address and contact number (care.addresses), and payment
@@ -12,6 +12,8 @@ from collections import defaultdict
 from datetime import date, datetime, timedelta
 
 from django.contrib.auth import get_user_model
+from .demo_safety import is_demo_record, require_same_demo_data
+
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
 from django.db.models import Q, Sum
@@ -116,6 +118,10 @@ def allowance_window(patient, authorization, on_date):
 
 def product_allowance(patient, product, *, on_date=None, exclude_shipment=None, exclude_order=None):
     """Only explicitly authorised products; never infer allowed medication doses."""
+    try:
+        require_same_demo_data(patient, product)
+    except ValidationError as error:
+        return None, 0, ' '.join(error.messages)
     on_date = on_date or timezone.localdate()
     if not product.requires_authorisation:
         return None, 100, ''
@@ -198,8 +204,7 @@ def _locked_shipment(shipment, actor):
 
 @transaction.atomic
 def prepare_shipment(*, shipment, actor, request=None):
-    """Mark a parcel ready: its patient, care plan, prescription, dose and supply allowance are checked. Pens are
-    ordered for the week's ready parcels, so nothing waits on stock."""
+    """Check clinical eligibility and mark ready. Stock is reserved at lock time."""
     company, shipment = _locked_shipment(shipment, actor)
     if shipment.status not in UNDISPATCHED:
         raise ValidationError('Only an undispatched shipment can be prepared.')
@@ -214,7 +219,7 @@ def prepare_shipment(*, shipment, actor, request=None):
 
 
 @transaction.atomic
-def prepare_week(*, company, actor, week_start, request=None):
+def prepare_week(*, company, actor, week_start, shipment_ids=None, request=None):
     """Mark the week's draft parcels ready, each checked as prepare_shipment does. A draft that doesn't pass stays a
     draft, with the reason shown on the list. Returns (marked ready, left as drafts)."""
     company = _lock_company(company, actor, shipping=True)
@@ -222,6 +227,11 @@ def prepare_week(*, company, actor, week_start, request=None):
         company=company, patient__company=company, status=Shipment.Status.DRAFT,
         scheduled_for__range=(week_start, week_start + timedelta(days=6)),
     ).select_related('company', 'patient', 'subscription').order_by('scheduled_for', 'pk'))
+    if shipment_ids is not None:
+        selected = set(shipment_ids)
+        if not selected or not selected.issubset({parcel.pk for parcel in drafts}):
+            raise ValidationError('Select draft parcels from this practice and shipping week. Reload if a parcel changed.')
+        drafts = [parcel for parcel in drafts if parcel.pk in selected]
     ready, left = [], []
     for shipment in drafts:
         if shipment_hold_reason(shipment):
@@ -281,8 +291,9 @@ def hold_or_cancel_shipment(*, shipment, actor, cancel=False, reason, request=No
     fields = ['status', 'hold_reason', 'locked_at', 'updated_at']
     if cancelled_booking:
         shipment.waybill, shipment.courier_shipment_id, shipment.courier_status = '', '', 'cancelled'
+        shipment.courier_status_updated_at = None
         shipment.waybill_created_at, shipment.booked_address = None, {}
-        fields += ['waybill', 'courier_shipment_id', 'courier_status', 'waybill_created_at', 'booked_address']
+        fields += ['waybill', 'courier_shipment_id', 'courier_status', 'courier_status_updated_at', 'waybill_created_at', 'booked_address']
     shipment.save(update_fields=fields)
     record_audit(company=company, actor=actor, patient=shipment.patient, action='shipment.cancelled' if cancel else 'shipment.held',
                  target=shipment, request=request,
@@ -313,6 +324,55 @@ def lock_reasons(shipment, on_date=None):
 
 
 @transaction.atomic
+def confirm_shipments(*, company, actor, week_start, shipment_ids, request=None):
+    """Confirm selected pending parcels together, checking clinical, delivery and payment requirements.
+
+    Confirmation makes a parcel ready and locks it in one action. Locked parcels reserve stock, even when the
+    practice has a shortage; receiving or deducting stock and booking a courier happen separately. Treatment changes
+    may hold a parcel without clearing its old lock or courier details, so held parcels are fully checked again.
+    """
+    company = _lock_company(company, actor, shipping=True)
+    try:
+        selected = set(shipment_ids or ())
+    except TypeError:
+        raise ValidationError('Select pending parcels from this practice and shipping week.')
+    if not selected or any(type(pk) is not int or pk <= 0 for pk in selected):
+        raise ValidationError('Select pending parcels from this practice and shipping week.')
+    shipments = list(Shipment.objects.select_for_update(of=('self',)).filter(
+        pk__in=selected, company=company, patient__company=company, status__in=UNDISPATCHED,
+        scheduled_for__range=(week_start, week_start + timedelta(days=6)),
+    ).filter(Q(status=Shipment.Status.HELD) | Q(locked_at__isnull=True)).select_related(
+        'company', 'patient', 'subscription').order_by('scheduled_for', 'pk'))
+    if selected != {shipment.pk for shipment in shipments}:
+        raise ValidationError(
+            'Select pending parcels from this practice and shipping week. Reload if a parcel changed or was already confirmed.')
+    failing = [(shipment, ' '.join(reasons)) for shipment in shipments if (reasons := lock_reasons(shipment))]
+    if failing:
+        raise ValidationError([f'{shipment.patient} ({shipment.scheduled_for:%a %-d %b}): {reason}'
+                               for shipment, reason in failing])
+    for shipment in shipments:
+        # Recheck after earlier selected parcels are saved so future allowance rules cannot accidentally allow
+        # several parcels in the same supply cycle to pass separately. A failure rolls back the whole selection.
+        if reasons := lock_reasons(shipment):
+            raise ValidationError(f'{shipment.patient} ({shipment.scheduled_for:%a %-d %b}): {" ".join(reasons)}')
+        was_pending = shipment.status in (Shipment.Status.DRAFT, Shipment.Status.HELD)
+        now = timezone.now()
+        shipment.status, shipment.hold_reason = Shipment.Status.READY, ''
+        if shipment.prepared_by_id is None:
+            shipment.prepared_by = actor
+        if shipment.prepared_at is None:
+            shipment.prepared_at = now
+        shipment.locked_at = now
+        shipment.save(update_fields=('status', 'hold_reason', 'prepared_by', 'prepared_at', 'locked_at', 'updated_at'))
+        if was_pending:
+            record_audit(company=company, actor=actor, patient=shipment.patient, action='shipment.prepared',
+                         target=shipment, request=request)
+        record_audit(company=company, actor=actor, patient=shipment.patient, action='shipment.locked',
+                     target=shipment, request=request)
+    return shipments
+
+
+@transaction.atomic
 def lock_week(*, company, actor, week_start, hold_failing=False, request=None):
     """Check and lock the week's ready parcels: their prescriptions again, delivery addresses, contact numbers and
     payment. The week locks only when every ready parcel passes; with hold_failing, the ones that don't are held with
@@ -340,7 +400,7 @@ def lock_week(*, company, actor, week_start, hold_failing=False, request=None):
 
 
 def lock_shipping_week(*, company, actor, week_start, request=None):
-    """Confirm the week's ready parcels: each is checked again, then the week's pens can be ordered."""
+    """Confirm the week's ready parcels: each is checked again, reserving its stock even when availability becomes negative."""
     return lock_week(company=company, actor=actor, week_start=week_start, request=request)['locked']
 
 
@@ -369,13 +429,15 @@ def _pens_by_product(items):
     return {row['product']: row['pens'] for row in items.values('product').annotate(pens=Sum('quantity'))}
 
 
-def week_stock(company, week_start):
-    """Each active catalogue item for a shipping week (Dispatch stock): the pens going out in its parcels that aren't
-    cancelled, and the pens to order, which are those in its ready parcels (as week_order). Pens aren't kept in stock,
-    so there is nothing on hand to take off. For Super Admins, how To order is worked out: the pens still in draft or
-    held parcels, the average dispatched a week over the AVERAGE_WEEKS before this one, and next week's parcels."""
+def week_stock(company, week_start, *, consumption_week_start=None, include_inactive=False):
+    """Weekly demand used by Inventory. The legacy to_order count is ready-parcel demand;
+    physical balances, reservations and shortages are calculated by care.inventory. Historical consumption uses
+    the eight weeks before consumption_week_start, or before the demand week when that argument is omitted.
+    """
     week = (week_start, week_start + timedelta(days=6))
-    items = ShipmentItem.objects.filter(company=company, shipment__patient__company=company)
+    consumption_week = consumption_week_start or week_start
+    items = ShipmentItem.objects.filter(
+        company=company, shipment__company=company, shipment__patient__company=company, product__company=company)
     in_week = items.filter(shipment__scheduled_for__range=week).exclude(shipment__status=Shipment.Status.CANCELLED)
     counts = {
         'to_ship': _pens_by_product(in_week),
@@ -387,11 +449,15 @@ def week_stock(company, week_start):
         ).exclude(shipment__status=Shipment.Status.CANCELLED)),
         'dispatched': _pens_by_product(items.filter(
             shipment__status__in=(Shipment.Status.DISPATCHED, Shipment.Status.DELIVERED),
-            shipment__dispatched_at__date__range=(week_start - timedelta(weeks=AVERAGE_WEEKS), week_start - timedelta(days=1)),
+            shipment__dispatched_at__date__range=(consumption_week - timedelta(weeks=AVERAGE_WEEKS),
+                                                 consumption_week - timedelta(days=1)),
         )),
     }
     rows = []
-    for product in MedicationProduct.objects.filter(company=company, is_active=True).order_by('name', 'strength', 'pk'):
+    products = MedicationProduct.objects.filter(company=company)
+    if not include_inactive:
+        products = products.filter(is_active=True)
+    for product in products.order_by('name', 'strength', 'pk'):
         row = {name: values.get(product.pk, 0) for name, values in counts.items()}
         row['average'] = row.pop('dispatched') / AVERAGE_WEEKS
         rows.append(dict(row, product=product))
@@ -402,6 +468,8 @@ def week_stock(company, week_start):
 def set_shipment_note(*, shipment, actor, note, request=None):
     """The practice's note on a parcel, from the Weekly shipping list. Blank clears it."""
     company, shipment = _locked_shipment(shipment, actor)
+    if shipment.status in (Shipment.Status.CANCELLED, Shipment.Status.DELIVERED):
+        raise ValidationError('This parcel is closed, so its note can’t be changed.')
     note = ' '.join(note.split()) if isinstance(note, str) else ''
     if len(note) > 500:
         raise ValidationError('Keep the note to 500 characters or fewer.')
@@ -414,9 +482,11 @@ def set_shipment_note(*, shipment, actor, note, request=None):
 
 
 @transaction.atomic
-def dispatch_shipment(*, shipment, actor, tracking_number, confirm=False, batch_notes=None, request=None):
+def dispatch_shipment(*, shipment, actor, tracking_number, confirm=False, batch_notes=None, stock_override=False, stock_override_reason='', request=None, demo_only=False):
     """Record a parcel's actual dispatch. batch_notes ({item pk: 'SG-2604, expiry 04/2027'}) note what went into it."""
     company, shipment = _locked_shipment(shipment, actor)
+    if demo_only and not is_demo_record(shipment):
+        raise ValidationError('Only demo parcels can be collected with this demo action.')
     if shipment.status in (Shipment.Status.DISPATCHED, Shipment.Status.DELIVERED):
         if shipment.tracking_number == tracking_number.strip():
             return shipment
@@ -441,6 +511,8 @@ def dispatch_shipment(*, shipment, actor, tracking_number, confirm=False, batch_
         if item.pk in batch_notes:
             item.batch_note = ' '.join(batch_notes[item.pk].split())
             item.save(update_fields=('batch_note', 'updated_at'))
+    from .inventory import consume_stock
+    consume_stock(shipment, actor, override=stock_override, reason=stock_override_reason, request=request)
     shipment.dispatch_snapshot = {
         'patient_name': str(shipment.patient), 'patient_id_number': shipment.patient.id_number,
         'company_name': company.name, 'scheduled_for': shipment.scheduled_for.isoformat(),
@@ -470,23 +542,27 @@ def dispatch_shipment(*, shipment, actor, tracking_number, confirm=False, batch_
     return shipment
 
 
-def dispatch_week(*, company, actor, week_start, batch_notes=None, request=None):
+def dispatch_week(*, company, actor, week_start, batch_notes=None, stock_override=False, stock_override_reason='', request=None, demo_only=False):
     """Record the week's locked parcels as collected by the courier: each with its waybill as the tracking reference,
     and the batch noted for each medicine ({product pk: 'SG-2604, expiry 04/2027'}). A parcel that can't go (its
     payment or address changed) is left with the reason. Returns (dispatched, [(parcel, reason)])."""
     batch_notes = batch_notes or {}
-    parcels = list(Shipment.objects.filter(
-        company=company, status=Shipment.Status.READY, locked_at__isnull=False,
+    candidates = Shipment.objects.filter(
+        company=company, patient__company=company, status=Shipment.Status.READY, locked_at__isnull=False,
         scheduled_for__range=(week_start, week_start + timedelta(days=6)),
-    ).exclude(waybill='').order_by('scheduled_for', 'pk'))
+    ).exclude(waybill='', tracking_number='').order_by('scheduled_for', 'pk')
+    if demo_only:
+        candidates = candidates.filter(patient__demo_data_set__isnull=False)
+    parcels = list(candidates)
     if not parcels:
         raise ValidationError('There are no locked parcels with a waybill to record as collected this week.')
     dispatched, failed = [], []
     for parcel in parcels:
         notes = {item.pk: batch_notes.get(item.product_id, '') for item in parcel.items.all()}
         try:
-            dispatch_shipment(shipment=parcel, actor=actor, tracking_number=parcel.waybill, confirm=True,
-                              batch_notes={pk: note for pk, note in notes.items() if note}, request=request)
+            dispatch_shipment(shipment=parcel, actor=actor, tracking_number=parcel.waybill or parcel.tracking_number, confirm=True,
+                              batch_notes={pk: note for pk, note in notes.items() if note}, stock_override=stock_override,
+                              stock_override_reason=stock_override_reason, request=request, demo_only=demo_only)
         except ValidationError as error:
             failed.append((parcel, ' '.join(error.messages)))
             continue

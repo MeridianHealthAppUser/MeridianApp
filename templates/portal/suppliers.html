@@ -1,0 +1,27 @@
+{% extends 'portal/operations_base.html' %}{% load static workspace_ui %}
+{% block title %}Suppliers | Meridian{% endblock %}
+{% block breadcrumbs %}{% breadcrumbs 'Suppliers' %}{% endblock %}
+{% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/dialogs.css' %}"><link rel="stylesheet" href="{% static 'css/suppliers.css' %}?v=20261103a"><script src="{% static 'js/dialogs.js' %}?v=20261102a" defer></script><script src="{% static 'js/suppliers.js' %}?v=20261103b" defer></script>{% endblock %}
+{% block page_heading %}<header class="staff-page-header"><div><h1>Suppliers</h1><p>Manage your suppliers, their products and ordering codes.</p></div><a class="console-button console-button--primary" href="{{ supplier_return_url }}{% if '?' in supplier_return_url %}&amp;{% else %}?{% endif %}create=1">Add supplier</a></header>{% endblock %}
+{% block operations_content %}
+<section class="staff-page-card">
+  <header class="staff-page-card__header staff-list-header"><div><h2>Your suppliers</h2><p>Expand a supplier to see the products they supply.</p></div>{% include 'portal/includes/list_tools.html' with search_label='Search suppliers' %}</header>
+  <div data-search-region="list">
+  {% if filter_form.errors %}<p class="staff-filter-error" role="alert">{{ filter_form.errors }}Correct the search to view suppliers.</p>{% else %}
+  <div class="suppliers-list">
+  {% for supplier in suppliers %}
+    <div class="supplier-card">
+      <details class="supplier-details">
+        <summary><span class="supplier-chevron" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="m9 5 7 7-7 7"/></svg></span><span class="supplier-name"><strong>{{ supplier.name }}</strong><small>{{ supplier.contact_name|default:'No contact person added' }}</small></span><span class="supplier-contact"><span>{{ supplier.email|default:'—' }}</span><small>{{ supplier.phone|default:'No phone added' }}</small></span><span class="supplier-product-count">{{ supplier.display_links|length }} product{{ supplier.display_links|length|pluralize }}</span></summary>
+        <div class="supplier-products"><table class="ops-table"><thead><tr><th scope="col">Product</th><th scope="col">Category</th><th scope="col">Supplier product code</th></tr></thead><tbody>{% for link in supplier.display_links %}<tr><td data-label="Product"><strong>{{ link.product.name }}</strong><small>{{ link.product.strength }}{% if not link.product.is_active %} · Hidden{% endif %}</small></td><td data-label="Category">{{ link.product.get_category_display }}</td><td data-label="Supplier product code"><span class="supplier-code">{{ link.supplier_code }}</span></td></tr>{% empty %}<tr><td colspan="3" class="supplier-empty">No products linked. Edit this supplier to add products and their ordering codes.</td></tr>{% endfor %}</tbody></table></div>
+      </details>
+      <div class="supplier-actions"><a class="supplier-icon" href="{{ supplier.edit_url }}" title="Edit supplier" aria-label="Edit {{ supplier.name }}"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m15 5 4 4M4 20l4-1 12-12a2.8 2.8 0 0 0-4-4L4 15l-1 6Z"/></svg></a><a class="supplier-icon supplier-icon--delete" href="{{ supplier.delete_url }}" title="Delete supplier" aria-label="Delete {{ supplier.name }}"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 6h16M9 6V3h6v3M6 6l1 15h10l1-15M10 10v7M14 10v7"/></svg></a></div>
+    </div>
+  {% empty %}<div class="supplier-empty"><strong>{% if search %}No suppliers match this search.{% else %}Add your first supplier{% endif %}</strong><p>{% if search %}Try a supplier, product or supplier code.{% else %}Link the products they supply and the codes they use when you order.{% endif %}</p></div>{% endfor %}
+  </div>{% endif %}
+  {% include 'portal/includes/numbered_pagination.html' with pagination_label='Suppliers' %}
+  </div>
+</section>
+{% if supplier_editor_open %}{% include 'portal/includes/supplier_editor.html' %}{% endif %}
+{% if supplier_delete_open %}{% include 'portal/includes/supplier_delete.html' %}{% endif %}
+{% endblock %}

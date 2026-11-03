@@ -1,0 +1,53 @@
+{% extends 'portal/operations_base.html' %}
+{% load static workspace_ui %}
+{% block title %}Purchasing | Meridian{% endblock %}
+{% block breadcrumbs %}{% breadcrumbs 'Purchasing' %}{% endblock %}
+{% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/purchasing.css' %}?v=20261103h"><link rel="stylesheet" href="{% static 'css/purchase_orders.css' %}?v=20261103a"><link rel="stylesheet" href="{% static 'css/dialogs.css' %}?v=20261022a"><script src="{% static 'js/dialogs.js' %}?v=20261102a" defer></script><script src="{% static 'js/shipping_help.js' %}?v=20261102b" defer></script><script src="{% static 'js/purchasing_selection.js' %}?v=20261103c" defer></script><script src="{% static 'js/purchase_order_receiving.js' %}?v=20261103a" defer></script>{% endblock %}
+{% block page_heading %}
+  <header class="staff-page-header"><div><h1>Purchasing</h1><p>Medication purchasing at {{ company.name }}.</p></div></header>
+{% endblock %}
+{% block operations_content %}
+  {% include 'portal/includes/purchasing_tabs.html' %}
+  {% if purchasing_view == 'to-order' %}
+  <section class="staff-page-card" aria-labelledby="to-order-heading" data-purchasing-selection>
+    <header class="staff-page-card__header staff-list-header">
+      <div class="purchasing-table-title"><h2 id="to-order-heading">To order</h2><div class="shipping-help" data-shipping-help>
+        <button type="button" class="shipping-help-trigger" aria-label="How To order is calculated" aria-describedby="to-order-formula" aria-expanded="false">{% include 'portal/includes/shipping_help_icon.html' %}</button>
+        <div class="shipping-help-popover" id="to-order-formula" role="tooltip" popover="auto"><strong>How much to order</strong><p>(AWC × lead time in weeks) + safety stock − stock on hand − quantity on order.</p><p>Positive results are rounded up to whole units. A negative result is shown as zero. AWC uses a super admin’s starting value when set, otherwise the previous eight completed weeks of dispatches.</p><p>Lead time and safety stock must be set in Inventory. Explicit zero values are valid. On order means units ordered but not yet received.</p></div>
+      </div></div>
+      {% include 'portal/includes/list_tools.html' with search_label='Search products to order' %}
+    </header>
+    <div class="purchasing-selection-bar">
+      <div class="purchasing-selection-status"><label class="purchasing-select-all-mobile"><input type="checkbox" data-select-all-products> Select this page</label><span data-selected-products-count role="status" aria-live="polite">Select products to order</span><button type="button" class="purchasing-clear-selection" data-clear-product-selection hidden>Clear</button></div>
+      <button type="button" class="console-button console-button--primary" data-order-selected data-modal-open="purchasing-order-preview" aria-haspopup="dialog" aria-controls="purchasing-order-preview" disabled>Create Purchase</button>
+    </div>
+    <div data-search-region="list">{% if filter_form.errors %}<div class="staff-filter-error" role="alert">Correct the filters to view products to order.</div>{% else %}
+      <div class="ops-table-wrap"><table class="ops-table purchasing-order-table">
+        <thead><tr><th scope="col" class="purchasing-select-column"><span class="sr-only">Select</span><input type="checkbox" data-select-all-products aria-label="Select all products on this page" title="Select all products on this page"></th><th scope="col">Product</th><th scope="col">Category</th><th scope="col">AWC</th><th scope="col">Lead time (weeks)</th><th scope="col">Safety stock</th><th scope="col">On hand</th><th scope="col">On order</th><th scope="col">To order</th></tr></thead>
+        <tbody>{% for row in rows %}<tr>
+          <td data-label="Select" class="purchasing-select-column"><input type="checkbox" value="{{ row.product.pk }}" data-select-product data-product-name="{{ row.product.name }}" data-product-strength="{{ row.product.strength }}" data-product-category="{{ row.product.get_category_display }}" data-suggested-quantity="{{ row.order_quantity|default_if_none:'' }}" aria-label="Select {{ row.product }}"></td>
+          <td data-label="Product"><div><strong>{{ row.product.name }}</strong><small>{{ row.product.strength }}</small></div></td>
+          <td data-label="Category">{{ row.product.get_category_display }}</td>
+          <td data-label="AWC"><span title="{% if row.awc_source == 'starting' %}Starting AWC set by a super admin{% else %}Average from eight completed weeks of dispatches{% endif %}">{{ row.awc|floatformat:2 }}</span></td>
+          <td data-label="Lead time (weeks)">{{ row.lead_time_weeks|floatformat:'-2'|default:'—' }}</td>
+          <td data-label="Safety stock">{{ row.safety_stock|default_if_none:'—' }}</td>
+          <td data-label="On hand">{{ row.on_hand }}</td>
+          <td data-label="On order">{{ row.on_order }}</td>
+          <td data-label="To order">{% if row.status == 'setup' %}<a class="purchasing-setup-link" href="{{ row.settings_url }}" title="Set {{ row.missing_fields|join:' and ' }} in Inventory" aria-label="Set {{ row.missing_fields|join:' and ' }} for {{ row.product }}"><span>—</span><svg viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false"><path d="m12 3 10 18H2Z"/><path d="M12 9v5M12 17h.01"/></svg></a>{% elif row.order_quantity %}<span class="purchasing-order-quantity">{{ row.order_quantity }}</span>{% else %}<span class="purchasing-order-zero">0</span>{% endif %}</td>
+        </tr>{% empty %}<tr><td class="ops-empty" colspan="9">No products match these filters.</td></tr>{% endfor %}</tbody>
+      </table></div>
+    {% endif %}</div>
+  </section>
+  <div data-search-region="pages">{% include 'portal/includes/numbered_pagination.html' with pagination_label='To order' %}</div>
+  {% include 'portal/includes/purchasing_order_preview.html' %}
+  {% else %}
+  <section class="staff-page-card" aria-labelledby="purchase-orders-heading">
+    <header class="staff-page-card__header staff-list-header"><h2 id="purchase-orders-heading">{{ purchasing_title }}</h2>{% include 'portal/includes/list_tools.html' with search_label='Search purchase orders' %}</header>
+    {% if purchasing_view == 'history' %}<nav class="patient-order-subtabs purchase-history-views" aria-label="Purchase history views"><a href="{{ history_orders_url }}"{% if purchasing_group == 'orders' %} class="is-active" aria-current="page"{% endif %}>Purchase orders</a><a href="{{ history_products_url }}"{% if purchasing_group == 'products' %} class="is-active" aria-current="page"{% endif %}>Products</a></nav>{% endif %}
+    <div data-search-region="list">{% if filter_form.errors %}<p class="staff-filter-error" role="alert">Correct the filters to view purchase orders.</p>{% elif purchasing_group == 'products' %}{% include 'portal/includes/purchase_history_products.html' %}{% else %}{% include 'portal/includes/purchase_order_list.html' %}{% endif %}</div>
+  </section>
+  <div data-search-region="pages">{% include 'portal/includes/numbered_pagination.html' with pagination_label='Purchase orders' %}</div>
+  {% endif %}
+  {% if receive_order %}{% include 'portal/includes/purchase_order_receive_dialog.html' %}{% endif %}
+  {% if email_order %}{% include 'portal/includes/purchase_order_email_dialog.html' %}{% endif %}
+{% endblock %}

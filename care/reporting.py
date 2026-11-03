@@ -143,12 +143,12 @@ def operational_metrics(*, actor, company, scope, start, end):
 
 def doctor_activity(*, company, doctor, start, end):
     lower, upper = period_bounds(start, end)
-    appointments = Appointment.objects.for_company(company).filter(patient__company=company, clinician=doctor, status='completed', starts_at__gte=lower, starts_at__lt=upper).order_by('pk')
+    appointments = Appointment.objects.for_company(company).filter(patient__company=company, patient__demo_data_set__isnull=True, clinician=doctor, status='completed', starts_at__gte=lower, starts_at__lt=upper).order_by('pk')
     source_ids = {
         'initial': list(appointments.filter(appointment_type='initial').values_list('pk', flat=True)),
         'review': list(appointments.filter(appointment_type='review').values_list('pk', flat=True)),
         'follow_up': list(appointments.filter(appointment_type__in=('follow_up', 'ad_hoc')).values_list('pk', flat=True)),
-        'messages': list(PatientMessage.objects.for_company(company).filter(thread__company=company, thread__patient__company=company, sender=doctor, created_at__gte=lower, created_at__lt=upper).order_by('pk').values_list('pk', flat=True)),
+        'messages': list(PatientMessage.objects.for_company(company).filter(thread__company=company, thread__patient__company=company, thread__patient__demo_data_set__isnull=True, sender=doctor, created_at__gte=lower, created_at__lt=upper).order_by('pk').values_list('pk', flat=True)),
     }
     return {key: len(values) for key, values in source_ids.items()}, source_ids
 

@@ -1,0 +1,4 @@
+<div class="shipping-help" data-shipping-help>
+  <button type="button" class="shipping-help-trigger" aria-label="About AWC" aria-describedby="inventory-awc-help-{{ help_suffix }}" aria-expanded="false">{% include 'portal/includes/shipping_help_icon.html' %}</button>
+  <div class="shipping-help-popover" id="inventory-awc-help-{{ help_suffix }}" role="tooltip" popover="auto"><strong>Average Weekly Consumption</strong><p>A super admin can enter a starting value for purchasing. It is used until cleared. Otherwise, AWC is units dispatched over the previous {{ average_weeks }} completed calendar weeks, divided by {{ average_weeks }}. Weeks with no dispatches count as zero. Pending and reserved stock are excluded.</p></div>
+</div>

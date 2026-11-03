@@ -10,6 +10,7 @@ from urllib.parse import parse_qs, urlsplit
 
 from django.urls import reverse
 from django.conf import settings
+from django.utils import timezone
 
 from care.models import AuditEvent, MedicationProduct, PharmacyOrder, Shipment
 from care.operations import dispatch_shipment
@@ -71,7 +72,7 @@ class OperationsTemplateTests(OperationsFixture):
         order = self.submitted_order()
         self.login(self.super_admin)
         for route, heading, args in (
-            ('ops-catalogue', 'Product catalogue', ()), ('ops-product-create', 'Add a product', ()),
+            ('ops-catalogue', 'Inventory catalogue', ()), ('ops-product-create', 'Add a product', ()),
             ('ops-product-detail', 'Explicit prescribed product', (self.product.pk,)),
             ('ops-shipping', 'id="create-shipment"', ()),
             ('ops-shipment-detail', 'Shipment record', (shipment.pk,)),
@@ -120,20 +121,20 @@ class OperationsTemplateTests(OperationsFixture):
         shipment = self.shipment(quantity=1)
         self.login(self.super_admin)
         audits = AuditEvent.objects.count()
-        for step in ('ready', 'lock', 'order', 'courier', 'collection'):
+        for step in ('pending', 'confirmed', 'tracking'):
             with self.subTest(step=step):
                 response = self.client.get(reverse('portal:ops-shipping'),
                                            {'week': self.today, '__full': '1', 'shipping_step': step})
                 self.assertEqual(response.status_code, 200)
                 markup = InputIds()
                 markup.feed(response.content.decode())
-                self.assertEqual(len(markup.shipping_tabs), 5)
+                self.assertEqual(len(markup.shipping_tabs), 3)
                 self.assertEqual([tab['data-shipping-step'] for tab in markup.shipping_tabs
                                   if tab['aria-selected'] == 'true'], [step])
                 self.assertEqual([panel['data-shipping-panel'] for panel in markup.shipping_panels
                                   if 'hidden' not in panel], [step])
-                for action in ('ops-shipping-prepare', 'ops-shipping-lock'):
-                    self.assertIn(reverse(f'portal:{action}'), {form.get('action') for form in markup.forms})
+                if step == 'pending':
+                    self.assertIn(reverse('portal:ops-shipping-confirm'), {form.get('action') for form in markup.forms})
         shipment.refresh_from_db()
         self.assertEqual(shipment.status, Shipment.Status.DRAFT)
         self.assertEqual(AuditEvent.objects.count(), audits)
@@ -144,7 +145,7 @@ class OperationsTemplateTests(OperationsFixture):
                                    {'week': self.today, 'status': ['draft', 'ready'], 'q': 'Alpha & Patient',
                                     'shipping_step': 'invalid', 'create': '1', '__shell': '1', '__full': '1'})
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.context['shipping_step'], 'ready')
+        self.assertEqual(response.context['shipping_step'], 'pending')
         for step in response.context['shipping_steps']:
             address = urlsplit(step['url'])
             query = parse_qs(address.query)
@@ -166,24 +167,29 @@ class OperationsTemplateTests(OperationsFixture):
 
         self.assertFalse(any(step['complete'] for step in steps().values()))
         shipment = self.shipment(quantity=1, status=Shipment.Status.HELD)
-        self.assertFalse(steps()['ready']['complete'])
+        self.assertFalse(steps()['pending']['complete'])
         Shipment.objects.filter(pk=shipment.pk).update(status=Shipment.Status.READY)
         ready = steps()
-        self.assertTrue(ready['ready']['complete'])
-        self.assertTrue(ready['lock']['current'])
-        self.assertFalse(ready['order']['complete'])
-        self.assertEqual(ready['courier']['summary'], 'Not booked')
-        self.assertEqual(ready['collection']['summary'], 'Pending')
+        self.assertFalse(ready['pending']['complete'])
+        self.assertTrue(ready['pending']['current'])
+        self.assertNotIn('order', ready)
+        self.assertEqual(ready['confirmed']['summary'], '0 awaiting courier')
+        self.assertEqual(ready['tracking']['summary'], '0 shipments')
+        Shipment.objects.filter(pk=shipment.pk).update(locked_at=timezone.now())
+        confirmed = steps()
+        self.assertTrue(confirmed['pending']['complete'])
+        self.assertTrue(confirmed['confirmed']['current'])
+        self.assertEqual(confirmed['confirmed']['summary'], '1 awaiting courier')
 
     def test_collection_dialog_has_a_native_get_fallback_without_dispatching(self):
         shipment = self.locked(self.shipment(quantity=1))
         Shipment.objects.filter(pk=shipment.pk).update(waybill='TEST-COLLECTION')
         self.login(self.super_admin)
-        response = self.client.get(reverse('portal:ops-shipping'), {'week': self.today, 'shipping_step': 'collection'})
+        response = self.client.get(reverse('portal:ops-shipping'), {'week': self.today, 'shipping_step': 'tracking'})
         self.assertEqual(response.status_code, 200)
         fallback = self.client.get(response.context['collection_url'])
         self.assertContains(fallback, 'aria-labelledby="record-collection-title" open')
-        self.assertEqual(fallback.context['shipping_step'], 'collection')
+        self.assertEqual(fallback.context['shipping_step'], 'tracking')
         self.assertContains(fallback, f'action="{reverse("portal:ops-shipping-collect")}"')
         closed = self.client.get(fallback.context['collection_close_url'])
         self.assertNotContains(closed, 'aria-labelledby="record-collection-title" open')

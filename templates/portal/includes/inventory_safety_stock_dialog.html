@@ -1,0 +1,11 @@
+<dialog class="app-dialog inventory-safety-dialog" id="inventory-safety-stock-{{ row.product.pk }}" aria-labelledby="inventory-safety-stock-title-{{ row.product.pk }}"{% if row.safety_stock_open %} open{% endif %}>
+  <div class="app-dialog__body">
+    <header class="inventory-reservations-header"><div><h2 id="inventory-safety-stock-title-{{ row.product.pk }}">Safety stock</h2><p class="app-dialog__sub">{{ row.product }}</p></div><a href="{{ inventory_return_url }}" class="inventory-dialog-close" data-dialog-close aria-label="Close safety stock"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false"><path d="m6 6 12 12M18 6 6 18"/></svg></a></header>
+    <form method="post" action="{% url 'portal:inventory-safety-stock' row.product.pk %}" class="ops-form">
+      {% csrf_token %}<input type="hidden" name="workflow_context" value="{{ row.safety_stock_context }}"><input type="hidden" name="q" value="{{ search }}">
+      {{ row.safety_stock_form.non_field_errors }}
+      <div class="ops-form-field"><label for="safety-stock-quantity-{{ row.product.pk }}">Safety stock</label><input type="number" id="safety-stock-quantity-{{ row.product.pk }}" name="quantity" min="0" max="2147483647" step="1" value="{{ row.safety_stock_form.quantity.value|default_if_none:'' }}" aria-describedby="safety-stock-help-{{ row.product.pk }}"{% if row.safety_stock_form.quantity.errors %} aria-invalid="true"{% endif %}><span class="helptext" id="safety-stock-help-{{ row.product.pk }}">{{ row.safety_stock_form.quantity.help_text }}</span>{{ row.safety_stock_form.quantity.errors }}</div>
+      <div class="app-dialog__actions"><a class="console-button console-button--secondary" href="{{ inventory_return_url }}" data-dialog-close>Cancel</a><button class="console-button console-button--primary" type="submit">Save safety stock</button></div>
+    </form>
+  </div>
+</dialog>

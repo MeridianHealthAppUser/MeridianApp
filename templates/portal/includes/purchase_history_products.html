@@ -1,0 +1,32 @@
+<div class="purchase-order-list">
+  {% for row in product_rows %}
+  <details class="purchase-order-card purchase-product-card" aria-labelledby="purchase-history-product-{{ row.product_id }}">
+    <summary class="purchase-order-summary purchase-product-summary">
+      <span class="purchase-order-heading"><span class="purchase-order-chevron" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" focusable="false"><path d="m9 5 7 7-7 7"/></svg></span><span><strong id="purchase-history-product-{{ row.product_id }}">{{ row.product__name }}</strong><small>{{ row.product__strength }}</small></span></span>
+      <span class="purchase-order-summary-cell"><span class="purchase-order-field-label">Category</span><span>{{ row.category_label }}</span></span>
+      <span class="purchase-order-summary-cell"><span class="purchase-order-field-label">Orders</span><span>{{ row.order_count }}</span></span>
+      <span class="purchase-order-summary-cell"><span class="purchase-order-field-label">Ordered</span><span>{{ row.ordered_units }}</span></span>
+      <span class="purchase-order-summary-cell"><span class="purchase-order-field-label">Received</span><span>{{ row.received_units }}</span></span>
+    </summary>
+    <div class="purchase-order-content">
+      <div class="ops-table-wrap"><table class="ops-table purchase-order-items-table purchase-product-orders-table">
+        <caption class="sr-only">Received purchase orders for {{ row.product__name }} {{ row.product__strength }}</caption>
+        <thead><tr><th scope="col">Purchase order</th><th scope="col">Supplier</th><th scope="col">Created</th><th scope="col">Fully received</th><th scope="col" class="purchase-order-number">Ordered</th><th scope="col" class="purchase-order-number">Received</th><th scope="col"><span class="sr-only">Documents</span></th></tr></thead>
+        <tbody>{% for item in row.order_items %}<tr>
+          <td data-label="Purchase order"><strong>{{ item.purchase_order.reference }}</strong></td>
+          <td data-label="Supplier"><span>{{ item.purchase_order.supplier_name|default:'Unassigned' }}</span>{% if item.supplier_code %}<small>{{ item.supplier_code }}</small>{% endif %}</td>
+          <td data-label="Created"><time datetime="{{ item.purchase_order.created_at|date:'c' }}">{{ item.purchase_order.created_at|date:'j M Y' }}</time></td>
+          <td data-label="Fully received">{% if item.purchase_order.received_at %}<time datetime="{{ item.purchase_order.received_at|date:'c' }}">{{ item.purchase_order.received_at|date:'j M Y' }}</time>{% else %}—{% endif %}</td>
+          <td data-label="Ordered" class="purchase-order-number">{{ item.quantity }}</td>
+          <td data-label="Received" class="purchase-order-number">{{ item.quantity_received }}</td>
+          <td data-label="Documents"><div class="purchase-order-document-actions" role="group" aria-label="Documents for {{ item.purchase_order.reference }}">
+            <a class="purchase-order-icon" href="{% url 'portal:purchase-order-excel' item.purchase_order.pk %}" data-native-navigation data-no-loader title="Download Excel" aria-label="Download Excel for {{ item.purchase_order.reference }}"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false"><path d="M14 3H5v18h14V8l-5-5Z"/><path d="M14 3v5h5M8 11l5 6m0-6-5 6M15 12h2m-2 3h2"/></svg></a>
+            <a class="purchase-order-icon" href="{% url 'portal:purchase-order-pdf' item.purchase_order.pk %}" data-native-navigation data-no-loader title="Download PDF" aria-label="Download PDF for {{ item.purchase_order.reference }}"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false"><path d="M14 3H5v18h14V8l-5-5Z"/><path d="M14 3v5h5M8 12h3M8 15h8M8 18h6"/></svg><span class="purchase-order-file-type" aria-hidden="true">PDF</span></a>
+            <a class="purchase-order-icon" href="{% if item.purchase_order.email_url %}{{ item.purchase_order.email_url }}{% else %}{% url 'portal:purchasing' %}?view=history&amp;group=products&amp;email={{ item.purchase_order.pk }}{% endif %}" title="Email purchase order" aria-label="Email {{ item.purchase_order.reference }}" aria-haspopup="dialog"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 6 9 7 9-7"/></svg></a>
+          </div></td>
+        </tr>{% empty %}<tr><td class="ops-empty" colspan="7">No received purchase orders for this product.</td></tr>{% endfor %}</tbody>
+      </table></div>
+    </div>
+  </details>
+  {% empty %}<p class="purchase-orders-empty">No received products match these filters.</p>{% endfor %}
+</div>

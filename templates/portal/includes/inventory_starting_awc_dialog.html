@@ -1,0 +1,12 @@
+{% load l10n %}
+<dialog class="app-dialog inventory-safety-dialog" id="inventory-starting-awc-{{ row.product.pk }}" aria-labelledby="inventory-starting-awc-title-{{ row.product.pk }}"{% if row.awc_open %} open{% endif %}>
+  <div class="app-dialog__body">
+    <header class="inventory-reservations-header"><div><h2 id="inventory-starting-awc-title-{{ row.product.pk }}">Starting AWC</h2><p class="app-dialog__sub">{{ row.product }}</p></div><a href="{{ inventory_return_url }}" class="inventory-dialog-close" data-dialog-close aria-label="Close starting AWC"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false"><path d="m6 6 12 12M18 6 6 18"/></svg></a></header>
+    <form method="post" action="{% url 'portal:inventory-starting-awc' row.product.pk %}" class="ops-form">
+      {% csrf_token %}<input type="hidden" name="workflow_context" value="{{ row.awc_context }}"><input type="hidden" name="q" value="{{ search }}">
+      {{ row.awc_form.non_field_errors }}
+      <div class="ops-form-field"><label for="starting-awc-{{ row.product.pk }}">Average Weekly Consumption (units)</label><input type="number" id="starting-awc-{{ row.product.pk }}" name="starting_awc" min="0" max="99999999.99" step="0.01" value="{{ row.awc_form.starting_awc.value|default_if_none:''|unlocalize }}" aria-describedby="starting-awc-help-{{ row.product.pk }}"{% if row.awc_form.starting_awc.errors %} aria-invalid="true"{% endif %}><span class="helptext" id="starting-awc-help-{{ row.product.pk }}">{{ row.awc_form.starting_awc.help_text }} Calculated average: {{ row.historical_awc|floatformat:2 }} units per week.</span>{{ row.awc_form.starting_awc.errors }}</div>
+      <div class="app-dialog__actions"><a class="console-button console-button--secondary" href="{{ inventory_return_url }}" data-dialog-close>Cancel</a><button class="console-button console-button--primary" type="submit">Save starting AWC</button></div>
+    </form>
+  </div>
+</dialog>

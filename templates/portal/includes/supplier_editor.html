@@ -1,0 +1,14 @@
+<dialog id="supplier-editor" class="app-dialog supplier-editor" open aria-labelledby="supplier-editor-title"><div class="app-dialog__body">
+  <header class="supplier-editor-heading"><div><h2 id="supplier-editor-title">{% if editor_supplier %}Edit supplier{% else %}Add supplier{% endif %}</h2><p class="app-dialog__sub">Supplier details and the products you can order from them.</p></div><a href="{{ supplier_return_url }}" class="supplier-icon" data-dialog-close aria-label="Close supplier editor"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></a></header>
+  <form method="post" action="{% if editor_supplier %}{% url 'portal:supplier-edit' editor_supplier.pk %}{% else %}{% url 'portal:supplier-create' %}{% endif %}" class="ops-form" data-supplier-editor>
+    {% csrf_token %}<input type="hidden" name="workflow_context" value="{{ supplier_context }}"><input type="hidden" name="q" value="{{ search }}">
+    {{ supplier_form.non_field_errors }}
+    <div class="supplier-fields"><div class="ops-form-field">{{ supplier_form.name.label_tag }}{{ supplier_form.name }}{{ supplier_form.name.errors }}</div><div class="ops-form-field">{{ supplier_form.contact_name.label_tag }}{{ supplier_form.contact_name }}{{ supplier_form.contact_name.errors }}</div><div class="ops-form-field">{{ supplier_form.email.label_tag }}{{ supplier_form.email }}{{ supplier_form.email.errors }}</div><div class="ops-form-field">{{ supplier_form.phone.label_tag }}{{ supplier_form.phone }}{{ supplier_form.phone.errors }}</div></div>
+    <div class="supplier-products-heading"><div><h3>Products supplied</h3><p>Use the code this supplier uses for each product.</p></div><span data-supplier-product-count></span></div>
+    {{ product_formset.management_form }}{{ product_formset.non_form_errors }}
+    <div data-supplier-product-rows>{% for line in product_formset %}{% include 'portal/includes/supplier_product_row.html' %}{% endfor %}</div>
+    <template data-supplier-product-template>{% include 'portal/includes/supplier_product_row.html' with line=product_formset.empty_form %}</template>
+    <button type="button" class="console-button console-button--secondary" data-add-supplier-product>+ Add product</button>
+    <footer class="supplier-editor-footer"><a href="{{ supplier_return_url }}" class="console-button console-button--secondary" data-dialog-close>Cancel</a><button class="console-button console-button--primary" type="submit">{% if editor_supplier %}Save changes{% else %}Create supplier{% endif %}</button></footer>
+  </form>
+</div></dialog>

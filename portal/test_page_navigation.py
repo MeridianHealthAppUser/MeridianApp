@@ -403,6 +403,10 @@ class PageNavigationTests(TestCase):
              'portal.billing_views.PatientPaymentReturnView.get'),
             (self.admin, False, 'ops-shipment-label', [17],
              'portal.operations_views.ShipmentLabelView.get'),
+            (self.admin, False, 'purchase-order-excel', [17],
+             'portal.purchase_document_views.PurchaseOrderExcelView.get'),
+            (self.admin, False, 'purchase-order-pdf', [17],
+             'portal.purchase_document_views.PurchaseOrderPDFView.get'),
         )
         for user, patient, route, args, handler in cases:
             with self.subTest(route=route):
@@ -445,7 +449,7 @@ class PageNavigationTests(TestCase):
         content = self.content(url)
         self.assertEqual(content.status_code, 200)
         self.assertEqual(content.json()['redirect_url'], response['Location'])
-        self.assertEqual(urlsplit(response['Location']).path, reverse('portal:ops-shipping'))
+        self.assertEqual(urlsplit(response['Location']).path, reverse('portal:inventory'))
 
     def test_all_registered_shells_retain_full_view_access_results_for_each_role(self):
         from .page_navigation import PATIENT_PAGES, STAFF_PAGES
@@ -609,7 +613,7 @@ class NavigationRouteRegistryTests(SimpleTestCase):
             '/patients/23/record/export/', '/patients/23/record/history/',
             '/patients/23/record/export.xlsx', '/patients/23/record/workbook.xlsx',
             '/compounding/23/print/', '/metrics/export.csv', '/activity-statements/23/export.csv',
-            '/shipping/manifest.csv', '/shipping/order.csv', '/dispatch-history/export.csv',
+            '/shipping/manifest.csv', '/shipping/order.csv', '/dispatch-history/export.xlsx',
             '/messages/status/', '/patient/messages/status/', '/patient/appointments/video-status/',
             '/patient/appointments/book/times/', '/schedule/book/times/',
             '/patients/23/messages/search/', '/tasks/23/complete/', '/messages/23/seen/',

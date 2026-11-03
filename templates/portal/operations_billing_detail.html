@@ -5,8 +5,8 @@
 {% block page_heading %}<header class="staff-page-header"><div><h1>{{ plan.patient }}</h1><p>{{ company.name }} · Subscription since {{ plan.starts_on|date:'j M Y' }} ({{ plan.get_status_display|lower }}){% if plan.authorization and plan.authorization.dose %} · {{ plan.authorization.dose }}{% endif %}</p></div></header>{% endblock %}
 {% block operations_content %}
 <section class="staff-page-card ops-panel" aria-labelledby="billing-cycles-heading">
-    <h2 id="billing-cycles-heading">Payments</h2>
-    <p><span class="ops-paid ops-paid--{% if state == 'paid' %}paid{% elif state == 'failed' %}failed{% elif state == 'due' %}due{% else %}retrying{% endif %}">{{ state_text }}</span>{% if owed %} · R{{ owed|floatformat:"-2" }} outstanding{% endif %}</p>
+    <header class="staff-list-header"><div><h2 id="billing-cycles-heading">Payments</h2>
+    <p><span class="ops-paid ops-paid--{% if state == 'paid' %}paid{% elif state == 'failed' %}failed{% elif state == 'due' %}due{% else %}retrying{% endif %}">{{ state_text }}</span>{% if owed %} · R{{ owed|floatformat:"-2" }} outstanding{% endif %}</p></div><div class="staff-list-tools"><span class="staff-page-card__count">{{ cycles_count }} cycle{{ cycles_count|pluralize }}</span>{% include 'portal/includes/excel_download.html' with url=cycles_export_url %}</div></header>
     <div class="ops-table-wrap"><table class="ops-table">
       <thead><tr><th scope="col">Cycle</th><th scope="col">Period</th><th scope="col">Amount</th><th scope="col">Status</th><th scope="col">Attempts</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead>
       <tbody>{% for cycle in cycles %}<tr>
@@ -52,5 +52,5 @@
     </form>
   </section>
 {% endif %}
-{% if other_payments %}<section class="staff-page-card"><header class="staff-page-card__header"><h2>Other payments</h2></header><div class="ops-table-wrap"><table class="ops-table"><thead><tr><th scope="col">Date</th><th scope="col">For</th><th scope="col">Amount</th><th scope="col">Status</th></tr></thead><tbody>{% for payment in other_payments %}<tr><td data-label="Date">{{ payment.paid_at|default:payment.created_at|date:'j M Y' }}</td><td data-label="For">{{ payment.get_kind_display|default:'Payment' }}{% if payment.note %}<small>{{ payment.note }}</small>{% endif %}</td><td data-label="Amount">R{{ payment.amount|floatformat:"-2" }}</td><td data-label="Status">{{ payment.get_status_display }}</td></tr>{% endfor %}</tbody></table></div></section>{% endif %}
+{% if other_payments %}<section class="staff-page-card"><header class="staff-page-card__header staff-list-header"><h2>Other payments</h2><div class="staff-list-tools"><span class="staff-page-card__count">{{ other_payments_count }} payment{{ other_payments_count|pluralize }}</span>{% include 'portal/includes/excel_download.html' with url=other_payments_export_url %}</div></header><div class="ops-table-wrap"><table class="ops-table"><thead><tr><th scope="col">Date</th><th scope="col">For</th><th scope="col">Amount</th><th scope="col">Status</th></tr></thead><tbody>{% for payment in other_payments %}<tr><td data-label="Date">{{ payment.paid_at|default:payment.created_at|date:'j M Y' }}</td><td data-label="For">{{ payment.get_kind_display|default:'Payment' }}{% if payment.note %}<small>{{ payment.note }}</small>{% endif %}</td><td data-label="Amount">R{{ payment.amount|floatformat:"-2" }}</td><td data-label="Status">{{ payment.get_status_display }}</td></tr>{% endfor %}</tbody></table></div></section>{% endif %}
 {% endblock %}

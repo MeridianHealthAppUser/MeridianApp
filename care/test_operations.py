@@ -13,7 +13,7 @@ from django.utils import timezone
 
 from practices.models import Company, CompanyMembership, Patient
 from .models import (AuditEvent, DeliveryAddress, MedicationProduct, PatientSubscription, Payment,
-                     PracticeSettings, Shipment, ShipmentItem, SubscriptionCycle, TreatmentAuthorization)
+                     PracticeSettings, Shipment, ShipmentItem, StockMovement, SubscriptionCycle, TreatmentAuthorization)
 from .operations import (allowance_window, change_parcel, dispatch_shipment, hold_or_cancel_shipment, lock_shipping_week,
                          mark_delivered, prepare_shipment, prepare_week, product_allowance, shipment_hold_reason, week_order)
 
@@ -45,6 +45,8 @@ class OperationsFixture(TestCase):
         cls.product = MedicationProduct.objects.create(company=cls.company, name='Explicit prescribed product', strength='Dose A', price=Decimal('100.00'))
         cls.open_product = MedicationProduct.objects.create(company=cls.company, name='Open local product', price=Decimal('40.00'), requires_authorisation=False, requires_cold_chain=False)
         cls.beta_product = MedicationProduct.objects.create(company=cls.beta, name='Private beta product', price=Decimal('60.00'))
+        for product in (cls.product, cls.open_product):
+            StockMovement.objects.create(company=cls.company, product=product, actor=cls.admin, quantity=100, reason='Opening test stock')
         cls.auth = TreatmentAuthorization.objects.create(company=cls.company, patient=cls.patient,
             product=cls.product, prescribed_by=cls.doctor, max_dose='Explicit physician dose', quantity_per_cycle=4,
             starts_on=cls.today - timedelta(days=10), expires_on=cls.today + timedelta(days=180))

@@ -1,0 +1,29 @@
+<dialog class="app-dialog inventory-reservations-dialog" id="inventory-reservations-{{ row.product.pk }}" aria-labelledby="inventory-reservations-title-{{ row.product.pk }}" aria-describedby="inventory-reservations-description-{{ row.product.pk }}"{% if row.reserved_open %} open{% endif %}>
+  <div class="app-dialog__body">
+    <header class="inventory-reservations-header">
+      <div><p class="inventory-reservations-eyebrow">Inventory reservations</p><h2 id="inventory-reservations-title-{{ row.product.pk }}">{{ row.product }}</h2><p class="app-dialog__sub" id="inventory-reservations-description-{{ row.product.pk }}">Stock reserved for locked shipments awaiting dispatch.</p></div>
+      <a href="{{ inventory_return_url }}" class="inventory-dialog-close" data-dialog-close aria-label="Close reservations for {{ row.product }}"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false"><path d="m6 6 12 12M18 6 6 18"/></svg></a>
+    </header>
+    <dl class="inventory-reservations-summary">
+      <div><dt>On hand</dt><dd>{{ row.on_hand }}</dd></div>
+      <div class="inventory-reservations-summary__reserved"><dt>Reserved</dt><dd>{{ row.reserved }}</dd></div>
+      <div{% if row.available < 0 %} class="inventory-reservations-summary__shortage"{% endif %}><dt>Available</dt><dd>{{ row.available }}</dd></div>
+      <div{% if row.shortage %} class="inventory-reservations-summary__shortage"{% endif %}><dt>Shortage to replenish</dt><dd>{{ row.shortage }}</dd></div>
+    </dl>
+    {% if row.shortage %}<div class="ops-notice ops-notice--warning inventory-reservations-warning"><strong>{{ row.shortage }} short for these reservations.</strong> Receive stock before dispatch, or use an explicit stock override at dispatch.</div>{% endif %}
+    <div class="inventory-reservations-table-heading"><h3>Reserved shipments</h3><div class="staff-list-tools"><span class="staff-page-card__count">{{ row.reservations|length }} parcel line{{ row.reservations|length|pluralize }}</span>{% include 'portal/includes/excel_download.html' with url=row.reservations_export_url %}</div></div>
+    <div class="ops-table-wrap inventory-reservations-table-wrap"><table class="ops-table inventory-reservations-table">
+      <thead><tr><th>Customer</th><th>Doctor</th><th>Quantity</th><th>Due date</th><th>Payment</th><th>Shipment</th><th><span class="sr-only">Actions</span></th></tr></thead>
+      <tbody>{% for item in row.reservations %}<tr>
+        <td data-label="Customer"><div><strong>{{ item.shipment.patient }}</strong>{% if item.shipment.subscription_id %}<small>{{ item.shipment.subscription.plan_name }}</small>{% endif %}</div></td>
+        <td data-label="Doctor">{{ item.reservation_doctor.titled_name|default:'—' }}</td>
+        <td data-label="Quantity"><div><strong>{{ item.quantity }}</strong>{% if item.dose %}<small>{{ item.dose }}</small>{% endif %}</div></td>
+        <td data-label="Due date">{{ item.shipment.scheduled_for|date:'D j M Y' }}</td>
+        <td data-label="Payment"><div><span class="ops-paid ops-paid--{{ item.reservation_payment_state }}">{% if item.reservation_payment_state == 'paid' %}Paid{% elif item.reservation_payment_state == 'due' %}Due{% elif item.reservation_payment_state == 'retrying' %}Retrying{% elif item.reservation_payment_state == 'failed' %}Failed{% else %}Not paid{% endif %}</span>{% if item.reservation_payment_text != 'Paid' %}<small>{{ item.reservation_payment_text }}</small>{% endif %}</div></td>
+        <td data-label="Shipment"><div>#{{ item.shipment_id }}{% if item.shipment.waybill %}<small>Waybill {{ item.shipment.waybill }}</small>{% elif item.shipment.tracking_number %}<small>Tracking {{ item.shipment.tracking_number }}</small>{% else %}<small>Awaiting courier booking</small>{% endif %}</div></td>
+        <td data-label="Actions"><a class="console-button console-button--secondary" href="{% url 'portal:ops-shipment-detail' item.shipment_id %}">Open<span class="sr-only"> shipment {{ item.shipment_id }} for {{ item.shipment.patient }}</span><svg viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false"><path d="M7 17 17 7M7 7h10v10"/></svg></a></td>
+      </tr>{% endfor %}</tbody>
+    </table></div>
+    <footer class="app-dialog__actions inventory-reservations-footer"><a href="{{ inventory_return_url }}" class="console-button console-button--secondary" data-dialog-close>Close</a></footer>
+  </div>
+</dialog>

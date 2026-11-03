@@ -12,3 +12,4 @@ pypdf==6.19.0
 reportlab==5.1.0
 django-storages[s3]==1.14.6
 boto3==1.43.108
+openpyxl==3.1.5

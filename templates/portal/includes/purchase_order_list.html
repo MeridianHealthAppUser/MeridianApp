@@ -1,0 +1,37 @@
+<div class="purchase-order-list">
+  {% for order in orders %}
+  <details class="purchase-order-card"{% if order.expanded %} open{% endif %} aria-labelledby="purchase-order-reference-{{ order.pk }}">
+    <summary class="purchase-order-summary">
+      <span class="purchase-order-heading"><span class="purchase-order-chevron" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" focusable="false"><path d="m9 5 7 7-7 7"/></svg></span><span><strong id="purchase-order-reference-{{ order.pk }}">{{ order.reference }}</strong><small>{{ order.line_count }} product{{ order.line_count|pluralize }}{% if order.demo_data_set_id %} · Demo{% endif %}</small></span></span>
+      <span class="purchase-order-summary-cell"><span class="purchase-order-field-label">Supplier</span><span>{{ order.supplier_name|default:'Unassigned' }}</span></span>
+      <span class="purchase-order-summary-cell"><span class="purchase-order-field-label">Created</span><time datetime="{{ order.created_at|date:'c' }}">{{ order.created_at|date:'j M Y' }}</time></span>
+      <span class="purchase-order-summary-cell"><span class="purchase-order-field-label">ETA</span>{% if order.eta %}<time datetime="{{ order.eta|date:'Y-m-d' }}">{{ order.eta|date:'j M Y' }}</time>{% else %}<span class="purchase-order-muted">Not set</span>{% endif %}</span>
+      <span class="purchase-order-progress"><span class="purchase-order-progress-label"><span class="purchase-order-field-label">Received</span><span>{{ order.received_units }} / {{ order.ordered_units }}</span></span><progress max="{{ order.ordered_units|default:1 }}" value="{{ order.received_units }}" aria-label="Units received for {{ order.reference }}">{{ order.progress }}%</progress></span>
+    </summary>
+    <div class="purchase-order-content">
+      <div class="ops-table-wrap"><table class="ops-table purchase-order-items-table">
+        <caption class="sr-only">Products on {{ order.reference }}</caption>
+        <thead><tr><th scope="col">Product</th><th scope="col">Category</th><th scope="col" class="purchase-order-number">Ordered</th><th scope="col" class="purchase-order-number">Received</th><th scope="col" class="purchase-order-number">Outstanding</th></tr></thead>
+        <tbody>{% for item in order.display_items %}<tr>
+          <td data-label="Product"><div><strong>{{ item.product_name }}</strong><small>{{ item.strength }}</small>{% if item.supplier_code %}<small>Supplier code: {{ item.supplier_code }}</small>{% endif %}</div></td>
+          <td data-label="Category">{{ item.get_category_display }}</td>
+          <td data-label="Ordered" class="purchase-order-number">{{ item.quantity }}</td>
+          <td data-label="Received" class="purchase-order-number">{{ item.quantity_received }}</td>
+          <td data-label="Outstanding" class="purchase-order-number"><span{% if item.remaining %} class="purchase-order-outstanding"{% endif %}>{{ item.remaining }}</span></td>
+        </tr>{% empty %}<tr><td class="ops-empty" colspan="5">No products on this purchase order.</td></tr>{% endfor %}</tbody>
+      </table></div>
+      <div class="purchase-order-actions">
+        <div class="purchase-order-receipt-state">{% if order.status == 'open' %}<span>{{ order.remaining_units }} unit{{ order.remaining_units|pluralize }} outstanding</span>{% elif order.received_at %}<span>Fully received <time datetime="{{ order.received_at|date:'c' }}">{{ order.received_at|date:'j M Y' }}</time></span>{% else %}<span>{{ order.get_status_display }}</span>{% endif %}</div>
+        <div class="purchase-order-action-links">
+          <div class="purchase-order-document-actions" role="group" aria-label="Documents for {{ order.reference }}">
+            <a class="purchase-order-icon" href="{% url 'portal:purchase-order-excel' order.pk %}" data-native-navigation data-no-loader title="Download Excel" aria-label="Download Excel for {{ order.reference }}"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false"><path d="M14 3H5v18h14V8l-5-5Z"/><path d="M14 3v5h5M8 11l5 6m0-6-5 6M15 12h2m-2 3h2"/></svg></a>
+            <a class="purchase-order-icon" href="{% url 'portal:purchase-order-pdf' order.pk %}" data-native-navigation data-no-loader title="Download PDF" aria-label="Download PDF for {{ order.reference }}"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false"><path d="M14 3H5v18h14V8l-5-5Z"/><path d="M14 3v5h5M8 12h3M8 15h8M8 18h6"/></svg><span class="purchase-order-file-type" aria-hidden="true">PDF</span></a>
+            {% if order.demo_data_set_id %}<span class="purchase-order-icon" tabindex="0" title="Emails are disabled for demo orders" aria-label="Emails are disabled for demo orders" aria-disabled="true"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 6 9 7 9-7"/></svg></span>{% else %}<a class="purchase-order-icon" href="{{ order.email_url }}" title="Email purchase order" aria-label="Email {{ order.reference }}" aria-haspopup="dialog"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 6 9 7 9-7"/></svg></a>{% endif %}
+          </div>
+          {% if order.status == 'open' and order.remaining_units %}<a class="console-button console-button--primary purchase-order-receive" href="{{ order.receive_url }}" aria-haspopup="dialog">Receive stock</a>{% endif %}
+        </div>
+      </div>
+    </div>
+  </details>
+  {% empty %}<p class="purchase-orders-empty">{% if purchasing_view == 'history' %}No received purchase orders match these filters.{% else %}No open purchase orders match these filters.{% endif %}</p>{% endfor %}
+</div>

@@ -35,6 +35,7 @@ from .models import (
     ClinicalTask, DebitMandate, Invoice, PatientEvent, PatientSubscription, Payment, PharmacyOrder, PracticeSettings,
     SubscriptionCycle, TreatmentAuthorization,
 )
+from .demo_safety import block_demo_billing, is_demo_record
 from .notifications import queue as notify
 from .payment_providers import current_provider, provider_named, require_provider
 from .services import record_audit
@@ -122,6 +123,7 @@ def current_mandate(subscription):
 # Debit orders
 
 @transaction.atomic
+@block_demo_billing('subscription')
 def start_debit_order(*, subscription, actor, method=DebitMandate.Method.DEBICHECK, request=None):
     """The patient asks for a debit order for their subscription. Returns the new mandate and the page where they
     approve it (the provider's, or the sandbox's)."""
@@ -156,6 +158,7 @@ def start_debit_order(*, subscription, actor, method=DebitMandate.Method.DEBICHE
 
 
 @transaction.atomic
+@block_demo_billing('mandate')
 def approve_mandate(*, mandate, account_label='', provider_reference='', fail_debits=False, actor=None, request=None):
     """The patient approved the debit order with their bank or card provider. It replaces any earlier one, sets the
     billing date when this is the first, and collects what is due now: the first debit, or a payment that failed.
@@ -202,13 +205,14 @@ def lead_days(mandate):
 def release_mandates(mandates):
     """Tell the provider that these debit orders are finished (Peach forgets the card; Stitch revokes the DebiCheck
     mandate at the bank), once the change that ends them is saved. Each goes to the provider that holds it."""
-    for mandate in mandates.exclude(provider_reference=''):
+    for mandate in mandates.filter(patient__demo_data_set__isnull=True).exclude(provider_reference=''):
         provider = provider_named(mandate.provider)
         if provider is not None:
-            transaction.on_commit(lambda mandate=mandate, provider=provider: provider.cancel_mandate(mandate))
+            transaction.on_commit(lambda mandate=mandate, provider=provider: None if is_demo_record(mandate) else provider.cancel_mandate(mandate))
 
 
 @transaction.atomic
+@block_demo_billing('mandate')
 def decline_mandate(*, mandate, reason='', actor=None, request=None):
     mandate = DebitMandate.objects.select_for_update().get(pk=mandate.pk)
     if mandate.status != DebitMandate.Status.PENDING:
@@ -227,7 +231,7 @@ def review_mandates(company, patient=None, *, prescription_changed=False):
     Returns the mandates marked."""
     any_change = practice_settings(company).new_debit_order == PracticeSettings.NewDebitOrder.ANY_CHANGE
     marked = []
-    mandates = DebitMandate.objects.filter(company=company, status=DebitMandate.Status.ACTIVE).select_related('subscription')
+    mandates = DebitMandate.objects.filter(company=company, status=DebitMandate.Status.ACTIVE, patient__demo_data_set__isnull=True).select_related('subscription')
     if patient is not None:
         mandates = mandates.filter(patient=patient)
     for mandate in mandates:
@@ -343,6 +347,8 @@ def _failure_task(cycle, reason):
 def collect_cycle(cycle, *, today=None, actor=None, request=None):
     """Try to collect one cycle with the subscription's debit order. Returns the Payment tried, or None when nothing
     could be tried (no debit order, or one waiting for the patient to confirm a new amount)."""
+    if is_demo_record(cycle):
+        return None
     today = today or timezone.localdate()
     cycle = SubscriptionCycle.objects.select_for_update(of=('self',)).select_related('subscription', 'patient').get(pk=cycle.pk)
     if cycle.status in (SubscriptionCycle.Status.PAID, SubscriptionCycle.Status.CANCELLED):
@@ -386,6 +392,7 @@ def collect_cycle(cycle, *, today=None, actor=None, request=None):
 
 
 @transaction.atomic
+@block_demo_billing('payment')
 def record_collection(*, payment, status, reference='', reason='', today=None, actor=None, request=None):
     """What the provider said about a debit: straight away, or later by webhook for one that was pending."""
     today = today or timezone.localdate()
@@ -438,6 +445,8 @@ def record_collection(*, payment, status, reference='', reason='', today=None, a
 def bill_subscription(subscription, *, today=None):
     """Open every cycle that has come round for this subscription and collect what is due: new cycles, retries that
     are due, and any cycle still waiting (a new debit order collects a failed payment straight away)."""
+    if is_demo_record(subscription):
+        return []
     today = today or timezone.localdate()
     subscription = PatientSubscription.objects.select_for_update(of=('self',)).select_related('authorization').get(pk=subscription.pk)
     if subscription.status not in BILLABLE:
@@ -475,7 +484,7 @@ def check_unanswered(company):
     """Debits the provider didn't answer when they were sent (it timed out), and no webhook has settled since a day
     later: ask the provider what happened, so the cycle can be retried or marked paid instead of waiting for ever.
     (A DebiCheck collection is pending for days by design; the provider's files settle it, not this.)"""
-    stale = Payment.objects.filter(company=company, status=Payment.Status.PENDING, checkout=False,
+    stale = Payment.objects.filter(company=company, patient__demo_data_set__isnull=True, status=Payment.Status.PENDING, checkout=False,
                                    subscription_cycle__isnull=False, created_at__lt=timezone.now() - timedelta(days=1))
     checked = 0
     for payment in stale.exclude(method=Payment.Method.DEBICHECK):
@@ -497,7 +506,7 @@ def run_debits(company, *, today=None):
     today = today or timezone.localdate()
     check_unanswered(company)
     counts = {'subscriptions': 0, 'tried': 0, 'paid': 0, 'failed': 0}
-    due = PatientSubscription.objects.filter(company=company, status__in=BILLABLE, patient__is_active=True).filter(
+    due = PatientSubscription.objects.filter(company=company, status__in=BILLABLE, patient__is_active=True, patient__demo_data_set__isnull=True).filter(
         mandates__status__in=LIVE_MANDATES).distinct()
     for subscription in due:
         counts['subscriptions'] += 1
@@ -514,6 +523,7 @@ def run_debits(company, *, today=None):
 # By the practice
 
 @transaction.atomic
+@block_demo_billing('cycle')
 def retry_now(*, cycle, actor, request=None):
     """Try a failed or retrying debit again today, from Operations > Billing."""
     require_staff(cycle.company, actor)
@@ -535,6 +545,7 @@ def retry_now(*, cycle, actor, request=None):
 
 
 @transaction.atomic
+@block_demo_billing('cycle', 'order', 'shipment')
 def record_manual_payment(*, company, actor, amount, method, reference='', note='', cycle=None, order=None,
                           shipment=None, from_shipping=False, request=None):
     """A payment the practice received another way (EFT, cash, or the old debit order while patients move over),
@@ -590,6 +601,7 @@ def record_manual_payment(*, company, actor, amount, method, reference='', note=
 
 
 @transaction.atomic
+@block_demo_billing('subscription')
 def set_next_debit(*, subscription, actor, day, request=None):
     """Move the date the next debit is collected: a moved patient's existing debit date (the billing anchor), or a
     pause agreed with them."""
@@ -609,6 +621,7 @@ def set_next_debit(*, subscription, actor, day, request=None):
 
 
 @transaction.atomic
+@block_demo_billing('subscription')
 def ask_for_new_debit_order(*, subscription, actor, request=None):
     """The practice asks the patient to approve a new debit order: their details changed, or one keeps failing."""
     require_staff(subscription.company, actor)
@@ -624,6 +637,7 @@ def ask_for_new_debit_order(*, subscription, actor, request=None):
 # Once-off payments: non-prescription requests
 
 @transaction.atomic
+@block_demo_billing('order')
 def start_order_payment(*, order, actor, request=None):
     """The patient pays for their non-prescription request by card. Returns the payment and where to pay."""
     provider = require_provider()
@@ -646,6 +660,7 @@ def start_order_payment(*, order, actor, request=None):
 
 
 @transaction.atomic
+@block_demo_billing('cycle')
 def start_cycle_payment(*, cycle, actor, request=None):
     """The patient pays a failed or retrying debit now, by card, instead of waiting for the next retry."""
     provider = require_provider()
@@ -664,6 +679,7 @@ def start_cycle_payment(*, cycle, actor, request=None):
 
 
 @transaction.atomic
+@block_demo_billing('payment')
 def complete_card_payment(*, payment, paid, reference='', reason='', actor=None, request=None):
     """The provider's answer for a card payment: a non-prescription request, or a debit paid by card instead."""
     payment = Payment.objects.select_for_update(of=('self',)).select_related('pharmacy_order', 'subscription_cycle').get(pk=payment.pk)
@@ -696,6 +712,7 @@ def complete_card_payment(*, payment, paid, reference='', reason='', actor=None,
 
 # The provider's answers: when the patient comes back from its page, and by webhook
 
+@block_demo_billing('mandate')
 def settle_mandate(*, mandate, approval, actor=None, request=None):
     """Apply what the provider said about a debit order the patient was sent to approve (an Approval)."""
     if approval.status == 'approved':
@@ -709,6 +726,7 @@ def settle_mandate(*, mandate, approval, actor=None, request=None):
 
 
 @transaction.atomic
+@block_demo_billing('mandate')
 def revoke_mandate(*, mandate, reason='', actor=None, request=None):
     """The patient's bank stopped an approved debit order (the patient revoked or paused it there): nothing more is
     collected with it, the patient is asked for a new one and the practice sees it on Operations > Billing."""
@@ -729,6 +747,7 @@ def revoke_mandate(*, mandate, reason='', actor=None, request=None):
     return mandate
 
 
+@block_demo_billing('payment')
 def settle_payment(*, payment, collection, actor=None, request=None):
     """Apply what the provider said about a payment (a Collection): a card checkout, or a debit it answered later."""
     if collection.status == 'pending':
@@ -749,11 +768,11 @@ def apply_notice(provider, notice):
     what happened. One about a record this app doesn't have is ignored."""
     if notice.mandate_id:
         mandate = DebitMandate.objects.filter(pk=notice.mandate_id, provider=provider.name).first()
-        if mandate is not None:
+        if mandate is not None and not is_demo_record(mandate):
             settle_mandate(mandate=mandate, approval=notice.outcome)
     elif notice.payment_id:
         payment = Payment.objects.filter(pk=notice.payment_id, provider=provider.name).first()
-        if payment is not None:
+        if payment is not None and not is_demo_record(payment):
             settle_payment(payment=payment, collection=notice.outcome)
 
 
@@ -771,6 +790,8 @@ def covering_cycle(shipment):
 def parcel_payment(shipment):
     """(state, text) for a parcel: paid, due (not collected yet), retrying, failed or unpaid, with what the shipping
     list shows beside it."""
+    if is_demo_record(shipment):
+        return 'paid', 'Demo · payment simulated'
     if Payment.objects.filter(shipment=shipment, status=Payment.Status.PAID).exists():
         return 'paid', 'Paid (recorded by the practice)'
     order = getattr(shipment, 'pharmacy_order', None)
@@ -808,6 +829,8 @@ def parcel_payment_reason(shipment):
 
 def billing_state(subscription):
     """One word for where a subscription's billing stands, and its detail, for Operations > Billing."""
+    if is_demo_record(subscription):
+        return 'demo', 'Demo · billing disabled'
     mandate = current_mandate(subscription)
     failed = subscription.cycles.filter(status=SubscriptionCycle.Status.FAILED).order_by('-cycle_number').first()
     if failed is not None:
@@ -830,6 +853,8 @@ def billing_state(subscription):
 
 def patient_summary(subscription):
     """A line for the patient about their subscription's billing, and whether something is waiting on them."""
+    if is_demo_record(subscription):
+        return {'state': 'demo', 'text': 'Demo · billing disabled', 'action': ''}
     state, text = billing_state(subscription)
     mandate = current_mandate(subscription)
     if state == 'no_mandate':
@@ -851,5 +876,7 @@ def patient_summary(subscription):
 
 def outstanding(subscription):
     """What the patient owes: every cycle not paid yet."""
+    if is_demo_record(subscription):
+        return Decimal('0')
     return sum((cycle.amount for cycle in subscription.cycles.filter(
         status__in=(SubscriptionCycle.Status.PENDING, SubscriptionCycle.Status.FAILED))), Decimal('0'))

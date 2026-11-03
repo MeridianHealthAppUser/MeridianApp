@@ -116,11 +116,11 @@ class WorkspacePresentationTests(TestCase):
         self.login(self.super_admin)
         response = self.page('desktop-dashboard')
         self.assertContains(response, 'data-rail-navigation')
-        for group in ('Care', 'Operations', 'Administration', 'Insights', 'Settings'):
+        for group in ('Care', 'Purchasing', 'Inventory', 'Operations', 'Administration', 'Insights', 'Settings'):
             self.assertContains(response, f'data-navigation-group="{group.lower()}"')
             self.assertContains(response, f'</svg>{group}</span>')
         paths = actionable_paths(response)
-        for name in ('staff-tasks', 'staff-schedule', 'ops-catalogue', 'policy-list', 'management-users', 'metrics', 'staff-data-requests'):
+        for name in ('staff-tasks', 'staff-schedule', 'purchasing', 'inventory', 'policy-list', 'management-users', 'metrics', 'staff-data-requests'):
             self.assertIn(reverse(f'portal:{name}'), paths)
         self.login(self.doctor)
         response = self.page('desktop-dashboard')

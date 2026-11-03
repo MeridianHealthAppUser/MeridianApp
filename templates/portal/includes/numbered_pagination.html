@@ -1,0 +1,11 @@
+{% if page_obj.has_other_pages %}
+<nav class="ops-pagination ops-numbered-pagination{% if pagination_class %} {{ pagination_class }}{% endif %}" aria-label="{{ pagination_label|default:'Results' }} pages">
+  {% if previous_url %}<a class="console-button console-button--secondary" href="{{ previous_url }}"{% if pagination_lazy %} data-movements-page{% endif %}>Previous</a>{% endif %}
+  {% for item in page_urls %}
+    {% if item.ellipsis %}<span class="ops-page-ellipsis">…</span>
+    {% elif item.current %}<span class="ops-page-current{% if pagination_lazy %} inventory-page-current{% endif %}" aria-current="page" aria-label="Page {{ item.number }}">{{ item.number }}</span>
+    {% else %}<a class="console-button console-button--secondary" href="{{ item.url }}"{% if pagination_lazy %} data-movements-page{% endif %} aria-label="Page {{ item.number }}">{{ item.number }}</a>{% endif %}
+  {% endfor %}
+  {% if next_url %}<a class="console-button console-button--secondary" href="{{ next_url }}"{% if pagination_lazy %} data-movements-page{% endif %}>Next</a>{% endif %}
+</nav>
+{% endif %}

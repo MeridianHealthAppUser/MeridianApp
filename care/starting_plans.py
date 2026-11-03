@@ -10,6 +10,8 @@ its step is current, and the clinical log shows the plan once, on the first step
 import uuid
 from datetime import timedelta
 
+from .demo_safety import require_same_demo_data
+
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
 from django.utils import timezone
@@ -159,6 +161,7 @@ def initiate_prescription(*, company, patient, actor, current, plan, weeks, reas
     flags = _check_flags(company, patient, acknowledge_flags)
     key = uuid.uuid4()
     schedule = plan_schedule(plan, weeks)
+    require_same_demo_data(patient, *(dose.pen for dose, _, _ in schedule))
     steps = []
     for position, (dose, starts_on, expires_on) in enumerate(schedule, start=1):
         step = TreatmentAuthorization(

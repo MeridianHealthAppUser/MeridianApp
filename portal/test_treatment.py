@@ -9,7 +9,7 @@ from django.test import Client, RequestFactory, TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from care.models import MedicationProduct, PatientClinicalSummary, PatientSubscription, PracticeSettings, TreatmentAuthorization
+from care.models import MedicationProduct, PatientClinicalSummary, PatientSubscription, PracticeSettings, Shipment, TreatmentAuthorization
 from care.treatment import create_authorization, enroll_local_subscription
 from practices.models import Company, CompanyMembership, Patient
 from practices.services import ACTIVE_COMPANY_SESSION_KEY, ACTIVE_PATIENT_COMPANY_SESSION_KEY
@@ -225,3 +225,23 @@ class TreatmentPageTests(TestCase):
         response = self.client.get(reverse('portal:patient-treatment'), {'page': 2, 'plans_page': 2, 'shipments_page': 2})
         self.assertNotContains(response, 'Treatment and delivery history')
         self.assertNotContains(response, 'id="treatment-history"')
+
+    def test_subscription_supply_progress_excludes_cancelled_and_other_courses(self):
+        authorization = self.authorization()
+        plan = enroll_local_subscription(company=self.company, patient=self.patient, actor=self.patient_user,
+                                        authorization=authorization, confirm=True)
+        today = timezone.localdate()
+        for status, offset in ((Shipment.Status.DELIVERED, -14), (Shipment.Status.DISPATCHED, -7),
+                               (Shipment.Status.HELD, 0), (Shipment.Status.DRAFT, 7),
+                               (Shipment.Status.CANCELLED, -1)):
+            Shipment.objects.create(company=self.company, patient=self.patient, subscription=plan,
+                                    authorization=authorization, scheduled_for=today + timedelta(days=offset), status=status)
+        other = self.authorization()
+        Shipment.objects.create(company=self.company, patient=self.patient, subscription=plan,
+                                authorization=other, scheduled_for=today, status=Shipment.Status.DRAFT)
+        self.login(self.admin)
+        response = self.client.get(reverse('portal:treatment-subscriptions'))
+        self.assertContains(response, '2 dispatched · 2 remaining')
+        row = list(response.context['page_obj'])[0]
+        self.assertEqual(row.next_shipment.scheduled_for, today)
+        self.assertEqual(row.next_shipment.status, Shipment.Status.HELD)

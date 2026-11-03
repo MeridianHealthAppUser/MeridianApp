@@ -1,8 +1,8 @@
 {% extends 'portal/operations_base.html' %}
 {% load workspace_ui %}
 {% block title %}{% if dose %}{{ dose }}{% else %}New dose{% endif %} | Meridian{% endblock %}
-{% block breadcrumbs %}{% if dose %}{% breadcrumbs 'Catalogue' 'portal:ops-catalogue' 'Dose' %}{% else %}{% breadcrumbs 'Catalogue' 'portal:ops-catalogue' 'Add a dose' %}{% endif %}{% endblock %}
-{% block page_heading %}<header class="staff-page-header"><div><h1>{% if dose %}{{ dose }}{% else %}Add a dose{% endif %}</h1><p>{{ company.name }}</p></div></header>{% endblock %}
+{% block breadcrumbs %}{% if dose %}{% breadcrumbs 'Inventory' 'portal:inventory' 'Catalogue' 'portal:ops-catalogue' 'Dose' %}{% else %}{% breadcrumbs 'Inventory' 'portal:inventory' 'Catalogue' 'portal:ops-catalogue' 'Add a dose' %}{% endif %}{% endblock %}
+{% block page_heading %}<header class="staff-page-header"><div><h1>{% if dose %}{{ dose }}{% else %}Add a dose{% endif %}</h1><p>{{ company.name }}</p></div><a class="console-button console-button--secondary" href="{% url 'portal:ops-catalogue' %}">Back to catalogue</a></header>{% endblock %}
 {% block operations_content %}
   <div class="ops-notice">A dose is what a doctor prescribes in Change prescription and starting plans: how much is taken how often, the pen it comes in, how many pens are sent how often, and what the patient pays how often. {% if in_use %}This dose has been prescribed or is in a starting plan, so its pen, amount and supply stay as they are; add a new dose for those changes. Price, billing, tier and whether it is offered may be updated.{% else %}A dose without a price can’t be prescribed until it has one.{% endif %}</div>
   <section class="staff-page-card ops-panel">

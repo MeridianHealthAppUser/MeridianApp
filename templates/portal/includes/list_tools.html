@@ -1,7 +1,9 @@
 {% comment %}A table's tools at the top right of its card: the count, the Filters menu, then the search, which the table
 follows as you type (portal.filter_menus.list_tools). The page loads filter_menu and conversation_search CSS and JS.{% endcomment %}
 <div class="staff-list-tools">
+  {% if list_tools_extra_url %}<a class="shipping-all-stages" href="{{ list_tools_extra_url }}"{% if list_tools_extra_current %} aria-current="page"{% endif %}>{{ list_tools_extra_label }}</a>{% endif %}
   {% if count_label %}<span class="staff-page-card__count" data-search-region="count">{{ count_label }}</span>{% endif %}
+  {% if table_export_url %}<span class="table-export-control" data-search-region="table-export">{% include 'portal/includes/excel_download.html' with url=table_export_url disabled=table_export_disabled %}</span>{% endif %}
   {% if filter_menu %}{% include 'portal/includes/filter_menu.html' with filter_menu_class='filter-menu--compact' %}{% endif %}
   {% include 'portal/includes/conversation_search.html' %}
 </div>

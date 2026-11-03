@@ -8,6 +8,7 @@ from unittest.mock import patch
 from django.contrib.auth import get_user_model
 from django.test import Client
 from django.urls import reverse
+from openpyxl import load_workbook
 
 from care.models import AuditEvent, MedicationProduct, Payment, PharmacyOrder, PracticeSettings, Shipment, ShipmentItem
 from care.operations import dispatch_shipment
@@ -66,6 +67,12 @@ class OperationsPortalFixture(OperationsFixture):
 
 
 class OperationsPortalTests(OperationsPortalFixture):
+    def page(self, name, args=None, client=None, **params):
+        # General list tests explicitly request the whole week; stage queues have separate coverage.
+        if name == 'ops-shipping':
+            params.setdefault('shipping_step', 'all')
+        return super().page(name, args=args, client=client, **params)
+
     def test_lists_are_separate_scoped_pages_and_doctors_cannot_open_them(self):
         shipment = self.shipment(quantity=2)
         order = self.submitted()
@@ -195,18 +202,18 @@ class OperationsPortalTests(OperationsPortalFixture):
         self.assertEqual(response.status_code, 400)
         self.assertFalse(Shipment.objects.exists())
 
-    def test_prepare_lock_dispatch_and_delivery_are_explicit_separate_actions(self):
+    def test_confirmation_dispatch_and_delivery_are_explicit_separate_actions(self):
         shipment = self.shipment()
         item = shipment.items.get()
         url = reverse('portal:ops-shipment-detail', args=[shipment.pk])
         def post_action(action, **extra):
             return self.client.post(url, {'workflow_context': self.token('ops-shipment-detail', [shipment.pk]),
                 'action': action, 'confirm': 'on', **extra})
-        self.assertEqual(post_action('prepare').status_code, 302)
         self.assertEqual(post_action('dispatch', tracking_number='TRACK-1').status_code, 400)
-        shipping = self.page('ops-shipping', week=self.today)
-        self.assertEqual(self.client.post(reverse('portal:ops-shipping-lock'), {
-            'workflow_context': shipping.context['lock_context'], 'week': self.today}).status_code, 302)
+        self.assertEqual(post_action('confirm').status_code, 302)
+        shipment.refresh_from_db()
+        self.assertEqual(shipment.status, Shipment.Status.READY)
+        self.assertIsNotNone(shipment.locked_at)
         token = self.token('ops-shipment-detail', [shipment.pk])
         self.assertEqual(self.client.post(url, {'workflow_context': token, 'action': 'dispatch', 'tracking_number': 'TRACK-1'}).status_code, 400)
         # The parcel's batch and expiry are noted with the dispatch.
@@ -233,20 +240,21 @@ class OperationsPortalTests(OperationsPortalFixture):
         self.assertEqual(order.shipment.status, 'draft')
         self.assertFalse(Payment.objects.exists())
 
-    def test_the_list_shows_each_parcel_and_marks_the_weeks_drafts_ready(self):
+    def test_the_list_confirms_and_locks_selected_pending_parcels(self):
         week = self.today - timedelta(days=self.today.weekday())
         draft = self.shipment(quantity=2, scheduled_for=week)
-        page = self.page('ops-shipping', week=week)
+        page = self.page('ops-shipping', week=week, shipping_step='pending')
         self.assertContains(page, f'{self.product.name} <span class="ops-dose">{self.auth.max_dose}</span>', html=False)
         self.assertContains(page, '<td data-label="Qty"><div>2</div></td>', html=False)
-        response = self.client.post(reverse('portal:ops-shipping-prepare'), {
-            'workflow_context': page.context['prepare_context'], 'week': week})
-        self.assertRedirects(response, f"{reverse('portal:ops-shipping')}?week={week}", fetch_redirect_response=False)
+        response = self.client.post(reverse('portal:ops-shipping-confirm'), {
+            'workflow_context': page.context['confirm_context'], 'week': week, 'shipment_ids': [draft.pk]})
+        self.assertRedirects(response, f"{reverse('portal:ops-shipping')}?week={week}&shipping_step=pending", fetch_redirect_response=False)
         draft.refresh_from_db()
         self.assertEqual(draft.status, 'ready')
-        self.assertContains(self.page('ops-shipping', week=week), '1 draft parcel marked ready.')
+        self.assertIsNotNone(draft.locked_at)
+        self.assertContains(self.page('ops-shipping', week=week), '1 parcel confirmed and locked.')
         self.login(self.doctor)
-        self.assertEqual(self.client.post(reverse('portal:ops-shipping-prepare'), {'week': week}).status_code, 403)
+        self.assertEqual(self.client.post(reverse('portal:ops-shipping-confirm'), {'week': week}).status_code, 403)
 
     def test_the_list_opens_on_the_week_of_the_next_shipping_day(self):
         from datetime import date
@@ -270,7 +278,7 @@ class OperationsPortalTests(OperationsPortalFixture):
         page = self.page('ops-shipping', week=week)
         self.assertNotContains(page, 'Show week')
         # The week is chosen with the arrows beside its heading; the Filters menu keeps it.
-        self.assertEqual([section['label'] for section in page.context['filter_menu']['sections']], ['Status'])
+        self.assertEqual([section['label'] for section in page.context['filter_menu']['sections']], ['Status', 'Product', 'Doctor', 'Payment'])
         self.assertIn(('week', week.isoformat()), page.context['filter_menu']['hidden'])
         self.assertEqual(page.context['search_hidden']['week'], week.isoformat())
         self.assertContains(page, 'data-conversation-search')
@@ -282,32 +290,39 @@ class OperationsPortalTests(OperationsPortalFixture):
         # Older links that say status=all still mean every status.
         self.assertEqual(listed(status='all'), {draft.pk, ready.pk})
 
-    def test_each_draft_line_has_its_own_mark_ready_button(self):
+    def test_each_pending_line_has_its_own_bound_confirm_and_lock_control(self):
         week = self.today - timedelta(days=self.today.weekday())
         draft = self.shipment(quantity=1, scheduled_for=week)
         failing = self.shipment(quantity=1, scheduled_for=week)
         failing.items.update(dose='Not the authorised dose')
+        locked = self.locked(self.shipment(quantity=1, scheduled_for=week))
         ready = self.ready(self.shipment(quantity=1, scheduled_for=week))
         page = self.page('ops-shipping', week=week, status='all')
         rows = {shipment.pk: shipment for shipment in page.context['shipments']}
-        self.assertTrue(rows[draft.pk].ready_context)
-        self.assertFalse(hasattr(rows[ready.pk], 'ready_context'))
-        self.assertContains(page, reverse('portal:ops-shipment-ready', args=[draft.pk]))
-        self.assertNotContains(page, reverse('portal:ops-shipment-ready', args=[ready.pk]))
-        url = reverse('portal:ops-shipment-ready', args=[draft.pk])
-        data = {'workflow_context': rows[draft.pk].ready_context, 'list_query': f'week={week}&status=all&next=https://evil.test'}
+        self.assertTrue(rows[draft.pk].confirm_context)
+        self.assertTrue(rows[ready.pk].confirm_context)
+        self.assertFalse(hasattr(rows[locked.pk], 'confirm_context'))
+        self.assertContains(page, reverse('portal:ops-shipping-confirm'))
+        self.assertContains(page, 'name="single_shipment"')
+        url = reverse('portal:ops-shipping-confirm')
+        data = {'workflow_context': rows[draft.pk].confirm_context, 'single_shipment': str(draft.pk),
+                'shipment_ids': [draft.pk], 'week': week,
+                'list_query': f'week={week}&status=all&next=https://evil.test'}
         response = self.client.post(url, data)
-        # Back to the same week and status; nothing else from the query is followed.
-        self.assertRedirects(response, f"{reverse('portal:ops-shipping')}?week={week}&status=all", fetch_redirect_response=False)
+        # Return to Pending in the same week and filters; never follow an unrelated external next value.
+        self.assertRedirects(response, f"{reverse('portal:ops-shipping')}?week={week}&status=all&shipping_step=pending", fetch_redirect_response=False)
         draft.refresh_from_db()
         self.assertEqual(draft.status, 'ready')
-        # The same click again is stale: the parcel has changed since the page was shown.
+        self.assertIsNotNone(draft.locked_at)
+        # The same record-bound submission becomes stale after the successful confirmation.
         self.client.post(url, data)
-        self.assertEqual(AuditEvent.objects.filter(action='shipment.prepared', target_id=str(draft.pk)).count(), 1)
-        self.client.post(reverse('portal:ops-shipment-ready', args=[failing.pk]), {'workflow_context': rows[failing.pk].ready_context})
+        self.assertEqual(AuditEvent.objects.filter(action='shipment.locked', target_id=str(draft.pk)).count(), 1)
+        self.client.post(url, {'workflow_context': rows[failing.pk].confirm_context,
+                              'single_shipment': str(failing.pk), 'shipment_ids': [failing.pk], 'week': week})
         failing.refresh_from_db()
         self.assertEqual(failing.status, 'draft')
-        self.assertContains(self.page('ops-shipping', week=week), 'not marked ready: The recorded dose does not match')
+        self.assertIsNone(failing.locked_at)
+        self.assertContains(self.page('ops-shipping', week=week), 'The recorded dose does not match')
         self.login(self.doctor)
         self.assertEqual(self.client.post(url, data).status_code, 403)
 
@@ -326,9 +341,9 @@ class OperationsPortalTests(OperationsPortalFixture):
         self.assertEqual((shipment.scheduled_for, item.quantity), (self.today + timedelta(days=2), 1))
         # The action form keeps working after a change: each form has its own token.
         self.assertEqual(self.client.post(reverse('portal:ops-shipment-detail', args=[shipment.pk]), {
-            'workflow_context': self.token('ops-shipment-detail', [shipment.pk]), 'action': 'prepare', 'confirm': 'on'}).status_code, 302)
-        lock = self.page('ops-shipping', week=shipment.scheduled_for)
-        self.client.post(reverse('portal:ops-shipping-lock'), {'workflow_context': lock.context['lock_context'], 'week': shipment.scheduled_for})
+            'workflow_context': self.token('ops-shipment-detail', [shipment.pk]), 'action': 'confirm', 'confirm': 'on'}).status_code, 302)
+        shipment.refresh_from_db()
+        self.assertIsNotNone(shipment.locked_at)
         self.assertNotContains(self.page('ops-shipment-detail', [shipment.pk]), 'Change this parcel')
 
     def test_the_weeks_pens_to_order_are_listed_and_exported_privately_and_formula_safe(self):
@@ -342,13 +357,11 @@ class OperationsPortalTests(OperationsPortalFixture):
         # What to order is on Weekly shipping, under the week's parcels (Dispatch stock was its own page until
         # 24 Oct 2026; its address opens this one).
         self.assertRedirects(self.client.get(reverse('portal:ops-stock'), {'week': week}),
-                             f'{reverse("portal:ops-shipping")}?week={week}#week-pens', fetch_redirect_response=False)
+                             reverse('portal:inventory'), fetch_redirect_response=False)
         page = self.page('ops-shipping', week=week)
         self.assertEqual([(line['product'].pk, line['pens']) for line in page.context['week_order']['lines']], [(self.product.pk, 3)])
-        self.assertEqual([(row['product'].pk, row['to_ship'], row['to_order']) for row in page.context['stock_rows']],
-                         [(self.product.pk, 4, 3), (self.open_product.pk, 0, 0)])
-        self.assertContains(page, 'Not in To order yet: 1 draft parcel.')
-        self.assertContains(page, f'{reverse("portal:ops-week-order")}?week={week}')
+        self.assertNotContains(page, 'Pens this week')
+        self.assertNotContains(page, 'Order pens')
         url = reverse('portal:ops-week-order')
         PracticeSettings.objects.update_or_create(company=self.company, defaults={'store_view_log': True})
         count = AuditEvent.objects.count()
@@ -363,18 +376,24 @@ class OperationsPortalTests(OperationsPortalFixture):
         self.assertEqual(AuditEvent.objects.count(), count + 1)
         self.assertEqual(self.client.get(url, {'week': 'bad'}).status_code, 400)
 
-    def test_history_export_uses_immutable_snapshot_and_escapes_patient_formula(self):
+    def test_history_export_uses_immutable_snapshot_and_literal_patient_formula(self):
         shipment = dispatch_shipment(shipment=self.locked(), actor=self.admin, tracking_number='TRACK', confirm=True)
         shipment.dispatch_snapshot['patient_name'] = ' =HYPERLINK("bad")'
         shipment.save(update_fields=('dispatch_snapshot',))
         old_product_name = self.product.name
         MedicationProduct.objects.filter(pk=self.product.pk).update(name='Changed later')
         response = self.client.get(reverse('portal:ops-history-export'))
-        self.assertContains(response, old_product_name)
-        self.assertNotContains(response, 'Changed later')
-        rows = list(csv.reader(io.StringIO(response.content.decode())))
-        self.assertEqual(rows[1][rows[0].index('Patient')][0], "'")
-        self.assertEqual(self.client.get(reverse('portal:ops-history-export'), {'start': 'bad'}).status_code, 400)
+        self.assertEqual(response['Content-Type'], 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+        content = b''.join(response.streaming_content)
+        response.close()
+        workbook = load_workbook(io.BytesIO(content))
+        self.addCleanup(workbook.close)
+        headers = [cell.value for cell in workbook.active[1]]
+        row = dict(zip(headers, workbook.active[2]))
+        self.assertEqual(row['Product'].value, old_product_name + ' ' + self.product.strength)
+        self.assertEqual(row['Patient'].value, ' =HYPERLINK("bad")')
+        self.assertEqual(row['Patient'].data_type, 's')
+        self.assertEqual(self.client.get(reverse('portal:ops-history-export'), {'start_month': 'bad'}).status_code, 400)
 
     def test_invalid_filters_are_validated_and_shipping_pagination_reaches_page_two(self):
         week = self.today - timedelta(days=self.today.weekday())

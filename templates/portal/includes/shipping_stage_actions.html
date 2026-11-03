@@ -1,0 +1,52 @@
+<div class="ops-step-panels">
+  <section class="ops-step-panel" id="shipping-panel-pending" data-shipping-panel="pending" aria-labelledby="shipping-step-pending"{% if shipping_step != 'pending' %} hidden{% endif %}>
+    <form id="shipping-bulk-confirm" method="post" action="{% url 'portal:ops-shipping-confirm' %}">
+      {% csrf_token %}<input type="hidden" name="list_query" value="{{ list_query }}"><input type="hidden" name="workflow_context" value="{{ confirm_context }}"><input type="hidden" name="week" value="{{ week_start|date:'Y-m-d' }}">
+      <button class="console-button console-button--primary" type="submit">Confirm &amp; lock selected</button>
+    </form>
+    <div class="shipping-help" data-shipping-help>
+      <button type="button" class="shipping-help-trigger" aria-label="About Pending" aria-describedby="shipping-help-pending" aria-expanded="false">{% include 'portal/includes/shipping_help_icon.html' %}</button>
+      <div class="shipping-help-popover" id="shipping-help-pending" role="tooltip" popover="auto">
+        <strong>Pending → Confirmed &amp; Locked</strong>
+        <p>To move to Confirmed &amp; Locked, the parcel needs:</p>
+        <ul>
+          <li>A valid prescription and active subscription, where applicable.</li>
+          <li>The correct medication, dose and permitted quantity.</li>
+          <li>A complete delivery address and contact number.</li>
+          <li>Confirmed payment, where required.</li>
+          <li>A stock check—shortages show a warning but can still be reserved.</li>
+        </ul>
+        {% if week_order.held %}<p>{{ week_order.held }} held parcel{{ week_order.held|pluralize }} need{{ week_order.held|pluralize:"s," }} review.</p>{% endif %}
+      </div>
+    </div>
+  </section>
+  <section class="ops-step-panel" id="shipping-panel-confirmed" data-shipping-panel="confirmed" aria-labelledby="shipping-step-confirmed"{% if shipping_step != 'confirmed' %} hidden{% endif %}>
+    {% if not to_book_demo or to_book > to_book_demo %}<form method="post" action="{% url 'portal:ops-shipping-courier' %}">
+      {% csrf_token %}<input type="hidden" name="workflow_context" value="{{ courier_context }}"><input type="hidden" name="list_query" value="{{ list_query }}"><input type="hidden" name="week" value="{{ week_start|date:'Y-m-d' }}">
+      <button class="console-button console-button--primary" type="submit"{% if not courier_enabled or not to_book or courier_problem %} disabled{% endif %}>Book courier</button>
+    </form>{% endif %}
+    {% if to_book_demo %}<form method="post" action="{% url 'portal:ops-shipping-courier' %}">{% csrf_token %}<input type="hidden" name="workflow_context" value="{{ courier_context }}"><input type="hidden" name="list_query" value="{{ list_query }}"><input type="hidden" name="week" value="{{ week_start|date:'Y-m-d' }}"><input type="hidden" name="demo_only" value="1"><button class="console-button console-button--secondary" type="submit">Simulate demo courier</button></form>{% endif %}
+    <div class="shipping-help" data-shipping-help>
+      <button type="button" class="shipping-help-trigger" aria-label="About Confirmed and Locked" aria-describedby="shipping-help-confirmed" aria-expanded="false">{% include 'portal/includes/shipping_help_icon.html' %}</button>
+      <div class="shipping-help-popover" id="shipping-help-confirmed" role="tooltip" popover="auto">
+        <strong>Confirmed &amp; Locked</strong>
+        <p>These parcels have passed the checks and their stock is reserved. Courier booking is still needed.</p>
+        <p>Once a waybill or tracking reference is recorded, the parcel moves to Tracking. The Waybill column shows its tracking reference, and Shipping status shows its latest courier update.</p>
+        {% if to_book_demo %}<p>Simulate demo courier assigns test waybills to the {{ to_book_demo }} demo parcel{{ to_book_demo|pluralize }} only. It does not contact a courier.</p>{% endif %}
+        {% if courier_enabled %}{% if courier_problem %}<p>{{ courier_problem }}</p>{% endif %}{% else %}<p>Courier booking is not connected. If booked externally, open the parcel to record its tracking reference when dispatching it.</p>{% endif %}
+      </div>
+    </div>
+  </section>
+  <section class="ops-step-panel" id="shipping-panel-tracking" data-shipping-panel="tracking" aria-labelledby="shipping-step-tracking"{% if shipping_step != 'tracking' %} hidden{% endif %}>
+    {% if to_collect and not to_collect_demo or to_collect > to_collect_demo %}<a class="console-button console-button--secondary" href="{{ collection_url }}"{% if not collect_demo_mode %} data-modal-open="record-collection"{% endif %} aria-haspopup="dialog">Record collection</a>{% endif %}
+    {% if to_collect_demo %}<a class="console-button console-button--secondary" href="{{ demo_collection_url }}" aria-haspopup="dialog">Record demo collection</a>{% endif %}
+    <div class="shipping-help" data-shipping-help>
+      <button type="button" class="shipping-help-trigger" aria-label="About Tracking" aria-describedby="shipping-help-tracking" aria-expanded="false">{% include 'portal/includes/shipping_help_icon.html' %}</button>
+      <div class="shipping-help-popover" id="shipping-help-tracking" role="tooltip" popover="auto">
+        <strong>Tracking</strong>
+        <p>Follow booked parcels through collection, transit and delivery. The Waybill and Shipping status columns show its reference and latest courier update.</p>
+        {% if to_collect %}<p>{{ to_collect }} booked parcel{{ to_collect|pluralize }} {{ to_collect|pluralize:"is,are" }} awaiting collection. Use Record collection once the courier has collected them to record dispatch and deduct stock.</p>{% endif %}
+      </div>
+    </div>
+  </section>
+</div>

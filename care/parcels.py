@@ -10,6 +10,8 @@ dispatched, and a parcel is only ever planned, never sent, by this module.
 from datetime import timedelta
 
 from django.db.models import Min
+from .demo_safety import require_same_demo_data
+
 from django.utils import timezone
 
 from .models import PatientSubscription, PracticeSettings, Shipment, ShipmentItem, TreatmentAuthorization
@@ -43,6 +45,7 @@ def schedule_parcels(authorization):
     Each parcel goes out within its own supply period (care.operations.allowance_window): the first shipping day on
     or after the dose starts is less than a week in, and every later one is a whole dispatch interval after it.
     """
+    require_same_demo_data(authorization.patient, authorization.product)
     if not authorization.dose_id:
         return []
     interval = timedelta(weeks=authorization.dose.dispatch_weeks)

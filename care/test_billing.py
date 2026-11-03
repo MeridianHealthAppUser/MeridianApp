@@ -25,6 +25,7 @@ from .models import (
     PatientSubscription, Payment, PharmacyOrder, PracticeSettings, Shipment, ShipmentItem, SubscriptionCycle,
     TreatmentAuthorization,
 )
+from .models import StockMovement
 from .operations import dispatch_shipment, lock_week, prepare_shipment
 from .treatment import enroll_local_subscription
 
@@ -48,6 +49,7 @@ class BillingFixture(TestCase):
                                              last_name='Mokoena', assigned_doctor=cls.doctor)
         PracticeSettings.objects.create(company=cls.company, doctors_ship=False)
         pen = MedicationProduct.objects.create(company=cls.company, name='Semaglutide', strength='1.0 mg', price='100.00')
+        StockMovement.objects.create(company=cls.company, product=pen, actor=cls.admin, quantity=100)
         cls.dose = MedicationDose.objects.create(company=cls.company, pen=pen, amount_mg='1', price='3295')
 
     def setUp(self):
@@ -375,7 +377,7 @@ class CourierTests(BillingFixture):
         session = self.client.session
         session[ACTIVE_COMPANY_SESSION_KEY] = self.company.pk
         session.save()
-        page = self.client.get(reverse('portal:ops-shipping'), {'week': self.week.isoformat()})
+        page = self.client.get(reverse('portal:ops-shipping'), {'week': self.week.isoformat(), 'shipping_step': 'collection'})
         self.assertContains(page, 'Changed after booking: The Courier Guy has the old address')
         # Dispatch records where the courier was sent, not the address now.
         shipment = dispatch_shipment(shipment=self.shipment, actor=self.admin, tracking_number='TCG91', confirm=True)

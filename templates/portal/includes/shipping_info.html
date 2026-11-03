@@ -1,0 +1,1 @@
+<span class="shipping-waybill">{% if shipment.waybill %}{{ shipment.waybill }}{% elif shipment.tracking_number %}{{ shipment.tracking_number }}{% else %}—<span class="sr-only"> No waybill recorded</span>{% endif %}</span>

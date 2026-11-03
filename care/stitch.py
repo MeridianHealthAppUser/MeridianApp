@@ -37,6 +37,8 @@ from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.utils import timezone
 
+from .demo_safety import block_demo_billing
+
 from .payment_providers import (
     Approval, Collection, Notice, ProviderUnavailable, http_call, payment_reference, record_id, return_url, webhook_secret,
 )
@@ -157,6 +159,7 @@ class StitchProvider:
         return {'nonce': str(uuid.uuid4()), 'externalReference': mandate.reference, 'payerInformation': payer,
                 'paymentMethods': methods}
 
+    @block_demo_billing('mandate')
     def start_mandate(self, mandate):
         data = self.graphql('''mutation CreateConsent($input: CreatePaymentConsentRequestInput!) {
               paymentConsentRequestCreate(input: $input) { id url } }''', {'input': self.consent_input(mandate)})
@@ -167,6 +170,7 @@ class StitchProvider:
         return _with_param(consent['url'], 'returnUrl' if mandate.method == 'debicheck' else 'redirect_uri',
                            return_url('mandate', mandate))
 
+    @block_demo_billing('mandate')
     def finish_mandate(self, mandate, params):
         try:
             data = self.graphql('''query Consent($id: ID!) { node(id: $id) { ... on PaymentConsentRequest {
@@ -198,6 +202,7 @@ class StitchProvider:
             return f"{details['card'].get('network') or 'Card'} ···{details['card']['last4']}"
         return 'DebiCheck debit order' if mandate.method == 'debicheck' else 'Card'
 
+    @block_demo_billing('mandate')
     def cancel_mandate(self, mandate):
         if not mandate.provider_reference:
             return
@@ -210,6 +215,7 @@ class StitchProvider:
 
     # Collecting
 
+    @block_demo_billing('payment', 'mandate')
     def collect(self, payment, mandate):
         if mandate.method == 'debicheck':
             # Sent with the next collection file; Stitch's OUTPUT file settles it.
@@ -245,6 +251,7 @@ class StitchProvider:
 
     # Once-off payments: a payment request
 
+    @block_demo_billing('payment')
     def start_checkout(self, payment):
         reference = payment_reference(payment)
         data = self.graphql('''mutation Pay($input: ClientPaymentInitiationRequestCreateInput!) {
@@ -259,6 +266,7 @@ class StitchProvider:
         payment.save(update_fields=('provider_reference', 'updated_at'))
         return _with_param(request['url'], 'redirect_uri', return_url('payment', payment))
 
+    @block_demo_billing('payment')
     def finish_checkout(self, payment, params):
         try:
             data = self.graphql('''query Payment($id: ID!) { node(id: $id) { ... on PaymentInitiationRequest {
@@ -344,7 +352,7 @@ def debicheck_in_use(company):
     from .models import DebitMandate
 
     return settings.PAYMENT_PROVIDER == StitchProvider.name or DebitMandate.objects.filter(
-        company=company, provider=StitchProvider.name, method=DebitMandate.Method.DEBICHECK).exclude(
+        company=company, patient__demo_data_set__isnull=True, provider=StitchProvider.name, method=DebitMandate.Method.DEBICHECK).exclude(
         status__in=(DebitMandate.Status.CANCELLED, DebitMandate.Status.FAILED)).exists() or debicheck_waiting(company).exists()
 
 
@@ -352,7 +360,7 @@ def debicheck_waiting(company):
     """DebiCheck debits waiting to go in a collection file."""
     from .models import Payment
 
-    return Payment.objects.filter(company=company, provider=StitchProvider.name, method=Payment.Method.DEBICHECK,
+    return Payment.objects.filter(company=company, patient__demo_data_set__isnull=True, provider=StitchProvider.name, method=Payment.Method.DEBICHECK,
                                   status=Payment.Status.PENDING, checkout=False, provider_reference='')
 
 
@@ -424,7 +432,7 @@ def apply_results_file(company, text, *, actor=None):
         if row[0] != 'D' or file_type not in ('REPLY', 'OUTPUT'):
             continue
         payment_id = record_id(record.get('EXTERNAL_COLLECTION_REFERENCE'), 'MHP')
-        payment = Payment.objects.filter(pk=payment_id, company=company, provider=StitchProvider.name).first() if payment_id else None
+        payment = Payment.objects.filter(pk=payment_id, company=company, patient__demo_data_set__isnull=True, provider=StitchProvider.name).first() if payment_id else None
         if payment is not None and record.get('COLLECTION_STATUS') == 'DISPUTED' and payment.status == Payment.Status.PAID:
             counts['failed'] += dispute(payment, actor=actor)
             continue
@@ -453,6 +461,7 @@ def apply_results_file(company, text, *, actor=None):
     return counts
 
 
+@block_demo_billing('payment')
 def dispute(payment, *, actor=None):
     """The patient disputed a DebiCheck collection and their bank refunded it: the payment is marked refunded, its
     period unpaid again (in the failure queue), and the practice gets a task. Returns 1 when something changed."""

@@ -1,0 +1,5 @@
+<nav class="patient-order-subtabs purchasing-subtabs" aria-label="Purchasing views">
+  <a href="{% url 'portal:purchasing' %}"{% if purchasing_view == 'to-order' %} class="is-active" aria-current="page"{% endif %}>To order</a>
+  <a href="{% url 'portal:purchasing' %}?view=on-order"{% if purchasing_view == 'on-order' %} class="is-active" aria-current="page"{% endif %}>On order</a>
+  <a href="{% url 'portal:purchasing' %}?view=history"{% if purchasing_view == 'history' %} class="is-active" aria-current="page"{% endif %}>Purchase history</a>
+</nav>

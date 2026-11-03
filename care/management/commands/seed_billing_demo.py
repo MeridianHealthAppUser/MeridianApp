@@ -150,6 +150,9 @@ class Command(BaseCommand):
         self.ship_day = shipping_day_from(today + timedelta(days=1), weekday)
         self.week = self.ship_day - timedelta(days=self.ship_day.weekday())
         self.started = self.ship_day - timedelta(weeks=4)
+        # When seeded on the shipping day, the next parcel is a whole week away. Anchor the paid examples so
+        # their second debit is already due today, rather than waiting for a future debit before they can ship.
+        paid_from = min(self.started - timedelta(days=2), today - timedelta(weeks=4))
         if not settings_row.collection_street:
             # Placeholder collection details, so Weekly shipping's courier steps have something to show. Replace them
             # with the practice's own (Practice settings > Courier) before booking a real waybill.
@@ -190,8 +193,8 @@ class Command(BaseCommand):
         # Ayesha: card, paid up. Her parcel this week passes every check.
         ayesha = self.patient('Ayesha')
         authorization, plan = self.prescribe(ayesha, low)
-        self.debit_order(plan, method='card', label='Visa ···4242', first_debit=self.started - timedelta(days=2))
-        self.bill(plan, self.started - timedelta(days=2), today)
+        self.debit_order(plan, method='card', label='Visa ···4242', first_debit=paid_from)
+        self.bill(plan, paid_from, today)
         self.dispatched(ayesha, authorization, plan, self.started, waybill='TCG90387711', courier_status='delivered', delivered=True)
 
         # Pieter: DebiCheck; this cycle's debit failed twice and is retried in a few days.
@@ -218,8 +221,8 @@ class Command(BaseCommand):
         # Lerato: DebiCheck, paid; then her doctor raised her dose (and price), so the new amount needs her approval.
         lerato = self.patient('Lerato')
         authorization, plan = self.prescribe(lerato, low)
-        self.debit_order(plan, method='debicheck', label='FNB ···4821', first_debit=self.started - timedelta(days=2))
-        self.bill(plan, self.started - timedelta(days=2), today)
+        self.debit_order(plan, method='debicheck', label='FNB ···4821', first_debit=paid_from)
+        self.bill(plan, paid_from, today)
         self.dispatched(lerato, authorization, plan, self.started, waybill='TCG90387714', courier_status='delivered', delivered=True)
         TreatmentAuthorization.objects.filter(pk=authorization.pk).update(dose=high, max_dose=high.label, product=high.pen)
         ShipmentItem.objects.filter(shipment__patient=lerato, shipment__status=Shipment.Status.DRAFT).update(
@@ -238,8 +241,8 @@ class Command(BaseCommand):
         # Megan: card, paid; no contact number on her delivery address. She also bought creatine sachets, paid by card.
         megan = self.patient('Megan')
         authorization, plan = self.prescribe(megan, low)
-        self.debit_order(plan, method='card', label='Visa ···0119', first_debit=self.started - timedelta(days=2))
-        self.bill(plan, self.started - timedelta(days=2), today)
+        self.debit_order(plan, method='card', label='Visa ···0119', first_debit=paid_from)
+        self.bill(plan, paid_from, today)
         creatine, _ = MedicationProduct.objects.get_or_create(
             company=company, name='Creatine monohydrate sachets', strength='30 × 5 g',
             defaults=dict(category=MedicationProduct.Category.OTHER, price=Decimal('240.00'), requires_authorisation=False,
