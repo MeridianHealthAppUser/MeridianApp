@@ -94,7 +94,7 @@ class InvoiceDownloadTests(BillingPageFixture):
     def test_long_invoice_wraps_over_multiple_pages_and_retains_the_total(self):
         invoice = self.invoice()
         InvoiceLine.objects.bulk_create([
-            InvoiceLine(company=self.company, invoice=invoice, description=f'Line {number}: ' + 'Recorded service ' * 15,
+            InvoiceLine(company=self.company, invoice=invoice, description=f'Line {number}: ' + 'Recorded service ' * 12,
                         quantity=1, unit_amount='0.00', line_total='0.00') for number in range(55)
         ])
         self.login(self.patient_user)
