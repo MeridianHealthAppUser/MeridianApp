@@ -195,8 +195,8 @@ class AccountProfileTests(TestCase):
                 self.assertNotIn('form', response.context)
                 self.assertNotContains(response, 'name="first_name"')
                 self.assertContains(response, 'Read-only')
-                if user != self.doctor:
-                    self.assertContains(response, 'These details are maintained centrally.')
+                # The "maintained centrally" note was removed for everyone on 4 Nov 2026.
+                self.assertNotContains(response, 'These details are maintained centrally.')
                 token = make_profile_context(user)
                 response = self.client.post(self.url, {'profile_context': token, 'first_name': 'Changed', 'last_name': 'Display'})
                 self.assertEqual(response.status_code, 403)

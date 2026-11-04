@@ -56,7 +56,6 @@ class InventorySearchTests(OperationsPortalFixture):
         response = self.client.get(self.url, params)
         self.assertEqual(response.status_code, 200)
         content = b''.join(response.streaming_content)
-        response.close()
         workbook = load_workbook(BytesIO(content))
         self.addCleanup(workbook.close)
         return {row[0] for row in list(workbook.active.values)[1:]}

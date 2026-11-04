@@ -385,7 +385,6 @@ class OperationsPortalTests(OperationsPortalFixture):
         response = self.client.get(reverse('portal:ops-history-export'))
         self.assertEqual(response['Content-Type'], 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
         content = b''.join(response.streaming_content)
-        response.close()
         workbook = load_workbook(io.BytesIO(content))
         self.addCleanup(workbook.close)
         headers = [cell.value for cell in workbook.active[1]]

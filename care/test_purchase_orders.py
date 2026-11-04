@@ -6,7 +6,7 @@ from unittest.mock import patch
 from uuid import uuid4
 
 from django.core.exceptions import PermissionDenied, ValidationError
-from django.db import IntegrityError, transaction
+from django.db import DataError, IntegrityError, transaction
 from django.utils import timezone
 
 from practices.models import Company, CompanyMembership
@@ -399,9 +399,10 @@ class PurchaseOrderModelTests(PurchaseOrderFixture):
     def test_database_enforces_positive_quantities_received_bounds_and_unique_identifiers(self):
         order = self.create_order()
         item = order.items.get()
+        # Postgres rejects a number too big for the column as a DataError, before any check constraint.
         for changes in ({'quantity': 0}, {'quantity': -1}, {'quantity': 2147483648},
                         {'quantity_received': -1}, {'quantity_received': 6}):
-            with self.subTest(changes=changes), self.assertRaises(IntegrityError), transaction.atomic():
+            with self.subTest(changes=changes), self.assertRaises((IntegrityError, DataError)), transaction.atomic():
                 PurchaseOrderItem.objects.filter(pk=item.pk).update(**changes)
         for fields in ({'number': order.number, 'submission_key': uuid4()},
                        {'number': 2, 'submission_key': order.submission_key},

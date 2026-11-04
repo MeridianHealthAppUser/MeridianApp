@@ -14,7 +14,7 @@ from django.urls import reverse
 
 from .filter_menus import TickedChoiceField, list_tools, ticked_sections
 from .staff_views import StaffPageView
-from .followup_views import FOLLOW_UP_CHOICES, follow_up_matches, with_follow_up
+from .followup_views import FOLLOW_UP_CHOICES, follow_up_matches, please_call, with_follow_up
 
 
 class LeadFilterForm(forms.Form):
@@ -22,12 +22,6 @@ class LeadFilterForm(forms.Form):
     screening_status = TickedChoiceField(label='Screening', choices=Lead.ScreeningStatus.choices)
     stage = TickedChoiceField(label='Stage', choices=Lead.Stage.choices)
     follow_up = TickedChoiceField(label='Follow-up', choices=FOLLOW_UP_CHOICES)
-
-    def __init__(self, *args, history=False, **kwargs):
-        super().__init__(*args, **kwargs)
-        if not history:
-            # Leads are the enquiries not yet converted; Lead history has every stage.
-            self.fields['stage'].choices = [choice for choice in Lead.Stage.choices if choice[0] != Lead.Stage.CONVERTED]
 
 
 @method_decorator(never_cache, name='dispatch')
@@ -42,8 +36,8 @@ class LeadPageView(StaffPageView):
 
 
 class LeadListView(LeadPageView):
-    """Leads: the enquiries not yet converted to patients. Lead history (history=True) is every enquiry, converted
-    ones too, with the whole Stage filter."""
+    """Leads: the Please call list (Dr Czech, 4 Nov 2026; it was on Dropouts). Lead history (history=True) is every
+    enquiry, converted ones too, with search and filters."""
 
     template_name = 'portal/staff_leads.html'
     page_title = 'Leads and enquiries'
@@ -51,10 +45,11 @@ class LeadListView(LeadPageView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        queryset = with_follow_up(Lead.objects.for_company(self.company).order_by('-created_at', '-pk'), 'lead')
         if not self.history:
-            queryset = queryset.exclude(stage=Lead.Stage.CONVERTED)
-        form = LeadFilterForm(self.request.GET, history=self.history)
+            context.update(please_call(self.request, self.company), lead_history=False)
+            return context
+        queryset = with_follow_up(Lead.objects.for_company(self.company).order_by('-created_at', '-pk'), 'lead')
+        form = LeadFilterForm(self.request.GET)
         filters = {}
         if form.is_valid():
             filters = form.cleaned_data
@@ -71,10 +66,10 @@ class LeadListView(LeadPageView):
             queryset = queryset.none()
         context.update(self.paginate(queryset, **filters))
         count = context['page_obj'].paginator.count
-        context.update(filter_form=form, leads=context['page_obj'].object_list, lead_history=self.history,
-                       count_label=f'{count} {"enquir" + pluralize(count, "y,ies") if self.history else "lead" + pluralize(count)}')
+        context.update(filter_form=form, leads=context['page_obj'].object_list, lead_history=True,
+                       count_label=f'{count} enquir{pluralize(count, "y,ies")}')
         context.update(list_tools(
-            action=reverse('portal:staff-lead-history' if self.history else 'portal:staff-leads'), data=self.request.GET,
+            action=reverse('portal:staff-lead-history'), data=self.request.GET,
             form=form, label='Filter leads',
             sections=ticked_sections(form, self.request.GET, ('screening_status', 'stage', 'follow_up'),
                                      icons={'stage': 'list', 'follow_up': 'list'}),

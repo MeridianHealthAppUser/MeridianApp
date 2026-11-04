@@ -26,6 +26,9 @@ def visible_tasks(company, actor, membership):
     )
     if membership.role == CompanyMembership.Role.DOCTOR:
         tasks = tasks.filter(Q(assigned_to=actor) | Q(created_by=actor))
+    elif membership.role == CompanyMembership.Role.PRACTICE_ADMIN:
+        # Data requests are the clinician's and Super Admin's; the practice handles them in Messages (4 Nov 2026).
+        tasks = tasks.filter(data_request__isnull=True)
     return tasks
 
 

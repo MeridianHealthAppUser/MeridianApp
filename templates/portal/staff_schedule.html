@@ -193,7 +193,7 @@
 
       {# One day's free time, so Day view only. #}{% if not is_doctor and schedule_view == 'table' %}{% include 'portal/includes/schedule_day_diaries.html' %}{% endif %}
 
-      {# The practice's list for moving bookings; clinicians see each booking's status only. #}{% if not is_doctor %}
+      {# The Super Admin's list for moving bookings; clinicians and practice administrators see each booking's status only. #}{% if show_attention %}
         <section class="staff-page-card schedule-attention-card" aria-labelledby="affected-appointments-heading">
           <header class="staff-page-card__header">
             <div><h2 id="affected-appointments-heading">Appointments needing attention</h2><p>Future bookings at {{ company.name }} outside working hours, outside special hours or on leave.</p></div>
@@ -264,7 +264,6 @@
   <dialog class="app-dialog" id="create-appointment" aria-labelledby="create-appointment-title">
     <div class="app-dialog__body">
       <h2 id="create-appointment-title">Create appointment</h2>
-      <p class="app-dialog__sub">Times are SAST. Working hours, time off and both people’s other bookings are checked again when you save.</p>
       <form class="console-form" method="post" action="{% url 'portal:appointment-book' %}">{% csrf_token %}<input type="hidden" name="workflow_context" value="{{ booking_context }}">
         {% include 'portal/includes/appointment_booking_fields.html' with form=booking_form %}
         <div class="app-dialog__actions"><button class="console-button console-button--secondary" type="button" data-dialog-close>Cancel</button><button class="console-button console-button--primary" type="submit">Confirm booking</button></div>

@@ -28,7 +28,6 @@
         {% if staff_is_clinician %}<div><dt>HPCSA registration number</dt><dd>{{ profile_user.hpcsa_number|default:"Not recorded" }}</dd></div>
         <div><dt>PathCare code</dt><dd>{{ profile_user.pathcare_code|default:"Not recorded" }}</dd></div>{% endif %}
       </dl>
-      {# A Super Admin keeps every one of these in Users and roles. #}{% if not staff_is_clinician %}<p class="account-profile__note">These details are maintained centrally. If anything here is wrong, let the practice know and it will be corrected for you.</p>{% endif %}
     </section>
     <div class="account-profile__stack">
       <section class="account-profile__card" aria-labelledby="profile-security-heading">

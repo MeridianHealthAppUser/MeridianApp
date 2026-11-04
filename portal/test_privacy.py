@@ -434,7 +434,7 @@ class PrivacyTests(TestCase):
         self.assertTrue(response.context['form'].non_field_errors())
         self.assertEqual(PatientDataRequestReply.objects.count(), before)
 
-    def test_new_request_raises_a_task_administrators_open_it_from(self):
+    def test_new_request_raises_a_task_a_super_admin_opens_it_from(self):
         self.login()
         self.post('patient-data-request-create', self.request_data(kind='question', description='Who can see my notes?'))
         record = PatientDataRequest.objects.get(description='Who can see my notes?')
@@ -443,12 +443,17 @@ class PrivacyTests(TestCase):
                          (self.alpha.pk, self.patient.pk, 'Data request: privacy question', 'open', None))
         self.assertIn('Who can see my notes?', task.description)
         self.assertNotIn('Summary data', task.description)
-        for actor in (self.admin, self.super_admin):
-            self.login(actor)
-            listed = {row.pk: row for row in self.get('staff-tasks').context['tasks']}
-            self.assertEqual(listed[task.pk].workflow_url, self.url('staff-data-request-detail', record.pk))
-            self.assertEqual(listed[task.pk].workflow_label, 'Open data request')
-            self.assertTrue(listed[task.pk].is_actionable)
+        self.login(self.super_admin)
+        listed = {row.pk: row for row in self.get('staff-tasks').context['tasks']}
+        self.assertEqual(listed[task.pk].workflow_url, self.url('staff-data-request-detail', record.pk))
+        self.assertEqual(listed[task.pk].workflow_label, 'Open data request')
+        self.assertTrue(listed[task.pk].is_actionable)
+        # Practice administrators don't get it; the practice handles requests in Messages (4 Nov 2026).
+        self.login(self.admin)
+        self.assertNotIn(task.pk, [row.pk for row in self.get('staff-tasks').context['tasks']])
+        self.assertEqual(self.client.post(reverse('portal:task-complete', args=[task.pk])).status_code, 404)
+        task.refresh_from_db()
+        self.assertEqual(task.status, 'open')
         # This patient has no clinician, so no clinician has it.
         self.login(self.doctor)
         self.assertNotIn(task.pk, [row.pk for row in self.get('staff-tasks').context['tasks']])
@@ -464,7 +469,7 @@ class PrivacyTests(TestCase):
         question = PatientDataRequest.objects.get(description='Who reads my notes?')
         self.assertEqual((record.task.assigned_to, question.task.assigned_to), (self.doctor, self.doctor))
         self.assertIn('Summary data', record.task.description)
-        self.login(self.admin)
+        self.login(self.super_admin)
         self.assertContains(self.get('staff-tasks'), ', 4 open data requests')
         self.login(self.doctor)
         listed = {row.pk: row for row in self.get('staff-tasks').context['tasks']}
@@ -497,8 +502,9 @@ class PrivacyTests(TestCase):
         record = PatientDataRequest.objects.get(description='A copy please.')
         task = record.task
         edit = reverse('portal:task-edit', args=[task.pk])
+        # A practice administrator doesn't get data request tasks at all.
         self.login(self.admin)
-        self.assertRedirects(self.client.get(edit), self.url('staff-data-request-detail', record.pk), fetch_redirect_response=False)
+        self.assertEqual(self.client.get(edit).status_code, 404)
         self.assertNotContains(self.get('staff-tasks'), f'href="{edit}"')
         data = dict(title=task.title, description=task.description, patient=self.patient.pk, assigned_to=self.super_admin.pk,
                     status='open', priority='normal', due_at='')
@@ -556,21 +562,24 @@ class PrivacyTests(TestCase):
         self.assertTrue(self.post('staff-data-request-detail', data, self.request_record.pk).context['form'].errors)
 
     def test_data_requests_menu_counts_requests_waiting_on_the_practice(self):
-        self.login(self.admin)
+        self.login(self.super_admin)
         self.assertContains(self.get('staff-tasks'), ', 2 open data requests')
         PatientDataRequest.objects.filter(pk=self.other_request.pk).update(status='in_review')
         self.assertContains(self.get('staff-tasks'), ', 2 open data requests')
         PatientDataRequest.objects.filter(pk=self.other_request.pk).update(status='resolved')
         self.assertContains(self.get('staff-tasks'), ', 1 open data request<')
-        # The Administration menu item and its Data requests tab both carry it; a Super Admin's section page too.
+        # The Data requests tab carries it, and the Administration section page.
         tabs = self.get('staff-data-requests')
         self.assertContains(tabs, f'<a href="{self.url("staff-data-requests")}" class="is-active" aria-current="page">Data requests'
                                   '<span class="nav-badge" aria-hidden="true">1</span>')
-        self.assertContains(tabs, '<span class="console-nav__text">Administration</span><span class="nav-badge" aria-hidden="true">1</span>')
-        self.login(self.super_admin)
         self.assertContains(self.client.get(reverse('portal:staff-menu-section', args=['administration'])), ', 1 open data request<')
-        self.login(self.doctor)
-        self.assertNotContains(self.get('staff-tasks'), 'open data request')
+        # Practice administrators and clinicians get neither the count nor the tab (Dr Czech, 4 Nov 2026).
+        for user in (self.admin, self.doctor):
+            self.login(user)
+            self.assertNotContains(self.get('staff-tasks'), 'open data request')
+        self.login(self.admin)
+        self.assertNotContains(self.get('staff-leads'), f'href="{self.url("staff-data-requests")}"')
+        self.assertNotContains(self.get('staff-leads'), '<span class="console-nav__text">Administration</span><span class="nav-badge"')
 
     def test_staff_request_head_does_not_audit_and_get_does(self):
         PracticeSettings.objects.update_or_create(company=self.alpha, defaults={'store_view_log': True})

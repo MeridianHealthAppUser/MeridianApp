@@ -59,7 +59,6 @@ class SupplierPortalTests(OperationsPortalFixture):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response['Content-Type'], 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
         workbook = load_workbook(BytesIO(b''.join(response.streaming_content)))
-        response.close()
         self.addCleanup(workbook.close)
         values = list(workbook.active.values)
         return workbook, [dict(zip(values[0], row)) for row in values[1:]]

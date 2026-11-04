@@ -39,10 +39,10 @@ def attach_clinical_task_links(tasks, actor, membership):
             task.workflow_url = reverse('portal:treatment-authorisation-detail', args=[reminder.authorization_id])
             task.workflow_label = 'Review authorisation'
         elif data_request and data_request.company_id == task.company_id and data_request.patient_id == task.patient_id \
-                and membership.is_admin:
-            # Clinicians can't open Data requests; they edit or complete the task itself. A Super Admin can also
-            # edit it, to reassign it; practice administrators open the request or complete the task.
+                and membership.role == CompanyMembership.Role.SUPER_ADMIN:
+            # Clinicians can't open Data requests; they edit or complete the task itself. A Super Admin opens the
+            # request and can edit the task, to reassign it. Practice administrators don't get these tasks.
             task.workflow_url = reverse('portal:staff-data-request-detail', args=[data_request.pk])
             task.workflow_label = 'Open data request'
-            task.also_editable = membership.role == CompanyMembership.Role.SUPER_ADMIN
+            task.also_editable = True
     return tasks

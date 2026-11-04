@@ -358,9 +358,9 @@ class FollowUpImportSafetyTests(ReportingPortalFixture):
         self.assertIsNone(response.context['form'].initial['assigned_to'])
         self.assertEqual(response.context['page_obj'].paginator.count, 0)
         self.assertNotContains(response, 'Foreign administrative text')
-        response = self.get('staff-leads', follow_up='none')
+        response = self.get('staff-lead-history', follow_up='none')
         self.assertContains(response, 'safe@example.test')
-        self.assertNotContains(self.get('staff-leads', follow_up='done'), 'safe@example.test')
+        self.assertNotContains(self.get('staff-lead-history', follow_up='done'), 'safe@example.test')
 
     def test_malformed_direct_contact_dates_and_targets_are_validation_errors_with_no_writes(self):
         lead = Lead.objects.create(company=self.company, first_name='Safe', last_name='Enquiry', email='safe@example.test')

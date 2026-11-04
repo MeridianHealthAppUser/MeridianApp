@@ -60,10 +60,18 @@ def labelled_slots(slots, *, patient=False):
     return [dict(slot, label=SLOT_LABELS[slot['state']]) for slot in slots]
 
 
-def staff_booking_form(company, *args, **kwargs):
-    """The booking form as staff see it: no external meeting link, as the native video room is used."""
+# What a practice administrator books; six-month reviews and ad-hoc appointments are the clinician's (Dr Czech, 4 Nov 2026).
+PRACTICE_ADMIN_TYPES = (Appointment.Type.INITIAL, Appointment.Type.FOLLOW_UP)
+
+
+def staff_booking_form(company, *args, membership, **kwargs):
+    """The booking form as staff see it: no external meeting link, as the native video room is used, and for a
+    practice administrator, only initial consultations and follow-ups."""
     form = AppointmentForm(*args, company=company, **kwargs)
     form.fields['video_link'].widget = forms.HiddenInput()
+    if membership.role == membership.Role.PRACTICE_ADMIN:
+        field = form.fields['appointment_type']
+        field.choices = [(value, label) for value, label in field.choices if value in ('', *PRACTICE_ADMIN_TYPES)]
     return form
 
 
@@ -126,7 +134,7 @@ class StaffBookingView(LoginRequiredMixin, StaffCompanyRequiredMixin, View):
     http_method_names = ('get', 'post', 'head', 'options')
 
     def booking_form(self, *args, **kwargs):
-        form = staff_booking_form(self.company, *args, **kwargs)
+        form = staff_booking_form(self.company, *args, membership=self.membership, **kwargs)
         limit_patient_choices(form.fields['patient'], self.membership, self.request.user)
         return form
 

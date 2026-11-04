@@ -124,7 +124,7 @@ class PatientCareTests(TestCase):
         self.assertEqual(list(form.fields['appointment_type'].choices), [('follow_up', 'Follow-up · 15 minutes')])
         self.assertTrue(form['appointment_type'].is_hidden)
         self.assertEqual(form['appointment_type'].value(), 'follow_up')
-        self.assertContains(page, 'Follow-up · 15 minutes')
+        self.assertContains(page, '15-minute follow-ups can be booked here')
         self.assertNotContains(page, '<select name="appointment_type"')
         self.assertEqual(form['clinician'].value(), self.doctor.pk)
         self.assertContains(page, f'data-booking-form data-times-url="{self.url("patient-booking-times")}"')

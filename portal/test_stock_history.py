@@ -42,7 +42,6 @@ class InventoryMovementTests(OperationsPortalFixture):
         self.assertIn('attachment;', response['Content-Disposition'])
         self.assertIn('stock-movements.xlsx', response['Content-Disposition'])
         content = b''.join(response.streaming_content)
-        response.close()
         return response, load_workbook(BytesIO(content))
 
     def assert_private(self, response):

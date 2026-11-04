@@ -85,7 +85,6 @@ class PurchaseDocumentTests(OperationsPortalFixture):
                 self.assertIn('no-store', response['Cache-Control'])
                 self.assertEqual(response['X-Content-Type-Options'], 'nosniff')
                 content = b''.join(response.streaming_content)
-                response.close()
                 if kind == 'excel':
                     workbook = load_workbook(BytesIO(content))
                     self.assertEqual(tuple(workbook.active.cell(8, column).value for column in (1, 5, 6, 7)),
@@ -111,7 +110,7 @@ class PurchaseDocumentTests(OperationsPortalFixture):
         for kind in ('excel', 'pdf'):
             response = self.client.head(self.url(kind))
             self.assertEqual(response.status_code, 200)
-            response.close()
+            self.assertEqual(b''.join(response.streaming_content), b'')
         self.assertEqual(AuditEvent.objects.count(), before)
         self.assertFalse(mail.outbox)
 
@@ -136,7 +135,7 @@ class PurchaseDocumentTests(OperationsPortalFixture):
         self.login(self.super_admin)
         response = self.client.get(self.url('pdf'))
         self.assertEqual(response.status_code, 200)
-        response.close()
+        self.assertTrue(b''.join(response.streaming_content).startswith(b'%PDF'))
         self.login()
         CompanyMembership.objects.filter(company=self.company, user=self.admin).update(is_active=False)
         self.assertEqual(self.client.get(self.url('pdf')).status_code, 403)

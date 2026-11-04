@@ -97,17 +97,16 @@ def schedule_availability_context(request, company, membership, clinician, selec
         for special in special_days:
             special.remove_url = reverse('portal:availability-special-day-remove', args=[special.pk]) + '?' + params
             special.overridden = states[special.date]['kind'] == 'off'
-    # Appointments needing attention is the practice's list, for moving bookings; clinicians don't get it.
-    affected = (Appointment.objects.none() if membership.role == membership.Role.DOCTOR
-                else appointments_requiring_attention(company=company, clinician=clinician))
+    # Appointments needing attention is the Super Admin's list, for moving bookings. Clinicians don't get it, and
+    # practice administrators don't either (Dr Czech, 4 Nov 2026).
+    show_attention = membership.role == membership.Role.SUPER_ADMIN
+    affected = (appointments_requiring_attention(company=company, clinician=clinician) if show_attention
+                else Appointment.objects.none())
     affected_page = Paginator(affected, 20).get_page(request.GET.get('affected_page'))
     affected_appointments = list(affected_page.object_list)
-    no_record = membership.role == membership.Role.PRACTICE_ADMIN
     for appointment in affected_appointments:
         appointment.attention_reason = ATTENTION_REASONS[attention_kind(appointment)]
-        # Practice administrators don't open patient records: Review appointment opens the appointment, to move it.
-        appointment.attention_url = (reverse('portal:appointment-detail', args=[appointment.pk]) if no_record
-                                     else reverse('portal:patient-detail', args=[appointment.patient_id]))
+        appointment.attention_url = reverse('portal:patient-detail', args=[appointment.patient_id])
 
     day_state = diary_day_states(company=company, clinician=clinician, first_day=selected_date,
                                  last_day=selected_date)[selected_date] if clinician and selected_date else None
@@ -126,7 +125,7 @@ def schedule_availability_context(request, company, membership, clinician, selec
         'weekly_pattern': [dict(day_label=WEEKDAYS[day], is_working=bool(periods), periods=periods) for day, periods in enumerate(week)],
         'time_off_form': TimeOffForm(prefix='timeoff', initial={'starts_on': selected_date, 'ends_on': selected_date}) if can_manage_days else None,
         'special_day_form': SpecialDayForm(prefix='special', initial={'date': selected_date}) if can_manage_days else None,
-        'time_off_entries': time_off, 'affected_appointments': affected_appointments, 'affected_count': affected_page.paginator.count,
+        'time_off_entries': time_off, 'show_attention': show_attention, 'affected_appointments': affected_appointments, 'affected_count': affected_page.paginator.count,
         'time_off_page_obj': time_off_page,
         'time_off_previous_url': page_url('time_off_page', time_off_page.previous_page_number(), 'time-off-heading') if time_off_page.has_previous() else None,
         'time_off_next_url': page_url('time_off_page', time_off_page.next_page_number(), 'time-off-heading') if time_off_page.has_next() else None,

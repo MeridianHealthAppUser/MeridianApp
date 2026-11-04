@@ -248,11 +248,14 @@ class AvailabilityPortalTests(TestCase):
                        'Appointments needing attention', 'Needs rescheduling', 'schedule-appointment-attention'):
             self.assertNotContains(response, hidden)
         self.assertContains(response, '<span class="console-status console-status--booked">Booked</span>', html=True)
-        # The practice still sees why it needs a new time, and the list.
+        # The practice still sees why it needs a new time; only a Super Admin gets the list (Dr Czech, 4 Nov).
         self.login(self.admin)
         response = self.client.get(reverse('portal:staff-schedule'), {'date': self.monday.isoformat(), 'clinician': self.doctor.pk})
         self.assertContains(response, 'Doctor unavailable')
         self.assertContains(response, 'Not open')
+        self.assertNotContains(response, 'Appointments needing attention')
+        self.login(self.super_admin)
+        response = self.client.get(reverse('portal:staff-schedule'), {'date': self.monday.isoformat(), 'clinician': self.doctor.pk})
         self.assertContains(response, 'Appointments needing attention')
         booking.refresh_from_db()
         self.assertEqual((booking.status, booking.starts_at), (Appointment.Status.BOOKED, self.at(10)))
@@ -536,10 +539,11 @@ class AvailabilityPortalTests(TestCase):
         ) for day in range(21)]
         beta_patient = Patient.objects.create(company=self.beta, first_name='Secret', last_name='Beta Patient')
         foreign = Appointment.objects.create(company=self.beta, patient=beta_patient, clinician=self.doctor, starts_at=self.at(9), duration_minutes=30)
-        # The practice's list; a clinician doesn't get it.
-        self.login()
-        self.assertEqual(self.client.get(reverse('portal:staff-schedule'), {'date': self.monday.isoformat()}).context['affected_count'], 0)
-        self.login(self.admin)
+        # The Super Admin's list; a clinician or practice administrator doesn't get it.
+        for user in (self.doctor, self.admin):
+            self.login(user)
+            self.assertEqual(self.client.get(reverse('portal:staff-schedule'), {'date': self.monday.isoformat()}).context['affected_count'], 0)
+        self.login(self.super_admin)
         response = self.client.get(reverse('portal:staff-schedule'), {
             'date': self.monday.isoformat(), 'clinician': self.doctor.pk, 'view': 'calendar',
         })
@@ -565,7 +569,7 @@ class AvailabilityPortalTests(TestCase):
         beta_patient = Patient.objects.create(company=self.beta, first_name='Secret', last_name='Other Practice')
         Appointment.objects.create(company=self.beta, patient=beta_patient, clinician=self.doctor, starts_at=self.at(10))
         self.leave(company=self.beta)
-        self.login(self.admin)
+        self.login(self.super_admin)
         response = self.client.get(reverse('portal:staff-schedule'), {'date': self.monday.isoformat(), 'clinician': ''})
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Appointments needing attention')

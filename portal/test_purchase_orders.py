@@ -97,7 +97,6 @@ class PurchaseOrderPortalTests(OperationsPortalFixture):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response['Content-Type'], 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
         content = b''.join(response.streaming_content)
-        response.close()
         workbook = load_workbook(BytesIO(content))
         self.addCleanup(workbook.close)
         return response, workbook

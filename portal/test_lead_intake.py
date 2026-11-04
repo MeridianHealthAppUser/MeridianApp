@@ -455,7 +455,7 @@ class StaffLeadWorkspaceTests(TestCase):
     def test_administrators_can_open_only_their_current_practice_leads(self):
         for user in (self.admin, self.super_admin):
             self.login(user)
-            response = self.client.get(reverse('portal:staff-leads'))
+            response = self.client.get(reverse('portal:staff-lead-history'))
             self.assertContains(response, self.pending.last_name)
             self.assertContains(response, self.cleared.last_name)
             self.assertNotContains(response, self.foreign.last_name)
@@ -478,7 +478,7 @@ class StaffLeadWorkspaceTests(TestCase):
 
     def test_lead_detail_contains_answers_while_list_keeps_health_text_out(self):
         self.login()
-        self.assertNotContains(self.client.get(reverse('portal:staff-leads')), 'Distinctive confidential clinical answer.')
+        self.assertNotContains(self.client.get(reverse('portal:staff-lead-history')), 'Distinctive confidential clinical answer.')
         self.assertContains(
             self.client.get(reverse('portal:lead-detail', args=[self.pending.pk])),
             'Distinctive confidential clinical answer.',
@@ -486,7 +486,7 @@ class StaffLeadWorkspaceTests(TestCase):
 
     def test_search_status_and_stage_filters(self):
         self.login()
-        url = reverse('portal:staff-leads')
+        url = reverse('portal:staff-lead-history')
         for params in (
             {'q': 'beth-lead@example.test'},
             {'screening_status': Lead.ScreeningStatus.CLEARED},
@@ -498,9 +498,9 @@ class StaffLeadWorkspaceTests(TestCase):
                 self.assertNotContains(response, self.pending.last_name)
                 self.assertNotContains(response, self.foreign.last_name)
 
-    def test_leads_have_a_search_at_the_top_right_of_the_table_with_filters_before_it(self):
+    def test_lead_history_has_a_search_at_the_top_right_of_the_table_with_filters_before_it(self):
         self.login()
-        url = reverse('portal:staff-leads')
+        url = reverse('portal:staff-lead-history')
         response = self.client.get(url)
         self.assertNotContains(response, 'Find an enquiry')
         self.assertNotContains(response, 'Apply filters')
@@ -522,7 +522,7 @@ class StaffLeadWorkspaceTests(TestCase):
         self.login()
         for field in ('screening_status', 'stage'):
             with self.subTest(field=field):
-                response = self.client.get(reverse('portal:staff-leads'), {field: 'invented-state'})
+                response = self.client.get(reverse('portal:staff-lead-history'), {field: 'invented-state'})
                 self.assertEqual(response.status_code, 200)
                 self.assertIn(field, response.context['filter_form'].errors)
                 self.assertNotContains(response, self.pending.last_name)
@@ -545,7 +545,7 @@ class StaffLeadWorkspaceTests(TestCase):
         })
         self.assertRedirects(response, url, fetch_redirect_response=False)
         self.assertEqual(self.client.session[ACTIVE_COMPANY_SESSION_KEY], self.other_company.pk)
-        response = self.client.get(url)
+        response = self.client.get(reverse('portal:staff-lead-history'))
         self.assertContains(response, self.foreign.last_name)
         self.assertNotContains(response, self.pending.last_name)
         self.assertEqual(self.client.get(reverse('portal:lead-detail', args=[self.pending.pk])).status_code, 404)

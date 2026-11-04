@@ -57,7 +57,6 @@ class ConsumptionPortalTests(OperationsPortalFixture):
                          'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
         self.assertIn('.xlsx', response['Content-Disposition'])
         payload = b''.join(response.streaming_content)
-        response.close()
         workbook = load_workbook(BytesIO(payload))
         self.addCleanup(workbook.close)
         return workbook
@@ -202,7 +201,7 @@ class ConsumptionPortalTests(OperationsPortalFixture):
         for url in routes:
             response = self.client.get(url)
             self.assertEqual(response.status_code, 200)
-            response.close()
+            self.assertTrue(b''.join(response.streaming_content) if response.streaming else response.content)
         for actor in (self.doctor, self.patient_user):
             self.login(actor)
             for url in routes:

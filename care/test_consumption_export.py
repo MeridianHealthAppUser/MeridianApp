@@ -120,7 +120,8 @@ class ConsumptionWorkbookTests(OperationsFixture):
 
     def test_formula_like_product_patient_and_tracking_are_literal_text(self):
         self.product.name = '=HYPERLINK("https://example.invalid")'
-        self.product.strength = 'One\x00two'
+        # A control character Excel can't hold; Postgres won't store a NUL, so this uses BEL.
+        self.product.strength = 'One\x07two'
         self.product.save(update_fields=('name', 'strength'))
         self.supplied(1, tracking_number='=1+1', dispatch_snapshot={'patient_name': '+SUM(A1:A2)'})
         workbook = self.read(consumption_workbook(self.company, self.report()))

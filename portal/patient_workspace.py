@@ -254,7 +254,7 @@ def workspace_tab_context(request, company, membership, patient, tab, **override
             # The Join window column: when the room opens and closes, for a booking that's still on.
             row.join_window = join_window(row) if row.status == Appointment.Status.BOOKED else None
         from .appointment_detail_views import staff_booking_form
-        context.update(appointment_form=staff_booking_form(company, patient=patient),
+        context.update(appointment_form=staff_booking_form(company, patient=patient, membership=membership),
                        legacy_appointment_context=request.POST.get('workflow_context', '') if request.method == 'POST' else make_workflow_context(request, company, 'legacy-staff-booking', patient))
     elif tab == 'consultations':
         encounters = consultations(company, membership, patient, request.user)

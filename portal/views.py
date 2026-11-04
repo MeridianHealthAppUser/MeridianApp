@@ -415,7 +415,7 @@ def _patient_record_context(request, company, membership, patient, **overrides):
         'notes': notes,
         'message_threads': _conversation_threads(company, patient, patient_view=False, viewer=request.user, mark_read=records_conversation_view(request)),
         'task_form': ClinicalTaskForm(company=company, patient=patient),
-        'appointment_form': _staff_booking_form(company, patient=patient),
+        'appointment_form': _staff_booking_form(company, patient=patient, membership=membership),
         'legacy_appointment_context': (
             request.POST.get('workflow_context', '') if overrides.get('failed_form') == 'appointment_form'
             else make_workflow_context(request, company, 'legacy-staff-booking', patient)
@@ -514,7 +514,7 @@ class PatientAppointmentCreateView(StaffPatientActionMixin, View):
     def post(self, request, *args, **kwargs):
         patient = self.get_patient()
         from .appointment_detail_views import staff_booking_form
-        form = staff_booking_form(self.company, request.POST, patient=patient)
+        form = staff_booking_form(self.company, request.POST, patient=patient, membership=self.membership)
         valid = form.is_valid()
         from care.appointment_lifecycle import book_staff_appointment
         from .workflow_context import validate_workflow_context

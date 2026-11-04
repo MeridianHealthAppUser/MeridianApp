@@ -176,7 +176,7 @@ class StaffScheduleView(StaffPageView):
         # Create appointment opens the booking form in a modal over the calendar.
         from .appointment_detail_views import staff_booking_form
         from .workflow_context import make_workflow_context
-        booking_form = staff_booking_form(self.company)
+        booking_form = staff_booking_form(self.company, membership=self.membership)
         limit_patient_choices(booking_form.fields['patient'], self.membership, self.request.user)
         context.update(booking_form=booking_form,
                        booking_context=make_workflow_context(self.request, self.company, 'staff-booking'))

@@ -169,8 +169,8 @@ class StaffMenuTests(TestCase):
             'Operations': [('treatment-subscriptions', 'Subscriptions'), ('ops-orders', 'Non-prescription requests'),
                            ('ops-shipping', 'Weekly shipping'), ('ops-history', 'Dispatch history'),
                            ('ops-billing', 'Billing')],
-            'Administration': [('staff-leads', 'Leads'), ('dropouts', 'Dropouts'), ('staff-data-requests', 'Data requests'),
-                               ('email-log', 'Emails')],
+            # Data requests is a Super Admin's tab only (Dr Czech, 4 Nov 2026).
+            'Administration': [('staff-leads', 'Leads'), ('dropouts', 'Dropouts'), ('email-log', 'Emails')],
         }
         for group, pages in tabs.items():
             for name, label in pages:
@@ -188,7 +188,10 @@ class StaffMenuTests(TestCase):
                     else:
                         self.assertIn(f'<a href="{reverse(f"portal:{name}")}" class="is-active" aria-current="page">{label}', nav)
                     # Each tab's table has its search at the top right with the Filters menu before it, except
-                    # Dispatch history, which opens on a week: its search only, the week being the dates.
+                    # Dispatch history, which opens on a week: its search only, the week being the dates; and Leads,
+                    # which is the Please call list (its search is on Full Lead History).
+                    if name == 'staff-leads':
+                        continue
                     self.assertContains(response, 'class="staff-list-tools"')
                     self.assertContains(response, 'data-conversation-search')
                     if name != 'ops-history':

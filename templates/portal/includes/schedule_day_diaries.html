@@ -4,7 +4,7 @@ filled in (static/js/appointment_booking.js); without scripts its link opens the
 leave and past slots can't be chosen.{% endcomment %}
 <section class="staff-page-card schedule-free-time" aria-labelledby="availability-heading">
   <header class="staff-page-card__header">
-    <div><h2 id="availability-heading">Available time</h2><p>Each clinician’s working hours on {{ selected_date|date:'l j F' }}, in 15-minute slots. Choose a free slot to book it.</p></div>
+    <div><h2 id="availability-heading">Available time</h2></div>
   </header>
   <div class="schedule-free-time__body">
     {% for diary in day_diaries %}

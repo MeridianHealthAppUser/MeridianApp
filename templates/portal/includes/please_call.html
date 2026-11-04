@@ -1,0 +1,30 @@
+{# Please call on Administration's Leads tab; the page loads backoffice.css and dialogs.css/js for it. #}
+<div class="backoffice dropouts">
+  <section class="staff-page-card staff-page-card--list" aria-labelledby="please-call-heading">
+    {# People who asked for a call at the end of the questionnaire, until Confirm called or until they book. #}
+    <header class="staff-page-card__header"><div><h2 id="please-call-heading">Please call</h2><p>People who asked for a call before booking, at the end of the questionnaire. Confirm called takes them off the list and keeps your note; booking their consultation takes them off too.</p></div><span class="staff-page-card__count">{{ call_page.paginator.count }} waiting</span></header>
+    <div class="backoffice-table-wrap"><table>
+      <thead><tr><th scope="col">Name</th><th scope="col">Contact</th><th scope="col">Notes</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead>
+      <tbody>{% for item in call_page %}<tr>
+        <td><strong>{{ item.name }}</strong><small>Asked {{ item.created_at|date:'j M Y, H:i' }}</small></td>
+        <td class="dropouts-contact">{{ item.phone }}{% if item.email %}<small>{{ item.email }}</small>{% endif %}</td>
+        <td class="dropouts-reason">{{ item.note|default:'—' }}</td>
+        <td><button class="console-button console-button--primary" type="button" data-modal-open="called-{{ item.pk }}" aria-haspopup="dialog">Confirm called<span class="sr-only"> {{ item.name }}</span></button></td>
+      </tr>{% empty %}<tr><td colspan="4">No one is waiting for a call.</td></tr>{% endfor %}</tbody>
+    </table></div>
+    {% include 'portal/includes/patient_pager.html' with pager=call_page param='call_page' query=call_query anchor='please-call-heading' label='Please call' %}
+  </section>
+
+  {% for item in call_page %}
+    <dialog class="app-dialog" id="called-{{ item.pk }}" aria-labelledby="called-{{ item.pk }}-title">
+      <div class="app-dialog__body">
+        <h2 id="called-{{ item.pk }}-title">Confirm called</h2>
+        <p class="app-dialog__sub">{{ item.name }} comes off the Please call list. Your note is kept with their request.</p>
+        <form class="console-form" method="post" action="{% url 'portal:callback-called' item.pk %}">{% csrf_token %}<input type="hidden" name="workflow_context" value="{{ item.called_context }}">
+          <div class="console-form__field"><label for="called-{{ item.pk }}-note">Note (optional)</label><textarea id="called-{{ item.pk }}-note" name="note" rows="3" maxlength="1000" placeholder="For example: explained prices, will book this week"></textarea></div>
+          <div class="app-dialog__actions"><button class="console-button console-button--secondary" type="button" data-dialog-close>Back</button><button class="console-button console-button--primary" type="submit">Confirm called</button></div>
+        </form>
+      </div>
+    </dialog>
+  {% endfor %}
+</div>

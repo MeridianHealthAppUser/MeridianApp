@@ -92,7 +92,6 @@ class ToOrderPageTests(OperationsPortalFixture):
         self.assertEqual(response['Content-Type'], 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
         self.assertIn('to-order.xlsx', response['Content-Disposition'])
         content = b''.join(response.streaming_content)
-        response.close()
         workbook = load_workbook(BytesIO(content))
         self.addCleanup(workbook.close)
         return response, workbook
@@ -273,5 +272,4 @@ class ToOrderPageTests(OperationsPortalFixture):
             self.assertEqual(response.status_code, 200)
             content = b''.join(response.streaming_content) if response.streaming else response.content
             self.assertEqual(content, b'')
-            response.close()
         self.assertEqual({model: list(model.objects.order_by('pk').values()) for model in models}, before)

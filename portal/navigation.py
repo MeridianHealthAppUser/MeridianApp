@@ -58,12 +58,15 @@ def uses_flat_menu(membership):
 def page_tabs(nav_section, *, data_requests=0, membership=None):
     """The Operations or Administration tabs for the page at nav_section, with the current one marked; None for any
     other page. Data requests carries its count, as the menu does. A doctor sees only Weekly shipping and Dispatch
-    history."""
+    history; a practice administrator doesn't see Data requests."""
     order_section = nav_section in ('subscriptions', 'orders')
     active_section = 'subscriptions' if order_section else nav_section
     for key, (label, tabs) in TAB_GROUPS.items():
         if membership is not None and membership.role == 'doctor':
             tabs = tuple(tab for tab in tabs if tab[0] in SHIPPING_TABS)
+        elif membership is not None and membership.role == 'practice_admin':
+            # Patients no longer raise data requests in the app, so practice administrators don't get the tab.
+            tabs = tuple(tab for tab in tabs if tab[0] != 'privacy_requests')
         if active_section in (tab[0] for tab in tabs):
             items = [dict(key=tab_key, label=tab_label, url=reverse(url_name), active=tab_key == active_section,
                           badge=data_requests if tab_key == 'privacy_requests' else 0, badge_label='open data request')

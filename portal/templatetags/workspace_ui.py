@@ -25,10 +25,10 @@ def staff_unread_messages(context):
 
 
 def _open_data_requests(context):
-    """Data requests waiting on the practice, for the administrators who see that menu item; once per request."""
+    """Data requests waiting on the practice, for the Super Admins who see that menu item; once per request."""
     request = context.get('request')
     membership = context.get('active_membership')
-    if request is None or membership is None or not membership.is_admin:
+    if request is None or membership is None or membership.role != membership.Role.SUPER_ADMIN:
         return 0
     if not hasattr(request, '_open_data_requests'):
         from care.privacy import unresolved_request_count

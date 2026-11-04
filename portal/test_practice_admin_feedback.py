@@ -59,15 +59,18 @@ class PracticeAdminMenuTests(SessionMixin, OperationsFixture):
         self.assertEqual(self.client.get(reverse('portal:patient-list')).status_code, 200)
         self.assertEqual(self.client.get(reverse('portal:account-access-history')).status_code, 200)
 
-    def test_leads_are_the_unconverted_enquiries_and_lead_history_has_them_all(self):
+    def test_leads_is_the_please_call_list_and_lead_history_has_every_enquiry(self):
         waiting = Lead.objects.create(company=self.company, first_name='Tumi', last_name='Dlamini', email='tumi@example.test',
                                       stage=Lead.Stage.BOOKING)
         converted = Lead.objects.create(company=self.company, first_name='Jimmy', last_name='Patient', email='jimmy@example.test',
                                         stage=Lead.Stage.CONVERTED, converted_patient=self.patient)
         self.login(self.admin)
+        # The enquiries table is only in Full Lead History now (Dr Czech, 4 Nov 2026).
         leads = self.client.get(reverse('portal:staff-leads'))
-        self.assertEqual([lead.pk for lead in leads.context['leads']], [waiting.pk])
-        self.assertNotIn('converted', [option['value'] for option in leads.context['filter_menu']['sections'][1]['options']])
+        self.assertContains(leads, '<h2 id="please-call-heading">Please call</h2>', html=True)
+        self.assertNotContains(leads, 'Enquiries')
+        self.assertNotContains(leads, 'tumi@example.test')
+        self.assertNotIn('leads', leads.context)
         self.assertContains(leads, f'href="{reverse("portal:staff-lead-history")}"><svg')
         self.assertContains(leads, '</svg>Full Lead History</a>')
         history = self.client.get(reverse('portal:staff-lead-history'))
@@ -119,6 +122,21 @@ class PracticeAdminCalendarTests(SessionMixin, AppointmentLifecycleFixture):
         self.login(self.super_admin)
         page = self.client.get(url)
         self.assertContains(page, 'Add leave')
+
+    def test_practice_admins_book_only_initial_consultations_and_follow_ups(self):
+        # Six-month reviews and ad-hoc appointments are the clinician's to book (Dr Czech, 4 Nov 2026).
+        self.login(self.admin)
+        page = self.client.get(self.day_url())
+        self.assertEqual([value for value, _ in page.context['booking_form'].fields['appointment_type'].choices if value],
+                         ['initial', 'follow_up'])
+        self.assertNotContains(page, 'Six-month review</option>')
+        response = self.client.post(reverse('portal:appointment-book'), {'appointment_type': 'review'})
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('appointment_type', response.context['form'].errors)
+        self.login(self.super_admin)
+        page = self.client.get(self.day_url())
+        self.assertEqual([value for value, _ in page.context['booking_form'].fields['appointment_type'].choices if value],
+                         ['initial', 'follow_up', 'review', 'ad_hoc'])
 
     def test_day_view_moves_and_cancels_a_booking_in_dialogs_and_comes_back(self):
         appointment = self.appointment(appointment_type='follow_up')
@@ -315,7 +333,6 @@ class OperationsFeedbackTests(SessionMixin, OperationsFixture):
         self.assertIn('.xlsx', export['Content-Disposition'])
         self.assertEqual(export['Content-Type'], 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
         content = b''.join(export.streaming_content)
-        export.close()
         workbook = load_workbook(BytesIO(content))
         self.addCleanup(workbook.close)
         rows = list(workbook.active.iter_rows(values_only=True))
@@ -410,15 +427,18 @@ class DropoutsTests(SessionMixin, OperationsFixture):
         callback = CallbackRequest.objects.get()
         self.assertEqual((callback.name, callback.phone, callback.note, callback.email),
                          ('Thandi Caller', '083 382 7292', 'What does it cost?', 'thandi@example.test'))
+        # Please call is on the Leads tab, not Dropouts (Dr Czech, 4 Nov 2026).
         self.login(self.admin)
-        page = self.client.get(reverse('portal:dropouts'))
+        self.assertNotContains(self.client.get(reverse('portal:dropouts')), 'please-call-heading')
+        page = self.client.get(reverse('portal:staff-leads'))
         self.assertContains(page, 'What does it cost?')
         row = page.context['call_page'][0]
-        self.client.post(reverse('portal:callback-called', args=[callback.pk]),
-                         {'workflow_context': row.called_context, 'note': 'Explained prices.'})
+        response = self.client.post(reverse('portal:callback-called', args=[callback.pk]),
+                                    {'workflow_context': row.called_context, 'note': 'Explained prices.'})
+        self.assertRedirects(response, f"{reverse('portal:staff-leads')}#please-call-heading", fetch_redirect_response=False)
         callback.refresh_from_db()
         self.assertEqual((callback.status, callback.called_by, callback.staff_note), ('called', self.admin, 'Explained prices.'))
-        self.assertFalse(self.client.get(reverse('portal:dropouts')).context['call_page'].object_list)
+        self.assertFalse(self.client.get(reverse('portal:staff-leads')).context['call_page'].object_list)
         # Asking again opens a new one; booking (checkout) takes it off.
         again = request_callback(lead=lead, phone='083 382 7292')
         close_callbacks(lead)

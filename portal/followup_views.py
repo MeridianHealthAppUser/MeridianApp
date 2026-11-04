@@ -89,9 +89,21 @@ class ResolveForm(forms.Form):
     note = forms.CharField(label='Note (optional)', max_length=1000, required=False, widget=forms.Textarea(attrs={'rows': 3}))
 
 
+def please_call(request, company):
+    """Please call, on the Leads tab: people who asked for a call at the end of the questionnaire, with its pages
+    keeping the rest of the address."""
+    page = Paginator(CallbackRequest.objects.for_company(company).filter(status=CallbackRequest.Status.OPEN),
+                     20).get_page(request.GET.get('call_page'))
+    for item in page:
+        item.called_context = make_workflow_context(request, company, 'callback-called', item)
+    query = request.GET.copy()
+    query.pop('call_page', None)
+    return {'call_page': page, 'call_query': query.urlencode()}
+
+
 class DropoutListView(AdminFollowUpView):
     """Dropouts: patients who said something is wrong, until someone confirms it's resolved, then the cancelled and
-    paused subscriptions (expandable). Please call: people who asked for a call at the end of the questionnaire."""
+    paused subscriptions (expandable). Please call moved to the Leads tab on 4 Nov 2026."""
 
     nav_section = 'dropouts'
     http_method_names = ('get', 'head', 'options')
@@ -109,13 +121,6 @@ class DropoutListView(AdminFollowUpView):
             item.message_patient_url = (staff_inbox_url(item.thread) if item.thread_id and is_participant(item.thread, request.user)
                                         else f"{reverse('portal:staff-inbox')}?{urlencode({'compose': 1, 'patient': patient.pk})}")
             item.resolve_context = make_workflow_context(request, self.company, 'help-request-resolve', item)
-        return page
-
-    def callbacks(self, request):
-        page = Paginator(CallbackRequest.objects.for_company(self.company).filter(status=CallbackRequest.Status.OPEN),
-                         20).get_page(request.GET.get('call_page'))
-        for item in page:
-            item.called_context = make_workflow_context(request, self.company, 'callback-called', item)
         return page
 
     def get(self, request):
@@ -139,15 +144,13 @@ class DropoutListView(AdminFollowUpView):
                            placeholder='Patient or plan')
         count = page.paginator.count
         searching = any(request.GET.get(name) for name in ('q', 'status', 'follow_up', 'page'))
-        # Each list pages on its own; its links keep the others where they were.
-        others = {name: request.GET.copy() for name in ('help_page', 'call_page')}
-        for name, kept in others.items():
-            kept.pop(name, None)
+        # Each list pages on its own; its links keep the other where it was.
+        help_query = request.GET.copy()
+        help_query.pop('help_page', None)
         return render(request, 'portal/followup_dropouts.html', self.context(
             filter_form=form, page_obj=page, pagination_query=query.urlencode(), ended_open=searching,
             count_label=f'{count} subscription{pluralize(count)}', help_page=self.help_requests(request),
-            call_page=self.callbacks(request), resolve_form=ResolveForm(), help_query=others['help_page'].urlencode(),
-            call_query=others['call_page'].urlencode(), **tools))
+            resolve_form=ResolveForm(), help_query=help_query.urlencode(), **tools))
 
 
 class HelpRequestResolveView(AdminFollowUpView):
@@ -187,7 +190,7 @@ class CallbackCalledView(AdminFollowUpView):
             messages.success(request, f'Call to {item.name} confirmed and taken off the Please call list.')
         except ValidationError as error:
             messages.error(request, ' '.join(error.messages))
-        return redirect(f"{reverse('portal:dropouts')}#please-call-heading")
+        return redirect(f"{reverse('portal:staff-leads')}#please-call-heading")
 
 
 class FollowUpDetailView(AdminFollowUpView):

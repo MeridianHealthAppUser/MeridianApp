@@ -84,7 +84,6 @@ class DispatchHistoryTests(OperationsPortalFixture):
         self.assertIn('attachment;', response['Content-Disposition'])
         self.assertIn('.xlsx', response['Content-Disposition'])
         content = b''.join(response.streaming_content) if response.streaming else response.content
-        response.close()
         workbook = load_workbook(BytesIO(content))
         self.addCleanup(workbook.close)
         return response, workbook
@@ -339,12 +338,12 @@ class DispatchHistoryTests(OperationsPortalFixture):
             self.login(self.super_admin)
             response = self.client.get(url)
             self.assertEqual(response.status_code, 200)
-            response.close()
+            self.assertTrue(b''.join(response.streaming_content) if response.streaming else response.content)
             PracticeSettings.objects.filter(company=self.company).update(doctors_ship=True)
             self.login(self.doctor)
             response = self.client.get(url)
             self.assertEqual(response.status_code, 200)
-            response.close()
+            self.assertTrue(b''.join(response.streaming_content) if response.streaming else response.content)
             PracticeSettings.objects.filter(company=self.company).update(doctors_ship=False)
         self.login()
         CompanyMembership.objects.filter(company=self.company, user=self.admin).update(is_active=False)
@@ -375,7 +374,6 @@ class DispatchHistoryTests(OperationsPortalFixture):
             self.assertEqual(response.status_code, 200)
             content = b''.join(response.streaming_content) if response.streaming else response.content
             self.assertEqual(content, b'')
-            response.close()
         self.assertFalse(AuditEvent.objects.filter(action='dispatch.history_exported').exists())
         response = self.history()
         exported, _ = self.workbook()

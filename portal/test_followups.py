@@ -112,8 +112,8 @@ class FollowUpTests(OperationsFixture):
 
     def test_bad_filters_fail_closed_and_lead_table_shows_followup(self):
         self.post()
-        self.assertContains(self.client.get(reverse('portal:staff-leads') + '?follow_up=open'), 'Follow-up: open')
-        self.assertNotContains(self.client.get(reverse('portal:staff-leads') + '?follow_up=bad'), 'enquiry@example.test')
+        self.assertContains(self.client.get(reverse('portal:staff-lead-history') + '?follow_up=open'), 'Follow-up: open')
+        self.assertNotContains(self.client.get(reverse('portal:staff-lead-history') + '?follow_up=bad'), 'enquiry@example.test')
         self.assertNotContains(self.client.get(reverse('portal:dropouts') + '?follow_up=bad'), self.plan.plan_name)
 
     def test_private_cache_headers(self):
