@@ -1,0 +1,69 @@
+{% extends 'portal/pharmacy_base.html' %}
+{% load static workspace_ui %}
+{% block title %}Your basket | Meridian{% endblock %}
+{% block patient_extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/patient_medications.css' %}?v=20261104a">{% endblock %}
+{% block patient_breadcrumbs %}{% breadcrumbs 'My Treatment' 'portal:patient-treatment' 'Basket' %}{% endblock %}
+{% block patient_heading %}<header class="patient-page-heading"><div><h1>Your basket</h1></div></header>{% endblock %}
+
+{% block pharmacy_content %}
+  {% if order and items %}
+    <div class="patient-basket">
+      <section class="console-card" aria-labelledby="basket-items-heading">
+        <div class="console-card__body">
+          <h2 class="patient-eyebrow" id="basket-items-heading">Items</h2>
+          <div class="patient-basket__lines">
+            {% for item in items %}
+              <div class="patient-basket-line">
+                <div><strong>{{ item.product_name }}</strong>{% if item.strength %}<small>{{ item.strength }}</small>{% endif %}</div>
+                <span class="patient-basket-line__qty">{{ item.quantity }} × R{{ item.unit_price|floatformat:"-2" }}</span>
+                <form method="post" action="{% url 'portal:patient-basket-item' item.product_id %}">
+                  {% csrf_token %}
+                  <input type="hidden" name="workflow_context" value="{{ item.remove_context }}">
+                  <input type="hidden" name="quantity" value="0">
+                  <input type="hidden" name="next" value="basket">
+                  <button class="console-button console-button--secondary" type="submit">Remove<span class="sr-only"> {{ item.product_name }} from your basket</span></button>
+                </form>
+              </div>
+            {% endfor %}
+          </div>
+          <p class="patient-small">To change a quantity, go back to <a class="patient-inline-link" href="{% url 'portal:patient-treatment' %}#once-off-items">Once-off items</a> on My Treatment.</p>
+        </div>
+      </section>
+
+      <section class="console-card" aria-labelledby="basket-summary-heading">
+        <div class="console-card__body">
+          <h2 class="patient-eyebrow" id="basket-summary-heading">Summary</h2>
+          <div class="patient-basket__total"><span>Total</span><strong>R{{ order.subtotal|floatformat:"-2" }}</strong></div>
+          <h3 class="patient-eyebrow">Delivered to</h3>
+          {% if address %}
+            <p class="patient-basket__address">{% for line in address.lines %}{{ line }}<br>{% endfor %}{{ address.phone }}</p>
+            <a class="patient-inline-link" href="{% url 'portal:patient-delivery-address' %}?next=basket">Change my delivery address</a>
+          {% else %}
+            <p class="patient-small">Add the address your parcels go to before you order.</p>
+            <div class="patient-card-actions"><a class="console-button console-button--primary" href="{% url 'portal:patient-delivery-address' %}?next=basket">Add my delivery address</a></div>
+          {% endif %}
+          {% if needs_prescription %}<div class="patient-plan__hold" role="alert">Remove {% for item in needs_prescription %}{{ item.product_name }}{% if not forloop.last %}, {% endif %}{% endfor %} first: it comes with your subscription.</div>{% endif %}
+          {% if address and not needs_prescription %}
+            <form method="post" action="{% url 'portal:patient-order-detail' order.pk %}" class="ops-form">
+              {% csrf_token %}
+              <input type="hidden" name="workflow_context" value="{{ workflow_context }}">
+              <input type="hidden" name="action" value="submit">
+              {% include 'portal/operations_fields.html' %}
+              <button class="console-button console-button--primary" type="submit">{% if pays_by_card %}Pay R{{ order.subtotal|floatformat:"-2" }} by card{% else %}Place my order{% endif %}</button>
+            </form>
+            <p class="patient-small">{% if pays_by_card %}You pay once, now. {% else %}The practice tells you how to pay. {% endif %}Once it’s paid, your order goes out with the parcels on the next shipping day.</p>
+          {% endif %}
+          <div class="patient-card-actions"><a class="console-button console-button--secondary patient-card-actions__wide" href="{% url 'portal:patient-treatment' %}#once-off-items">Keep shopping</a></div>
+        </div>
+      </section>
+    </div>
+  {% else %}
+    <section class="console-card" aria-labelledby="basket-empty-heading">
+      <div class="console-card__body">
+        <h2 class="patient-plan__empty-title" id="basket-empty-heading">Your basket is empty</h2>
+        <p class="patient-small">Add once-off items, such as supplements, from My Treatment.</p>
+        <div class="patient-card-actions"><a class="console-button console-button--secondary" href="{% url 'portal:patient-treatment' %}#once-off-items">Back to My Treatment</a></div>
+      </div>
+    </section>
+  {% endif %}
+{% endblock %}

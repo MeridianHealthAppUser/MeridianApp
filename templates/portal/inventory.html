@@ -1,7 +1,7 @@
 {% extends 'portal/operations_base.html' %}{% load static workspace_ui %}
 {% block title %}Inventory | Meridian
 {% endblock %}
-{% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/dialogs.css' %}?v=20261022a"><link rel="stylesheet" href="{% static 'css/inventory.css' %}?v=20261103f"><script src="{% static 'js/dialogs.js' %}?v=20261102a" defer></script><script src="{% static 'js/inventory_receipts.js' %}?v=20261102a" defer></script><script src="{% static 'js/inventory_movements.js' %}?v=20261102a" defer></script><script src="{% static 'js/shipping_help.js' %}?v=20261102b" defer></script>
+{% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/dialogs.css' %}?v=20261104d"><link rel="stylesheet" href="{% static 'css/inventory.css' %}?v=20261104a"><script src="{% static 'js/dialogs.js' %}?v=20261102a" defer></script><script src="{% static 'js/inventory_receipts.js' %}?v=20261102a" defer></script><script src="{% static 'js/inventory_movements.js' %}?v=20261102a" defer></script><script src="{% static 'js/shipping_help.js' %}?v=20261102b" defer></script>
 {% endblock %}
 {% block page_heading %}<header class="staff-page-header"><div><h1>Inventory</h1><p>Manage your stock and medication catalogue.</p></div><a class="console-button console-button--primary" href="{{ receive_url }}" data-modal-open="receive-stock" aria-haspopup="dialog">Add stock</a></header>
 {% endblock %}

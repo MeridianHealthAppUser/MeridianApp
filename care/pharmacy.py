@@ -1,4 +1,8 @@
-"""Patient supply requests without payments or automatic dispensing."""
+"""Patients' once-off orders from My Treatment: a basket, submitted with the delivery address, then paid by card.
+
+An order reaches Weekly shipping as a draft parcel when the practice accepts it, or by itself once it is paid when
+every item needs no prescription (ship_paid_order). Nothing is dispensed automatically: the parcel is checked and
+locked with the rest of the week."""
 
 from collections import defaultdict
 from decimal import Decimal
@@ -111,7 +115,7 @@ def submit_basket(*, order, actor, delivery_address, note='', confirm=False, exp
     order.save()
     record_audit(company=company, actor=actor, patient=patient, action='pharmacy_order.submitted', target=order, request=request)
     PatientEvent.objects.create(company=company, patient=patient, category=PatientEvent.Category.MEDICATION,
-                                title='Supply request submitted', detail='Your request is awaiting the practice team.',
+                                title='Order placed', detail='It goes out with the next parcels once it’s paid.',
                                 source_type='care.pharmacyorder', source_id=str(order.pk))
     return order
 
@@ -148,6 +152,14 @@ def accept_order(*, order, actor, scheduled_for, confirm=False, request=None):
         return order.shipment
     if confirm is not True or order.status != PharmacyOrder.Status.SUBMITTED or scheduled_for < timezone.localdate():
         raise ValidationError('Confirm an outstanding request with a current or future planned dispatch date.')
+    shipment = _draft_parcel(company, order, scheduled_for)
+    record_audit(company=company, actor=actor, patient=order.patient, action='pharmacy_order.accepted', target=order,
+                 request=request, metadata={'shipment_id': shipment.pk})
+    return shipment
+
+
+def _draft_parcel(company, order, scheduled_for):
+    """The order's items as a draft parcel on Weekly shipping; the order is then accepted."""
     _check_items(order, on_date=scheduled_for)
     items = list(order.items.select_related('product'))
     if not items:
@@ -169,6 +181,29 @@ def accept_order(*, order, actor, scheduled_for, confirm=False, request=None):
     order.status, order.shipment = PharmacyOrder.Status.ACCEPTED, shipment
     order.revision += 1
     order.save(update_fields=('status', 'shipment', 'revision', 'updated_at'))
-    record_audit(company=company, actor=actor, patient=order.patient, action='pharmacy_order.accepted', target=order,
-                 request=request, metadata={'shipment_id': shipment.pk})
+    return shipment
+
+
+def ship_paid_order(order, *, request=None):
+    """Once a submitted order is paid, put it on the next shipping day's list by itself, when every item needs no
+    prescription. Returns the draft parcel, or None when the order waits for the practice to accept it (an item needs
+    a doctor's authorisation, or is no longer available). A payment is never undone by this: it runs in its own
+    savepoint, inside the payment's transaction."""
+    from .parcels import shipping_day_from, shipping_weekday
+
+    company = Company.objects.select_for_update().get(pk=order.company_id)
+    order = PharmacyOrder.objects.select_for_update(of=('self',)).select_related('patient').get(pk=order.pk, company=company)
+    if order.status != PharmacyOrder.Status.SUBMITTED or not order.paid_at or order.shipment_id:
+        return None
+    items = list(order.items.select_related('product'))
+    if not items or any(item.product.requires_authorisation for item in items) or not order.patient.is_active:
+        return None
+    day = shipping_day_from(timezone.localdate(), shipping_weekday(company))
+    try:
+        with transaction.atomic():
+            shipment = _draft_parcel(company, order, day)
+    except ValidationError:
+        return None
+    record_audit(company=company, actor=None, patient=order.patient, action='pharmacy_order.accepted', target=order,
+                 request=request, metadata={'shipment_id': shipment.pk, 'automatic': True})
     return shipment

@@ -5,7 +5,7 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="theme-color" content="#0d4d4f">
+    <meta name="theme-color" content="#1d4a5e">
     <meta name="color-scheme" content="light dark">
     {# Light or dark as the person chose in their account menu, set before anything is drawn; else the device's. #}
     <script>try { var theme = localStorage.getItem('meridian-theme'); if (theme === 'light' || theme === 'dark') document.documentElement.setAttribute('data-theme', theme); } catch (error) {}</script>
@@ -13,19 +13,19 @@
     {# Roboto, Meridian's typeface, on every page. #}
     <link rel="preload" href="{% static 'fonts/roboto/roboto-latin.woff2' %}" as="font" type="font/woff2" crossorigin>
     <link rel="stylesheet" href="{% static 'css/fonts.css' %}?v=20261007">
-    <link rel="stylesheet" href="{% static 'css/theme.css' %}?v=20261103a">
-    <link rel="stylesheet" href="{% static 'css/base.css' %}?v=20261011a">
-    {% if page_navigation_config %}<link rel="stylesheet" href="{% static 'css/page_navigation.css' %}"><script src="{% static 'js/page_lifecycle.js' %}" defer></script>{% endif %}
+    <link rel="stylesheet" href="{% static 'css/theme.css' %}?v=20261104e">
+    <link rel="stylesheet" href="{% static 'css/base.css' %}?v=20261104a">
+    {% if page_navigation_config %}<link rel="stylesheet" href="{% static 'css/page_navigation.css' %}?v=20261104a"><script src="{% static 'js/page_lifecycle.js' %}" defer></script>{% endif %}
     {% block extra_css %}{% endblock %}
-    {% if is_workspace_page %}<link rel="stylesheet" href="{% static 'css/workspace_polish.css' %}?v=20261007"><script src="{% static 'js/workspace_polish.js' %}" defer></script>{% endif %}
-    {% if user.is_authenticated %}<link rel="stylesheet" href="{% static 'css/account_menu.css' %}?v=20261024a"><script src="{% static 'js/account_menu.js' %}" defer></script><script src="{% static 'js/theme.js' %}?v=20261024a" defer></script>{% endif %}
-    {% if active_membership.role == 'super_admin' and not is_patient_portal %}<link rel="stylesheet" href="{% static 'css/demo_data.css' %}?v=20261103a"><script src="{% static 'js/demo_data.js' %}?v=20261103a" defer></script>{% endif %}
-    {% if can_switch_practice_role %}<link rel="stylesheet" href="{% static 'css/practice_role_switcher.css' %}">{% endif %}
-    {% if video_notifications_enabled %}<link rel="stylesheet" href="{% static 'css/call_notifications.css' %}"><script src="{% static 'js/call_notifications.js' %}" defer></script>{% endif %}
+    {% if is_workspace_page %}<link rel="stylesheet" href="{% static 'css/workspace_polish.css' %}?v=20261104a"><script src="{% static 'js/workspace_polish.js' %}" defer></script>{% endif %}
+    {% if user.is_authenticated %}<link rel="stylesheet" href="{% static 'css/account_menu.css' %}?v=20261104a"><script src="{% static 'js/account_menu.js' %}" defer></script><script src="{% static 'js/theme.js' %}?v=20261024a" defer></script>{% endif %}
+    {% if active_membership.role == 'super_admin' and not is_patient_portal %}<link rel="stylesheet" href="{% static 'css/demo_data.css' %}?v=20261104a"><script src="{% static 'js/demo_data.js' %}?v=20261103a" defer></script>{% endif %}
+    {% if can_switch_practice_role %}<link rel="stylesheet" href="{% static 'css/practice_role_switcher.css' %}?v=20261104a">{% endif %}
+    {% if video_notifications_enabled %}<link rel="stylesheet" href="{% static 'css/call_notifications.css' %}?v=20261104a"><script src="{% static 'js/call_notifications.js' %}" defer></script>{% endif %}
     {% if request.realtime_scope %}<link rel="stylesheet" href="{% static 'css/live_messages.css' %}?v=20261018"><script src="{% static 'js/live_messages.js' %}?v=20261018" defer></script>{% endif %}
     <link rel="stylesheet" href="{% static 'css/branding.css' %}?v=20260913-logo">
     {# The practice's brand palette and type for patients; loaded last so it can finish shared styles. #}
-    {% if is_patient_portal %}<link rel="stylesheet" href="{% static 'css/patient_theme.css' %}?v=20261029">{% endif %}
+    {% if is_patient_portal %}<link rel="stylesheet" href="{% static 'css/patient_theme.css' %}?v=20261104c">{% endif %}
     {% if page_navigation_config %}<script src="{% static 'js/app_navigation.js' %}" defer></script>{% endif %}
   </head>
   <body{% if is_workspace_page or is_patient_portal %} class="{% if is_workspace_page %}workspace-page{% endif %}{% if is_patient_portal %}{% if is_workspace_page %} {% endif %}patient-app{% endif %}"{% endif %}>

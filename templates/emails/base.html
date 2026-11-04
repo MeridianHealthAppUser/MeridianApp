@@ -1,7 +1,7 @@
 {% load static %}{% comment %}Every Meridian email's HTML part (care/emails.py); base.txt is the same in plain text. Inline styles only, as
 email apps drop most stylesheets. Roboto, the platform's typeface, from our own server where the email app loads web
-fonts; others fall back to their system font. Colours: ink #183638, teal #087e75 (links and buttons, as on the sign-in
-page), muted #5a7274. The logo sits on white so its black lettering stays readable in dark mode.{% endcomment %}<!doctype html>
+fonts; others fall back to their system font. Colours: the patient pages' blues, ink and buttons #1d4a5e (links too, as on the sign-in
+page), muted #506e7c. The logo sits on white so its black lettering stays readable in dark mode.{% endcomment %}<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -16,10 +16,10 @@ page), muted #5a7274. The logo sits on white so its black lettering stays readab
 <body style="margin:0;padding:0;background:#ffffff;">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#ffffff;">
   <tr>
-    <td style="padding:24px 16px;font-family:Roboto,-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;font-size:15px;line-height:1.55;color:#183638;">
+    <td style="padding:24px 16px;font-family:Roboto,-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;font-size:15px;line-height:1.55;color:#1d4a5e;">
       <div style="max-width:600px;">
 {% block content %}{% endblock %}
-        <p style="margin:28px 0 12px;color:#5a7274;">Meridian Health</p>
+        <p style="margin:28px 0 12px;color:#506e7c;">Meridian Health</p>
         <table role="presentation" cellpadding="0" cellspacing="0" border="0">
           <tr>
             <td bgcolor="#ffffff" style="background:#ffffff;">
@@ -27,8 +27,8 @@ page), muted #5a7274. The logo sits on white so its black lettering stays readab
             </td>
           </tr>
         </table>
-        <p style="margin:24px 0 0;font-size:12px;line-height:1.5;color:#6e8588;">Please do not reply to this email. If you need help, please email <a href="mailto:{{ support_email }}" style="color:#087e75;">{{ support_email }}</a>.</p>
-        {% if unsubscribe_url %}<p style="margin:8px 0 0;font-size:12px;line-height:1.5;color:#6e8588;">You get these emails about your care with us. <a href="{{ unsubscribe_url }}" style="color:#087e75;">Unsubscribe</a> from them at any time; emails about appointments, messages and payments still come.</p>{% endif %}
+        <p style="margin:24px 0 0;font-size:12px;line-height:1.5;color:#70838d;">Please do not reply to this email. If you need help, please email <a href="mailto:{{ support_email }}" style="color:#1d4a5e;">{{ support_email }}</a>.</p>
+        {% if unsubscribe_url %}<p style="margin:8px 0 0;font-size:12px;line-height:1.5;color:#70838d;">You get these emails about your care with us. <a href="{{ unsubscribe_url }}" style="color:#1d4a5e;">Unsubscribe</a> from them at any time; emails about appointments, messages and payments still come.</p>{% endif %}
       </div>
     </td>
   </tr>

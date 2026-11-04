@@ -119,7 +119,8 @@ class PatientBillingView(PatientCarePage):
                                debit_form=DebitOrderForm(),
                                debit_context=make_workflow_context(request, company, 'debit-order', plan, patient=patient) if plan else '',
                                address=address_for(patient),
-                               has_previous_orders=PharmacyOrder.objects.filter(company=company, patient=patient).exists())
+                               has_previous_orders=PharmacyOrder.objects.filter(company=company, patient=patient).exclude(
+                                   status=PharmacyOrder.Status.DRAFT).exists())
         return render(request, 'portal/patient_billing.html', context)
 
 
@@ -214,11 +215,16 @@ class PatientInvoiceDownloadView(PatientCarePage):
 
 
 class PatientDeliveryAddressView(PatientCarePage):
-    """The patient's own delivery address and contact number for parcels."""
+    """The patient's own delivery address and contact number for parcels. From the basket (?next=basket), it goes
+    back there."""
+
+    def from_basket(self):
+        return self.request.GET.get('next') == 'basket'
 
     def display(self, request, form, status=200):
         return render(request, 'portal/patient_delivery_address.html', self.context(
-            'account', 'Delivery address', form=form, address=address_for(self.patient)), status=status)
+            'account', 'Delivery address', form=form, address=address_for(self.patient), from_basket=self.from_basket()),
+            status=status)
 
     def get(self, request):
         return self.display(request, DeliveryAddressForm(instance_address=address_for(self.patient), patient=self.patient,
@@ -231,6 +237,8 @@ class PatientDeliveryAddressView(PatientCarePage):
                 _, changed = save_delivery_address(company=self.patient_company, patient=self.patient, actor=request.user,
                                                    data=form.address(), request=request)
                 messages.success(request, 'Your delivery address is saved.' if changed else 'Your delivery address is already up to date.')
+                if self.from_basket():
+                    return redirect('portal:patient-basket')
                 return redirect(f"{reverse('portal:patient-profile')}#profile-delivery")
             except ValidationError as error:
                 for message in error.messages:

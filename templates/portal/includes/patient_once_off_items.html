@@ -1,0 +1,18 @@
+{# Once-off items, below Previously prescribed: bought without a prescription and paid once by card (portal.patient_shop). #}
+<section class="patient-shop" id="once-off-items" aria-labelledby="once-off-items-heading">
+  <div class="patient-section-head">
+    <div class="patient-section-head__copy">
+      <h2 id="once-off-items-heading">Once-off items</h2>
+      <p>Supplements and supplies that don’t need a prescription. Pay once by card and they go out with the next week’s parcels.</p>
+    </div>
+    <div class="patient-shop__actions">
+      {% if has_orders %}<a class="console-button console-button--secondary" href="{% url 'portal:patient-orders' %}">My orders</a>{% endif %}
+      <a class="console-button {% if basket_count %}console-button--primary{% else %}console-button--secondary{% endif %}" href="{% url 'portal:patient-basket' %}">Basket · {{ basket_count }}<span class="sr-only"> item{{ basket_count|pluralize }}</span></a>
+    </div>
+  </div>
+  {% if shop_products %}
+    <div class="patient-shop__grid">{% for product in shop_products %}{% include 'portal/includes/patient_product_card.html' %}{% endfor %}</div>
+  {% else %}
+    <p class="patient-small">There are no once-off items to order right now.</p>
+  {% endif %}
+</section>

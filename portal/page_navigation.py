@@ -85,7 +85,7 @@ PATIENT_PAGES = {
     'patient-medical-profile': Page('My Medical Information', 'medical_profile'),
     'patient-updates': Page('Updates', 'updates'),
     'patient-profile': Page('My profile', 'profile'),
-    'patient-orders': Page('Previous supply requests', 'orders'),
+    'patient-orders': Page('My orders', 'orders'),
 }
 
 
@@ -112,7 +112,7 @@ HTML_PAGE_ROUTES = frozenset(STAFF_PAGES) | frozenset(PATIENT_PAGES) | frozenset
     'patient-appointment-detail', 'patient-book-appointment',
     'patient-data-request-create', 'patient-data-request-detail',
     'patient-lab-detail', 'patient-subscription',
-    'patient-billing', 'patient-invoice', 'patient-delivery-address', 'patient-order-detail',
+    'patient-billing', 'patient-invoice', 'patient-delivery-address', 'patient-order-detail', 'patient-basket',
     'patient-billing-sandbox-mandate', 'patient-billing-sandbox-checkout',
     'patient-details-edit', 'policy-create', 'staff-data-request-detail', 'staff-menu-section',
     'staff-patient-record', 'task-create', 'task-edit',
@@ -124,7 +124,7 @@ PATIENT_HTML_PAGE_ROUTES = frozenset(PATIENT_PAGES) | frozenset((
     'patient-appointment-detail', 'patient-book-appointment',
     'patient-data-request-create', 'patient-data-request-detail',
     'patient-lab-detail', 'patient-subscription',
-    'patient-billing', 'patient-invoice', 'patient-delivery-address', 'patient-order-detail',
+    'patient-billing', 'patient-invoice', 'patient-delivery-address', 'patient-order-detail', 'patient-basket',
     'patient-billing-sandbox-mandate', 'patient-billing-sandbox-checkout',
 ))
 STAFF_HTML_PAGE_ROUTES = HTML_PAGE_ROUTES - PATIENT_HTML_PAGE_ROUTES
@@ -148,8 +148,8 @@ NATIVE_GET_ROUTES = frozenset((
     'clinical-lab-result-download', 'patient-lab-result-download', 'patient-lab-form',
     'record-conversation-search', 'patient-blood-test-form', 'patient-blood-result-report',
     'email-unsubscribe', 'ops-shipment-label',
-    # Retired patient shop addresses redirect only on ordinary navigation.
-    'patient-pharmacy', 'patient-basket', 'patient-basket-item',
+    # The old My Medications address redirects to My Treatment's once-off items, only on ordinary navigation.
+    'patient-pharmacy',
     # Preparing a provider card form or settling its return has GET side effects;
     # a content request must be rejected before either view runs.
     'patient-card-form', 'patient-payment-return',

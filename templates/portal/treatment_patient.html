@@ -2,7 +2,7 @@
 {% load static workspace_ui %}
 
 {% block title %}My Treatment | Meridian{% endblock %}
-{% block patient_extra_css %}<link rel="stylesheet" href="{% static 'css/treatment.css' %}?v=20261029a"><link rel="stylesheet" href="{% static 'css/patient_billing.css' %}?v=20261025d"><link rel="stylesheet" href="{% static 'css/dialogs.css' %}?v=20261022a"><script src="{% static 'js/dialogs.js' %}?v=20261022a" defer></script>{% endblock %}
+{% block patient_extra_css %}<link rel="stylesheet" href="{% static 'css/treatment.css' %}?v=20261104a"><link rel="stylesheet" href="{% static 'css/patient_billing.css' %}?v=20261104a"><link rel="stylesheet" href="{% static 'css/patient_medications.css' %}?v=20261104a"><link rel="stylesheet" href="{% static 'css/dialogs.css' %}?v=20261104d"><script src="{% static 'js/dialogs.js' %}?v=20261022a" defer></script>{% endblock %}
 {% block patient_content_class %}patient-treatment{% endblock %}
 {% block patient_breadcrumbs %}{% breadcrumbs 'My Treatment' %}{% endblock %}
 {% block patient_heading %}<header class="patient-page-heading"><div><h1>My Treatment</h1></div></header>{% endblock %}
@@ -144,6 +144,7 @@
     </section>
   </div>
   {% if previous_prescriptions %}{% include 'portal/includes/patient_previous_prescriptions.html' %}{% endif %}
+  {% if shop_products or basket_count or has_orders %}{% include 'portal/includes/patient_once_off_items.html' %}{% endif %}
 </div>
 {% if timeline %}{% include 'portal/includes/patient_treatment_timeline.html' %}{% endif %}
 {% if action_plan %}

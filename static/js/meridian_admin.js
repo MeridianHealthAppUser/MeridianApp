@@ -3,7 +3,7 @@
 /* Small, local SVG charts: no external analytics, fonts, or chart CDN. */
 (() => {
   'use strict';
-  const colors = { teal: '#159286', blue: '#6289ce', violet: '#8272b0', amber: '#c89543', rose: '#bd6f7d', slate: '#9aadb5' };
+  const colors = { navy: '#225166', blue: '#6289ce', violet: '#8272b0', amber: '#c89543', rose: '#bd6f7d', slate: '#9aadb5' };
   const readData = id => {
     const element = document.getElementById(id);
     if (!element) return null;
@@ -39,7 +39,7 @@
     svg.append(svgNode('desc', { id: 'meridian-chart-description' }, 'New patient records and appointments by week. Exact values are available in the View chart data table below.'));
     const defs = svgNode('defs');
     const gradient = svgNode('linearGradient', { id: 'meridian-chart-fill', x1: 0, y1: 0, x2: 0, y2: 1 });
-    gradient.append(svgNode('stop', { offset: '0%', 'stop-color': colors.teal, 'stop-opacity': '.16' }), svgNode('stop', { offset: '100%', 'stop-color': colors.teal, 'stop-opacity': '.01' }));
+    gradient.append(svgNode('stop', { offset: '0%', 'stop-color': colors.navy, 'stop-opacity': '.16' }), svgNode('stop', { offset: '100%', 'stop-color': colors.navy, 'stop-opacity': '.01' }));
     defs.append(gradient);
     svg.append(defs);
     for (let tick = 0; tick <= 4; tick += 1) {
@@ -59,7 +59,7 @@
     tooltip.textContent = activity.has_data ? 'Hover or focus a point to see its weekly total.' : 'Weekly totals will appear as records are added.';
     tooltip.setAttribute('aria-live', 'polite');
     series.forEach(key => {
-      const color = key === 'patients' ? colors.teal : colors.blue;
+      const color = key === 'patients' ? colors.navy : colors.blue;
       const points = activity[key].map((value, index) => `${x(index)},${y(value)}`).join(' ');
       if (key === 'patients' && activity[key].some(value => value > 0)) {
         svg.append(svgNode('polygon', { points: `${x(0)},${y(0)} ${points} ${x(activity.labels.length - 1)},${y(0)}`, fill: 'url(#meridian-chart-fill)' }));

@@ -52,7 +52,7 @@
 .record-weight__panes { align-items: start; display: grid; gap: 1.1rem; grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .record-weight-table--tab { margin-top: .6rem; }
 .workspace-page .meridian-console .record-weight-table--tab thead { background: none; }
-.record-weight-table--tab th { color: var(--c-7b9093); font-size: .62rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+.record-weight-table--tab th { color: var(--c-7d8f98); font-size: .62rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
 .record-weight-table--tab td { padding-block: .75rem; }
 .record-weight-table--tab td:first-child, .record-weight-table--tab td:nth-child(2) { white-space: nowrap; }
 .record-weight-table--tab tbody tr:last-child td { border-bottom: 1px solid var(--console-soft-line); }

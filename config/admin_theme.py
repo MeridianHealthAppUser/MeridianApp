@@ -69,7 +69,7 @@ JAZZMIN_UI_TWEAKS = {
     'sidebar_fixed': True,
     'sidebar': 'sidebar-dark-primary',
     'navbar': 'navbar-white navbar-light',
-    'accent': 'accent-teal',
+    'accent': 'accent-primary',
     'sidebar_nav_small_text': True,
     'sidebar_nav_child_indent': True,
     'sidebar_nav_compact_style': False,

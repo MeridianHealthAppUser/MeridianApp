@@ -89,23 +89,22 @@ class OperationsTemplateTests(OperationsFixture):
         for route, pk in (('ops-product-detail', self.product.pk), ('ops-shipment-detail', shipment.pk), ('ops-order-detail', order.pk)):
             self.assertEqual(self.client.get(reverse(f'portal:{route}', args=[pk])).status_code, 403)
 
-    def test_patient_catalogue_and_basket_links_open_my_treatment(self):
+    def test_the_old_shop_link_opens_once_off_items_on_my_treatment(self):
         self.login(self.patient_user)
-        for route in ('patient-pharmacy', 'patient-basket'):
-            response = self.client.get(reverse(f'portal:{route}'), follow=True)
-            self.assertContains(response, '<h1>My Treatment</h1>', html=True)
-            self.assertNotContains(response, 'Add to basket')
-            self.assertNotContains(response, 'Submit supply request')
+        response = self.client.get(reverse('portal:patient-pharmacy'), follow=True)
+        self.assertContains(response, '<h1>My Treatment</h1>', html=True)
+        self.assertContains(response, 'Once-off items')
+        self.assertContains(response, self.open_product.name)
+        self.assertContains(self.client.get(reverse('portal:patient-basket')), 'Your basket is empty')
 
-    def test_patient_order_detail_and_history_remain_available_without_a_shop(self):
+    def test_patient_order_pages_have_no_staff_controls(self):
         order = self.submitted_order()
         self.login(self.patient_user)
         for route, args in (('patient-orders', ()), ('patient-order-detail', (order.pk,))):
             response = self.client.get(reverse(f'portal:{route}', args=args), follow=True)
             self.assertEqual(response.status_code, 200)
             self.assertNotContains(response, 'Accept for preparation')
-            self.assertNotContains(response, 'Add to basket')
-            self.assertNotContains(response, 'Open current basket')
+            self.assertNotContains(response, 'Planned dispatch date')
         order.refresh_from_db()
         self.assertEqual(order.status, PharmacyOrder.Status.SUBMITTED)
 

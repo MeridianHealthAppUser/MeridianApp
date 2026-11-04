@@ -1,0 +1,17 @@
+{# One once-off item, with its own Add to basket form. #}
+<article class="patient-product" aria-labelledby="product-heading-{{ product.pk }}">
+  <div class="patient-product__art" aria-hidden="true"><span></span></div>
+  <div class="patient-product__body">
+    <h3 id="product-heading-{{ product.pk }}">{{ product.name }}{% if product.strength %} <span>{{ product.strength }}</span>{% endif %}</h3>
+    {% if product.description %}<p class="patient-product__description">{{ product.description|linebreaksbr }}</p>{% endif %}
+    <form method="post" action="{% url 'portal:patient-basket-item' product.pk %}" class="patient-product__form">
+      {% csrf_token %}
+      <input type="hidden" name="workflow_context" value="{{ product.workflow_context }}">
+      <span class="patient-product__price">R{{ product.price|floatformat:"-2" }}</span>
+      <label class="sr-only" for="{{ product.quantity_form.quantity.id_for_label }}">Quantity of {{ product.name }}{% if product.in_basket %} (0 removes it){% endif %}</label>
+      {{ product.quantity_form.quantity }}
+      <button class="console-button {% if product.in_basket %}console-button--secondary{% else %}console-button--primary{% endif %}" type="submit">{% if product.in_basket %}Update basket{% else %}Add to basket{% endif %}<span class="sr-only">: {{ product.name }}</span></button>
+    </form>
+    {% if product.in_basket %}<p class="patient-product__note">{{ product.in_basket }} in your basket</p>{% endif %}
+  </div>
+</article>

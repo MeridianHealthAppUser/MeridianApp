@@ -149,10 +149,10 @@ class PageNavigationTests(TestCase):
         self.login(self.patient_user, patient=True)
         listing = self.content(reverse('portal:patient-orders'))
         self.assertEqual(listing.status_code, 200)
-        self.assertIn('Previous supply requests', listing.json()['html'])
+        self.assertIn('My orders', listing.json()['html'])
         detail = self.content(reverse('portal:patient-order-detail', args=[own.pk]))
         self.assertEqual(detail.status_code, 200)
-        self.assertIn(f'Request {own.pk}', detail.json()['html'])
+        self.assertIn(f'Order {own.pk}', detail.json()['html'])
         self.assertEqual(self.content(reverse('portal:patient-order-detail', args=[foreign.pk])).status_code, 404)
 
     def test_content_contract_returns_authorized_html_and_private_uncached_metadata(self):

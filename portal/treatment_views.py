@@ -278,15 +278,17 @@ def _eligible_authorizations(company, patient):
 
 def patient_treatment_context(request, company, patient, *, enrollment_form=None, action_form=None, action_plan=None,
                               cancel_form=None, help_form=None):
-    """My Treatment: tasks, the record the doctor has on file, and the care plan. Something is wrong and Cancel my
-    subscription each open a dialog, which opens again after a mistake (or from ?help=1 and ?cancel=1 without
-    scripts)."""
+    """My Treatment: tasks, the record the doctor has on file, the care plan and once-off items. Something is wrong and
+    Cancel my subscription each open a dialog, which opens again after a mistake (or from ?help=1 and ?cancel=1
+    without scripts)."""
     from .patient_summary import (
         billing_tasks, current_authorization, latest_weight,
         next_consult, open_lab_requests, patient_tasks, previous_prescriptions, treatment_overview, treatment_timeline,
     )
 
     from care.billing import patient_summary as billing_summary, prescription_amount
+
+    from .patient_shop import shop_context
 
     context = patient_page_context(request, company, patient, 'treatment', 'My Treatment')
     current = _plans(company, patient).exclude(status=PatientSubscription.Status.CANCELLED).first()
@@ -329,6 +331,8 @@ def patient_treatment_context(request, company, patient, *, enrollment_form=None
         # Week by week: the dose, the pens sent and the payments due.
         timeline=treatment_timeline(company, patient, treatment_authorization),
         timeline_open=request.GET.get('timeline') == '1',
+        # Once-off items, below Previously prescribed: what the patient can buy without a prescription.
+        **shop_context(request, company, patient),
     )
     return context
 

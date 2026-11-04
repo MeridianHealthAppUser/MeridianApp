@@ -85,9 +85,9 @@ class MessageNotificationTests(NotificationTestCase):
         self.assertIn(f'{SITE}/messages/?thread={self.thread.pk}', email.body)
         self.assertIn(f'<a href="{SITE}/messages/?thread={self.thread.pk}"', html)
         self.assertIn('>Read message</a>', html)
-        # The platform's look: Roboto, the teal and the logo under the signature.
+        # The platform's look: Roboto, the patient blue and the logo under the signature.
         self.assertIn("font-family:Roboto,", html)
-        self.assertIn('background:#087e75', html)
+        self.assertIn('background:#1d4a5e', html)
         self.assertRegex(html, rf'<img src="{SITE}/static/images/meridian-logo[^"]*\.png" alt="Meridian Health - Medical Weight Loss"')
 
     def test_a_staff_message_emails_the_patient_and_the_other_clinicians(self):
@@ -172,7 +172,7 @@ class AppointmentNotificationTests(NotificationTestCase):
         self.assertIn(f'{SITE}/patient/appointments/', patient.body)
         html = self.html(patient)
         self.assertIn('>View my appointments</a>', html)
-        self.assertIn('background:#eff8f6', html)
+        self.assertIn('background:#f3f8fa', html)
         doctor = sent['sam@notify.test']
         self.assertEqual(doctor.subject, f'New booking: Nadia Mokoena on {when}')
         self.assertIn('Hello Dr Marchant,\n\nA new appointment has been booked with you. Booked by Lindiwe Mahlangu.', doctor.body)

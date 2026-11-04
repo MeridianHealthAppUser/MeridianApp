@@ -29,15 +29,16 @@ from care.operations import (
     lock_week, mark_delivered, prepare_shipment, prepare_week, require_operations_actor,
     set_shipment_note, shipment_hold_reason, week_order, week_stock,
 )
-from care.pharmacy import accept_order, cancel_order
+from care.pharmacy import accept_order, cancel_order, set_basket_quantity, submit_basket
 from care.services import record_audit
 from care.shipment_intake import create_manual_shipment
 from practices.models import Company, CompanyMembership
 
 from .filter_menus import fields_section, list_tools, ticked_sections, without_all
 from .operations_forms import (
-    SHIPPING_FILTER_FIELDS, CatalogueFilterForm, ConfirmForm, DeliveryAddressForm, DoseForm, HistoryFilterForm, OrderFilterForm,
-    OrderReviewForm, ProductForm, ShipmentActionForm, ShipmentChangeForm, ShipmentCreateForm, ShippingFilterForm,
+    SHIPPING_FILTER_FIELDS, BasketQuantityForm, CatalogueFilterForm, ConfirmForm, DeliveryAddressForm, DoseForm,
+    HistoryFilterForm, OrderFilterForm, OrderForm, OrderReviewForm, ProductForm, ShipmentActionForm, ShipmentChangeForm,
+    ShipmentCreateForm, ShippingFilterForm,
 )
 from .patient_views import patient_page_context
 from .views import PatientPortalRequiredMixin, StaffCompanyRequiredMixin
@@ -1298,60 +1299,110 @@ class StaffOrderDetailView(OperationsView):
         return self.display(request, order, form, status=400)
 
 
-def retired_pharmacy_response(request, company, patient):
-    """Reject stale purchase forms without creating or changing requests or payments."""
-    return render(request, 'portal/patient_pharmacy_retired.html',
-                  patient_page_context(request, company, patient, 'treatment', 'My Treatment'), status=410)
+def _shop_url():
+    return f"{reverse('portal:patient-treatment')}#once-off-items"
 
 
-class PatientPharmacyView(LoginRequiredMixin, PatientPortalRequiredMixin, View):
-    """Keep old shop links usable while all patient medication supply moves to subscriptions."""
-
-    http_method_names = ('get', 'post', 'head', 'options')
-
-    def get(self, request, **kwargs):
-        return redirect(f"{reverse('portal:patient-treatment')}#treatment-plan")
-
-    def post(self, request, **kwargs):
-        return retired_pharmacy_response(request, self.patient_company, self.patient)
-
-
-class PatientOrderBase(LoginRequiredMixin, PatientPortalRequiredMixin, View):
-    """Existing supply requests remain available after the catalogue closes."""
+class PatientShopBase(LoginRequiredMixin, PatientPortalRequiredMixin, View):
+    """A patient's once-off orders (care.pharmacy): the basket, and the orders placed from it."""
 
     http_method_names = ('get', 'post', 'head', 'options')
 
     def orders(self):
         return PharmacyOrder.objects.filter(company=self.patient_company, patient=self.patient).select_related('shipment')
 
-    def context(self, **kwargs):
-        return dict(patient_page_context(self.request, self.patient_company, self.patient, 'orders',
-                                         'Previous supply requests'), **kwargs)
+    def context(self, title, **kwargs):
+        return dict(patient_page_context(self.request, self.patient_company, self.patient, 'orders', title), **kwargs)
+
+    def token(self, kind, record):
+        return make_workflow_context(self.request, self.patient_company, kind, record, patient=self.patient)
 
 
-class PatientOrderListView(PatientOrderBase):
+class PatientPharmacyView(PatientShopBase):
+    """The old My Medications address: once-off items are on My Treatment now."""
+
     http_method_names = ('get', 'head', 'options')
 
     def get(self, request):
-        context = self.context(**_paginate(request, self.orders()))
+        return redirect(_shop_url())
+
+
+class PatientBasketItemView(PatientShopBase):
+    """Add a once-off item to the basket or change how many, from My Treatment; 0 removes it, from the basket."""
+
+    http_method_names = ('post',)
+
+    @transaction.atomic
+    def post(self, request, pk):
+        self.patient_company = Company.objects.select_for_update().get(pk=self.patient_company.pk)
+        product = get_object_or_404(MedicationProduct.objects.for_company(self.patient_company), pk=pk)
+        form = BasketQuantityForm(request.POST)
+        back = 'portal:patient-basket' if request.POST.get('next') == 'basket' else None
+        try:
+            validate_workflow_context(request, self.patient_company, 'basket-product', product, patient=self.patient)
+            if not form.is_valid():
+                raise ValidationError('Choose a quantity from 0 to 100.')
+            quantity = form.cleaned_data['quantity']
+            # Prescription medicine comes with the subscription; an old basket can still remove it.
+            if quantity and product.requires_authorisation:
+                raise ValidationError('This item needs a prescription and comes with your subscription.')
+            set_basket_quantity(company=self.patient_company, patient=self.patient, actor=request.user, product=product,
+                                quantity=quantity, request=request)
+        except ValidationError as error:
+            messages.error(request, ' '.join(error.messages))
+            return redirect(back) if back else redirect(_shop_url())
+        messages.success(request, 'Removed from your basket.' if not quantity else 'Basket updated.')
+        return redirect('portal:patient-basket')
+
+
+class PatientBasketView(PatientShopBase):
+    """The basket: its items, where they're delivered, and Pay by card, which places the order."""
+
+    http_method_names = ('get', 'head', 'options')
+
+    def display(self, request, order, form=None, status=200):
+        from care.addresses import address_for
+        from care.payment_providers import current_provider
+
+        items = _order_items(order) if order else []
+        for item in items:
+            item.remove_context = self.token('basket-product', item.product)
+        return render(request, 'portal/pharmacy_basket.html', self.context(
+            'Basket', order=order, items=items, address=address_for(self.patient),
+            needs_prescription=[item for item in items if item.product.requires_authorisation],
+            pays_by_card=current_provider() is not None, form=form if form is not None else OrderForm(),
+            workflow_context=(request.POST.get('workflow_context', '') if request.method == 'POST'
+                              else self.token('patient-order', order) if order else ''),
+        ), status=status)
+
+    def get(self, request):
+        return self.display(request, self.orders().filter(status=PharmacyOrder.Status.DRAFT).first())
+
+
+class PatientOrderListView(PatientShopBase):
+    http_method_names = ('get', 'head', 'options')
+
+    def get(self, request):
+        context = self.context('My orders', **_paginate(request, self.orders().exclude(status=PharmacyOrder.Status.DRAFT)))
         context['orders'] = list(context['page_obj'].object_list)
         return render(request, 'portal/pharmacy_orders.html', context)
 
 
-class PatientOrderDetailView(PatientOrderBase):
+class PatientOrderDetailView(PatientShopBase):
+    """One order: paying for it, how it's going and cancelling it before it's accepted. The basket places one here."""
+
     def display(self, request, order, form=None, status=200):
         from care.payment_providers import current_provider
 
         payable = (order.status in (PharmacyOrder.Status.SUBMITTED, PharmacyOrder.Status.ACCEPTED)
                    and not order.paid_at and order.subtotal > 0 and current_provider() is not None)
-        # No quantity controls or submission form, including for old draft baskets.
         items = [item for item in _order_items(order) if item.company_id == self.patient_company.pk]
         shipment = order.shipment if order.shipment_id else None
         if shipment and (shipment.company_id != self.patient_company.pk or shipment.patient_id != self.patient.pk):
             shipment = None
         return render(request, 'portal/pharmacy_order_detail.html', self.context(
-            order=order, items=items, shipment=shipment, payable=payable,
-            can_cancel=order.status in (PharmacyOrder.Status.DRAFT, PharmacyOrder.Status.SUBMITTED),
+            f'Order {order.pk}', order=order, items=items, shipment=shipment, payable=payable,
+            can_cancel=order.status == PharmacyOrder.Status.SUBMITTED,
             cancel_form=form if form is not None else ConfirmForm(),
             pay_context=make_workflow_context(request, self.patient_company, 'order-pay', order, patient=self.patient) if payable else '',
             workflow_context=(request.POST.get('workflow_context', '') if request.method == 'POST'
@@ -1359,21 +1410,70 @@ class PatientOrderDetailView(PatientOrderBase):
         ), status=status)
 
     def get(self, request, pk):
-        return self.display(request, get_object_or_404(self.orders(), pk=pk))
+        order = get_object_or_404(self.orders(), pk=pk)
+        if order.status == PharmacyOrder.Status.DRAFT:
+            return redirect('portal:patient-basket')
+        return self.display(request, order)
+
+    def post(self, request, pk):
+        if request.POST.get('action') == 'submit':
+            return self.place(request, pk)
+        return self.cancel(request, pk)
+
+    def place(self, request, pk):
+        """Place the basket as an order to the delivery address on file, then pay for it by card."""
+        from care.addresses import address_for
+        from care.billing import start_order_payment
+        from care.payment_providers import current_provider
+
+        from .patient_shop import order_address
+
+        form = OrderForm(request.POST)
+        try:
+            with transaction.atomic():
+                self.patient_company = Company.objects.select_for_update().get(pk=self.patient_company.pk)
+                order = get_object_or_404(self.orders().select_for_update(of=('self',)), pk=pk)
+                if order.status != PharmacyOrder.Status.DRAFT:
+                    # Already placed, from this page a moment ago or another tab.
+                    return redirect('portal:patient-order-detail', pk=order.pk)
+                validate_workflow_context(request, self.patient_company, 'patient-order', order, patient=self.patient)
+                address = address_for(self.patient)
+                if address is None:
+                    raise ValidationError('Add your delivery address before you order.')
+                prescribed = [item.product_name for item in order.items.select_related('product') if item.product.requires_authorisation]
+                if prescribed:
+                    raise ValidationError(f'Remove {", ".join(prescribed)} first: it comes with your subscription.')
+                if not form.is_valid():
+                    raise ValidationError('Check your note for the practice.')
+                order = submit_basket(order=order, actor=request.user, delivery_address=order_address(address),
+                                      note=form.cleaned_data['note'], confirm=True, expected_revision=order.revision,
+                                      request=request)
+        except ValidationError as error:
+            _errors(request, form, error)
+            return PatientBasketView.display(self, request, get_object_or_404(self.orders(), pk=pk), form, status=400)
+        if current_provider() is None:
+            messages.success(request, 'Order placed. The practice will tell you how to pay for it.')
+            return redirect('portal:patient-order-detail', pk=order.pk)
+        try:
+            _, url = start_order_payment(order=order, actor=request.user, request=request)
+        except ValidationError as error:
+            messages.error(request, ' '.join(error.messages))
+            return redirect('portal:patient-order-detail', pk=order.pk)
+        return redirect(url)
 
     @transaction.atomic
-    def post(self, request, pk):
+    def cancel(self, request, pk):
         self.patient_company = Company.objects.select_for_update().get(pk=self.patient_company.pk)
         order = get_object_or_404(self.orders().select_for_update(of=('self',)), pk=pk)
-        if request.POST.get('action') != 'cancel':
-            return retired_pharmacy_response(request, self.patient_company, self.patient)
         form = ConfirmForm(request.POST)
         valid = form.is_valid()
         try:
             validate_workflow_context(request, self.patient_company, 'patient-order', order, patient=self.patient)
+            if request.POST.get('action') != 'cancel':
+                raise ValidationError('Choose cancel order.')
             if valid:
                 cancel_order(order=order, actor=request.user, confirm=True, request=request)
-                messages.success(request, 'Supply request cancelled.')
+                messages.success(request, 'Order cancelled.')
                 return redirect('portal:patient-order-detail', pk=pk)
         except ValidationError as error:
             _errors(request, form, error)

@@ -1,7 +1,7 @@
-.table-excel-download { align-items:center; background:var(--c-ffffff, var(--c-ffffff)); border:1px solid var(--c-dce8eb, var(--c-dce8eb)); border-radius:.65rem; box-sizing:border-box; color:var(--c-087e75, var(--c-087e75)); display:inline-flex; flex:0 0 auto; height:2.75rem; justify-content:center; padding:.5rem; text-decoration:none; width:2.75rem; }
+.table-excel-download { align-items:center; background:var(--c-ffffff, var(--c-ffffff)); border:1px solid var(--c-dce8eb, var(--c-dde8ec)); border-radius:.65rem; box-sizing:border-box; color:var(--c-087e75, var(--c-1a4457)); display:inline-flex; flex:0 0 auto; height:2.75rem; justify-content:center; padding:.5rem; text-decoration:none; width:2.75rem; }
 .table-excel-download svg { height:1.35rem; width:1.35rem; stroke:currentColor; stroke-linecap:round; stroke-linejoin:round; stroke-width:1.7; }
-.table-excel-download:hover { background:var(--c-e4f5f1, var(--c-e4f5f1)); border-color:var(--c-bfe7e2, var(--c-bfe7e2)); }
-.table-excel-download:focus-visible { outline:2px solid var(--c-087e75, var(--c-087e75)); outline-offset:3px; }
+.table-excel-download:hover { background:var(--c-e4f5f1, var(--c-e4f4fa)); border-color:var(--c-bfe7e2, var(--c-bfe5ef)); }
+.table-excel-download:focus-visible { outline:2px solid var(--c-087e75, var(--c-1a4457)); outline-offset:3px; }
 .table-excel-download:disabled { cursor:not-allowed; opacity:.45; }
 .table-export-control { display:inline-flex; flex:0 0 auto; }
 .staff-list-tools:has(> .table-export-control) > .staff-page-card__count { margin-right:.25rem; }

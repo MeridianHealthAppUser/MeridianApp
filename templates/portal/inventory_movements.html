@@ -1,6 +1,6 @@
 {% extends 'portal/operations_base.html' %}{% load static workspace_ui %}
 {% block title %}Stock movements | Meridian{% endblock %}
-{% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/inventory.css' %}?v=20261103f">{% endblock %}
+{% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/inventory.css' %}?v=20261104a">{% endblock %}
 {% block breadcrumbs %}{% breadcrumbs 'Inventory' 'portal:inventory' 'Stock movements' %}{% endblock %}
 {% block page_heading %}<header class="staff-page-header"><div><h1>Stock movements</h1><p>{{ company.name }} · Receipts and dispatches.</p></div><a class="console-button console-button--secondary" href="{% url 'portal:inventory' %}">Back to Inventory</a></header>{% endblock %}
 {% block operations_content %}<section class="staff-page-card">{% include 'portal/includes/inventory_movements.html' %}</section>{% endblock %}

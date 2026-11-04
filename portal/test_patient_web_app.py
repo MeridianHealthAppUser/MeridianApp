@@ -180,7 +180,7 @@ class PatientWebAppTests(TestCase):
         rows = dict(medical_information(profile=None, intake={}, weight=logged))
         self.assertEqual(rows['Weight'], '85 kg')
 
-    def test_my_treatment_keeps_previous_prescriptions_below_subscription_without_a_shop(self):
+    def test_my_treatment_lists_previous_prescriptions_then_once_off_items_below_the_subscription(self):
         authorization = self.authorize()
         enroll_local_subscription(company=self.company, patient=self.patient, actor=self.user,
                                   authorization=authorization, confirm=True)
@@ -198,10 +198,16 @@ class PatientWebAppTests(TestCase):
         self.assertContains(response, earlier.name)
         self.assertContains(response, 'My active subscription')
         self.assertLess(response.content.index(b'My active subscription'), response.content.index(b'Previously prescribed'))
-        self.assertNotContains(response, supply.name)
+        self.assertLess(response.content.index(b'Previously prescribed'), response.content.index(b'Once-off items'))
+        # Only items that need no prescription are for sale; prescription medicine comes with the subscription.
+        self.assertEqual(response.context['shop_products'], [supply])
+        self.assertContains(response, 'Add to basket')
+        self.assertContains(response, reverse('portal:patient-basket'))
         self.assertNotContains(response, never.name)
-        self.assertNotContains(response, 'Add to basket')
-        self.assertNotContains(response, reverse('portal:patient-basket'))
+        # With nothing to sell, the section isn't shown.
+        supply.is_active = False
+        supply.save()
+        self.assertNotContains(self.page('patient-treatment'), 'Once-off items')
 
     def test_previous_prescriptions_never_cross_patient_or_practice(self):
         other_user = get_user_model().objects.create_user(email='previous-other@example.test')

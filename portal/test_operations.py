@@ -6,7 +6,7 @@ from datetime import timedelta
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
-from django.test import Client
+from django.test import Client, override_settings
 from django.urls import reverse
 from openpyxl import load_workbook
 
@@ -415,75 +415,187 @@ class OperationsPortalTests(OperationsPortalFixture):
         self.assertFalse(Shipment.objects.exists())
 
 
-class PatientPharmacyPortalTests(OperationsPortalFixture):
+@override_settings(PAYMENT_PROVIDER='sandbox')
+class PatientShopPortalTests(OperationsPortalFixture):
+    """Once-off items on My Treatment: basket, place and pay by card, then the next shipping day's list."""
+
     def setUp(self):
         self.login(self.patient_user)
 
-    def retired_urls(self, pk=123):
-        return [reverse(f'portal:{name}', args=args) for name, args in (
-            ('patient-pharmacy', ()), ('patient-basket', ()),
-            ('patient-basket-item', (self.product.pk,)),
-        )]
+    def product_token(self, product=None):
+        product = product or self.open_product
+        response = self.page('patient-treatment')
+        return next(p.workflow_context for p in response.context['shop_products'] if p.pk == product.pk)
 
-    def test_old_shop_links_redirect_to_subscription_without_changing_existing_orders(self):
-        order = self.basket()
-        before = list(PharmacyOrder.objects.values())
-        events_before = AuditEvent.objects.count()
-        destination = reverse('portal:patient-treatment') + '#treatment-plan'
-        for url in self.retired_urls(order.pk):
-            with self.subTest(url=url):
-                self.assertRedirects(self.client.get(url), destination, fetch_redirect_response=False)
-                self.assertRedirects(self.client.head(url), destination, fetch_redirect_response=False)
-        self.assertEqual(list(PharmacyOrder.objects.values()), before)
-        self.assertEqual(AuditEvent.objects.count(), events_before)
-        self.assertFalse(Payment.objects.exists())
+    def add_item(self, quantity=2, **extra):
+        return self.client.post(reverse('portal:patient-basket-item', args=[self.open_product.pk]),
+                                {'workflow_context': self.product_token(), 'quantity': quantity, **extra})
 
-    def test_posts_from_old_pages_cannot_create_baskets_or_payments(self):
-        for url in self.retired_urls():
-            with self.subTest(url=url):
-                response = self.client.post(url, {'quantity': 2, 'action': 'submit', 'confirm': 'on', **ADDRESS})
-                self.assertEqual(response.status_code, 410)
-        self.assertFalse(PharmacyOrder.objects.exists())
-        self.assertFalse(Payment.objects.exists())
-        self.assertFalse(AuditEvent.objects.exists())
-
-    def test_stale_signed_forms_cannot_change_or_submit_existing_baskets(self):
+    def signed(self, kind, record):
         from django.test import RequestFactory
         from .workflow_context import make_workflow_context
 
-        order = self.basket()
         request = RequestFactory().post('/')
         request.user = self.patient_user
-        before = list(PharmacyOrder.objects.values())
-        items_before = list(order.items.values())
-        events_before = AuditEvent.objects.count()
-        for name, record, kind, action in (
-            ('patient-basket-item', self.product, 'basket-product', ''),
-            ('patient-order-detail', order, 'patient-order', 'submit'),
-        ):
-            token = make_workflow_context(request, self.company, kind, record, patient=self.patient)
-            url = reverse(f'portal:{name}', args=[record.pk])
-            response = self.client.post(url, {'workflow_context': token, 'quantity': 3, 'action': action,
-                                               'confirm': 'on', **ADDRESS})
-            self.assertEqual(response.status_code, 410)
-        self.assertEqual(list(PharmacyOrder.objects.values()), before)
-        self.assertEqual(list(order.items.values()), items_before)
-        self.assertEqual(AuditEvent.objects.count(), events_before)
+        return make_workflow_context(request, self.company, kind, record, patient=self.patient)
+
+    def place(self, **extra):
+        basket = self.page('patient-basket')
+        return self.client.post(reverse('portal:patient-order-detail', args=[basket.context['order'].pk]),
+                                {'workflow_context': basket.context['workflow_context'], 'action': 'submit', **extra})
+
+    def test_my_treatment_lists_once_off_items_below_previously_prescribed_without_writing(self):
+        response = self.page('patient-treatment')
+        self.assertEqual(response.context['shop_products'], [self.open_product])
+        self.assertContains(response, 'Once-off items')
+        self.assertContains(response, 'Add to basket')
+        self.assertContains(response, 'Basket · 0')
+        self.assertNotContains(response, self.beta_product.name)
+        self.assertNotContains(response, 'My orders')
+        self.assertFalse(PharmacyOrder.objects.exists())
+        self.assertFalse(AuditEvent.objects.filter(action__startswith='basket').exists())
+        # Inactive or unpriced items aren't offered.
+        MedicationProduct.objects.filter(pk=self.open_product.pk).update(price=0)
+        self.assertEqual(self.page('patient-treatment').context['shop_products'], [])
+
+    def test_add_place_and_pay_puts_the_order_on_the_next_shipping_list(self):
+        from care.billing import parcel_payment
+        from care.parcels import shipping_day_from, shipping_weekday
+
+        self.assertRedirects(self.add_item(note='ignored'), reverse('portal:patient-basket'), fetch_redirect_response=False)
+        order = PharmacyOrder.objects.get()
+        self.assertContains(self.page('patient-treatment'), 'Basket · 2')
+        basket = self.page('patient-basket')
+        self.assertContains(basket, '1 Test Street')
+        self.assertContains(basket, 'Pay R80 by card')
+        response = self.place(note='Ring the bell')
+        payment = Payment.objects.get(pharmacy_order=order)
+        self.assertEqual(response.url, reverse('portal:patient-billing-sandbox-checkout', args=[payment.pk]))
+        order.refresh_from_db()
+        self.assertEqual((order.status, order.note, order.delivery_address['line1']), ('submitted', 'Ring the bell', '1 Test Street'))
+        self.assertFalse(Shipment.objects.exists())
+        checkout = self.client.get(response.url)
+        response = self.client.post(response.url, {'workflow_context': checkout.context['workflow_context'], 'choice': 'pay'})
+        self.assertRedirects(response, reverse('portal:patient-order-detail', args=[order.pk]), fetch_redirect_response=False)
+        order.refresh_from_db()
+        parcel = order.shipment
+        self.assertEqual(order.status, PharmacyOrder.Status.ACCEPTED)
+        self.assertEqual((parcel.status, parcel.patient, parcel.scheduled_for),
+                         ('draft', self.patient, shipping_day_from(self.today, shipping_weekday(self.company))))
+        self.assertEqual([(item.product, item.quantity) for item in parcel.items.all()], [(self.open_product, 2)])
+        self.assertEqual(parcel_payment(parcel)[0], 'paid')
+        self.assertTrue(AuditEvent.objects.filter(action='pharmacy_order.accepted', metadata__automatic=True).exists())
+        detail = self.page('patient-order-detail', [order.pk])
+        self.assertContains(detail, f'It goes out with the parcels on {parcel.scheduled_for:%-d %b %Y}')
+        self.assertNotContains(detail, 'Cancel order')
+        self.assertContains(self.page('patient-treatment'), 'My orders')
+        # The practice sees it on that week's shipping list.
+        self.login()
+        week = parcel.scheduled_for - timedelta(days=parcel.scheduled_for.weekday())
+        shipping = self.page('ops-shipping', week=week, shipping_step='all')
+        self.assertIn(parcel, shipping.context['shipments'])
+
+    def test_without_a_payment_provider_the_order_waits_for_the_practice(self):
+        self.add_item()
+        with override_settings(PAYMENT_PROVIDER=''):
+            self.assertContains(self.page('patient-basket'), 'Place my order')
+            response = self.place()
+            order = PharmacyOrder.objects.get()
+            self.assertRedirects(response, reverse('portal:patient-order-detail', args=[order.pk]), fetch_redirect_response=False)
+            self.assertContains(self.page('patient-order-detail', [order.pk]), 'will tell you how to pay')
+        order.refresh_from_db()
+        self.assertEqual(order.status, 'submitted')
+        self.assertFalse(Payment.objects.exists())
+        self.assertFalse(Shipment.objects.exists())
+
+    def test_the_basket_needs_a_delivery_address_and_comes_back_from_it(self):
+        from care.test_billing import ADDRESS as DELIVERY
+
+        self.address.delete()
+        self.add_item()
+        basket = self.page('patient-basket')
+        self.assertContains(basket, 'Add my delivery address')
+        self.assertContains(basket, reverse('portal:patient-delivery-address') + '?next=basket')
+        self.assertNotContains(basket, 'Pay R')
+        self.assertEqual(self.place().status_code, 400)
+        self.assertEqual(PharmacyOrder.objects.get().status, 'draft')
+        url = reverse('portal:patient-delivery-address') + '?next=basket'
+        self.assertContains(self.client.get(url), f'action="{url}"')
+        self.assertRedirects(self.client.post(url, DELIVERY), reverse('portal:patient-basket'), fetch_redirect_response=False)
+        self.assertContains(self.page('patient-basket'), 'Pay R80 by card')
+
+    def test_prescription_medicine_cannot_be_added_and_an_old_basket_must_remove_it(self):
+        url = reverse('portal:patient-basket-item', args=[self.product.pk])
+        response = self.client.post(url, {'workflow_context': self.signed('basket-product', self.product), 'quantity': 1})
+        self.assertRedirects(response, reverse('portal:patient-treatment') + '#once-off-items', fetch_redirect_response=False)
+        self.assertFalse(PharmacyOrder.objects.exists())
+        # A basket from before the shop closed can still hold one.
+        order = self.basket()
+        basket = self.page('patient-basket')
+        self.assertContains(basket, f'Remove {self.product.name} first')
+        self.assertNotContains(basket, 'Pay R')
+        response = self.client.post(reverse('portal:patient-order-detail', args=[order.pk]),
+                                    {'workflow_context': basket.context['workflow_context'], 'action': 'submit'})
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(PharmacyOrder.objects.get().status, 'draft')
+        response = self.client.post(url, {'workflow_context': basket.context['items'][0].remove_context, 'quantity': 0, 'next': 'basket'})
+        self.assertRedirects(response, reverse('portal:patient-basket'), fetch_redirect_response=False)
+        self.assertContains(self.page('patient-basket'), 'Your basket is empty')
+
+    def test_quantity_repeat_is_set_once_and_bad_or_stale_context_never_writes(self):
+        url = reverse('portal:patient-basket-item', args=[self.open_product.pk])
+        for token in ('', 'invalid'):
+            self.assertEqual(self.client.post(url, {'workflow_context': token, 'quantity': 2}).status_code, 302)
+        self.assertFalse(PharmacyOrder.objects.exists())
+        token = self.product_token()
+        for _ in range(2):
+            self.assertEqual(self.client.post(url, {'workflow_context': token, 'quantity': 2}).status_code, 302)
+        self.assertEqual(PharmacyOrder.objects.get().items.get().quantity, 2)
+        self.assertEqual(AuditEvent.objects.filter(action='basket.updated').count(), 1)
+        # A price change makes the page's form stale.
+        self.open_product.price = 50
+        self.open_product.save()
+        self.client.post(url, {'workflow_context': token, 'quantity': 3})
+        self.assertEqual(PharmacyOrder.objects.get().items.get().quantity, 2)
+
+    def test_placing_a_basket_that_changed_since_it_was_shown_is_refused(self):
+        self.add_item()
+        basket = self.page('patient-basket')
+        order = basket.context['order']
+        set_basket_quantity(company=self.company, patient=self.patient, actor=self.patient_user, product=self.open_product, quantity=3)
+        response = self.client.post(reverse('portal:patient-order-detail', args=[order.pk]),
+                                    {'workflow_context': basket.context['workflow_context'], 'action': 'submit'})
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.context['workflow_context'], basket.context['workflow_context'])
+        order.refresh_from_db()
+        self.assertEqual((order.status, order.items.get().quantity), ('draft', 3))
         self.assertFalse(Payment.objects.exists())
 
-    def test_retired_routes_still_require_an_authenticated_patient(self):
+    def test_a_draft_opens_as_the_basket_and_the_old_shop_address_opens_once_off_items(self):
+        order = self.basket()
+        self.assertRedirects(self.client.get(reverse('portal:patient-order-detail', args=[order.pk])),
+                             reverse('portal:patient-basket'), fetch_redirect_response=False)
+        destination = reverse('portal:patient-treatment') + '#once-off-items'
+        url = reverse('portal:patient-pharmacy')
+        self.assertRedirects(self.client.get(url), destination, fetch_redirect_response=False)
+        self.assertRedirects(self.client.head(url), destination, fetch_redirect_response=False)
+        self.assertEqual(self.client.post(url).status_code, 405)
+        self.assertEqual(self.client.get(reverse('portal:patient-basket-item', args=[self.open_product.pk])).status_code, 405)
+
+    def test_shop_routes_require_an_authenticated_patient(self):
+        urls = [reverse('portal:patient-basket'), reverse('portal:patient-orders'),
+                reverse('portal:patient-basket-item', args=[self.open_product.pk])]
         self.client.logout()
-        for url in self.retired_urls():
+        for url in urls:
             with self.subTest(url=url):
-                for method in (self.client.get, self.client.post):
-                    response = method(url)
-                    self.assertEqual(response.status_code, 302)
-                    self.assertTrue(response.url.startswith(reverse('accounts:login')))
+                response = self.client.post(url) if 'items' in url else self.client.get(url)
+                self.assertEqual(response.status_code, 302)
+                self.assertTrue(response.url.startswith(reverse('accounts:login')))
         self.login(self.admin)
-        for url in self.retired_urls():
+        for url in urls:
             with self.subTest(url=url):
-                self.assertEqual(self.client.get(url).status_code, 403)
-                self.assertEqual(self.client.post(url).status_code, 403)
+                response = self.client.post(url) if 'items' in url else self.client.get(url)
+                self.assertEqual(response.status_code, 403)
 
     def test_foreign_order_links_and_posts_do_not_disclose_or_modify_the_record(self):
         order = self.submitted()
@@ -493,36 +605,30 @@ class PatientPharmacyPortalTests(OperationsPortalFixture):
         self.assertEqual(self.client.get(url).status_code, 404)
         self.assertEqual(self.client.post(url, {'action': 'cancel', 'confirm': 'on'}).status_code, 404)
         self.login(self.patient_user, company=self.beta)
-        self.assertEqual(self.client.post(url, {'action': 'submit', 'confirm': 'on', **ADDRESS}).status_code, 404)
+        self.assertEqual(self.client.post(url, {'action': 'submit'}).status_code, 404)
         self.assertEqual(list(PharmacyOrder.objects.values()), before)
         self.assertFalse(Payment.objects.exists())
 
-    def test_csrf_and_inactive_patient_guards_still_apply_to_old_write_urls(self):
+    def test_csrf_and_inactive_patient_guards_apply_to_basket_writes(self):
         client = Client(enforce_csrf_checks=True)
         self.login(self.patient_user, client=client)
-        url = reverse('portal:patient-basket-item', args=[self.product.pk])
+        url = reverse('portal:patient-basket-item', args=[self.open_product.pk])
         self.assertEqual(client.post(url, {'quantity': 2}).status_code, 403)
         Patient.objects.filter(pk__in=(self.patient.pk, self.beta_patient.pk)).update(is_active=False)
         self.assertEqual(self.client.post(url, {'quantity': 2}).status_code, 403)
         self.assertFalse(PharmacyOrder.objects.exists())
 
-    def test_existing_requests_remain_readable_without_new_request_controls(self):
+    def test_an_unpaid_order_can_be_paid_from_its_page_and_found_in_my_orders(self):
         order = self.submitted()
-        before = list(PharmacyOrder.objects.values())
         listing = self.page('patient-orders')
         self.assertContains(listing, reverse('portal:patient-order-detail', args=[order.pk]))
         detail = self.page('patient-order-detail', [order.pk])
         self.assertContains(detail, self.product.name)
-        self.assertContains(detail, 'Cancel supply request')
+        self.assertContains(detail, 'Cancel order')
         self.assertContains(detail, 'Pay R200 by card')
-        for removed in ('Add to basket', 'Open current basket', 'Submit supply request'):
-            self.assertNotContains(listing, removed)
-            self.assertNotContains(detail, removed)
-        self.assertEqual(list(PharmacyOrder.objects.values()), before)
-        billing = self.page('patient-billing')
-        self.assertContains(billing, 'Previous supply requests')
+        self.assertContains(self.page('patient-billing'), 'My orders')
 
-    def test_owned_unaccepted_request_can_be_cancelled_only_with_confirmation_and_context(self):
+    def test_owned_unaccepted_order_can_be_cancelled_only_with_confirmation_and_context(self):
         order = self.submitted()
         url = reverse('portal:patient-order-detail', args=[order.pk])
         token = self.page('patient-order-detail', [order.pk]).context['workflow_context']
@@ -536,33 +642,16 @@ class PatientPharmacyPortalTests(OperationsPortalFixture):
         self.assertEqual(order.status, 'cancelled')
         self.assertFalse(Shipment.objects.exists())
 
-    def test_accepted_request_cannot_be_cancelled_by_patient(self):
+    def test_accepted_order_cannot_be_cancelled_by_patient(self):
         order = self.submitted()
         order.status = PharmacyOrder.Status.ACCEPTED
         order.save()
         url = reverse('portal:patient-order-detail', args=[order.pk])
         page = self.page('patient-order-detail', [order.pk])
-        self.assertNotContains(page, 'Cancel supply request')
+        self.assertNotContains(page, 'Cancel order')
         self.assertContains(page, 'Message your care team')
         response = self.client.post(url, {'action': 'cancel', 'confirm': 'on',
                                           'workflow_context': page.context['workflow_context']})
         self.assertEqual(response.status_code, 400)
         order.refresh_from_db()
         self.assertEqual(order.status, PharmacyOrder.Status.ACCEPTED)
-
-    def test_old_draft_is_readonly_and_cannot_be_submitted(self):
-        order = self.basket()
-        page = self.page('patient-order-detail', [order.pk])
-        self.assertContains(page, 'This draft was never submitted')
-        self.assertNotContains(page, 'name="quantity"')
-        self.assertNotContains(page, 'name="action" value="submit"')
-        self.assertNotContains(page, 'Pay R')
-        before = list(order.items.values())
-        response = self.client.post(reverse('portal:patient-order-detail', args=[order.pk]), {
-            'action': 'submit', 'confirm': 'on', 'workflow_context': page.context['workflow_context'], **ADDRESS})
-        self.assertEqual(response.status_code, 410)
-        order.refresh_from_db()
-        self.assertEqual(order.status, PharmacyOrder.Status.DRAFT)
-        self.assertEqual(list(order.items.values()), before)
-        self.assertEqual(PharmacyOrder.objects.count(), 1)
-        self.assertFalse(Payment.objects.exists())

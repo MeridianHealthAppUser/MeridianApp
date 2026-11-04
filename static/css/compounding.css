@@ -2,14 +2,14 @@
 .compounding-warning strong { display: block; letter-spacing: .08em; font-size: .8rem; }
 .compounding-note { overflow-wrap: anywhere; line-height: 1.65; }
 .compounding-status { margin: .7rem 0; }
-.compounding-step { border-top: 1px solid var(--c-e1eaea); padding-top: 1.25rem; margin-top: 1.25rem; }
-.compounding-print { background: var(--c-ffffff); color: var(--c-15343b); font: 15px/1.6 var(--meridian-font); margin: 0 auto; max-width: 850px; padding: 2rem; }
+.compounding-step { border-top: 1px solid var(--c-e2e9ed); padding-top: 1.25rem; margin-top: 1.25rem; }
+.compounding-print { background: var(--c-ffffff); color: var(--c-19333f); font: 15px/1.6 var(--meridian-font); margin: 0 auto; max-width: 850px; padding: 2rem; }
 .compounding-print h1 { font-family: inherit; font-size: 1.8rem; font-weight: 500; }
 .compounding-print table { border-collapse: collapse; width: 100%; }
-.compounding-print th, .compounding-print td { border-bottom: 1px solid var(--c-dce6e8); padding: .65rem 0; text-align: left; vertical-align: top; }
+.compounding-print th, .compounding-print td { border-bottom: 1px solid var(--c-dde6e9); padding: .65rem 0; text-align: left; vertical-align: top; }
 .compounding-print th { width: 40%; }
 .compounding-print td { overflow-wrap: anywhere; }
 .compounding-print-actions { display: flex; gap: 1rem; margin-bottom: 1rem; }
-.compounding-print-actions button, .compounding-print-actions a { background: var(--c-087f77); color: var(--c-ffffff); border: 0; border-radius: .5rem; padding: .7rem 1rem; text-decoration: none; font: inherit; cursor: pointer; }
+.compounding-print-actions button, .compounding-print-actions a { background: var(--c-1b4557); color: var(--c-ffffff); border: 0; border-radius: .5rem; padding: .7rem 1rem; text-decoration: none; font: inherit; cursor: pointer; }
 @media print { .compounding-print-actions { display: none; } .compounding-print { padding: 0; max-width: none; } .compounding-warning { border-color: var(--c-333333); background: var(--c-ffffff); color: var(--c-111111); } }
 @media (max-width: 42rem) { .compounding-print { padding: 1rem; } }

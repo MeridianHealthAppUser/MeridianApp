@@ -2,7 +2,7 @@
 {% load static workspace_ui %}
 
 {% block title %}{{ lead }} | Leads | {{ company.name }}{% endblock %}
-{% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/leads.css' %}">{% endblock %}
+{% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/leads.css' %}?v=20261104a">{% endblock %}
 
 {% block breadcrumbs %}{% with lead.first_name|add:' '|add:lead.last_name as lead_name %}{% breadcrumbs 'Leads' 'portal:staff-leads' lead_name %}{% endwith %}{% endblock %}
 {% block page_heading %}

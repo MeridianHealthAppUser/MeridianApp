@@ -17,7 +17,8 @@ How it fits together:
 - A prescription or price change that needs more than the mandate's amount marks it "New amount to confirm"; the
   patient is asked to approve a new debit order, and nothing more is collected until they do.
 - A parcel is paid for when the cycle covering its day is paid (a cycle covers the parcels up to its last day), when
-  its non-prescription order is paid, or when the practice recorded a payment against it. Check and lock week
+  its non-prescription order is paid, or when the practice recorded a payment against it. A paid order of items that
+  need no prescription goes on the next shipping day's list by itself (care.pharmacy.ship_paid_order). Check and lock week
   (care.operations) holds back parcels that aren't, when the practice requires payment (the default).
 """
 
@@ -696,14 +697,19 @@ def complete_card_payment(*, payment, paid, reference='', reason='', actor=None,
         if cycle.status != SubscriptionCycle.Status.PAID:
             _mark_paid(cycle, payment)
     elif paid and payment.pharmacy_order_id:
+        from .pharmacy import ship_paid_order
+
         order = payment.pharmacy_order
         if not order.paid_at:
             order.paid_at = payment.paid_at
             order.save(update_fields=('paid_at', 'updated_at'))
+        # Items that need no prescription go on the next shipping day's list now; anything else waits for the practice.
+        parcel = ship_paid_order(order, request=request)
         PatientEvent.objects.create(company_id=payment.company_id, patient_id=payment.patient_id,
                                     category=PatientEvent.Category.PAYMENT, title='Payment received',
-                                    detail=f'{money(payment.amount)} for your request.', source_type='care.payment',
-                                    source_id=str(payment.pk))
+                                    detail=f'{money(payment.amount)} for your order.' + (
+                                        f' It goes out with the parcels on {parcel.scheduled_for:%-d %b}.' if parcel else ''),
+                                    source_type='care.payment', source_id=str(payment.pk))
     record_audit(company=payment.company, actor=actor, patient=payment.patient,
                  action='billing.card_paid' if paid else 'billing.card_payment_failed', target=payment, request=request,
                  metadata={'for': 'cycle' if payment.subscription_cycle_id else 'order'})

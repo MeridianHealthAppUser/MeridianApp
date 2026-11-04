@@ -5,10 +5,11 @@ from decimal import Decimal
 
 from django.contrib.auth import get_user_model
 from django.core.exceptions import PermissionDenied, ValidationError
+from django.test import override_settings
 from django.utils import timezone
 from practices.models import Patient
 
-from .models import (AuditEvent, MedicationProduct, PatientSubscription, Payment, PharmacyOrder,
+from .models import (AuditEvent, MedicationProduct, PatientEvent, PatientSubscription, Payment, PharmacyOrder,
                      PharmacyOrderItem, Shipment, ShipmentItem, TreatmentAuthorization)
 from .operations import product_allowance
 from .pharmacy import accept_order, cancel_order, set_basket_quantity, submit_basket
@@ -254,3 +255,59 @@ class PharmacyRequestTests(OperationsFixture):
             cancel_order(order=order, actor=self.patient_user, confirm='yes')
         with self.assertRaises(ValidationError):
             self.accept(order, confirm='yes')
+
+
+@override_settings(PAYMENT_PROVIDER='sandbox')
+class PaidOrderShippingTests(OperationsFixture):
+    """A paid order of items that need no prescription goes on the next shipping day's list by itself."""
+
+    def pay(self, product, quantity=2):
+        from .billing import complete_card_payment, start_order_payment
+
+        basket = set_basket_quantity(company=self.company, patient=self.patient, actor=self.patient_user,
+                                     product=product, quantity=quantity)
+        order = submit_basket(order=basket, actor=self.patient_user, delivery_address=ADDRESS, confirm=True,
+                              expected_revision=basket.revision)
+        payment, _ = start_order_payment(order=order, actor=self.patient_user)
+        complete_card_payment(payment=payment, paid=True, reference='sandbox')
+        order.refresh_from_db()
+        return order, payment
+
+    def test_a_paid_order_of_open_items_is_drafted_on_the_next_shipping_day(self):
+        from .parcels import shipping_day_from, shipping_weekday
+
+        order, payment = self.pay(self.open_product)
+        self.assertEqual(order.status, PharmacyOrder.Status.ACCEPTED)
+        parcel = order.shipment
+        self.assertEqual((parcel.status, parcel.scheduled_for, parcel.subscription),
+                         ('draft', shipping_day_from(self.today, shipping_weekday(self.company)), self.plan))
+        self.assertEqual(list(parcel.items.values_list('product', 'quantity', 'dose')), [(self.open_product.pk, 2, '')])
+        self.assertTrue(AuditEvent.objects.filter(action='pharmacy_order.accepted', target_id=str(order.pk),
+                                                  metadata__automatic=True).exists())
+        event = PatientEvent.objects.get(source_type='care.payment', source_id=str(payment.pk))
+        self.assertIn(f'It goes out with the parcels on {parcel.scheduled_for:%-d %b}', event.detail)
+        # The practice accepting it afterwards changes nothing.
+        self.assertEqual(accept_order(order=order, actor=self.admin, scheduled_for=self.today, confirm=True), parcel)
+        self.assertEqual(Shipment.objects.count(), 1)
+
+    def test_a_paid_order_with_prescription_medicine_waits_for_the_practice(self):
+        order, _ = self.pay(self.product)
+        self.assertIsNotNone(order.paid_at)
+        self.assertEqual(order.status, PharmacyOrder.Status.SUBMITTED)
+        self.assertFalse(Shipment.objects.exists())
+
+    def test_an_item_withdrawn_before_the_payment_lands_keeps_the_payment_and_waits(self):
+        from .billing import complete_card_payment, start_order_payment
+
+        basket = set_basket_quantity(company=self.company, patient=self.patient, actor=self.patient_user,
+                                     product=self.open_product, quantity=1)
+        order = submit_basket(order=basket, actor=self.patient_user, delivery_address=ADDRESS, confirm=True,
+                              expected_revision=basket.revision)
+        payment, _ = start_order_payment(order=order, actor=self.patient_user)
+        MedicationProduct.objects.filter(pk=self.open_product.pk).update(is_active=False)
+        complete_card_payment(payment=payment, paid=True, reference='sandbox')
+        order.refresh_from_db()
+        payment.refresh_from_db()
+        self.assertEqual((payment.status, order.status), (Payment.Status.PAID, PharmacyOrder.Status.SUBMITTED))
+        self.assertIsNotNone(order.paid_at)
+        self.assertFalse(Shipment.objects.exists())

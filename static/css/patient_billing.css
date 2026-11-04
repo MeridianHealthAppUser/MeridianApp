@@ -1,13 +1,13 @@
 /* Billing and payments, the delivery address form, and Start my subscription's address and payment choices. */
-.patient-fieldset { border: 1px solid var(--c-dfe8e6); border-radius: .8rem; display: grid; gap: .6rem; margin: 0; min-width: 0; padding: .9rem 1rem 1rem; }
-.patient-fieldset legend { color: var(--c-183638); font-size: .9rem; font-weight: 700; padding: 0 .35rem; }
+.patient-fieldset { border: 1px solid var(--c-dfe7eb); border-radius: .8rem; display: grid; gap: .6rem; margin: 0; min-width: 0; padding: .9rem 1rem 1rem; }
+.patient-fieldset legend { color: var(--c-1c343f); font-size: .9rem; font-weight: 700; padding: 0 .35rem; }
 .patient-address-fields { display: grid; gap: .75rem 1rem; grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .patient-address-fields__recipient, .patient-address-fields__business, .patient-address-fields__street, .patient-address-fields__instructions { grid-column: 1 / -1; }
 .patient-address-fields select, .patient-address-fields input, .patient-address-fields textarea { width: 100%; box-sizing: border-box; }
-.patient-optional { color: var(--c-6b8285); font-weight: 400; }
+.patient-optional { color: var(--c-6d808a); font-weight: 400; }
 .patient-start-form { display: grid; gap: 1rem; }
 .billing-state { border-radius: .7rem; font-weight: 600; margin: 0 0 .9rem; padding: .65rem .85rem; }
-.billing-state--paid, .billing-state--due { background: var(--c-e4f5f1); color: var(--c-056f69); }
+.billing-state--paid, .billing-state--due { background: var(--c-e4f4fa); color: var(--c-153b4b); }
 .billing-state--retrying, .billing-state--pending, .billing-state--update, .billing-state--no_mandate { background: var(--c-fff6e4); color: var(--c-7a5410); }
 .billing-state--failed { background: var(--c-fcedeb); color: var(--c-aa4d47); }
 .billing-due { border-color: var(--c-f0d9a8); margin-bottom: 1.25rem; }
@@ -16,8 +16,8 @@
 .billing-due__row:first-of-type { border-top: 0; }
 .billing-due__row small { color: var(--c-6b5217); display: block; font-size: .82rem; margin-top: .15rem; }
 .billing-due__row form { margin: 0; }
-.billing-pill { background: var(--c-eef3f5); border-radius: 99rem; color: var(--c-496e74); display: inline-block; font-size: .75rem; font-weight: 700; padding: .15rem .6rem; white-space: nowrap; }
-.billing-pill--paid { background: var(--c-e3f5f0); color: var(--c-08726c); }
+.billing-pill { background: var(--c-eef3f5); border-radius: 99rem; color: var(--c-4d6c7b); display: inline-block; font-size: .75rem; font-weight: 700; padding: .15rem .6rem; white-space: nowrap; }
+.billing-pill--paid { background: var(--c-e3f4fb); color: var(--c-173d4d); }
 .billing-pill--retrying { background: var(--c-fff6e4); color: var(--c-7a5410); }
 .billing-pill--failed { background: var(--c-fcedeb); color: var(--c-aa4d47); }
 .billing-address { font-style: normal; line-height: 1.6; margin: 0 0 .5rem; }

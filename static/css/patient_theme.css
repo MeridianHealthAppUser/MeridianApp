@@ -1,4 +1,4 @@
-/* Patient-only palette: pale cyan #A5E3F0 and dark blue #1D4A5E.
+/* The patient palette: pale cyan #A5E3F0 and dark blue #1D4A5E (staff pages use it too, from console.css).
    Loaded last, with explicit light and dark tokens to preserve contrast. */
 
 .patient-app {
@@ -39,6 +39,7 @@
   --console-teal: var(--patient-teal);
   --console-teal-dark: var(--patient-teal-dark);
   --console-teal-soft: var(--patient-accent-soft);
+  --console-teal-line: var(--patient-accent-line);
   --console-sand: var(--c-fcf3e2);
   --console-amber: var(--c-9a6414);
   --console-red: var(--patient-rose);
@@ -213,6 +214,8 @@
   --patient-accent-hover: var(--c-c4eff8);
   --patient-accent-soft: var(--c-1d4a5e);
   --patient-accent-line: var(--c-4e899c);
+  --patient-bar-soft: var(--c-234255);
+  --patient-bar-line: var(--c-46728a);
   --patient-focus-ring: rgb(165 227 240 / 22%);
   --patient-shadow: 0 1px 2px rgb(0 0 0 / 12%), 0 8px 24px -12px rgb(0 0 0 / 30%);
 }
@@ -233,6 +236,8 @@
     --patient-accent-hover: var(--c-c4eff8);
     --patient-accent-soft: var(--c-1d4a5e);
     --patient-accent-line: var(--c-4e899c);
+    --patient-bar-soft: var(--c-234255);
+    --patient-bar-line: var(--c-46728a);
     --patient-focus-ring: rgb(165 227 240 / 22%);
     --patient-shadow: 0 1px 2px rgb(0 0 0 / 12%), 0 8px 24px -12px rgb(0 0 0 / 30%);
   }

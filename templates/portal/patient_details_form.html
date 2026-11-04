@@ -1,7 +1,7 @@
 {% extends 'portal/patient_workspace_base.html' %}
 {% load static %}
 {% block title %}Edit profile | {{ patient }} | Meridian{% endblock %}
-{% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/clinical_workflow.css' %}">{% endblock %}
+{% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/clinical_workflow.css' %}?v=20261104a">{% endblock %}
 {% block patient_workspace_heading_actions %}
   <a class="console-button console-button--quiet" href="{{ workspace_return_url }}">{{ workspace_return_label }}</a>
 {% endblock %}

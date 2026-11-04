@@ -1,7 +1,7 @@
 {% extends 'portal/operations_base.html' %}{% load static workspace_ui %}
 {% block title %}Suppliers | Meridian{% endblock %}
 {% block breadcrumbs %}{% breadcrumbs 'Suppliers' %}{% endblock %}
-{% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/dialogs.css' %}"><link rel="stylesheet" href="{% static 'css/suppliers.css' %}?v=20261103a"><script src="{% static 'js/dialogs.js' %}?v=20261102a" defer></script><script src="{% static 'js/suppliers.js' %}?v=20261103b" defer></script>{% endblock %}
+{% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/dialogs.css' %}?v=20261104d"><link rel="stylesheet" href="{% static 'css/suppliers.css' %}?v=20261104a"><script src="{% static 'js/dialogs.js' %}?v=20261102a" defer></script><script src="{% static 'js/suppliers.js' %}?v=20261103b" defer></script>{% endblock %}
 {% block page_heading %}<header class="staff-page-header"><div><h1>Suppliers</h1><p>Manage your suppliers, their products and ordering codes.</p></div><a class="console-button console-button--primary" href="{{ supplier_return_url }}{% if '?' in supplier_return_url %}&amp;{% else %}?{% endif %}create=1">Add supplier</a></header>{% endblock %}
 {% block operations_content %}
 <section class="staff-page-card">

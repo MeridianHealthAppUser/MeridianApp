@@ -31,20 +31,37 @@ COMMENT = re.compile(r'/\*.*?\*/', re.S)
 
 # Dark values chosen by hand, by token name.
 DARK_OVERRIDES = {
-    'ffffff': '#162427',   # cards, panels and inputs
-    'f4f8f7': '#0f1b1d',   # the page behind them
+    'ffffff': '#172b36',   # cards, panels and inputs: the patient pages' dark surface
+    'f4f8f9': '#101e27',   # the page behind them
+    'f5f8f9': '#101e27',
     '1f2933': '#1f2933',   # text on a provider's own light form (Peach's card form), the same in both
+    # The treatment timeline's four chips (treatment.css), fill then border: each keeps a hue of its own in dark mode.
+    'f4eefb': '#30294f', 'e2d6f3': '#6153a3',   # Prescription: violet
+    'ecf3fb': '#1b3358', 'd3e3f5': '#3f68ad',   # Shipment: blue
+    'e9f5fa': '#11414d', 'cfe7f1': '#2c8398',   # Dosage: cyan
+    'fbf4e6': '#3d2f13', 'f0e1bf': '#8c6c28',   # Payment: amber
+    # A table row on hover: a step lighter than the dark card it sits on (workspace_polish, patient pages, leads).
+    'f8fcfa': '#1f3541', 'f8fafb': '#1f3541', 'f6fafb': '#1f3541',
 }
 
-# Patient pages choose their own light/dark semantic roles in patient_theme.css.
-# Keep these palette values stable so the global conversion does not invert the
-# explicit dark palette a second time. These colours are only used by patients.
+# Patient pages choose their own light/dark semantic roles in patient_theme.css, and the
+# console's main colours (console.css) use the same ones. Keep these palette values stable
+# so the global conversion does not invert the explicit dark palette a second time.
 PATIENT_PALETTE = (
-    '101e27', '14384a', '172b36', '1d4a5e', '2b4655', '345363', '405f6e', '4e899c',
-    '506e7c', '557381', '8ccbdc', 'a5e3f0', 'aec7d3', 'b8ced8', 'c0d5df', 'c4eff8',
-    'd2e2e8', 'e3f1f6', 'e5eef2', 'f3f8fa',
+    '101e27', '14384a', '172b36', '1d4a5e', '234255', '2b4655', '345363', '405f6e', '46728a', '4e899c',
+    '506e7c', '557381', '8ccbdc', 'a5e3f0', 'aec7d3', 'b8ced8', 'c0d5df', 'c4eff8', 'd2e2e8', 'e3f1f6',
+    'e5eef2', 'f3f8fa',
 )
 DARK_OVERRIDES.update({colour: f'#{colour}' for colour in PATIENT_PALETTE})
+
+# The dark blues that buttons, links, icons and focus rings use on staff pages (they were the console's
+# teals until Nov 2026). In dark mode they turn pale cyan, as the patient pages' #1d4a5e turns #a5e3f0.
+BLUE_ACCENTS = (
+    '0d2631', '0f2834', '10303e', '122933', '153a4a', '153a4b', '153b4b', '163341', '163746', '173c4c',
+    '173d4d', '174051', '18333f', '183f50', '184153', '193d4e', '194051', '194254', '1a3f4f', '1a4051',
+    '1a4356', '1a4457', '1b4355', '1b4457', '1b4557', '1c4354', '1c4557', '1d4a5f', '1e495d', '204252',
+    '215065', '225368', '225369', '22556c', '23556b', '24556c', '25566c', '25586f', '2b424d', '446a7d',
+)
 
 
 def parse(text):
@@ -117,6 +134,15 @@ def from_oklch(lab_l, chroma, hue):
 # greys and tints used for lines and highlights stay a step lighter than them, so borders still show.
 LIGHT_TO_DARK = ((0.62, 0.52), (0.8, 0.41), (0.9, 0.35), (0.95, 0.31), (0.985, 0.24), (1.0, 0.21))
 
+# The hue of the patient pages' dark blues (#172b36, #345363). Pale greys and pale blues take it in dark mode, so
+# panels, lines, table headers and hovers match the blue surfaces instead of turning grey. Pale tints of other
+# colours (amber, red, green, violet) keep their own hue.
+SURFACE_HUE = math.radians(-126)
+
+
+def _hue_gap(first, second):
+    return abs((first - second + math.pi) % (2 * math.pi) - math.pi)
+
 
 def _between(value, points):
     for (x1, y1), (x2, y2) in zip(points, points[1:]):
@@ -134,11 +160,19 @@ def dark_value(r, g, b, alpha):
         return f'rgba(0, 0, 0, {round(min(alpha * 2, 0.6), 3):g})'
     if lightness > 0.62:
         new_l, new_c = _between(lightness, LIGHT_TO_DARK), chroma * 0.75
+        if chroma < 0.009 or (chroma < 0.05 and _hue_gap(hue, SURFACE_HUE) < math.radians(40)):
+            new_c, hue = max(new_c, 0.026 + max(0, new_l - 0.22) * 0.09), SURFACE_HUE
     elif lightness < 0.45:
         new_l, new_c = 0.93 - lightness * 0.62, chroma
     else:
         new_l, new_c = min(0.78, lightness + 0.08), chroma
     return css_value(*from_oklch(new_l, new_c, hue), alpha)
+
+
+def accent_dark(r, g, b, alpha):
+    """A BLUE_ACCENTS colour in dark mode: pale cyan, lighter for the darker (hover) blues, as #14384a turns #c4eff8."""
+    lightness = to_oklch(r, g, b)[0]
+    return css_value(*from_oklch(min(0.94, max(0.72, 0.88 + (0.387 - lightness) * 0.6)), 0.065, math.radians(212)), alpha)
 
 
 def tokenise(text, found):
@@ -181,7 +215,8 @@ def existing_tokens():
 def write_theme(tokens):
     names = sorted(tokens)
     light = '\n'.join(f'  --c-{name}: {css_value(*tokens[name])};' for name in names)
-    dark = '\n'.join(f'  --c-{name}: {DARK_OVERRIDES.get(name) or dark_value(*tokens[name])};' for name in names)
+    dark = '\n'.join(f'  --c-{name}: {DARK_OVERRIDES.get(name) or (accent_dark if name[:6] in BLUE_ACCENTS else dark_value)(*tokens[name])};'
+                     for name in names)
     THEME.write_text(f'''/* Light and dark mode: every colour in the app's stylesheets, as a token. Written by scripts/theme_tokens.py:
    don't edit the token lists by hand; change the script's DARK_OVERRIDES and run it again.
 

@@ -287,6 +287,19 @@ class DeliveryAddressForm(forms.Form):
         return {name: self.cleaned_data.get(name, '') for name in FIELDS}
 
 
+class BasketQuantityForm(forms.Form):
+    """How many of a once-off item go in the patient's basket, from My Treatment or the basket (0 removes it)."""
+
+    quantity = forms.IntegerField(min_value=0, max_value=100, initial=1, label='Quantity')
+
+
+class OrderForm(forms.Form):
+    """Placing the basket as an order. It goes to the delivery address on file, so only a note is asked for."""
+
+    note = forms.CharField(label='Note for the practice (optional)', required=False, max_length=1000,
+                           widget=forms.Textarea(attrs={'rows': 2}))
+
+
 class OrderReviewForm(forms.Form):
     action = forms.ChoiceField(choices=(('accept', 'Accept for preparation'), ('cancel', 'Cancel unaccepted request')))
     scheduled_for = forms.DateField(label='Planned dispatch date', required=False,

@@ -1,14 +1,14 @@
 /* Shared pieces of the patient pages: status pills, key/value rows, task and
    join bars, and the unread count on the sidebar. The colours and type are set
-   in patient_theme.css (the practice console's teal); these are the same values,
+   in patient_theme.css (the patient blues, which the practice console now uses too); these are the same values,
    for pages without it. */
 .patient-pages-console {
   --patient-amber-soft: var(--c-fcf3e2);
   --patient-amber-line: var(--c-ebd5ac);
-  --patient-blue: var(--c-056f69);
-  --patient-blue-soft: var(--c-e4f5f1);
-  --patient-blue-line: var(--c-b9d9d3);
-  --patient-teal-line: var(--c-b9d9d3);
+  --patient-blue: var(--c-153b4b);
+  --patient-blue-soft: var(--c-e4f4fa);
+  --patient-blue-line: var(--c-b8d8df);
+  --patient-teal-line: var(--c-b8d8df);
   --patient-rose-soft: var(--c-fbedeb);
   --patient-rose-line: var(--c-efccc8);
   --patient-badge: var(--c-d92d20);
@@ -67,14 +67,15 @@
 .patient-bar__title { color: var(--console-ink); font-size: .92rem; font-weight: 500; line-height: 1.4; margin: 0; }
 .patient-bar__body { color: var(--patient-text); font-size: .84rem; line-height: 1.6; margin: .25rem 0 0; }
 .patient-bar__actions { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: .75rem; }
-.patient-bar--urgent { background: var(--patient-amber-soft); border-color: var(--patient-amber-line); }
+/* Amber in light mode; patient_theme.css sets --patient-bar-soft and -line to a blue in dark mode. Its pill stays amber. */
+.patient-bar--urgent { background: var(--patient-bar-soft, var(--patient-amber-soft)); border-color: var(--patient-bar-line, var(--patient-amber-line)); }
 /* A task: its text runs up to the buttons on the right and wraps there. Without room for both, the buttons go below. */
 .patient-bar--task { flex-wrap: wrap; }
 .patient-bar--task .patient-bar__copy { flex: 1 1 16rem; }
 .patient-bar--task .patient-bar__actions { align-self: center; flex: 0 0 auto; justify-content: flex-end; margin: 0 0 0 auto; }
 .patient-bar--done { background: var(--console-teal-soft); border-color: var(--patient-teal-line); }
 .patient-bar--join { align-items: center; background: var(--console-teal-soft); border-color: var(--patient-teal-line); flex-wrap: wrap; padding: 1.05rem 1.2rem; }
-.patient-bar--join.is-waiting { background: var(--patient-amber-soft); border-color: var(--patient-amber-line); }
+.patient-bar--join.is-waiting { background: var(--patient-bar-soft, var(--patient-amber-soft)); border-color: var(--patient-bar-line, var(--patient-amber-line)); }
 .patient-bar--join .patient-bar__title { font-size: 1.02rem; margin-top: .35rem; }
 .patient-bar--join .patient-bar__actions { flex: 0 0 auto; margin-top: 0; }
 .patient-stack { display: grid; gap: .75rem; }

@@ -5,7 +5,7 @@
 .patient-workspace-actions { align-items: center; display: flex; flex-wrap: wrap; gap: .65rem; }
 .patient-workspace-tabs { border-bottom: 1px solid var(--console-line); display: flex; flex-wrap: wrap; gap: .3rem; margin-bottom: 1.3rem; padding-bottom: .75rem; }
 .patient-workspace-tabs a { align-items: center; border: 1px solid transparent; border-radius: .55rem; color: var(--console-muted); display: inline-flex; font-size: .8rem; font-weight: 650; min-height: 44px; padding: .55rem .75rem; text-decoration: none; }
-.patient-workspace-tabs a.is-active { background: var(--console-teal-soft); border-color: var(--c-acd8cb); color: var(--console-teal-dark); }
+.patient-workspace-tabs a.is-active { background: var(--console-teal-soft); border-color: var(--c-a9d6e1); color: var(--console-teal-dark); }
 .patient-workspace-tabs a:hover { background: var(--c-edf6f2); }
 /* Operations and Administration use these tabs too (includes/page_tabs.html); Data requests carries a count. */
 .patient-workspace-tabs a .nav-badge { margin-left: .45rem; }
@@ -59,7 +59,7 @@
   .patient-workspace-picker > summary svg { fill: none; flex: 0 0 auto; height: 1.1rem; stroke: var(--console-teal-dark); stroke-linecap: round; stroke-linejoin: round; stroke-width: 2; transition: transform .15s ease; width: 1.1rem; }
   .patient-workspace-picker[open] > summary svg { transform: rotate(180deg); }
   /* Opens in place, pushing the page down, so no option hides behind the bottom menu bar. */
-  .patient-workspace-picker nav { background: var(--c-ffffff); border: 1px solid var(--console-line); border-radius: .75rem; box-shadow: 0 6px 18px var(--c-153b39-080); margin-top: .4rem; }
+  .patient-workspace-picker nav { background: var(--c-ffffff); border: 1px solid var(--console-line); border-radius: .75rem; box-shadow: 0 6px 18px var(--c-1a3846-080); margin-top: .4rem; }
   .patient-workspace-picker ul { list-style: none; margin: 0; padding: .3rem; }
   .patient-workspace-picker a { align-items: center; border-radius: .55rem; color: var(--console-ink); display: flex; font-size: .92rem; font-weight: 650; justify-content: space-between; min-height: 2.9rem; padding: .6rem .8rem; text-decoration: none; }
   .patient-workspace-picker a:hover, .patient-workspace-picker a:focus-visible { background: var(--c-edf6f2); }
@@ -78,6 +78,6 @@
 /* Blood results: the results as written, wide enough to read. */
 .blood-result__text { min-width: 14rem; overflow-wrap: anywhere; }
 
-.patient-order-subtabs { display:flex; gap:1.25rem; padding:.75rem 0; margin-bottom:1rem; border-bottom:1px solid var(--c-dce8e6); overflow-x:auto; }
-.patient-order-subtabs a { align-items:center; box-sizing:border-box; display:inline-flex; font-size:.85rem; font-weight:500; line-height:1.4; min-height:2.75rem; padding:.45rem .25rem; white-space:nowrap; color:var(--c-637f83); text-decoration:none; }
-.patient-order-subtabs a.is-active { color:var(--c-00776f); font-weight:700; border-bottom:2px solid currentColor; }
+.patient-order-subtabs { display:flex; gap:1.25rem; padding:.75rem 0; margin-bottom:1rem; border-bottom:1px solid var(--c-dce7ec); overflow-x:auto; }
+.patient-order-subtabs a { align-items:center; box-sizing:border-box; display:inline-flex; font-size:.85rem; font-weight:500; line-height:1.4; min-height:2.75rem; padding:.45rem .25rem; white-space:nowrap; color:var(--c-667d89); text-decoration:none; }
+.patient-order-subtabs a.is-active { color:var(--c-174051); font-weight:700; border-bottom:2px solid currentColor; }
