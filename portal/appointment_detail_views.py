@@ -1,8 +1,7 @@
 from datetime import datetime, time as time_of_day, timedelta
-from urllib.parse import quote, urlencode
+from urllib.parse import urlencode
 
 from django import forms
-from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.exceptions import ValidationError
@@ -20,6 +19,7 @@ from django.views.decorators.cache import never_cache
 from care.appointment_lifecycle import book_staff_appointment, change_appointment_status, reschedule_appointment
 from care.availability import bookable_start_times, start_slots
 from care.forms import BOOKING_DURATIONS, AppointmentForm
+from care.messaging import practice_administrators
 from care.widgets import QUARTER_HOUR_CHOICES
 from care.models import Appointment, ClinicalEncounter, MessageThread
 from practices.models import Patient
@@ -230,11 +230,14 @@ class AppointmentDetailMixin:
             form=form if form is not None else AppointmentStatusForm(attendance=self.attendance(appointment), staff=not self.patient_portal),
             workflow_context=request.POST.get('workflow_context', '') if request.method == 'POST' else make_workflow_context(request, company, 'appointment-status', appointment, patient=self.patient if self.patient_portal else None))
         if self.patient_portal:
-            # A patient asks support for a new time by email, and the practice moves the appointment.
+            # A patient asks for a new time in a message to a practice administrator (their clinician when the
+            # practice has none), who is emailed about it as usual and moves the appointment.
             when = date_format(timezone.localtime(appointment.starts_at), 'D j M Y, H:i')
-            subject = f'Request for Appointment Change: {appointment.patient.first_name} {appointment.patient.last_name}, {when} SAST'
-            context.update(support_email=settings.SUPPORT_EMAIL,
-                           change_request_url=f"mailto:{settings.SUPPORT_EMAIL}?{urlencode({'subject': subject}, quote_via=quote)}")
+            query = {'compose': 1, 'subject': f'Request to change my appointment: {when} SAST'}
+            administrator = practice_administrators(company).first()
+            if administrator is not None:
+                query['to'] = administrator.pk
+            context['change_request_url'] = f"{reverse('portal:patient-messages')}?{urlencode(query)}#patient-conversation"
         allowed_role = 'patient' if self.patient_portal else ('doctor' if self.membership.is_clinician else None)
         context.update(appointment_video_context(request, appointment, allowed_role=allowed_role))
         if self.can_change_time(appointment):

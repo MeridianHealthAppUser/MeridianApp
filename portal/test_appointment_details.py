@@ -8,7 +8,7 @@ import shutil
 import subprocess
 from unittest import skipUnless
 from unittest.mock import patch
-from urllib.parse import quote
+from urllib.parse import urlencode
 
 from django.conf import settings
 from django.core.exceptions import PermissionDenied
@@ -512,13 +512,17 @@ class AppointmentDetailPageTests(AppointmentLifecycleFixture):
         self.assertTemplateUsed(response, 'portal/patient_appointment_detail.html')
         self.assertContains(response, '/static/css/patient_pages.css')
         self.assertContains(response, 'Add to calendar')
-        # A new time is asked of support by email; the practice moves the appointment.
+        # A new time is asked of a practice administrator in a message; the practice moves the appointment.
         self.assertNotContains(response, 'Discuss a new time')
         self.assertNotContains(response, 'accepted proposal')
         when = date_format(timezone.localtime(appointment.starts_at), 'D j M Y, H:i')
-        subject = quote(f'Request for Appointment Change: {self.patient.first_name} {self.patient.last_name}, {when} SAST')
-        self.assertContains(response, f'href="mailto:{settings.SUPPORT_EMAIL}?subject={subject}">Request a change</a>')
-        self.assertContains(response, f'email {settings.SUPPORT_EMAIL} and the practice will move your appointment.')
+        subject = f'Request to change my appointment: {when} SAST'
+        query = urlencode({'compose': 1, 'subject': subject, 'to': self.admin.pk})
+        self.assertContains(response, f'href="{reverse("portal:patient-messages")}?{query.replace("&", "&amp;")}#patient-conversation">Request a change</a>')
+        self.assertContains(response, 'use Request a change to message the practice, and they will move your appointment.')
+        self.assertNotContains(response, 'mailto:')
+        compose = self.client.get(f'{reverse("portal:patient-messages")}?{query}')
+        self.assertEqual(compose.context['thread_form'].initial, {'subject': subject, 'recipient': str(self.admin.pk)})
         self.assertNotContains(response, 'javascript:')
         self.assertNotContains(response, 'Write consultation note')
         self.assertNotContains(response, 'Record completed')
