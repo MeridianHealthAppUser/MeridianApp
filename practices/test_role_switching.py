@@ -283,18 +283,74 @@ class DoctorRoleContinuityTests(TestCase):
         return TreatmentAuthorization.objects.create(**data)
 
     def assert_departure_blocked(self, category):
-        before = self.snapshot()
-        for role in ('super_admin', 'practice_admin'):
-            with self.subTest(role=role), self.assertRaisesMessage(ActiveClinicalWorkError, category):
-                switch_own_practice_role(actor=self.admin, role=role)
-            self.assertEqual(self.snapshot(), before)
+        # Super admin keeps the clinician type, so only Practice administrator takes clinical access away.
+        for current_role in ('doctor', 'super_admin'):
+            CompanyMembership.objects.filter(pk=self.membership.pk).update(role=current_role)
+            before = self.snapshot()
+            with self.subTest(current_role=current_role):
+                with self.assertRaisesMessage(ActiveClinicalWorkError, category):
+                    switch_own_practice_role(actor=self.admin, role='practice_admin')
+                self.assertEqual(self.snapshot(), before)
+                response = self.client.post(self.url, {'role': 'practice_admin'})
+                self.assertRedirects(response, reverse('portal:desktop-dashboard'), fetch_redirect_response=False)
+                message = ' '.join(str(item) for item in get_messages(response.wsgi_request))
+                self.assertIn('Practice administrators are not clinicians', message)
+                self.assertIn(category, message)
+                self.assertIn('Choose Super admin', message)
+                self.assertEqual(self.snapshot(), before)
+        CompanyMembership.objects.filter(pk=self.membership.pk).update(role='doctor')
+
+    @override_settings(VIDEO_ENABLED=True)
+    def test_super_admin_doctor_keeps_active_care_and_their_normal_clinical_work(self):
+        from care.appointment_lifecycle import book_staff_appointment, change_appointment_status
+        from care.clinical import create_lab_request, review_lab_request, submit_lab_result
+        from care.treatment import authorization_is_current
+        from video.access import resolve_room_access
+
+        authorization = self.authorization()
+        self.patient.assigned_doctor = self.admin
+        self.patient.save(update_fields=('assigned_doctor',))
+        lab = create_lab_request(company=self.company, patient=self.patient, actor=self.admin, panel_name='Test panel')
+        now = timezone.now()
+        ended = Appointment.objects.create(
+            company=self.company, patient=self.patient, clinician=self.admin,
+            starts_at=now - timedelta(hours=1), duration_minutes=30,
+        )
+        ongoing = Appointment.objects.create(
+            company=self.company, patient=self.patient, clinician=self.admin,
+            starts_at=now - timedelta(minutes=5), duration_minutes=30,
+        )
+
         response = self.client.post(self.url, {'role': 'super_admin'})
         self.assertRedirects(response, reverse('portal:desktop-dashboard'), fetch_redirect_response=False)
-        message = ' '.join(str(item) for item in get_messages(response.wsgi_request))
-        self.assertIn('Your role remains Doctor', message)
-        self.assertIn(category, message)
-        self.assertIn('technical administration area is still available', message)
-        self.assertEqual(self.snapshot(), before)
+        self.membership.refresh_from_db()
+        self.assertEqual((self.membership.role, self.membership.clinician_type), ('super_admin', 'doctor'))
+
+        self.assertTrue(authorization_is_current(authorization))
+        self.patient.refresh_from_db()
+        self.patient.full_clean()
+        self.assertEqual(self.client.get(reverse('portal:management-users')).status_code, 200)
+        self.assertEqual(self.client.get(
+            reverse('portal:clinical-consultation-create', args=[self.patient.pk])).status_code, 200)
+        self.assertEqual(resolve_room_access(self.admin.pk, ongoing.pk, now=now).role, 'doctor')
+        submit_lab_result(
+            lab_request=lab, actor=self.patient_user, filename='result.pdf',
+            content=b'%PDF-1.4\n1 0 obj << /Type /Catalog >> endobj\n%%EOF',
+        )
+        reviewed = review_lab_request(lab_request=lab, actor=self.admin, review_note='Test review complete.')
+        self.assertEqual(reviewed.status, LabRequest.Status.REVIEWED)
+        create_lab_request(company=self.company, patient=self.patient, actor=self.admin, panel_name='Follow-up panel')
+        booked = book_staff_appointment(
+            company=self.company, patient=self.patient, actor=self.admin, clinician=self.admin,
+            starts_at=now + timedelta(days=2), duration_minutes=30, appointment_type=Appointment.Type.FOLLOW_UP,
+        )
+        self.assertEqual(booked.clinician, self.admin)
+        attended = change_appointment_status(
+            appointment=ended, actor=self.admin, status='completed',
+            expected_updated=ended.updated_at.isoformat(), confirm=True,
+        )
+        self.assertEqual(attended.status, 'completed')
+        self.assertEqual(switch_own_practice_role(actor=self.admin, role='doctor').role, 'doctor')
 
     def test_active_authorization_keeps_care_plan_eligible_after_blocked_switch(self):
         from care.treatment import authorization_is_current, ensure_subscription_eligible
@@ -328,8 +384,8 @@ class DoctorRoleContinuityTests(TestCase):
         self.assert_departure_blocked('outstanding laboratory requests')
         reviewed = review_lab_request(lab_request=lab, actor=self.admin, review_note='Test review complete.')
         self.assertEqual(reviewed.status, LabRequest.Status.REVIEWED)
-        changed = switch_own_practice_role(actor=self.admin, role='super_admin')
-        self.assertEqual(changed.role, 'super_admin')
+        changed = switch_own_practice_role(actor=self.admin, role='practice_admin')
+        self.assertEqual(changed.role, 'practice_admin')
 
     @override_settings(VIDEO_ENABLED=True)
     def test_booked_future_ongoing_and_unrecorded_past_visits_block_and_video_stays_available(self):
@@ -384,7 +440,7 @@ class DoctorRoleContinuityTests(TestCase):
         CompoundingRecord.objects.create(company=self.company, patient=self.patient, clinician=self.admin,
                                         authorization=cancelled, status='cancelled')
         ClinicalTask.objects.create(company=self.company, assigned_to=self.admin, title='Ordinary staff task')
-        self.assertEqual(switch_own_practice_role(actor=self.admin, role='super_admin').role, 'super_admin')
+        self.assertEqual(switch_own_practice_role(actor=self.admin, role='practice_admin').role, 'practice_admin')
 
     def test_another_doctors_care_does_not_block_this_users_role(self):
         other = get_user_model().objects.create_user('other-doctor@example.com')
@@ -393,7 +449,7 @@ class DoctorRoleContinuityTests(TestCase):
         LabRequest.objects.create(company=self.company, patient=self.patient, requested_by=other, panel_name='Test')
         Appointment.objects.create(company=self.company, patient=self.patient, clinician=other,
                                    starts_at=timezone.now() + timedelta(days=1))
-        self.assertEqual(switch_own_practice_role(actor=self.admin, role='super_admin').role, 'super_admin')
+        self.assertEqual(switch_own_practice_role(actor=self.admin, role='practice_admin').role, 'practice_admin')
 
     def test_current_doctor_can_select_doctor_again_without_disturbing_active_care(self):
         self.authorization()

@@ -47,9 +47,8 @@ def _require_no_active_clinical_work(company, user):
     blockers = [label for label, queryset in dependencies if queryset.exists()]
     if blockers:
         raise ActiveClinicalWorkError(
-            'Your role remains Doctor because existing care depends on it: '
-            + ', '.join(blockers) + '. Keep Doctor access for this work; '
-            'your technical administration area is still available with the same account.',
+            'Practice administrators are not clinicians, and existing care depends on your clinician access: '
+            + ', '.join(blockers) + '. Choose Super admin to do administration work and keep your clinical access.',
             code='active_clinical_work',
         )
 
@@ -87,8 +86,10 @@ def switch_own_practice_role(*, actor, role, request=None):
     service checks remain authoritative. Only a technical superuser can use
     this route; ordinary practice role management keeps its last-admin guard.
     This superuser retains technical access and can switch back while their
-    account, practice and membership remain active. Leaving Doctor also
-    requires that no active clinical work depends on that membership.
+    account, practice and membership remain active. Super admin keeps the
+    clinician type, so a doctor can do superuser work without handing over
+    care; Practice administrator clears it, so that switch requires that no
+    active clinical work depends on the membership.
     """
     if settings.MULTI_PRACTICE_ENABLED or not _technical_superuser(actor):
         raise PermissionDenied('Role switching is available only to an active technical administrator.')
@@ -112,7 +113,7 @@ def switch_own_practice_role(*, actor, role, request=None):
         raise PermissionDenied('An active membership in the configured practice is required.')
 
     if membership.role != role:
-        if membership.role == CompanyMembership.Role.DOCTOR:
+        if role == CompanyMembership.Role.PRACTICE_ADMIN and membership.clinician_type:
             _require_no_active_clinical_work(company, user)
         previous_role = membership.role
         membership.role = role
