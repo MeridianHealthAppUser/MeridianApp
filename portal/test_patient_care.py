@@ -169,13 +169,15 @@ class PatientCareTests(TestCase):
         def listed(**query):
             return self.client.get(self.url('patient-appointments'), query).context['appointments']
 
-        self.assertEqual(listed(), [today, later])
+        # All appointments to start with, so a past or cancelled one stays in sight.
+        self.assertEqual(listed(), [past, today, later])
+        self.assertEqual(listed(status='upcoming'), [today, later])
         self.assertEqual(listed(status='history'), [past])
         self.assertEqual(listed(status='all', when='today'), [today])
-        self.assertEqual(listed(when='month'), [today] if later.starts_at.month != now.month else [today, later])
-        self.assertEqual(listed(clinician=self.other_doctor.pk), [later])
-        self.assertEqual(listed(type='follow_up'), [today])
-        self.assertEqual(listed(type=['follow_up', 'review']), [today, later])
+        self.assertEqual(listed(status='upcoming', when='month'), [today] if later.starts_at.month != now.month else [today, later])
+        self.assertEqual(listed(status='upcoming', clinician=self.other_doctor.pk), [later])
+        self.assertEqual(listed(status='upcoming', type='follow_up'), [today])
+        self.assertEqual(listed(status='upcoming', type=['follow_up', 'review']), [today, later])
         page = self.client.get(self.url('patient-appointments'), {'clinician': self.other_doctor.pk, 'type': 'review'})
         self.assertContains(page, '<h2 id="patient-appointments-heading">My Appointments</h2>', html=True)
         self.assertNotContains(page, 'All your consults')
@@ -183,7 +185,7 @@ class PatientCareTests(TestCase):
         menu = page.context['filter_menu']
         self.assertEqual([section['label'] for section in menu['sections']], ['Status', 'Date', 'Clinician', 'Appointment type'])
         self.assertEqual([option['label'] for option in menu['sections'][1]['options']], ['Any time', 'Today', 'This week', 'This month'])
-        # Only the clinicians they've had appointments with; Upcoming is the default, so it isn't counted.
+        # Only the clinicians they've had appointments with; All appointments is the default, so it isn't counted.
         self.assertEqual([option['label'] for option in menu['sections'][2]['options']], ['Doctor One', 'Doctor Two'])
         self.assertEqual(menu['count'], 2)
         self.assertContains(page, 'class="filter-menu filter-menu--compact"')

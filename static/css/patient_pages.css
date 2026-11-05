@@ -64,6 +64,9 @@
 .patient-table__actions { align-items: center; display: flex; flex-wrap: wrap; gap: .5rem; min-width: 7rem; }
 .patient-table__actions .console-button { align-items: center; display: inline-flex; gap: .4rem; white-space: nowrap; }
 .patient-table__actions .console-button svg { flex: 0 0 auto; }
+.patient-table__actions .console-button:disabled { cursor: not-allowed; opacity: .5; }
+/* Row actions: small buttons with short text, as on Calendar & Bookings; Cancel is console-button--cancel. */
+.patient-table__actions .patient-row-action.console-button { font-size: .68rem; min-height: 2rem; padding: .35rem .65rem; }
 /* An Actions column as wide as its buttons, on the right of the table; with less room the buttons wrap, still right. */
 .patient-table .patient-table__fit { text-align: right; white-space: nowrap; width: 1%; }
 .patient-table__fit .patient-table__actions { flex-wrap: nowrap; justify-content: flex-end; }

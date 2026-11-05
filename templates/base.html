@@ -25,7 +25,7 @@
     {% if request.realtime_scope %}<link rel="stylesheet" href="{% static 'css/live_messages.css' %}?v=20261018"><script src="{% static 'js/live_messages.js' %}?v=20261018" defer></script>{% endif %}
     <link rel="stylesheet" href="{% static 'css/branding.css' %}?v=20260913-logo">
     {# The practice's brand palette and type for patients; loaded last so it can finish shared styles. #}
-    {% if is_patient_portal %}<link rel="stylesheet" href="{% static 'css/patient_theme.css' %}?v=20261104c">{% endif %}
+    {% if is_patient_portal %}<link rel="stylesheet" href="{% static 'css/patient_theme.css' %}?v=20261105a">{% endif %}
     {% if page_navigation_config %}<script src="{% static 'js/app_navigation.js' %}" defer></script>{% endif %}
   </head>
   <body{% if is_workspace_page or is_patient_portal %} class="{% if is_workspace_page %}workspace-page{% endif %}{% if is_patient_portal %}{% if is_workspace_page %} {% endif %}patient-app{% endif %}"{% endif %}>

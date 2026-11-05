@@ -284,25 +284,44 @@ class AppointmentDetailPageTests(AppointmentLifecycleFixture):
         response = self.client.get(url)
         html = response.content.decode()
         # A button with the card's other actions opens the form in a modal, below the video section in the page.
-        self.assertContains(response, 'href="?update=status" data-modal-open="appointment-status" aria-haspopup="dialog">Update booking status</a>')
+        # Practice administrators can only cancel, so the button says so and the status can't be changed.
+        self.assertContains(response, 'href="?update=status" data-modal-open="appointment-status" aria-haspopup="dialog">Cancel appointment</a>')
+        self.assertTrue(response.context['form'].fields['status'].disabled)
+        self.assertInHTML('<option value="cancelled" selected>Cancel booking</option>', html)
+        # They aren't asked to tick the confirmation: it's ticked and hidden.
+        self.assertNotContains(response, 'I confirm this appointment update')
         self.assertContains(response, '<dialog class="app-dialog" id="appointment-status" aria-labelledby="appointment-status-title">')
         self.assertContains(response, 'js/dialogs.js')
-        self.assertLess(html.index('<h2>Appointment details</h2>'), html.index('>Video consultation</h2>'))
-        self.assertLess(html.index('>Video consultation</h2>'), html.index('id="appointment-status"'))
+        # Practice administrators never join consultations, so their page has no video section.
+        self.assertNotContains(response, '>Video consultation</h2>')
+        self.assertLess(html.index('<h2>Appointment details</h2>'), html.index('id="appointment-status"'))
         # Without scripts the button's link opens it; after a form error it opens by itself, with the error.
         opened = 'id="appointment-status" aria-labelledby="appointment-status-title" open>'
         self.assertContains(self.client.get(url, {'update': 'status'}), opened)
-        response = self.client.post(url, self.status_data(response.context['workflow_context'], confirm=''))
+        token = response.context['workflow_context']
+        response = self.client.post(url, self.status_data(token, reason=''))
         self.assertContains(response, opened, status_code=400)
         self.assertContains(response, 'errorlist', status_code=400)
         appointment.refresh_from_db()
         self.assertEqual(appointment.status, 'booked')
+        self.login(self.super_admin)
+        html = self.client.get(url).content.decode()
+        self.assertIn('aria-haspopup="dialog">Update booking status</a>', html)
+        self.assertIn('I confirm this appointment update', html)
+        self.assertLess(html.index('<h2>Appointment details</h2>'), html.index('>Video consultation</h2>'))
+        self.assertLess(html.index('>Video consultation</h2>'), html.index('id="appointment-status"'))
         # Someone who can't change the booking gets neither the button nor the modal.
         ClinicianAssignment.objects.create(company=self.company, patient=self.patient, clinician=self.colleague, ended_at=timezone.now())
         self.login(self.colleague)
         response = self.client.get(url)
         self.assertNotContains(response, 'Update booking status')
+        self.assertNotContains(response, 'Cancel appointment')
         self.assertNotContains(response, '<dialog')
+        # A practice administrator's cancellation goes through without the tick.
+        self.login(self.admin)
+        self.client.post(url, self.status_data(token, confirm=''))
+        appointment.refresh_from_db()
+        self.assertEqual(appointment.status, 'cancelled')
 
     def test_write_consultation_note_opens_a_modal_with_this_appointment_chosen_and_the_time_now(self):
         appointment = self.appointment()
@@ -530,11 +549,54 @@ class AppointmentDetailPageTests(AppointmentLifecycleFixture):
         self.assertContains(response, 'data-modal-open="appointment-status" aria-haspopup="dialog">Cancel appointment</a>')
         self.assertTrue(response.context['form'].fields['status'].disabled)
         self.assertInHTML('<option value="cancelled" selected>Cancel booking</option>', response.content.decode())
-        data = self.status_data(response.context['workflow_context'])
-        data['status'] = 'completed'
-        self.assertEqual(self.client.post(url, data).status_code, 302)
+        token = response.context['workflow_context']
+        self.assertEqual(self.client.post(url, self.status_data(token, status='completed')).status_code, 400)
+        appointment.refresh_from_db()
+        self.assertEqual(appointment.status, 'booked')
+        self.assertEqual(self.client.post(url, self.status_data(token)).status_code, 302)
         appointment.refresh_from_db()
         self.assertEqual(appointment.status, 'cancelled')
+
+    def test_patient_list_greys_out_a_cancelled_appointment_and_drops_its_calendar_download(self):
+        booked = self.appointment()
+        cancelled = self.appointment(starts_at=self.starts_at + timedelta(hours=1), status='cancelled')
+        self.login(self.patient_user)
+        # My Appointments opens on all appointments, so both rows are listed.
+        html = self.client.get(self.url('patient-appointments')).content.decode()
+        self.assertNotIn(self.url('patient-appointment-detail', cancelled.pk), html)
+        self.assertNotIn(self.url('patient-appointment-calendar', cancelled.pk), html)
+        self.assertNotIn(f'cancel-appointment-{cancelled.pk}', html)
+        self.assertInHTML('<button class="console-button console-button--secondary patient-row-action" type="button" disabled>Details</button>', html)
+        self.assertIn(f'href="{self.url("patient-appointment-detail", booked.pk)}">Details</a>', html)
+        self.assertIn(self.url('patient-appointment-calendar', booked.pk), html)
+        self.assertEqual(html.count('disabled>Details'), 1)
+
+    def test_patient_cancels_from_my_appointments_in_the_appointment_pages_dialog_and_comes_back(self):
+        booked = self.appointment()
+        past = self.appointment(starts_at=timezone.now() - timedelta(days=1))
+        self.login(self.patient_user)
+        list_url = self.url('patient-appointments')
+        response = self.client.get(list_url)
+        html = response.content.decode()
+        # Cancel sits on a booking that can still be cancelled, and opens a dialog like the appointment page's.
+        self.assertIn(f'href="{self.url("patient-appointment-detail", booked.pk)}?update=status" data-modal-open="cancel-appointment-{booked.pk}" aria-haspopup="dialog">Cancel', html)
+        self.assertNotIn(f'cancel-appointment-{past.pk}', html)
+        row = next(appointment for appointment in response.context['appointments'] if appointment.pk == booked.pk)
+        self.assertTrue(row.cancel_form.fields['status'].disabled)
+        self.assertInHTML('<option value="cancelled" selected>Cancel booking</option>', html)
+        self.assertIn(f'id="cancel_{booked.pk}_confirm"', html)
+        self.assertIn('Confirm status update', html)
+        response = self.client.post(self.url('patient-appointment-detail', booked.pk), {
+            **self.status_data(row.cancel_context), 'next': list_url})
+        self.assertRedirects(response, list_url, fetch_redirect_response=False)
+        booked.refresh_from_db()
+        self.assertEqual(booked.status, 'cancelled')
+        # Anywhere else goes to the appointment's page, as before.
+        other = self.appointment(starts_at=self.starts_at + timedelta(hours=2))
+        token = next(a for a in self.client.get(list_url).context['appointments'] if a.pk == other.pk).cancel_context
+        response = self.client.post(self.url('patient-appointment-detail', other.pk), {
+            **self.status_data(token), 'next': 'https://example.com/'})
+        self.assertRedirects(response, self.url('patient-appointment-detail', other.pk), fetch_redirect_response=False)
 
     def test_legacy_staff_patient_detail_does_not_render_external_video_links_or_mutate_them(self):
         self.login(self.super_admin)

@@ -402,6 +402,9 @@
 .console-button--primary:hover { background: var(--console-teal-dark); }
 .console-button--secondary { background: var(--c-ffffff); border-color: var(--console-line); color: var(--console-teal-dark); }
 .console-button--secondary:hover { background: var(--c-f5fbfd); border-color: var(--c-b8d8df); }
+/* Cancelling an appointment: a secondary button in red. */
+.console-button--secondary.console-button--cancel { background: var(--c-ffffff); border-color: var(--c-a73f37); color: var(--c-a73f37); }
+.console-button--secondary.console-button--cancel:hover { background: var(--c-fcedeb); border-color: var(--c-a73f37); }
 .console-button--quiet { background: transparent; color: var(--console-teal-dark); min-height: auto; padding: .2rem 0; }
 .console-button--quiet:hover { color: var(--console-teal); }
 

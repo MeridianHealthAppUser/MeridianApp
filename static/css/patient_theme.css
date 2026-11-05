@@ -94,6 +94,8 @@
 .patient-app .meridian-console .console-button--primary:hover { background: var(--patient-accent-hover); border-color: var(--patient-accent-hover); }
 .patient-app .meridian-console .console-button--secondary { background: var(--patient-surface); border-color: var(--patient-line); color: var(--patient-ink); }
 .patient-app .meridian-console .console-button--secondary:hover { background: var(--patient-accent-soft); border-color: var(--patient-accent-line); }
+.patient-app .meridian-console .console-button--cancel { background: var(--patient-surface); border-color: var(--c-a73f37); color: var(--c-a73f37); }
+.patient-app .meridian-console .console-button--cancel:hover { background: var(--c-fcedeb); border-color: var(--c-a73f37); }
 .patient-app .meridian-console .console-button--quiet { background: var(--patient-surface); border-color: var(--patient-line); color: var(--patient-teal-dark); }
 .patient-app .meridian-console .console-button--quiet:hover { background: var(--patient-accent-soft); color: var(--patient-teal-dark); }
 .patient-app .meridian-console .console-button.patient-button--rose { border-color: var(--patient-rose-line); color: var(--patient-rose); }
