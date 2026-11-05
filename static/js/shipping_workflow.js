@@ -133,3 +133,31 @@
   listen(document, 'messages:searched', refresh);
   refresh();
 });
+
+(window.MeridianPages?.register || ((_name, initialize) => initialize(null)))('shipping_confirm', (lifecycle) => {
+  const listen = lifecycle ? lifecycle.on : (target, ...args) => target.addEventListener(...args);
+/* Confirm & lock asks first. A parcel's ✓ and Confirm & lock selected open #shipping-confirm-dialog (data-modal-open,
+   static/js/dialogs.js) instead of sending their form; this names what will be locked and makes the dialog's Confirm &
+   lock send the form whose button opened it. Without scripts those buttons send their form at once. */
+  const dialog = document.getElementById('shipping-confirm-dialog');
+  const accept = dialog?.querySelector('[data-confirm-accept]');
+  if (!accept) return;
+  let named = 0;
+  listen(document, 'click', event => {
+    const trigger = event.target.closest?.('[data-modal-open="shipping-confirm-dialog"]');
+    const form = trigger?.form;
+    if (!form || trigger.disabled) return;
+    if (!form.id) form.id = `shipping-confirm-form-${named += 1}`;
+    accept.setAttribute('form', form.id);
+    const parcel = trigger.dataset.confirmParcel;
+    const count = parcel ? 1 : new Set([...document.querySelectorAll('[data-select-shipment]:checked')]
+      .filter(box => !box.disabled && box.form === form).map(box => box.value)).size;
+    dialog.querySelector('[data-confirm-title]').textContent = count === 1 ? 'Confirm & lock this parcel?' : `Confirm & lock ${count} parcels?`;
+    const detail = dialog.querySelector('[data-confirm-detail]');
+    detail.textContent = parcel || '';
+    detail.hidden = !parcel;
+    dialog.querySelector('.app-dialog__sub').textContent = count === 1
+      ? 'It is checked, its stock is reserved and it moves to Confirmed & Locked, ready for courier booking.'
+      : 'Each parcel is checked, its stock is reserved and it moves to Confirmed & Locked, ready for courier booking.';
+  }, true);
+});

@@ -18,8 +18,11 @@
   window.MeridianFluid = true;
 
   const html = document.documentElement;
-  // The page's stylesheet link, not its styles: app_navigation.js may be re-adding it to restore the order.
-  const enabled = () => Boolean(document.querySelector('link[rel="stylesheet"][href*="/css/fluid.css"]:not([media="not all"])'));
+  // The page's stylesheet link, not its styles: app_navigation.js may be re-adding it to restore the order. In
+  // production collectstatic names it with a content hash, fluid.1691610357ce.css (portal/test_fluid.py).
+  const FLUID_CSS = /\/css\/fluid(?:\.[0-9a-f]{12})?\.css$/;
+  const enabled = () => [...document.querySelectorAll('link[rel="stylesheet"]')]
+    .some(link => link.media !== 'not all' && FLUID_CSS.test(new URL(link.href, window.location.href).pathname));
   const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
   const cssValue = name => getComputedStyle(html).getPropertyValue(name).trim();
   const easing = (name, fallback) => {
@@ -260,16 +263,22 @@
   let arriving = null;
   let lastNavigation = 0;
 
-  function previousElement(element, content) {
-    for (let node = element; node && node !== content; node = node.parentElement) {
-      if (node.previousElementSibling) return node.previousElementSibling;
-    }
-    return null;
+  // What stays in place for a tab: the tabs themselves, or for tabs in a card, the part of the card holding them.
+  const tabAnchor = nav => {
+    const card = nav.closest('.staff-page-card');
+    return card ? [...card.children].find(child => child.contains(nav)) : nav;
+  };
+
+  // Kept while the next tab loads, tabs stay usable and everything else is inert.
+  function freeze(node) {
+    if (node.matches(TAB_BARS)) return;
+    if (node.querySelector(TAB_BARS)) [...node.children].forEach(freeze);
+    else node.inert = true;
   }
 
   function keepHeader(content, nav) {
-    // A tab inside a card keeps what is above the card; the card itself waits like the rest.
-    const anchor = inCard(nav) ? previousElement(nav.closest('.staff-page-card'), content) : nav;
+    const anchor = tabAnchor(nav);
+    const card = nav.closest('.staff-page-card');
     const top = anchor && [...content.children].find(child => child.contains(anchor));
     if (!top) return false;
     const kept = [...content.children].slice(0, [...content.children].indexOf(top) + 1);
@@ -279,7 +288,15 @@
       for (let node = anchor; node && node !== content; node = node.parentElement) {
         while (node.nextElementSibling) node.nextElementSibling.remove();
       }
-      kept.forEach(node => { if (!node.matches(TAB_BARS) && !node.querySelector(TAB_BARS)) node.inert = true; });
+      kept.forEach(freeze);
+      // Tabs in a card: the card stays, and only what is under its tabs waits, as a skeleton in the card.
+      if (card) {
+        const skeleton = Object.assign(document.createElement('div'), { className: 'fluid-card-skeleton' });
+        skeleton.setAttribute('aria-hidden', 'true');
+        for (let line = 0; line < 5; line += 1) skeleton.append(Object.assign(document.createElement('span'), { className: 'page-skeleton-line' }));
+        card.append(skeleton);
+        loading.classList.add('fluid-loading-in-card');
+      }
       loading.before(...kept);
       loading.classList.add('fluid-loading-kept');
       if (arriving) arriving.kept = true;
@@ -294,7 +311,8 @@
     const content = region();
     const recent = choice && performance.now() - choice.time < 800 && content?.contains(choice.nav) ? choice : null;
     choice = null;
-    arriving = { direction: recent?.direction || 0, kept: false };
+    arriving = { direction: recent?.direction || 0, kept: false, scrollY: window.scrollY,
+      inCard: Boolean(recent && inCard(recent.nav)), key: recent && barKey(recent.nav) };
     if (recent) keepHeader(content, recent.nav);
   });
 
@@ -319,9 +337,17 @@
     const content = region();
     if (!entry || !content || !enabled()) return;
     if (!entry.kept) { arrive([...content.children], entry.direction); return; }
-    const header = [...content.querySelectorAll(TAB_BARS)].filter(nav => !inCard(nav)).pop();
+    // Tabs in a card: the page stays where it was, and the card's content slides in under its tabs.
+    const tabs = entry.inCard && [...content.querySelectorAll(TAB_BARS)].find(nav => barKey(nav) === entry.key);
+    const header = tabs || [...content.querySelectorAll(TAB_BARS)].filter(nav => !inCard(nav)).pop();
+    const anchor = tabs ? tabAnchor(tabs) : header;
+    if (tabs) {
+      window.scrollTo(window.scrollX, entry.scrollY);
+      if (!document.activeElement || document.activeElement === document.body) currentTab(tabs)?.focus({ preventScroll: true });
+    }
     const blocks = [];
-    for (let node = header; node && node !== content; node = node.parentElement) {
+    const stop = tabs ? tabs.closest('.staff-page-card') : content;
+    for (let node = anchor; node && node !== stop; node = node.parentElement) {
       for (let next = node.nextElementSibling; next; next = next.nextElementSibling) blocks.push(next);
     }
     arrive(blocks, entry.direction);
