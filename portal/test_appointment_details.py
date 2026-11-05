@@ -519,14 +519,20 @@ class AppointmentDetailPageTests(AppointmentLifecycleFixture):
         subject = f'Request to change my appointment: {when} SAST'
         query = urlencode({'compose': 1, 'subject': subject, 'to': self.admin.pk})
         self.assertContains(response, f'href="{reverse("portal:patient-messages")}?{query.replace("&", "&amp;")}#patient-conversation">Request a change</a>')
-        self.assertContains(response, 'use Request a change to message the practice, and they will move your appointment.')
+        self.assertContains(response, "To change the time, use 'Request a change' to contact support.")
         self.assertNotContains(response, 'mailto:')
         compose = self.client.get(f'{reverse("portal:patient-messages")}?{query}')
         self.assertEqual(compose.context['thread_form'].initial, {'subject': subject, 'recipient': str(self.admin.pk)})
         self.assertNotContains(response, 'javascript:')
         self.assertNotContains(response, 'Write consultation note')
         self.assertNotContains(response, 'Record completed')
-        self.assertEqual(self.client.post(url, self.status_data(response.context['workflow_context'])).status_code, 302)
+        # Cancelling is a patient's only choice, so the button says so and the status can't be changed.
+        self.assertContains(response, 'data-modal-open="appointment-status" aria-haspopup="dialog">Cancel appointment</a>')
+        self.assertTrue(response.context['form'].fields['status'].disabled)
+        self.assertInHTML('<option value="cancelled" selected>Cancel booking</option>', response.content.decode())
+        data = self.status_data(response.context['workflow_context'])
+        data['status'] = 'completed'
+        self.assertEqual(self.client.post(url, data).status_code, 302)
         appointment.refresh_from_db()
         self.assertEqual(appointment.status, 'cancelled')
 

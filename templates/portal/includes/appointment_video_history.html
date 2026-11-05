@@ -1,9 +1,8 @@
 <section class="staff-page-card backoffice-panel" aria-labelledby="appointment-video-heading">
   <h2 id="appointment-video-heading">Video consultation</h2>
   <div class="backoffice-actions">{% include 'portal/includes/video_join_link.html' %}</div>
-  <p>Only the booked doctor and patient can enter the native video room during its join window. Opening the room is a preflight step: your camera and microphone stay off until you choose to join.</p>
   <h3>Connection history</h3>
-  <p class="backoffice-muted">These are signalling connection records, not recordings or proof of consultation attendance. No audio, video, screen content or signalling payload is stored here.</p>
+  <!-- <p class="backoffice-muted">These are signalling connection records, not recordings or proof of consultation attendance. No audio, video, screen content or signalling payload is stored here.</p> -->
   {% if call_sessions %}
     <div class="backoffice-table-wrap">
       <table>
@@ -21,5 +20,5 @@
       <span>Page {{ call_history_page.number }} of {{ call_history_page.paginator.num_pages }}</span>
       {% if call_history_page.has_next %}<a class="console-button console-button--secondary" href="?call_page={{ call_history_page.next_page_number }}#appointment-video-heading">Older records</a>{% endif %}
     </nav>{% endif %}
-  {% else %}<p>No video connection history has been recorded for this appointment.</p>{% endif %}
+  {% else %}<p><i>No video connection history has been recorded for this appointment.</i></p>{% endif %}
 </section>

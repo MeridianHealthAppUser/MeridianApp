@@ -125,6 +125,10 @@ class AppointmentStatusForm(forms.Form):
         super().__init__(*args, **kwargs)
         if not attendance:
             self.fields['status'].choices = (('cancelled', 'Cancel booking'),)
+        if not staff:
+            # A patient can only cancel: the status shows, greyed out, and submits as a cancellation whatever is sent.
+            self.fields['status'].disabled = True
+            self.fields['status'].initial = 'cancelled'
         if staff:
             self.fields['reason'].help_text = 'For a cancellation, the patient sees this in the app and in their cancellation email.'
 

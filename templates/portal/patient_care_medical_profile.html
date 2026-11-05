@@ -11,7 +11,7 @@
   {# Medication, allergies and history come from the questionnaire and what the doctor records in Summary data. #}
   <section class="console-card" aria-labelledby="medical-information-heading">
     <div class="console-card__body">
-      <h2 class="patient-eyebrow" id="medical-information-heading">Medical information</h2>
+      <!-- <h2 class="patient-eyebrow" id="medical-information-heading">Medical information</h2> -->
       <dl class="patient-kv">
         {% for label, value in medical_rows %}<div{% if value|length > 48 %} class="is-long"{% endif %}><dt>{{ label }}</dt><dd{% if value == 'Not recorded' %} class="patient-kv__quiet"{% endif %}>{{ value }}</dd></div>{% endfor %}
       </dl>
