@@ -2,7 +2,7 @@
 {% load static workspace_ui %}
 
 {% block title %}{{ title|default:page_title }} | {{ company.name }} | Meridian{% endblock %}
-{% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/schedule_availability.css' %}?v=20261104a"><link rel="stylesheet" href="{% static 'css/dialogs.css' %}?v=20261104d"><script src="{% static 'js/dialogs.js' %}?v=20261022a" defer></script><link rel="stylesheet" href="{% static 'css/time_slots.css' %}?v=20261104a"><script src="{% static 'js/appointment_booking.js' %}?v=20261022d" defer></script><script src="{% static 'js/time_ranges.js' %}?v=20261011a" defer></script><script src="{% static 'js/working_hours.js' %}?v=20261012a" defer></script><script src="{% static 'js/submit_on_change.js' %}?v=20261017a" defer></script>{% endblock %}
+{% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/schedule_availability.css' %}?v=20261105a"><link rel="stylesheet" href="{% static 'css/dialogs.css' %}?v=20261104d"><script src="{% static 'js/dialogs.js' %}?v=20261022a" defer></script><link rel="stylesheet" href="{% static 'css/time_slots.css' %}?v=20261104a"><script src="{% static 'js/appointment_booking.js' %}?v=20261022d" defer></script><script src="{% static 'js/time_ranges.js' %}?v=20261011a" defer></script><script src="{% static 'js/working_hours.js' %}?v=20261012a" defer></script><script src="{% static 'js/submit_on_change.js' %}?v=20261017a" defer></script>{% endblock %}
 
 
 {% block breadcrumbs %}{% breadcrumbs page_title %}{% endblock %}
@@ -166,7 +166,7 @@
                           {# links open the same dialogs on the appointment's page. #}
                           {% if appointment.time_form %}
                             <a class="console-button console-button--secondary schedule-action" href="{% url 'portal:appointment-detail' appointment.pk %}?update=time" data-modal-open="edit-appointment-{{ appointment.pk }}" aria-haspopup="dialog">Edit<span class="sr-only"> the appointment with {{ appointment.patient }}</span></a>
-                            <a class="console-button console-button--secondary schedule-action schedule-action--cancel" href="{% url 'portal:appointment-detail' appointment.pk %}?update=status" data-modal-open="cancel-appointment-{{ appointment.pk }}" aria-haspopup="dialog">Cancel<span class="sr-only"> the appointment with {{ appointment.patient }}</span></a>
+                            <a class="console-button console-button--secondary console-button--cancel schedule-action" href="{% url 'portal:appointment-detail' appointment.pk %}?update=status" data-modal-open="cancel-appointment-{{ appointment.pk }}" aria-haspopup="dialog">Cancel<span class="sr-only"> the appointment with {{ appointment.patient }}</span></a>
                           {% endif %}
                         {% else %}
                           <a class="console-button console-button--primary schedule-action" href="{% url 'portal:patient-detail' appointment.patient_id %}">Open record<span class="sr-only"> for {{ appointment.patient }}</span></a>

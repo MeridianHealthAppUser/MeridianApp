@@ -27,10 +27,13 @@ from .patient_context import make_patient_context
 from .people_tags import in_join_order
 from .realtime_context import records_conversation_view
 from .video_links import safe_video_link
+from .workflow_context import make_workflow_context
 from .views import PatientPortalRequiredMixin, PatientThreadCreateView
 
 
 APPOINTMENT_STATUS_CHOICES = (('upcoming', 'Upcoming'), ('history', 'Past and cancelled'), ('all', 'All appointments'))
+# My Appointments opens on every appointment, so a past or cancelled one stays in sight.
+APPOINTMENT_STATUS_DEFAULT = 'all'
 APPOINTMENT_WHEN_CHOICES = (('', 'Any time'), ('today', 'Today'), ('week', 'This week'), ('month', 'This month'))
 # The appointment just booked, shown once at the top of My Appointments (portal/patient_care_views.py).
 JUST_BOOKED = 'patient_just_booked'
@@ -147,11 +150,11 @@ def _with_appointment_end(queryset):
 
 
 def _appointment_list(request, company, patient, now):
-    """My Appointments' table and its Filters: Status (Upcoming to start with), Date, Clinician and Appointment type."""
+    """My Appointments' table and its Filters: Status (All appointments to start with), Date, Clinician and Appointment type."""
     from django.contrib.auth import get_user_model
     from .filter_menus import choice_section, filter_menu, ticked_ids, ticked_values
 
-    form, status = _filter(request, AppointmentFilterForm, 'upcoming')
+    form, status = _filter(request, AppointmentFilterForm, APPOINTMENT_STATUS_DEFAULT)
     when = request.GET.get('when', '') if request.GET.get('when', '') in dict(APPOINTMENT_WHEN_CHOICES) else ''
     clinicians = ticked_ids(request.GET.getlist('clinician'))
     types = [value for value in ticked_values(request.GET.getlist('type')) if value in Appointment.Type.values]
@@ -181,8 +184,8 @@ def _appointment_list(request, company, patient, now):
     action = reverse('portal:patient-appointments')
     context.update(filter_form=form, filter_menu=filter_menu(
         action=action, clear_url=action, label='Filter appointments', form=form, sections=[
-            choice_section('status', 'Status', APPOINTMENT_STATUS_CHOICES, [request.GET.get('status', 'upcoming')], pick=True,
-                           default='upcoming', errors=form.errors.get('status', ())),
+            choice_section('status', 'Status', APPOINTMENT_STATUS_CHOICES, [request.GET.get('status', APPOINTMENT_STATUS_DEFAULT)], pick=True,
+                           default=APPOINTMENT_STATUS_DEFAULT, errors=form.errors.get('status', ())),
             choice_section('when', 'Date', APPOINTMENT_WHEN_CHOICES, [when], icon='date', pick=True, default=''),
             choice_section('clinician', 'Clinician', [(person.pk, person.full_name) for person in people], clinicians, icon='person'),
             choice_section('type', 'Appointment type', Appointment.Type.choices, types, icon='type'),
@@ -190,6 +193,12 @@ def _appointment_list(request, company, patient, now):
     context['appointments'] = list(context['page_obj'].object_list)
     context['video_server_time'] = now
     attach_video_join(context['appointments'], request.user.pk, allowed_role='patient', now=now)
+    # Cancel on a row opens the appointment page's own dialog, for each booking the patient can still cancel.
+    from .appointment_detail_views import AppointmentStatusForm
+    for appointment in context['appointments']:
+        if appointment.status == Appointment.Status.BOOKED and appointment.starts_at > now:
+            appointment.cancel_form = AppointmentStatusForm(cancel_only=True, auto_id=f'cancel_{appointment.pk}_%s')
+            appointment.cancel_context = make_workflow_context(request, company, 'appointment-status', appointment, patient=patient)
     return context
 
 

@@ -96,10 +96,11 @@ class BookingTimesView(LoginRequiredMixin, StaffCompanyRequiredMixin, View):
             free_times=times, exclude_appointment=data['appointment']))})
 
 
-def schedule_return(request):
-    """Back to Calendar & Bookings as it was, for a change made from its Day view; otherwise None."""
+def schedule_return(request, page='portal:staff-schedule'):
+    """Back to the list a change was made from, as it was: Calendar & Bookings' Day view, or a patient's
+    My Appointments. Otherwise None."""
     target = request.POST.get('next', '')
-    schedule = reverse('portal:staff-schedule')
+    schedule = reverse(page)
     if (target.startswith(schedule) and url_has_allowed_host_and_scheme(target, allowed_hosts={request.get_host()},
                                                                         require_https=request.is_secure())):
         return redirect(target)
@@ -121,16 +122,28 @@ class AppointmentStatusForm(forms.Form):
     reason = forms.CharField(label='Note / cancellation reason', max_length=500, required=False, widget=forms.Textarea(attrs={'rows': 3}))
     confirm = forms.BooleanField(label='I confirm this appointment update. A new time must be agreed separately.')
 
-    def __init__(self, *args, attendance=False, staff=False, **kwargs):
+    def __init__(self, *args, attendance=False, staff=False, cancel_only=False, preconfirmed=False, **kwargs):
         super().__init__(*args, **kwargs)
         if not attendance:
             self.fields['status'].choices = (('cancelled', 'Cancel booking'),)
-        if not staff:
-            # A patient can only cancel: the status shows, greyed out, and submits as a cancellation whatever is sent.
+        if cancel_only:
+            # Someone who can only cancel sees the status greyed out, and it submits as a cancellation whatever is sent.
             self.fields['status'].disabled = True
             self.fields['status'].initial = 'cancelled'
+        if preconfirmed:
+            # Ticked and hidden: the confirmation step isn't asked of this person.
+            self.fields['confirm'].disabled = True
+            self.fields['confirm'].initial = True
+            self.fields['confirm'].widget = forms.HiddenInput()
         if staff:
             self.fields['reason'].help_text = 'For a cancellation, the patient sees this in the app and in their cancellation email.'
+
+    def clean_status(self):
+        # A greyed-out status ignores what's sent, so refuse a forged update rather than cancel instead.
+        sent = self.data.get(self.add_prefix('status'))
+        if self.fields['status'].disabled and sent not in (None, '', 'cancelled'):
+            raise ValidationError(self.fields['status'].error_messages['invalid_choice'], code='invalid_choice', params={'value': sent})
+        return self.cleaned_data['status']
 
 
 @method_decorator(never_cache, name='dispatch')
@@ -206,6 +219,14 @@ class AppointmentDetailMixin:
         return (not self.patient_portal and self.membership.is_clinician and appointment.clinician_id == self.request.user.pk
                 and appointment.starts_at + timedelta(minutes=appointment.duration_minutes) <= timezone.now())
 
+    def status_form(self, appointment, data=None):
+        # Patients and practice administrators never record attendance, so cancelling is their only update.
+        # Practice administrators cancel without ticking the confirmation.
+        practice_admin = not self.patient_portal and self.membership.role == 'practice_admin'
+        return AppointmentStatusForm(
+            data, attendance=self.attendance(appointment), staff=not self.patient_portal,
+            cancel_only=self.patient_portal or practice_admin, preconfirmed=practice_admin)
+
     def consultation_note(self, request, company, appointment, can_write_notes):
         """Write consultation note opens a modal with a new note's form: this appointment chosen when it's yours,
         the time now. When the appointment already has a note you can read, the button opens that instead."""
@@ -231,7 +252,7 @@ class AppointmentDetailMixin:
             # Staff reach only their own conversations with the patient.
             conversation=None if self.patient_portal else MessageThread.objects.for_company(company).filter(
                 patient=appointment.patient, is_closed=False, participants=request.user).first(),
-            form=form if form is not None else AppointmentStatusForm(attendance=self.attendance(appointment), staff=not self.patient_portal),
+            form=form if form is not None else self.status_form(appointment),
             workflow_context=request.POST.get('workflow_context', '') if request.method == 'POST' else make_workflow_context(request, company, 'appointment-status', appointment, patient=self.patient if self.patient_portal else None))
         if self.patient_portal:
             # A patient asks for a new time in a message to a practice administrator (their clinician when the
@@ -269,7 +290,7 @@ class AppointmentDetailMixin:
 
     def post(self, request, pk):
         appointment = self.resolve(pk)
-        form = AppointmentStatusForm(request.POST, attendance=self.attendance(appointment), staff=not self.patient_portal)
+        form = self.status_form(appointment, request.POST)
         valid = form.is_valid()
         company = self.patient_company if self.patient_portal else self.company
         try:
@@ -283,6 +304,9 @@ class AppointmentDetailMixin:
                         return back
                 else:
                     messages.success(request, 'Appointment status recorded.')
+                    back = self.patient_portal and schedule_return(request, 'portal:patient-appointments')
+                    if back:
+                        return back
                 return redirect('portal:patient-appointment-detail' if self.patient_portal else 'portal:appointment-detail', pk=pk)
         except ValidationError as error:
             for message in error.messages:

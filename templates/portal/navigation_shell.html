@@ -2,8 +2,8 @@
 {% load static %}
 {% block title %}{{ page_title }} | Meridian{% endblock %}
 {% block extra_css %}
-  <link rel="stylesheet" href="{% static 'css/console.css' %}?v=20261104a">
-  {% if navigation_layout == 'patient' %}<link rel="stylesheet" href="{% static 'css/patient_pages.css' %}?v=20261104a"><link rel="stylesheet" href="{% static 'css/patient_portal.css' %}?v=20261104b">{% else %}<link rel="stylesheet" href="{% static 'css/patient_workspace.css' %}?v=20261104a">{% endif %}
+  <link rel="stylesheet" href="{% static 'css/console.css' %}?v=20261105a">
+  {% if navigation_layout == 'patient' %}<link rel="stylesheet" href="{% static 'css/patient_pages.css' %}?v=20261105d"><link rel="stylesheet" href="{% static 'css/patient_portal.css' %}?v=20261104b">{% else %}<link rel="stylesheet" href="{% static 'css/patient_workspace.css' %}?v=20261104a">{% endif %}
 {% endblock %}
 {% block content %}
   {% if navigation_layout == 'patient' %}
