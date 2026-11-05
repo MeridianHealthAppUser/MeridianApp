@@ -133,9 +133,25 @@
       disconnect() { resize.disconnect(); changes.disconnect(); },
     };
 
+    // Which edges have more tabs beyond them, for the fade (fluid.css).
+    const edges = () => {
+      const more = [nav.scrollLeft > 2 && 'start', nav.scrollLeft < nav.scrollWidth - nav.clientWidth - 2 && 'end'].filter(Boolean);
+      if (more.length) nav.dataset.fluidMore = more.join(' ');
+      else delete nav.dataset.fluidMore;
+    };
+    nav.addEventListener('scroll', edges, { passive: true });
+    // A mouse wheel scrolls tabs that don't fit sideways, until they reach an end and the page takes over.
+    nav.addEventListener('wheel', event => {
+      if (event.ctrlKey || Math.abs(event.deltaY) <= Math.abs(event.deltaX) || nav.scrollWidth <= nav.clientWidth) return;
+      const max = nav.scrollWidth - nav.clientWidth;
+      if ((event.deltaY < 0 && nav.scrollLeft <= 0) || (event.deltaY > 0 && nav.scrollLeft >= max - 1)) return;
+      event.preventDefault();
+      nav.scrollLeft += event.deltaY;
+    }, { passive: false });
     const resize = new ResizeObserver(() => {
       if (drag?.bar !== bar && bar.target?.isConnected) bar.moveTo(bar.target, { instant: true });
       nav.style.touchAction = nav.scrollWidth <= nav.clientWidth ? 'pan-y' : '';
+      edges();
     });
     resize.observe(nav);
     tabsOf(nav).forEach(link => resize.observe(link));

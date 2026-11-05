@@ -89,9 +89,12 @@
 .workspace-page .meridian-console :is(.console-button, .filter-menu__toggle, .table-excel-download):active:not(:disabled, [aria-disabled="true"]) { transform: scale(.96); transition: transform 90ms ease-out, background-color .1s ease, border-color .1s ease, box-shadow .1s ease, color .1s ease; }
 .workspace-page .meridian-console :is(.console-button, .filter-menu__toggle, .table-excel-download):active:not(:disabled, [aria-disabled="true"])::after { opacity: 1; transition-duration: 60ms; }
 .workspace-page .meridian-console .console-button--primary { background-image: linear-gradient(to bottom, color-mix(in srgb, var(--c-ffffff-220) 60%, transparent), transparent 70%); box-shadow: inset 0 1px 0 var(--c-ffffff-220), 0 1px 2px var(--c-183643-220), 0 6px 16px var(--c-183643-130); }
-.workspace-page .meridian-console .console-button--primary:hover { box-shadow: inset 0 1px 0 var(--c-ffffff-220), 0 1px 2px var(--c-183643-220), 0 10px 24px var(--c-183643-180); }
+.workspace-page .meridian-console .console-button--primary:hover:not(:disabled) { box-shadow: inset 0 1px 0 var(--c-ffffff-220), 0 1px 2px var(--c-183643-220), 0 10px 24px var(--c-183643-180); }
 .workspace-page .meridian-console :is(.console-button--secondary, .filter-menu__toggle, .table-excel-download) { border-color: var(--fluid-hairline); box-shadow: var(--fluid-rim), 0 1px 2px var(--c-1a3846-060); }
-.workspace-page .meridian-console :is(.console-button--secondary, .filter-menu__toggle, .table-excel-download):hover { box-shadow: var(--fluid-rim), 0 4px 14px var(--c-1a3846-080); }
+.workspace-page .meridian-console :is(.console-button--secondary, .filter-menu__toggle, .table-excel-download):hover:not(:disabled) { box-shadow: var(--fluid-rim), 0 4px 14px var(--c-1a3846-080); }
+/* A destructive action (cancelling an appointment) keeps its red edge and text, and its press glows red. */
+.workspace-page .meridian-console .console-button--secondary.console-button--cancel { border-color: var(--c-a73f37); }
+.workspace-page .meridian-console .console-button--secondary.console-button--cancel:hover:not(:disabled) { background: var(--c-fcedeb); border-color: var(--c-a73f37); }
 /* Small controls in tables and toolbars give under the finger too. */
 .meridian-console :is(.inventory-safety-trigger, .inventory-reserved-trigger, .shipping-action-icon, .inventory-dialog-close, .shipping-help-trigger, .ops-week-step, .consumption-arrow, .consumption-cell, .conversation-search__clear) { transition: transform var(--fluid-bouncy) var(--fluid-spring-bouncy), background-color .2s ease, color .2s ease; -webkit-tap-highlight-color: transparent; }
 .meridian-console :is(.inventory-safety-trigger, .inventory-reserved-trigger, .shipping-action-icon, .inventory-dialog-close, .shipping-help-trigger, .ops-week-step, .consumption-arrow, .consumption-cell, .conversation-search__clear):active { transform: scale(.9); transition-duration: 90ms, .1s, .1s; transition-timing-function: ease-out; }
@@ -158,6 +161,11 @@
 .meridian-console .fluid-tabs a:active { transform: scale(.95); transition-duration: .1s, .1s, 90ms; transition-timing-function: ease-out; }
 .meridian-console .fluid-tab-thumb { left: 0; list-style: none; pointer-events: none; position: absolute; top: 0; will-change: transform, width; z-index: 0; }
 .meridian-console .fluid-tabs { -webkit-user-select: none; user-select: none; }
+/* Tabs too many for the width scroll inside the capsule; they fade under whichever edge has more (fluid.js marks it). */
+.workspace-page .meridian-console .fluid-tabs::before, .workspace-page .meridian-console .fluid-tabs::after { align-self: stretch; content: ""; flex: 0 0 2rem; opacity: 0; pointer-events: none; position: sticky; transition: opacity .2s ease; z-index: 2; }
+.workspace-page .meridian-console .fluid-tabs::before { background: linear-gradient(to right, var(--fluid-glass-thick) 25%, transparent); border-radius: 999px 0 0 999px; left: 0; margin-inline-end: -2rem; }
+.workspace-page .meridian-console .fluid-tabs::after { background: linear-gradient(to left, var(--fluid-glass-thick) 25%, transparent); border-radius: 0 999px 999px 0; margin-inline-start: -2rem; right: 0; }
+.workspace-page .meridian-console .fluid-tabs[data-fluid-more~="start"]::before, .workspace-page .meridian-console .fluid-tabs[data-fluid-more~="end"]::after { opacity: 1; }
 .meridian-console .fluid-tabs.is-dragging { cursor: grabbing; }
 .meridian-console .fluid-tabs.is-dragging a { pointer-events: none; }
 /* A page's own tabs float under the header. */
