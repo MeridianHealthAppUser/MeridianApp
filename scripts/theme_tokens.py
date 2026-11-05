@@ -42,6 +42,8 @@ DARK_OVERRIDES = {
     'fbf4e6': '#3d2f13', 'f0e1bf': '#8c6c28',   # Payment: amber
     # A table row on hover: a step lighter than the dark card it sits on (workspace_polish, patient pages, leads).
     'f8fcfa': '#1f3541', 'f8fafb': '#1f3541', 'f6fafb': '#1f3541',
+    # Light catching the edge of glass and buttons (fluid.css): still white in the dark, only fainter.
+    'ffffff-600': 'rgba(255, 255, 255, 0.08)', 'ffffff-220': 'rgba(255, 255, 255, 0.18)',
 }
 
 # Patient pages choose their own light/dark semantic roles in patient_theme.css, and the

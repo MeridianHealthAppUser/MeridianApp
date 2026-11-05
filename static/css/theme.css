@@ -599,6 +599,8 @@
   --c-fff8ec: #fff8ec;
   --c-ffffff: #ffffff;
   --c-ffffff-130: rgba(255, 255, 255, 0.13);
+  --c-ffffff-220: rgba(255, 255, 255, 0.22);
+  --c-ffffff-600: rgba(255, 255, 255, 0.6);
   --c-ffffff-700: rgba(255, 255, 255, 0.7);
   --c-ffffff-780: rgba(255, 255, 255, 0.78);
   --c-ffffff-820: rgba(255, 255, 255, 0.82);
@@ -1202,6 +1204,8 @@
   --c-fff8ec: #24201a;
   --c-ffffff: #172b36;
   --c-ffffff-130: rgba(12, 26, 34, 0.13);
+  --c-ffffff-220: rgba(255, 255, 255, 0.18);
+  --c-ffffff-600: rgba(255, 255, 255, 0.08);
   --c-ffffff-700: rgba(12, 26, 34, 0.7);
   --c-ffffff-780: rgba(12, 26, 34, 0.78);
   --c-ffffff-820: rgba(12, 26, 34, 0.82);
@@ -1806,6 +1810,8 @@
     --c-fff8ec: #24201a;
     --c-ffffff: #172b36;
     --c-ffffff-130: rgba(12, 26, 34, 0.13);
+    --c-ffffff-220: rgba(255, 255, 255, 0.18);
+    --c-ffffff-600: rgba(255, 255, 255, 0.08);
     --c-ffffff-700: rgba(12, 26, 34, 0.7);
     --c-ffffff-780: rgba(12, 26, 34, 0.78);
     --c-ffffff-820: rgba(12, 26, 34, 0.82);

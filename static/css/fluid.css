@@ -1,0 +1,331 @@
+/* Apple-style material, motion and controls on every workspace page, in the app's own colours
+   (templates/includes/fluid_design.html, with static/js/fluid.js).
+
+   Springs are described the way Apple describes them: a damping ratio (1 settles without overshoot, lower gives a
+   little bounce) and a response (how quickly the value gets there). The linear() curves below are those springs
+   sampled, so CSS transitions and fluid.js move alike. A critically damped curve has the same shape at any response;
+   only its duration changes. */
+:root {
+  /* Damping 1. Durations: response .2, .35 and .5. */
+  --fluid-spring: linear(0, 0.001 0.5%, 0.004 1%, 0.0087 1.5%, 0.0228 2.5%, 0.0422 3.5%, 0.0535 4%, 0.0787 5%, 0.1069 6%, 0.153 7.5%, 0.2022 9%, 0.3703 14%, 0.4186 15.5%, 0.4649 17%, 0.5231 19%, 0.5639 20.5%, 0.6021 22%, 0.6377 23.5%, 0.6707 25%, 0.7013 26.5%, 0.7294 28%, 0.7635 30%, 0.7865 31.5%, 0.8141 33.5%, 0.8384 35.5%, 0.8598 37.5%, 0.8786 39.5%, 0.8989 42%, 0.9159 44.5%, 0.9302 47%, 0.9422 49.5%, 0.954 52.5%, 0.9635 55.5%, 0.971 58.5%, 0.978 62%, 0.9833 65.5%, 0.9912 73.5%, 0.9959 83%, 0.999 99.5%, 1);
+  --fluid-fast: 295ms;
+  --fluid-medium: 515ms;
+  --fluid-slow: 735ms;
+  /* Damping .78, response .42: a touch of give, for things that grow out of a press. */
+  --fluid-spring-bouncy: linear(0, 0.0008 0.5%, 0.0072 1.5%, 0.0126 2%, 0.0271 3%, 0.0361 3.5%, 0.0572 4.5%, 0.0817 5.5%, 0.1092 6.5%, 0.1548 8%, 0.2042 9.5%, 0.2561 11%, 0.4332 16%, 0.4845 17.5%, 0.534 19%, 0.5966 21%, 0.6406 22.5%, 0.6819 24%, 0.7203 25.5%, 0.7559 27%, 0.7887 28.5%, 0.8186 30%, 0.8543 32%, 0.8781 33.5%, 0.8993 35%, 0.9182 36.5%, 0.9401 38.5%, 0.9541 40%, 0.97 42%, 0.983 44%, 0.9935 46%, 1.0017 48%, 1.0093 50.5%, 1.0145 53%, 1.0177 55.5%, 1.0198 59.5%, 1.019 64.5%, 1.0064 84.5%, 1.0011 99.5%, 1);
+  --fluid-bouncy: 555ms;
+  /* Apple's activity indicator: eight spokes, the brightest leading as it turns. Drawn in currentColor via mask. */
+  --fluid-spinner: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cg fill='%23000'%3E%3Crect x='10.9' y='1.6' width='2.2' height='6.2' rx='1.1'/%3E%3Crect x='10.9' y='1.6' width='2.2' height='6.2' rx='1.1' opacity='0.3' transform='rotate(45 12 12)'/%3E%3Crect x='10.9' y='1.6' width='2.2' height='6.2' rx='1.1' opacity='0.4' transform='rotate(90 12 12)'/%3E%3Crect x='10.9' y='1.6' width='2.2' height='6.2' rx='1.1' opacity='0.5' transform='rotate(135 12 12)'/%3E%3Crect x='10.9' y='1.6' width='2.2' height='6.2' rx='1.1' opacity='0.6' transform='rotate(180 12 12)'/%3E%3Crect x='10.9' y='1.6' width='2.2' height='6.2' rx='1.1' opacity='0.7' transform='rotate(225 12 12)'/%3E%3Crect x='10.9' y='1.6' width='2.2' height='6.2' rx='1.1' opacity='0.8' transform='rotate(270 12 12)'/%3E%3Crect x='10.9' y='1.6' width='2.2' height='6.2' rx='1.1' opacity='0.9' transform='rotate(315 12 12)'/%3E%3C/g%3E%3C/svg%3E");
+}
+
+/* Materials. Glass is for the controls layer only (the header, tab bars, menus, popovers); cards and tables, the
+   content, stay solid. The bright top rim is light catching the edge of the material. */
+.meridian-console {
+  --fluid-glass: color-mix(in srgb, var(--console-card) 66%, transparent);
+  --fluid-glass-thick: color-mix(in srgb, var(--console-card) 84%, transparent);
+  --fluid-blur: blur(18px) saturate(180%);
+  --fluid-hairline: color-mix(in srgb, var(--console-line) 72%, transparent);
+  --fluid-rim: inset 0 1px 0 var(--c-ffffff-600);
+  --fluid-float: var(--fluid-rim), 0 1px 2px var(--c-1a3846-060), 0 10px 30px var(--c-1a3846-080);
+}
+
+/* The header is a sheet of glass the page scrolls under. Its edge appears only once something is beneath it. */
+@media (min-width: 52.001rem) {
+  .workspace-page .site-header { background: color-mix(in srgb, var(--c-ffffff) 72%, transparent); -webkit-backdrop-filter: blur(20px) saturate(180%); backdrop-filter: blur(20px) saturate(180%); }
+  @supports (animation-timeline: scroll()) {
+    .workspace-page .site-header { animation: fluid-scroll-edge linear both; animation-range: 0 3rem; animation-timeline: scroll(root); }
+  }
+}
+@keyframes fluid-scroll-edge {
+  from { border-bottom-color: transparent; box-shadow: none; }
+  to { box-shadow: 0 8px 24px var(--c-1a3846-060); }
+}
+
+/* Type: tighter tracking as the title grows. */
+.workspace-page .meridian-console .staff-page-header h1 { letter-spacing: -.028em; }
+.workspace-page .meridian-console .staff-page-card__header h2 { letter-spacing: -.012em; }
+
+/* Cards: content, so solid; depth from a soft key and ambient shadow instead of a heavy outline. */
+.workspace-page .meridian-console .staff-page-card { border-color: var(--fluid-hairline); border-radius: 1.15rem; box-shadow: 0 1px 2px var(--c-1a3846-035), 0 14px 36px var(--c-1a3846-060); }
+.workspace-page .meridian-console .staff-page-card__header { border-bottom-color: color-mix(in srgb, var(--console-soft-line) 80%, transparent); }
+.meridian-console summary.staff-page-card__header { cursor: pointer; transition: background-color .2s ease; }
+.meridian-console summary.staff-page-card__header:active { background: color-mix(in srgb, var(--console-teal-soft) 18%, transparent); }
+/* A collapsible card opens and closes on a spring where the browser can animate to and from auto height. */
+@supports (interpolate-size: allow-keywords) {
+  .meridian-console details.staff-page-card { interpolate-size: allow-keywords; }
+  .meridian-console details.staff-page-card::details-content { block-size: 0; overflow: clip; transition: block-size var(--fluid-medium) var(--fluid-spring), content-visibility var(--fluid-medium) allow-discrete; }
+  .meridian-console details.staff-page-card[open]::details-content { block-size: auto; overflow: visible; }
+}
+.meridian-console :is(.inventory-section-chevron, .inventory-movements-toggle) svg { transition: transform var(--fluid-bouncy) var(--fluid-spring-bouncy); }
+
+/* Tables: sentence-case column titles in the secondary label colour, and rows that ease into their hover tint. */
+.workspace-page .meridian-console table thead th { font-size: .74rem; font-weight: 600; letter-spacing: 0; text-transform: none; }
+.workspace-page .meridian-console table tbody td { transition: background-color .18s ease; }
+
+/* The search field: a filled capsule that lifts to the card colour, with a soft ring, when focused. */
+.workspace-page .meridian-console .conversation-search.conversation-search input[type="search"] { background: color-mix(in srgb, var(--console-line) 34%, var(--console-card)); border-color: transparent; border-radius: 999px; transition: background-color .2s ease, border-color .2s ease, box-shadow var(--fluid-medium) var(--fluid-spring); }
+.workspace-page .meridian-console .conversation-search.conversation-search input[type="search"]:focus { background: var(--console-card); border-color: var(--console-teal-line); box-shadow: 0 0 0 4px color-mix(in srgb, var(--console-teal) 14%, transparent); }
+
+/* Buttons respond on press, not on release: they give a little and light up where they were touched (fluid.js
+   sets --fluid-x/--fluid-y), then spring back. */
+.workspace-page .meridian-console :is(.console-button, .filter-menu__toggle, .table-excel-download) {
+  isolation: isolate;
+  overflow: hidden;
+  position: relative;
+  -webkit-tap-highlight-color: transparent;
+  transition: transform var(--fluid-bouncy) var(--fluid-spring-bouncy), background-color .2s ease, border-color .2s ease, box-shadow .3s ease, color .2s ease;
+}
+.workspace-page .meridian-console :is(.console-button, .filter-menu__toggle, .table-excel-download)::after {
+  background: radial-gradient(circle at var(--fluid-x, 50%) var(--fluid-y, 50%), color-mix(in srgb, currentColor 24%, transparent), transparent 70%);
+  border-radius: inherit;
+  content: "";
+  inset: 0;
+  opacity: 0;
+  pointer-events: none;
+  position: absolute;
+  transition: opacity .45s ease;
+  z-index: -1;
+}
+.workspace-page .meridian-console :is(.console-button, .filter-menu__toggle, .table-excel-download):active:not(:disabled, [aria-disabled="true"]) { transform: scale(.96); transition: transform 90ms ease-out, background-color .1s ease, border-color .1s ease, box-shadow .1s ease, color .1s ease; }
+.workspace-page .meridian-console :is(.console-button, .filter-menu__toggle, .table-excel-download):active:not(:disabled, [aria-disabled="true"])::after { opacity: 1; transition-duration: 60ms; }
+.workspace-page .meridian-console .console-button--primary { background-image: linear-gradient(to bottom, color-mix(in srgb, var(--c-ffffff-220) 60%, transparent), transparent 70%); box-shadow: inset 0 1px 0 var(--c-ffffff-220), 0 1px 2px var(--c-183643-220), 0 6px 16px var(--c-183643-130); }
+.workspace-page .meridian-console .console-button--primary:hover { box-shadow: inset 0 1px 0 var(--c-ffffff-220), 0 1px 2px var(--c-183643-220), 0 10px 24px var(--c-183643-180); }
+.workspace-page .meridian-console :is(.console-button--secondary, .filter-menu__toggle, .table-excel-download) { border-color: var(--fluid-hairline); box-shadow: var(--fluid-rim), 0 1px 2px var(--c-1a3846-060); }
+.workspace-page .meridian-console :is(.console-button--secondary, .filter-menu__toggle, .table-excel-download):hover { box-shadow: var(--fluid-rim), 0 4px 14px var(--c-1a3846-080); }
+/* Small controls in tables and toolbars give under the finger too. */
+.meridian-console :is(.inventory-safety-trigger, .inventory-reserved-trigger, .shipping-action-icon, .inventory-dialog-close, .shipping-help-trigger, .ops-week-step, .consumption-arrow, .consumption-cell, .conversation-search__clear) { transition: transform var(--fluid-bouncy) var(--fluid-spring-bouncy), background-color .2s ease, color .2s ease; -webkit-tap-highlight-color: transparent; }
+.meridian-console :is(.inventory-safety-trigger, .inventory-reserved-trigger, .shipping-action-icon, .inventory-dialog-close, .shipping-help-trigger, .ops-week-step, .consumption-arrow, .consumption-cell, .conversation-search__clear):active { transform: scale(.9); transition-duration: 90ms, .1s, .1s; transition-timing-function: ease-out; }
+/* A submit button waits with the activity indicator in place of its label, keeping its size. */
+.workspace-page .meridian-console [data-fluid-busy] { color: transparent; pointer-events: none; }
+.workspace-page .meridian-console [data-fluid-busy]::before { animation: fluid-spin .8s steps(8) infinite; background: var(--console-teal-dark); content: ""; height: 1.15rem; inset: 0; margin: auto; -webkit-mask: var(--fluid-spinner) center / contain no-repeat; mask: var(--fluid-spinner) center / contain no-repeat; position: absolute; width: 1.15rem; }
+.workspace-page .meridian-console .console-button--primary[data-fluid-busy]::before { background: var(--c-ffffff); }
+@keyframes fluid-spin { to { transform: rotate(360deg); } }
+
+/* Tabs. Every set of tabs is the same capsule of glass with a pill that slides to the chosen tab: a page's own
+   tabs, tabs within a section, the calendar's Day / Week / Month and a record's log filter alike. A page's own tabs
+   also stay under the header while the page scrolls beneath them. fluid.js draws the pill and moves it on a spring,
+   and marks the capsule .fluid-tabs once it has, so without scripts the current tab keeps its own fill. */
+.workspace-page .meridian-console :is(.patient-workspace-tabs, .patient-order-subtabs, .records-tabs, .ops-steps, .staff-view-toggle, .record-chips) {
+  align-items: center;
+  background-color: var(--fluid-glass);
+  background-image: radial-gradient(9rem circle at var(--fluid-hx, 30%) var(--fluid-hy, -60%), color-mix(in srgb, var(--c-ffffff-600) 55%, transparent), transparent 70%);
+  -webkit-backdrop-filter: var(--fluid-blur);
+  backdrop-filter: var(--fluid-blur);
+  border: 1px solid var(--fluid-hairline);
+  border-radius: 999px;
+  box-shadow: var(--fluid-float);
+  flex-wrap: nowrap;
+  gap: .1rem;
+  justify-self: start;
+  list-style: none;
+  max-width: 100%;
+  overflow-x: auto;
+  padding: .28rem;
+  position: relative;
+  scrollbar-width: none;
+  width: fit-content;
+}
+.workspace-page .meridian-console :is(.patient-workspace-tabs, .patient-order-subtabs, .records-tabs, .ops-steps, .staff-view-toggle, .record-chips)::-webkit-scrollbar { display: none; }
+.workspace-page .meridian-console .staff-view-toggle { display: inline-flex; }
+.workspace-page .meridian-console :is(.patient-workspace-tabs, .patient-order-subtabs, .records-tabs, .ops-steps, .staff-view-toggle, .record-chips) > li { display: flex; flex: 0 0 auto; }
+@media (max-width: 42rem) { .workspace-page .meridian-console :is(.patient-workspace-tabs, .patient-order-subtabs, .records-tabs, .ops-steps, .staff-view-toggle, .record-chips) a { padding-inline: .8rem; } }
+.workspace-page .meridian-console :is(.patient-workspace-tabs, .patient-order-subtabs, .records-tabs, .ops-steps, .staff-view-toggle, .record-chips) a {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 999px;
+  color: var(--console-muted);
+  display: inline-flex;
+  font-size: .82rem;
+  font-weight: 650;
+  gap: .45rem;
+  height: auto;
+  justify-content: center;
+  margin: 0;
+  min-height: 2.5rem;
+  padding: .45rem 1.05rem;
+  position: relative;
+  text-decoration: none;
+  transition: color .2s ease, background-color .2s ease, transform var(--fluid-bouncy) var(--fluid-spring-bouncy);
+  white-space: nowrap;
+  z-index: 1;
+  -webkit-tap-highlight-color: transparent;
+}
+.workspace-page .meridian-console :is(.patient-workspace-tabs, .patient-order-subtabs, .records-tabs, .ops-steps, .staff-view-toggle, .record-chips) a:hover { background: color-mix(in srgb, var(--console-teal-soft) 32%, transparent); color: var(--console-teal-dark); }
+.workspace-page .meridian-console :is(.patient-workspace-tabs, .patient-order-subtabs, .records-tabs, .ops-steps, .staff-view-toggle, .record-chips) a:is(.is-active, [aria-current="page"], [aria-selected="true"]) { background: var(--console-teal-soft); border: 0; color: var(--console-teal-dark); font-weight: 650; }
+.workspace-page .meridian-console :is(.patient-workspace-tabs, .patient-order-subtabs, .records-tabs, .ops-steps, .staff-view-toggle, .record-chips).fluid-tabs a:is(.is-active, [aria-current="page"], [aria-selected="true"]) { background: transparent; }
+.workspace-page .meridian-console .fluid-tabs > .fluid-tab-thumb { background: var(--console-teal-soft); border-radius: 999px; box-shadow: inset 0 1px 0 var(--c-ffffff-600), 0 0 0 1px color-mix(in srgb, var(--console-teal-line) 70%, transparent), 0 2px 8px var(--c-1a3846-080); }
+.meridian-console .fluid-tabs a:active { transform: scale(.95); transition-duration: .1s, .1s, 90ms; transition-timing-function: ease-out; }
+.meridian-console .fluid-tab-thumb { left: 0; list-style: none; pointer-events: none; position: absolute; top: 0; will-change: transform, width; z-index: 0; }
+.meridian-console .fluid-tabs { -webkit-user-select: none; user-select: none; }
+.meridian-console .fluid-tabs.is-dragging { cursor: grabbing; }
+.meridian-console .fluid-tabs.is-dragging a { pointer-events: none; }
+/* A page's own tabs float under the header. */
+.workspace-page .meridian-console :is(.patient-workspace-tabs, .inventory-subtabs, .purchasing-subtabs) { margin: 0 0 1.25rem; position: sticky; top: .75rem; z-index: 30; }
+@media (min-width: 52.001rem) { .workspace-page .meridian-console :is(.patient-workspace-tabs, .inventory-subtabs, .purchasing-subtabs) { top: 4.75rem; } }
+.workspace-page .meridian-console .records-tabs { margin-top: 1.1rem; }
+/* Inside a card, tabs keep the card's inset rather than meeting its edge. */
+.workspace-page .meridian-console .staff-page-card > :is(.patient-workspace-tabs, .patient-order-subtabs, .records-tabs, .ops-steps, .staff-view-toggle, .record-chips) { margin: .85rem 1.15rem; }
+.workspace-page .meridian-console .ops-shipping-card > :is(.patient-workspace-tabs, .patient-order-subtabs, .records-tabs, .ops-steps, .staff-view-toggle, .record-chips) { margin: .85rem 1.2rem; }
+/* Weekly shipping's stages sit in the card's toolbar, with the same inset and type as any other tabs. */
+.workspace-page .meridian-console .ops-shipping-card .shipping-primary-toolbar { padding-block: .85rem; }
+.workspace-page .meridian-console .ops-shipping-card .shipping-primary-toolbar .ops-week-nav { padding-bottom: 0; }
+.workspace-page .meridian-console .ops-steps .ops-step__title { font: inherit; }
+.workspace-page .meridian-console .ops-shipping-card .ops-steps { display: flex; }
+@media (max-width: 760px) { .workspace-page .meridian-console .staff-page-card > :is(.patient-workspace-tabs, .patient-order-subtabs, .records-tabs, .ops-steps, .staff-view-toggle, .record-chips) { margin-inline: 1rem; } }
+
+/* Menus and popovers: thick glass that grows out of the control that opened it. */
+.meridian-console :is(.filter-menu__panel, .shipping-help-popover) { background-color: var(--fluid-glass-thick); -webkit-backdrop-filter: blur(24px) saturate(180%); backdrop-filter: blur(24px) saturate(180%); border-color: var(--fluid-hairline); border-radius: 1.2rem; box-shadow: var(--fluid-rim), 0 2px 6px var(--c-1a3846-060), 0 22px 54px var(--c-183643-160); }
+.meridian-console .filter-menu__panel { transform-origin: top right; }
+.meridian-console .filter-menu__sections { border-color: var(--fluid-hairline); border-radius: .7rem; }
+.meridian-console .filter-menu[open] > .filter-menu__panel { animation: fluid-menu-in var(--fluid-bouncy) var(--fluid-spring-bouncy) both; }
+.meridian-console .filter-menu__chevron { transition: transform var(--fluid-medium) var(--fluid-spring-bouncy); }
+@keyframes fluid-menu-in {
+  from { -webkit-backdrop-filter: blur(0) saturate(100%); backdrop-filter: blur(0) saturate(100%); opacity: 0; transform: translateY(-.4rem) scale(.92); }
+  35% { opacity: 1; }
+}
+/* The help popover is placed by measuring it, so it arrives by fading and gathering its blur, never by scaling. */
+.meridian-console .shipping-help-popover { transition: opacity .22s ease, backdrop-filter .35s ease, overlay .22s allow-discrete, display .22s allow-discrete; }
+.meridian-console .shipping-help-popover:not(:popover-open) { opacity: 0; }
+@starting-style { .meridian-console .shipping-help-popover:popover-open { -webkit-backdrop-filter: blur(0); backdrop-filter: blur(0); opacity: 0; } }
+
+/* Dialogs: a solid sheet (it holds a form) over a dimmed, softly blurred page. fluid.js grows it out of the button
+   that opened it and returns it there when it closes. */
+.meridian-console .app-dialog { border-radius: 1.4rem; box-shadow: 0 0 0 1px var(--fluid-hairline), 0 12px 32px var(--c-183643-160), 0 40px 100px var(--c-183643-220); }
+.meridian-console .app-dialog::backdrop { -webkit-backdrop-filter: blur(6px) saturate(120%); backdrop-filter: blur(6px) saturate(120%); transition: opacity .3s ease, backdrop-filter .3s ease; }
+@starting-style { .meridian-console .app-dialog[open]::backdrop { -webkit-backdrop-filter: blur(0); backdrop-filter: blur(0); opacity: 0; } }
+.meridian-console .app-dialog .console-button { border-radius: .8rem; }
+
+/* Toasts arrive on a spring from where they will rest. */
+@media (prefers-reduced-motion: no-preference) {
+  .toast { animation-duration: var(--fluid-bouncy), .3s; animation-name: fluid-toast-in, toast-out; animation-timing-function: var(--fluid-spring-bouncy), ease-in; border-radius: 1rem; }
+  .toast.error { animation: fluid-toast-in var(--fluid-bouncy) var(--fluid-spring-bouncy); }
+}
+@keyframes fluid-toast-in { from { opacity: 0; transform: translateY(-.75rem) scale(.95); } 40% { opacity: 1; } }
+
+/* Loading. Skeletons appear only if the wait is long enough to notice, and a sheen passes over them instead of a
+   pulse. When a tab is chosen, the header and tabs stay where they are (fluid.js) and only the content below waits. */
+.meridian-console .page-skeleton-grid { animation: fluid-appear .3s ease .15s both; }
+.meridian-console .page-skeleton-card { border-color: var(--fluid-hairline); border-radius: 1.15rem; box-shadow: 0 1px 2px var(--c-1a3846-035); }
+.meridian-console .page-skeleton-line { animation: fluid-sheen 1.5s ease-in-out infinite; background: linear-gradient(90deg, var(--c-e8eef1) 0%, color-mix(in srgb, var(--c-e8eef1) 30%, var(--console-card)) 50%, var(--c-e8eef1) 100%); background-size: 250% 100%; border-radius: 999px; }
+.meridian-console .page-skeleton-line:nth-child(2) { animation-delay: .08s; }
+.meridian-console .page-skeleton-line:nth-child(3) { animation-delay: .16s; }
+.meridian-console .page-skeleton-line:nth-child(4) { animation-delay: .24s; }
+.meridian-console .page-navigation-loading.fluid-loading-kept { min-height: 0; }
+.meridian-console .fluid-loading-kept .page-navigation-loading__heading { clip-path: inset(50%); height: 1px; overflow: hidden; position: absolute; white-space: nowrap; width: 1px; }
+.meridian-console .fluid-loading-kept .page-skeleton-grid { grid-template-columns: 1fr; }
+.meridian-console .fluid-loading-kept .page-skeleton-card:not(.page-skeleton-card--wide) { display: none; }
+.meridian-console .fluid-loading-kept .page-skeleton-card--wide { min-height: 22rem; }
+@keyframes fluid-sheen { from { background-position: 100% 0; } to { background-position: 0 0; } }
+@keyframes fluid-appear { from { opacity: 0; } }
+/* The page loader becomes a small glass panel with the activity indicator. */
+.workspace-page-loader__spinner { -webkit-backdrop-filter: blur(20px) saturate(180%); backdrop-filter: blur(20px) saturate(180%); background: color-mix(in srgb, var(--c-ffffff) 78%, transparent); border-radius: 1.2rem; box-shadow: inset 0 1px 0 var(--c-ffffff-600), 0 12px 32px var(--c-183643-160); height: 4.5rem; width: 4.5rem; }
+.workspace-page-loader__spinner::after { animation: fluid-spin .8s steps(8) infinite; background: var(--console-muted, var(--c-506e7c)); content: ""; inset: 1.35rem; -webkit-mask: var(--fluid-spinner) center / contain no-repeat; mask: var(--fluid-spinner) center / contain no-repeat; position: absolute; }
+.workspace-page-loader__arc { display: none; }
+
+/* The side menu floats as a panel of glass beside the page and collapses to its icons (fluid.js keeps the choice
+   as data-sidebar on <html>, set before the page is drawn). Collapsing only narrows the panel: every icon keeps its
+   place, centred in the narrow width, while the labels fade under the edge. */
+:root { --fluid-rail: 16.25rem; --fluid-patient-rail: 15rem; --fluid-rail-closed: 4.25rem; }
+:root[data-sidebar="collapsed"] { --fluid-rail: var(--fluid-rail-closed); --fluid-patient-rail: var(--fluid-rail-closed); }
+.meridian-console { --fluid-icon: 1.1rem; --fluid-icon-inset: calc((var(--fluid-rail-closed) - 1rem - 2px - var(--fluid-icon)) / 2); }
+.fluid-rail-toggle { display: none; }
+@media (min-width: 52.001rem) {
+  .workspace-page .meridian-console.console-desktop .console-shell { grid-template-columns: calc(var(--fluid-rail) + .75rem) minmax(0, 1fr); transition: grid-template-columns var(--fluid-medium) var(--fluid-spring); }
+  .workspace-page .meridian-console.patient-pages-console { grid-template-columns: calc(var(--fluid-patient-rail) + .75rem) minmax(0, 1fr); transition: grid-template-columns var(--fluid-medium) var(--fluid-spring); }
+  :root .workspace-page .meridian-console :is(.console-sidebar, .patient-navigation) {
+    background: var(--fluid-glass-thick);
+    -webkit-backdrop-filter: var(--fluid-blur);
+    backdrop-filter: var(--fluid-blur);
+    border: 1px solid var(--fluid-hairline);
+    border-radius: 1.4rem;
+    box-shadow: var(--fluid-float);
+    height: calc(100vh - 5.5rem);
+    height: calc(100dvh - 5.5rem);
+    margin: .75rem 0 .75rem .75rem;
+    min-width: 0;
+    overflow: hidden;
+    padding: .5rem .5rem .75rem;
+    top: 4.75rem;
+  }
+  .workspace-page .meridian-console .console-nav { padding: .1rem 0 .65rem; scrollbar-width: none; }
+  .workspace-page .meridian-console .patient-navigation__links { gap: .15rem; padding: .15rem 0 .3rem; scrollbar-width: none; }
+  .workspace-page .meridian-console :is(.console-nav, .patient-navigation__links)::-webkit-scrollbar { display: none; }
+  .workspace-page .meridian-console :is(.console-sidebar, .patient-navigation) .nav-icon,
+  .workspace-page .meridian-console .patient-navigation a > svg { height: var(--fluid-icon); width: var(--fluid-icon); }
+  /* Each row starts its icon where the narrow rail centres it. */
+  .workspace-page .meridian-console :is(.console-nav a.console-nav__top, .console-nav--flat a.console-nav__item, .console-nav__toggle, .patient-navigation a) { padding-left: var(--fluid-icon-inset); position: relative; white-space: nowrap; }
+  .workspace-page .meridian-console .console-nav .console-nav__toggle .console-nav__label { gap: .7rem; }
+  .workspace-page .meridian-console .console-nav a.console-nav__top { gap: .7rem; }
+  .workspace-page .meridian-console :is(.console-nav__text, .console-nav__top > span, .patient-navigation__label) { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  .workspace-page .meridian-console .console-nav a, .workspace-page .meridian-console .patient-navigation a, .workspace-page .meridian-console .console-nav__toggle { transition: background-color .2s ease, color .2s ease, transform var(--fluid-bouncy) var(--fluid-spring-bouncy); -webkit-tap-highlight-color: transparent; }
+  .workspace-page .meridian-console :is(.console-nav a, .patient-navigation a, .console-nav__toggle):active { transform: scale(.96); transition-duration: .1s, .1s, 90ms; }
+  .workspace-page .meridian-console .patient-navigation__top { align-items: center; display: flex; flex: 0 0 auto; gap: .2rem; margin-bottom: .6rem; min-width: 0; }
+  .workspace-page .meridian-console .patient-navigation__top .patient-navigation__heading { margin: 0; overflow: hidden; white-space: nowrap; }
+
+  .meridian-console .fluid-rail-toggle { align-items: center; background: transparent; border: 0; border-radius: .7rem; color: var(--console-muted); cursor: pointer; display: inline-flex; flex: 0 0 auto; height: 2.25rem; justify-content: center; margin: 0 0 .35rem calc(var(--fluid-icon-inset) + var(--fluid-icon) / 2 - 1.125rem); padding: 0; transition: background-color .2s ease, color .2s ease, transform var(--fluid-bouncy) var(--fluid-spring-bouncy); width: 2.25rem; -webkit-tap-highlight-color: transparent; }
+  .meridian-console .patient-navigation__top .fluid-rail-toggle { margin-bottom: 0; }
+  .meridian-console .fluid-rail-toggle svg { fill: none; height: 1.2rem; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.7; width: 1.2rem; }
+  .meridian-console .fluid-rail-toggle:hover { background: color-mix(in srgb, var(--console-teal-soft) 45%, transparent); color: var(--console-teal-dark); }
+  .meridian-console .fluid-rail-toggle:active { transform: scale(.9); transition-duration: .1s, .1s, 90ms; }
+  .meridian-console .fluid-rail-toggle:focus-visible { outline: 2px solid var(--console-teal); outline-offset: 1px; }
+
+  /* Collapsed: labels, section chevrons and the pages inside sections give way to the icons. A section's pages open
+     beside it instead (fluid.js), and the section holding the current page is marked. */
+  .workspace-page .meridian-console :is(.console-sidebar, .patient-navigation) :is(.console-nav__text, .console-nav__top > span, .patient-navigation__label, .patient-navigation__heading, .console-sidebar__practice > div, .console-person__copy) { transition: opacity .2s ease .08s; }
+  .workspace-page .meridian-console .console-nav__label { transition: color .2s ease; }
+  .workspace-page .meridian-console .console-nav__toggle::after { transition: opacity .2s ease, transform var(--fluid-medium) var(--fluid-spring-bouncy); }
+  :root[data-sidebar="collapsed"] .workspace-page .meridian-console :is(.console-sidebar, .patient-navigation) :is(.console-nav__text, .console-nav__top > span, .patient-navigation__label, .patient-navigation__heading, .console-sidebar__practice > div, .console-person__copy) { opacity: 0; transition-delay: 0s; transition-duration: .1s; }
+  :root[data-sidebar="collapsed"] .workspace-page .meridian-console .console-nav__toggle::after { opacity: 0; }
+  :root[data-sidebar="collapsed"] .workspace-page .meridian-console .console-nav__toggle .console-nav__label { font-size: 0; letter-spacing: 0; }
+  :root[data-sidebar="collapsed"] .workspace-page .meridian-console .console-nav__group > .console-nav__links { display: none; }
+  :root[data-sidebar="collapsed"] .workspace-page .meridian-console .console-nav__group:has([aria-current]) > .console-nav__toggle { background: var(--console-teal-soft); color: var(--console-teal-dark); }
+  :root[data-sidebar="collapsed"] .workspace-page .meridian-console .console-nav__group[data-fluid-flyout] > .console-nav__toggle { background: color-mix(in srgb, var(--console-teal-soft) 55%, transparent); color: var(--console-teal-dark); }
+  :root[data-sidebar="collapsed"] .workspace-page .meridian-console .console-nav__group > .console-nav__toggle { margin: .15rem 0; }
+  /* An unread count becomes a dot on the icon. */
+  :root[data-sidebar="collapsed"] .workspace-page .meridian-console :is(.console-nav, .patient-navigation) :is(.nav-badge, .patient-navigation__badge) { font-size: 0; height: .55rem; left: calc(var(--fluid-icon-inset) + var(--fluid-icon) - .2rem); margin: 0; min-width: .55rem; padding: 0; position: absolute; top: .45rem; width: .55rem; }
+  :root[data-sidebar="collapsed"] .workspace-page .meridian-console .console-sidebar__practice { background: transparent; padding-left: calc(var(--fluid-icon-inset) + var(--fluid-icon) / 2 - 1.15rem); }
+}
+
+/* A collapsed menu's label beside an icon, and a section's pages beside its icon: both glass, both from the icon. */
+.meridian-console :is(.fluid-rail-tip, .fluid-rail-menu) { background: var(--fluid-glass-thick); -webkit-backdrop-filter: blur(24px) saturate(180%); backdrop-filter: blur(24px) saturate(180%); border: 1px solid var(--fluid-hairline); box-shadow: var(--fluid-rim), 0 2px 6px var(--c-1a3846-060), 0 18px 44px var(--c-183643-160); color: var(--console-ink); inset: auto; margin: 0; overflow: visible; position: fixed; transform-origin: left center; transition: opacity .18s ease, transform var(--fluid-bouncy) var(--fluid-spring-bouncy), overlay .2s allow-discrete, display .2s allow-discrete; }
+.meridian-console :is(.fluid-rail-tip, .fluid-rail-menu):not(:popover-open) { opacity: 0; transform: translateX(-.4rem) scale(.94); }
+@starting-style { .meridian-console :is(.fluid-rail-tip, .fluid-rail-menu):popover-open { opacity: 0; transform: translateX(-.4rem) scale(.94); } }
+.meridian-console .fluid-rail-tip { border-radius: .65rem; font-size: .78rem; font-weight: 650; padding: .4rem .7rem; pointer-events: none; white-space: nowrap; }
+.meridian-console .fluid-rail-menu { border-radius: 1.1rem; display: grid; gap: .1rem; min-width: 13rem; padding: .4rem; }
+.meridian-console .fluid-rail-menu:not(:popover-open) { display: none; }
+.meridian-console .fluid-rail-menu__title { color: var(--console-muted); font-size: .64rem; font-weight: 700; letter-spacing: .1em; margin: .3rem .6rem .35rem; text-transform: uppercase; }
+.meridian-console .fluid-rail-menu a { align-items: center; border-radius: .7rem; color: var(--console-ink); display: flex; font-size: .84rem; font-weight: 600; gap: .5rem; justify-content: space-between; min-height: 2.4rem; padding: .45rem .7rem; text-decoration: none; transition: background-color .15s ease, transform var(--fluid-bouncy) var(--fluid-spring-bouncy); }
+.meridian-console .fluid-rail-menu a:hover, .meridian-console .fluid-rail-menu a:focus-visible { background: color-mix(in srgb, var(--console-teal-soft) 55%, transparent); color: var(--console-teal-dark); outline: none; }
+.meridian-console .fluid-rail-menu a:active { transform: scale(.97); transition-duration: .1s, 90ms; }
+.meridian-console .fluid-rail-menu a[aria-current] { background: var(--console-teal); color: var(--c-ffffff); }
+.meridian-console .fluid-rail-menu a::before { display: none; }
+
+/* On phones the bottom bar floats too: a capsule of glass above the home indicator. */
+@media (max-width: 52rem) {
+  :root .workspace-page .meridian-console :is(.staff-mobile-nav, .patient-navigation) { background: var(--fluid-glass-thick); -webkit-backdrop-filter: var(--fluid-blur); backdrop-filter: var(--fluid-blur); border: 1px solid var(--fluid-hairline); border-radius: 1.6rem; bottom: calc(.6rem + env(safe-area-inset-bottom)); box-shadow: var(--fluid-float); left: .6rem; overflow: hidden; right: .6rem; }
+  .workspace-page .meridian-console .staff-mobile-nav { padding: .3rem; }
+  .workspace-page .meridian-console .staff-mobile-nav a { border-radius: 1.2rem; }
+  .workspace-page .meridian-console .patient-navigation__links { padding: .3rem; }
+  .workspace-page .meridian-console .patient-navigation a { border-radius: 1.2rem; }
+}
+
+/* Accessibility settings: frostier or solid glass, firmer edges, and no movement that isn't needed to follow along. */
+@media (prefers-reduced-transparency: reduce) {
+  .meridian-console { --fluid-glass: var(--console-card); --fluid-glass-thick: var(--console-card); --fluid-blur: none; }
+  .workspace-page .site-header { background: var(--c-ffffff); }
+}
+@media (prefers-contrast: more) {
+  .meridian-console { --fluid-glass: var(--console-card); --fluid-glass-thick: var(--console-card); --fluid-hairline: var(--console-line); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .meridian-console .fluid-tabs { background-image: none; }
+  .meridian-console :is(.console-button, .filter-menu__toggle, .table-excel-download, .fluid-tabs a, .inventory-safety-trigger, .inventory-reserved-trigger, .shipping-action-icon, .inventory-dialog-close, .shipping-help-trigger, .ops-week-step, .consumption-arrow, .consumption-cell):active { transform: none; }
+  .meridian-console .filter-menu[open] > .filter-menu__panel { animation: fluid-appear .15s ease both; }
+  .meridian-console .page-skeleton-line { animation: none; }
+  .meridian-console details.staff-page-card::details-content { transition: none; }
+  .workspace-page .meridian-console:is(.patient-pages-console, .console-desktop) :is(.console-shell), .workspace-page .meridian-console.patient-pages-console { transition: none; }
+  .meridian-console :is(.fluid-rail-tip, .fluid-rail-menu) { transition: opacity .15s ease, overlay .15s allow-discrete, display .15s allow-discrete; }
+  .meridian-console :is(.fluid-rail-tip, .fluid-rail-menu):not(:popover-open) { transform: none; }
+  .meridian-console [data-fluid-busy]::before, .workspace-page-loader__spinner::after { animation-duration: 1.6s; }
+}

@@ -8,7 +8,8 @@
     <meta name="theme-color" content="#1d4a5e">
     <meta name="color-scheme" content="light dark">
     {# Light or dark as the person chose in their account menu, set before anything is drawn; else the device's. #}
-    <script>try { var theme = localStorage.getItem('meridian-theme'); if (theme === 'light' || theme === 'dark') document.documentElement.setAttribute('data-theme', theme); } catch (error) {}</script>
+    {# The side menu stays collapsed if they collapsed it (static/js/fluid.js). #}
+    <script>try { var theme = localStorage.getItem('meridian-theme'); if (theme === 'light' || theme === 'dark') document.documentElement.setAttribute('data-theme', theme); if (localStorage.getItem('meridian-sidebar') === 'collapsed') document.documentElement.setAttribute('data-sidebar', 'collapsed'); } catch (error) {}</script>
     <title>{% block title %}Meridian Health{% endblock %}</title>
     {# Roboto, Meridian's typeface, on every page. #}
     <link rel="preload" href="{% static 'fonts/roboto/roboto-latin.woff2' %}" as="font" type="font/woff2" crossorigin>
@@ -23,6 +24,7 @@
     {% if can_switch_practice_role %}<link rel="stylesheet" href="{% static 'css/practice_role_switcher.css' %}?v=20261104a">{% endif %}
     {% if video_notifications_enabled %}<link rel="stylesheet" href="{% static 'css/call_notifications.css' %}?v=20261104a"><script src="{% static 'js/call_notifications.js' %}" defer></script>{% endif %}
     {% if request.realtime_scope %}<link rel="stylesheet" href="{% static 'css/live_messages.css' %}?v=20261018"><script src="{% static 'js/live_messages.js' %}?v=20261018" defer></script>{% endif %}
+    {% if is_workspace_page %}{% include 'includes/fluid_design.html' %}{% endif %}
     <link rel="stylesheet" href="{% static 'css/branding.css' %}?v=20260913-logo">
     {# The practice's brand palette and type for patients; loaded last so it can finish shared styles. #}
     {% if is_patient_portal %}<link rel="stylesheet" href="{% static 'css/patient_theme.css' %}?v=20261104c">{% endif %}

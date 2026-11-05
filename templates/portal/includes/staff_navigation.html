@@ -1,4 +1,5 @@
 {% load workspace_ui %}{% staff_menu as menu %}
+{% include 'portal/includes/sidebar_toggle.html' %}
 <nav class="console-nav{% if menu.flat %} console-nav--flat{% endif %}" aria-label="Staff pages" data-rail-navigation>
   {% if menu.flat %}
   {# Clinicians: one flat list with icons, like the patient app's menu. #}
