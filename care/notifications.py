@@ -38,8 +38,8 @@ from practices.models import CompanyMembership
 from practices.tenancy import enabled_companies
 from .emails import appointment_details, build_email, greeting_name, person_name, site_link
 from .models import (
-    Appointment, AppointmentStartReminder, DebitMandate, EmailDelivery, MessageThread, MessageThreadParticipant,
-    PatientMessage, PatientSubscription, SubscriptionCycle, TeamMessage, TeamThreadMember,
+    Appointment, AppointmentStartReminder, DebitMandate, EmailDelivery, LabRequest, MessageThread,
+    MessageThreadParticipant, PatientMessage, PatientSubscription, SubscriptionCycle, TeamMessage, TeamThreadMember,
 )
 
 logger = logging.getLogger(__name__)
@@ -475,6 +475,21 @@ def _debit_order_request_email(subscription, user, actor_id):
                        context={'greeting': subscription.patient.first_name, 'url': site_link('portal:patient-billing')})
 
 
+# Blood tests due on their Required by date (care.blood_tests)
+
+def _lab(pk):
+    return LabRequest.objects.select_related('patient__user', 'requested_by').get(pk=pk)
+
+
+def _blood_tests_due_email(lab, user, actor_id):
+    from .blood_tests import pauses_on
+
+    return build_email(to=user.email, subject='Your blood tests are due', template='blood_tests_due', context={
+        'greeting': lab.patient.first_name, 'doctor': lab.requested_by.titled_name, 'tests': lab.panel_name,
+        'due_on': lab.due_on, 'pauses_on': pauses_on(lab), 'url': site_link('portal:patient-treatment'),
+    })
+
+
 # kind: (load the object, who to email, build one person's email)
 KINDS = {
     'patient_message': (_patient_message, _patient_message_recipients, _patient_message_email),
@@ -491,4 +506,5 @@ KINDS = {
     'payment_failed': (_cycle, _patient_only, _payment_failed_email),
     'debit_order_update': (_mandate, _patient_only, _debit_order_update_email),
     'debit_order_request': (_subscription, _patient_only, _debit_order_request_email),
+    'blood_tests_due': (_lab, _patient_only, _blood_tests_due_email),
 }

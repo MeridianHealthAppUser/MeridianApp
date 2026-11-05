@@ -270,9 +270,15 @@ class StaffScheduleView(StaffPageView):
         manage_bookings = self.membership.role == CompanyMembership.Role.PRACTICE_ADMIN and schedule_view == 'table'
         if manage_bookings:
             from .appointment_detail_views import AppointmentTimeForm
+        now = timezone.now()
         for appointment in appointments:
             appointment.attention = attention.get(appointment.pk)
             appointment.needs_attention = appointment.attention is not None
+            # A doctor's own bookings in Day view: Download for their calendar, and Cancel in a dialog until it starts.
+            own = schedule_view == 'table' and not manage_bookings and appointment.clinician_id == self.request.user.pk
+            appointment.can_download = own and appointment.status != Appointment.Status.CANCELLED
+            if own and appointment.status == Appointment.Status.BOOKED and appointment.starts_at > now:
+                appointment.cancel_context = make_workflow_context(self.request, self.company, 'appointment-status', appointment)
             if manage_bookings and appointment.status == Appointment.Status.BOOKED:
                 local = timezone.localtime(appointment.starts_at)
                 appointment.time_form = AppointmentTimeForm(initial={'date': local.date(), 'time': f'{local:%H:%M}'},

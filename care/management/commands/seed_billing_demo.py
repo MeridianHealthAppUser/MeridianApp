@@ -229,12 +229,12 @@ class Command(BaseCommand):
             dose=high.label, product=high.pen)
         review_mandates(company, lerato, prescription_changed=True)
 
-        # Ruan: no debit order yet; he paid this parcel by EFT, recorded by the doctor from Weekly shipping.
+        # Ruan: no debit order yet; he paid this parcel by EFT, recorded by the practice administrator from Weekly shipping.
         ruan = self.patient('Ruan')
         authorization, plan = self.prescribe(ruan, mid)
         parcel = Shipment.objects.filter(company=company, patient=ruan, scheduled_for=self.ship_day).first()
         if parcel is not None:
-            record_manual_payment(company=company, actor=self.doctor, amount=mid.price, method='eft',
+            record_manual_payment(company=company, actor=self.admin, amount=mid.price, method='eft',
                                   reference='EFT RBOTHA', note='Paid by EFT while his debit order is set up.',
                                   shipment=parcel, from_shipping=True)
 

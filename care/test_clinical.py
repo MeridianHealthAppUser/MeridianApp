@@ -253,19 +253,27 @@ class ClinicalWorkflowTests(TestCase):
         self.assertFalse(visible.filter(detail__contains='Private clinical interpretation.').exists())
         self.assertTrue(all('Private clinical interpretation.' not in str(event.metadata) for event in AuditEvent.objects.all()))
 
-    def test_review_requires_report_nonempty_note_and_requesting_doctor(self):
+    def test_only_the_requesting_doctor_reviews_with_an_optional_note(self):
         request = self.lab()
-        with self.assertRaises(ValidationError):
-            review_lab_request(lab_request=request, actor=self.doctor, review_note='No uploaded report yet.')
         self.upload(request)
         for actor in (self.colleague, self.admin, self.super_admin, self.patient_user):
             with self.assertRaises(PermissionDenied):
                 review_lab_request(lab_request=request, actor=actor, review_note='Not the responsible doctor.')
-        for review_note in ('', ' ', 'x' * 10001):
-            with self.assertRaises(ValidationError):
-                review_lab_request(lab_request=request, actor=self.doctor, review_note=review_note)
+        with self.assertRaises(ValidationError):
+            review_lab_request(lab_request=request, actor=self.doctor, review_note='x' * 10001)
         request.refresh_from_db()
         self.assertEqual(request.status, LabRequest.Status.UPLOADED)
+        # Reviewed is one click: no note needed, and it completes the review task.
+        reviewed = review_lab_request(lab_request=request, actor=self.doctor)
+        self.assertEqual((reviewed.status, reviewed.result_summary), (LabRequest.Status.REVIEWED, ''))
+        self.assertEqual(reviewed.review_task.status, ClinicalTask.Status.DONE)
+
+    def test_doctor_can_review_before_the_patient_marks_the_tests_done(self):
+        # Results are often read on the PathCare portal, so a forgotten Done doesn't hold up the review.
+        request = self.lab()
+        reviewed = review_lab_request(lab_request=request, actor=self.doctor, review_note='Seen on the PathCare portal.')
+        self.assertEqual(reviewed.status, LabRequest.Status.REVIEWED)
+        self.assertIsNone(reviewed.review_task)
 
     def test_generic_complete_cannot_bypass_consultation_signing_or_lab_review(self):
         encounter = self.consultation()

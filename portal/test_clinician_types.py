@@ -78,9 +78,13 @@ class ClinicianTypeTests(TestCase):
         task = ClinicalTask.objects.create(company=self.company, patient=self.patient, title='Someone else’s task', assigned_to=self.doctor)
         self.assertIn(task, visible_tasks(self.company, self.super_doctor, self.super_doctor_membership))
         self.login(self.super_doctor)
-        for name in ('clinical-consultation-create', 'clinical-lab-create', 'treatment-authorisation-create'):
+        for name in ('clinical-consultation-create', 'treatment-authorisation-create'):
             with self.subTest(page=name):
                 self.assertEqual(self.client.get(reverse(f'portal:{name}', args=[self.patient.pk])).status_code, 200)
+        # Blood tests are requested on the record's Overview; the old page's address goes there.
+        self.assertRedirects(self.client.get(reverse('portal:clinical-lab-create', args=[self.patient.pk])),
+                             f'{reverse("portal:patient-detail", args=[self.patient.pk])}?tab=overview#record-bloods',
+                             fetch_redirect_response=False)
         self.assertContains(self.client.get(reverse('portal:desktop-dashboard')), 'Super admin · Doctor')
 
     def test_super_admin_without_a_type_reads_but_does_not_write_clinical_records(self):
@@ -98,7 +102,7 @@ class ClinicianTypeTests(TestCase):
             with self.subTest(page=name):
                 self.assertEqual(self.client.get(reverse(f'portal:{name}', args=[self.patient.pk])).status_code, 403)
         workspace = self.client.get(reverse('portal:patient-detail', args=[self.patient.pk]), {'tab': 'blood-tests'})
-        self.assertNotContains(workspace, reverse('portal:clinical-lab-create', args=[self.patient.pk]))
+        self.assertNotContains(workspace, '#record-bloods')
 
     def test_initial_consultations_at_checkout_are_offered_by_doctors_only(self):
         with patch('care.checkout.open_slots_for_day', return_value=[]) as slots:

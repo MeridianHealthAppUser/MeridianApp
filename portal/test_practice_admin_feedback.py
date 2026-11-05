@@ -183,6 +183,40 @@ class PracticeAdminCalendarTests(SessionMixin, AppointmentLifecycleFixture):
             'confirm': 'on', 'reason': 'Clinic closed.'})
         self.assertRedirects(response, reverse('portal:appointment-detail', args=[other.pk]), fetch_redirect_response=False)
 
+    def test_doctors_download_and_cancel_their_own_bookings_from_day_view(self):
+        appointment = self.appointment(appointment_type='follow_up')
+        cancelled = self.appointment(starts_at=self.starts_at + timedelta(hours=1), status='cancelled')
+        self.login(self.doctor)
+        page = self.client.get(self.day_url())
+        calendar = reverse('portal:appointment-calendar', args=[appointment.pk])
+        # Download | Details | Cancel | Open record; nothing to download or cancel once it's cancelled.
+        self.assertContains(page, f'data-no-loader href="{calendar}">')
+        self.assertNotContains(page, reverse('portal:appointment-calendar', args=[cancelled.pk]))
+        self.assertContains(page, f'data-modal-open="cancel-appointment-{appointment.pk}"')
+        self.assertNotContains(page, f'data-modal-open="cancel-appointment-{cancelled.pk}"')
+        self.assertContains(page, f'id="cancel-appointment-{appointment.pk}"')
+        html = page.content.decode()
+        row = html[html.index(f'href="{calendar}"'):]
+        self.assertLess(row.index('Details<span'), row.index(f'data-modal-open="cancel-appointment-{appointment.pk}"'))
+        self.assertLess(row.index(f'data-modal-open="cancel-appointment-{appointment.pk}"'), row.index('Open record<span'))
+        # The calendar file names no patient: calendars are often synced elsewhere.
+        ics = self.client.get(calendar)
+        self.assertEqual(ics['Content-Type'], 'text/calendar; charset=utf-8')
+        body = ics.content.decode()
+        self.assertIn('SUMMARY:Meridian: Follow-up', body)
+        self.assertNotIn(self.patient.last_name, body)
+        # Cancel in the dialog, with the reason the patient sees; back to the same day.
+        row = next(item for item in page.context['appointments'] if item.pk == appointment.pk)
+        response = self.client.post(reverse('portal:appointment-detail', args=[appointment.pk]), {
+            'workflow_context': row.cancel_context, 'next': self.day_url(), 'status': 'cancelled', 'confirm': 'on',
+            'reason': 'Called away. Please book another time.'})
+        self.assertRedirects(response, self.day_url(), fetch_redirect_response=False)
+        appointment.refresh_from_db()
+        self.assertEqual(appointment.status, 'cancelled')
+        # Another doctor can't download a booking for a patient whose record they can't open.
+        self.login(self.colleague)
+        self.assertNotEqual(self.client.get(calendar).get('Content-Type'), 'text/calendar; charset=utf-8')
+
     def test_available_time_is_each_doctors_working_day_in_15_minute_slots(self):
         day = timezone.localdate(self.starts_at)
         for clinician, periods in ((self.doctor, ((time(9), time(10)), (time(13), time(13, 30)))), (self.colleague, ((time(9), time(10)),))):
@@ -250,7 +284,7 @@ class PracticeAdminCalendarTests(SessionMixin, AppointmentLifecycleFixture):
                          [('09:00', 'Unavailable'), ('09:15', 'Unavailable'), ('09:30', 'Unavailable'), ('09:45', 'Free')])
         self.assertNotIn('Booked', response.content.decode())
 
-    def test_doctors_keep_open_record_and_have_no_edit_or_cancel(self):
+    def test_doctors_keep_open_record_and_have_no_edit(self):
         self.appointment()
         self.login(self.doctor)
         page = self.client.get(self.day_url())

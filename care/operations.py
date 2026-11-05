@@ -37,9 +37,9 @@ DEFAULT_SUPPLY_DAYS = 28
 
 
 def doctors_ship(company):
-    """Whether the practice's doctors use Weekly shipping and Dispatch history (Practice settings; on by default)."""
+    """Whether the practice's doctors use Weekly shipping and Dispatch history (Practice settings; off by default)."""
     value = PracticeSettings.objects.filter(company=company).values_list('doctors_ship', flat=True).first()
-    return True if value is None else value
+    return bool(value)
 
 
 def can_ship(company, membership):
@@ -162,9 +162,15 @@ def product_allowance(patient, product, *, on_date=None, exclude_shipment=None, 
 
 
 def shipment_hold_reason(shipment, on_date=None):
+    from .blood_tests import pause_reason
+
     on_date = on_date or shipment.scheduled_for
     if not shipment.company.is_active or not shipment.patient.is_active or shipment.patient.company_id != shipment.company_id:
         return 'The patient/practice is not active or no longer matches.'
+    # Blood tests not reviewed a week after their Required by date pause all of the patient's shipping.
+    blood_tests = pause_reason(shipment.company_id, shipment.patient_id, on_date)
+    if blood_tests:
+        return blood_tests
     if shipment.subscription_id:
         if shipment.subscription.patient_id != shipment.patient_id or shipment.subscription.company_id != shipment.company_id:
             return 'The subscription does not match this patient and practice.'

@@ -160,6 +160,7 @@
                     <td data-label="Room">{% if appointment.attention == 'day_off' or appointment.attention == 'special_hours' %}<span class="schedule-room-closed">Not open</span>{% elif appointment.video_room_url %}<a class="console-button console-button--secondary schedule-join" href="{{ appointment.video_room_url }}">Join<span class="sr-only"> video consultation with {{ appointment.patient }}</span></a>{% elif appointment.video_join_message %}<span class="schedule-room-closed" title="{{ appointment.video_join_message }}">Not open</span>{% else %}<span class="schedule-room-closed">&mdash;</span>{% endif %}</td>
                     <td class="staff-schedule-table__actions-cell" data-label="Actions">
                       <div class="staff-schedule-table__actions">
+                        {% if appointment.can_download %}<a class="console-button console-button--secondary schedule-action" data-no-loader href="{% url 'portal:appointment-calendar' appointment.pk %}">{% include 'portal/includes/calendar_download_icon.html' %}Download<span class="sr-only"> the appointment with {{ appointment.patient }} to your calendar</span></a>{% endif %}
                         <a class="console-button console-button--secondary schedule-action" href="{% url 'portal:appointment-detail' appointment.pk %}">Details<span class="sr-only"> of the appointment with {{ appointment.patient }}</span></a>
                         {% if manage_bookings %}
                           {# Practice administrators move or cancel a booking here, each in a dialog below; without scripts the #}
@@ -169,6 +170,8 @@
                             <a class="console-button console-button--secondary console-button--cancel schedule-action" href="{% url 'portal:appointment-detail' appointment.pk %}?update=status" data-modal-open="cancel-appointment-{{ appointment.pk }}" aria-haspopup="dialog">Cancel<span class="sr-only"> the appointment with {{ appointment.patient }}</span></a>
                           {% endif %}
                         {% else %}
+                          {# A doctor cancels their own booking in the same dialog, below; Open record comes last. #}
+                          {% if appointment.cancel_context %}<a class="console-button console-button--secondary console-button--cancel schedule-action" href="{% url 'portal:appointment-detail' appointment.pk %}?update=status" data-modal-open="cancel-appointment-{{ appointment.pk }}" aria-haspopup="dialog">Cancel<span class="sr-only"> the appointment with {{ appointment.patient }}</span></a>{% endif %}
                           <a class="console-button console-button--primary schedule-action" href="{% url 'portal:patient-detail' appointment.patient_id %}">Open record<span class="sr-only"> for {{ appointment.patient }}</span></a>
                         {% endif %}
                       </div>
@@ -223,8 +226,8 @@
     {% endif %}
   {% endif %}
 
-  {% if manage_bookings %}
-    {% for appointment in appointments %}{% if appointment.time_form %}
+  {% for appointment in appointments %}
+    {% if appointment.time_form %}
       {# Edit appointment: a new date and one of the clinician's free times, same clinician and length. A mistake #}
       {# opens the dialog again on the appointment's page; a change made here comes back to this day. #}
       <dialog class="app-dialog" id="edit-appointment-{{ appointment.pk }}" aria-labelledby="edit-appointment-{{ appointment.pk }}-title">
@@ -242,6 +245,8 @@
           </form>
         </div>
       </dialog>
+    {% endif %}
+    {% if appointment.cancel_context %}
       {# Cancel appointment: the reason is shown to the patient and sent in their cancellation email. #}
       <dialog class="app-dialog" id="cancel-appointment-{{ appointment.pk }}" aria-labelledby="cancel-appointment-{{ appointment.pk }}-title">
         <div class="app-dialog__body">
@@ -251,14 +256,14 @@
             <div class="console-form__field">
               <label for="cancel_{{ appointment.pk }}_reason">Reason</label>
               <textarea id="cancel_{{ appointment.pk }}_reason" name="reason" rows="3" maxlength="500" required aria-describedby="cancel_{{ appointment.pk }}_reason_help"></textarea>
-              <span class="helptext" id="cancel_{{ appointment.pk }}_reason_help">{{ appointment.patient.first_name }} sees this in the app and in their cancellation email. {{ appointment.clinician.titled_name }} is emailed too.</span>
+              <span class="helptext" id="cancel_{{ appointment.pk }}_reason_help">{{ appointment.patient.first_name }} sees this in the app and in their cancellation email.{% if appointment.clinician_id != request.user.pk %} {{ appointment.clinician.titled_name }} is emailed too.{% endif %}</span>
             </div>
             <div class="app-dialog__actions"><button class="console-button console-button--secondary" type="button" data-dialog-close>Back</button><button class="console-button console-button--primary" type="submit">Cancel appointment</button></div>
           </form>
         </div>
       </dialog>
-    {% endif %}{% endfor %}
-  {% endif %}
+    {% endif %}
+  {% endfor %}
 
   {# Opened by Create appointment above; without scripts that link opens the booking page, which also shows any mistake. #}
   <dialog class="app-dialog" id="create-appointment" aria-labelledby="create-appointment-title">

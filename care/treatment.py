@@ -77,6 +77,11 @@ def subscription_hold_reason(subscription, on_date=None):
     # (care.billing.parcel_payment) when the week is locked.
     if subscription.status not in (PatientSubscription.Status.ACTIVE, PatientSubscription.Status.PAYMENT_RETRY):
         return 'The care plan is not active.'
+    from .blood_tests import pause_reason
+
+    blood_tests = pause_reason(subscription.company_id, subscription.patient_id, on_date)
+    if blood_tests:
+        return blood_tests
     authorization = step_in_effect(subscription.authorization, on_date)
     if authorization is None or authorization.company_id != subscription.company_id or authorization.patient_id != subscription.patient_id:
         return 'A matching treatment authorisation is required.'

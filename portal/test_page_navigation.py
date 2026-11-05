@@ -127,6 +127,7 @@ class PageNavigationTests(TestCase):
 
     def test_doctor_shipping_shells_follow_the_practice_setting_like_the_full_view(self):
         self.login()
+        PracticeSettings.objects.update_or_create(company=self.company, defaults={'doctors_ship': True})
         for name in ('ops-shipping', 'ops-history'):
             self.assertEqual(self.client.get(reverse(f'portal:{name}'), HTTP_ACCEPT='text/html').status_code, 200)
         PracticeSettings.objects.filter(company=self.company).update(doctors_ship=False)

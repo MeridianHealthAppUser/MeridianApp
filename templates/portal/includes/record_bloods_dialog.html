@@ -1,0 +1,51 @@
+{# Request blood tests: the filled PathCare form to check, an optional Required by date, then send. Opened from the #}
+{# tests on the Overview's card or in the Blood results tab's dialog; sending goes back to the tab it came from. #}
+{% if can_request_bloods and not pathcare_blocked %}
+  <dialog class="record-dialog record-dialog--wide" id="record-bloods-dialog" aria-labelledby="record-bloods-title"{% if open_dialog == 'bloods' %} open{% endif %}>
+    <h2 id="record-bloods-title">Request blood tests</h2>
+    <p class="record-dialog__sub">{{ patient }} &middot; PathCare clinical request form</p>
+    <div class="record-bloods-preview">
+      <div class="record-bloods-preview__form">
+        <iframe name="record-bloods-frame" class="record-bloods-frame" title="The filled PathCare form" data-bloods-frame></iframe>
+        <button class="console-button console-button--secondary record-bloods-open" type="submit" form="record-bloods-preview-form" formtarget="_blank"><svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4h6v6"/><path d="m20 4-9 9"/><path d="M19 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5"/></svg>Open the filled form in a new tab</button>
+      </div>
+      <dl class="record-rows">
+        {% for row in pathcare_summary %}<div><dt>{{ row.label }}</dt><dd{% if row.missing %} class="is-rose"{% endif %}>{% if row.missing %}Missing{% else %}{{ row.value }}{% endif %}</dd></div>{% endfor %}
+        <div><dt>Medical aid no.</dt><dd class="is-muted">Left blank</dd></div>
+        <div><dt>Tests</dt><dd data-bloods-tests-preview>{{ bloods_tests|default:''|linebreaksbr }}</dd></div>
+      </dl>
+    </div>
+    {% if pathcare_has_missing %}<p class="record-dialog__help">A missing value leaves that box blank. You can still send the form.</p>{% endif %}
+    <p class="record-dialog__help">The medical aid number isn’t stored. You or the patient can write it on the form.</p>
+    <form id="record-bloods-preview-form" method="post" action="{% url 'portal:patient-blood-tests-preview-pdf' patient.pk %}" target="record-bloods-frame" data-bloods-preview-form>
+      {% csrf_token %}
+      <input type="hidden" name="workflow_context" value="{{ bloods_context_token }}">
+      <input type="hidden" name="tests" value="{{ bloods_tests|default:'' }}" data-bloods-tests-input>
+    </form>
+    <form method="post" action="{% url 'portal:patient-blood-tests' patient.pk %}" data-bloods-send-form>
+      {% csrf_token %}
+      <input type="hidden" name="workflow_context" value="{{ bloods_context_token }}">
+      <input type="hidden" name="submission_key" value="{{ bloods_submission_key }}">
+      <input type="hidden" name="return_tab" value="{{ workspace_tab }}">
+      <input type="hidden" name="tests" value="{{ bloods_tests|default:'' }}" data-bloods-tests-input>
+      {# Required by: blood tests not done and reviewed a week after it pause the subscription and shipping (care.blood_tests). #}
+      <div class="record-bloods-due">
+        <div class="console-form__field">
+          <label for="record-bloods-due">Required by (optional)</label>
+          <input type="date" id="record-bloods-due" name="due_on" min="{% now 'Y-m-d' %}" value="{{ bloods_due_on|default:'' }}">
+        </div>
+        <div class="record-bloods-next">
+          <h3 class="record-card__subhead">What happens next</h3>
+          <p class="record-dialog__help">The patient gets a task on My Tasks to mark the tests Done once they’ve had them, and you then get a task to review them.</p>
+          <p class="record-dialog__help">Setting ‘Required by’ will pause the subscription and shipping if the tests haven’t been done and reviewed by you a week after that date, until you mark them Reviewed. The patient is emailed about this on the ‘Required by’ date.</p>
+          <p class="record-dialog__help">Subscription and shipping will be unaffected if ‘Required by’ is left blank.</p>
+        </div>
+      </div>
+      <div class="record-dialog__actions">
+        <a class="console-button console-button--secondary" href="{{ workspace_url }}{% if workspace_tab == 'overview' %}#record-bloods{% endif %}" data-dialog-close>Cancel</a>
+        {% if patient_email %}<button class="console-button console-button--primary" type="submit"><svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg>Email to {{ patient_email }}</button>
+        {% else %}<span class="record-error">This patient has no email address on file.</span>{% endif %}
+      </div>
+    </form>
+  </dialog>
+{% endif %}

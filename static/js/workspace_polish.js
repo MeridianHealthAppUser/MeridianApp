@@ -88,15 +88,17 @@
     return document.querySelector('.console-content, .patient-console__content, .mobile-console__content');
   }
 
-  function showLoader() {
-    const region = contentRegion();
-    if (!region || region.classList.contains('is-page-loading')) return;
+  function showLoader(origin) {
+    // An open modal dialog is drawn above the whole page, so a link or form inside one shows the loader over it.
+    const dialog = origin?.closest?.('dialog[open]');
+    const region = dialog || contentRegion();
+    if (!region || region.classList.contains('is-page-loading') || region.querySelector(':scope > .workspace-page-loader')) return;
     const loader = document.createElement('div');
     // Where the page stops drawing (WebKit), a fade-in would freeze at its first, transparent frame.
-    loader.className = PAINT_FIRST ? 'workspace-page-loader workspace-page-loader--instant' : 'workspace-page-loader';
+    loader.className = `workspace-page-loader${PAINT_FIRST ? ' workspace-page-loader--instant' : ''}${dialog ? ' workspace-page-loader--dialog' : ''}`;
     loader.setAttribute('role', 'status');
     loader.innerHTML = `<div class="workspace-page-loader__inner">${SPINNER}<span class="workspace-page-loader__label">Loading</span></div>`;
-    region.classList.add('is-page-loading');
+    if (!dialog) region.classList.add('is-page-loading');
     region.setAttribute('aria-busy', 'true');
     region.appendChild(loader);
     // A response the browser downloads never replaces this page.
@@ -112,6 +114,7 @@
       region.classList.remove('is-page-loading');
       region.removeAttribute('aria-busy');
     });
+    document.querySelectorAll('dialog[aria-busy]').forEach((dialog) => dialog.removeAttribute('aria-busy'));
     if (navigating) {
       navigating = false;
       // A download or cancelled navigation can leave this document open.
@@ -119,10 +122,10 @@
     }
   }
 
-  function queueLoader(event) {
+  function queueLoader(event, origin) {
     clearTimeout(showTimer);
     // Fast pages swap in before the loader would appear; prevented events never navigate.
-    showTimer = setTimeout(() => { if (!event.defaultPrevented) showLoader(); }, SHOW_AFTER_MS);
+    showTimer = setTimeout(() => { if (!event.defaultPrevented) showLoader(origin); }, SHOW_AFTER_MS);
   }
 
   function opensAnotherPage(link) {
@@ -143,11 +146,11 @@
     startNavigation();
     if (PAINT_FIRST) {
       event.preventDefault();
-      showLoader();
+      showLoader(link);
       afterPaint(() => window.location.assign(link.href));
       return;
     }
-    queueLoader(event);
+    queueLoader(event, link);
   });
 
   listen(window, 'submit', (event) => {
@@ -165,7 +168,7 @@
     startNavigation();
     if (PAINT_FIRST) {
       event.preventDefault();
-      showLoader();
+      showLoader(submitter || form);
       afterPaint(() => {
         form.dataset.loaderPainted = '1';
         if (typeof form.requestSubmit === 'function') {
@@ -184,7 +187,7 @@
       });
       return;
     }
-    queueLoader(event);
+    queueLoader(event, submitter || form);
   });
 
   // Back and forward can restore this page from the cache with the loader still showing.

@@ -215,3 +215,30 @@ jobs:
       - key: DJANGO_SITE_URL
         value: '${APP_URL}'
         scope: RUN_TIME
+  - name: blood-test-checks
+    # Emails patients whose blood tests are due and holds the parcels of patients paused for blood tests
+    # (care/blood_tests.py), once a day.
+    kind: SCHEDULED
+    schedule:
+      cron: '0 7 * * *'
+      time_zone: Africa/Johannesburg
+    github:
+      repo: MeridianHealthAppUser/MeridianApp
+      branch: main
+      deploy_on_push: false
+    dockerfile_path: Dockerfile
+    source_dir: /
+    run_command: python manage.py run_blood_test_checks
+    envs:
+      - key: MULTI_PRACTICE_ENABLED
+        value: 'false'
+        scope: RUN_TIME
+      - key: SINGLE_PRACTICE_SLUG
+        value: meridian-health
+        scope: RUN_TIME
+      - key: DJANGO_DEBUG
+        value: 'false'
+        scope: RUN_TIME
+      - key: DJANGO_SITE_URL
+        value: '${APP_URL}'
+        scope: RUN_TIME

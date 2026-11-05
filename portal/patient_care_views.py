@@ -1,13 +1,13 @@
 """Standalone patient care pages."""
 
-from datetime import datetime, time, timedelta, timezone as datetime_timezone
+from datetime import datetime, time, timedelta
 from urllib.parse import urlencode
 
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.exceptions import ValidationError
 from django.core.paginator import Paginator
-from django.http import HttpResponse, JsonResponse
+from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
@@ -20,6 +20,7 @@ from care.clinical_summary import get_summary
 from care.models import Appointment, PatientEvent
 from care.patient_care import book_patient_appointment, patient_busy_intervals
 from .appointment_detail_views import labelled_slots
+from .calendar_files import calendar_file
 from .patient_care_forms import BookingTimesQuery, PatientBookingForm, PatientUpdatesFilterForm
 from .patient_context import validate_patient_context
 from .patient_summary import intake_answers, latest_weight, medical_information, medical_profile
@@ -167,25 +168,6 @@ class PatientUpdatesView(PatientCarePage):
         return render(request, 'portal/patient_care_updates.html', context)
 
 
-def _ical_escape(value):
-    # TEXT values are escaped before line folding. Raw CR/LF cannot create new
-    # calendar properties, and no clinical notes or user-entered fields appear.
-    return str(value).replace('\\', '\\\\').replace('\r\n', '\n').replace('\r', '\n').replace('\n', '\\n').replace(';', '\\;').replace(',', '\\,')
-
-
-def _ical_fold(line):
-    parts, current, count = [], '', 0
-    for character in line:
-        size = len(character.encode('utf-8'))
-        if count + size > 75:
-            parts.append(current)
-            current, count = ' ', 1
-        current += character
-        count += size
-    parts.append(current)
-    return '\r\n'.join(parts)
-
-
 class PatientAppointmentCalendarView(PatientCarePage):
     http_method_names = ('get', 'head', 'options')
 
@@ -193,22 +175,8 @@ class PatientAppointmentCalendarView(PatientCarePage):
         appointment = get_object_or_404(Appointment.objects.for_company(self.patient_company).filter(
             patient=self.patient,
         ), pk=pk)
-        stamp = lambda value: value.astimezone(datetime_timezone.utc).strftime('%Y%m%dT%H%M%SZ')
-        cancelled = appointment.status in (Appointment.Status.CANCELLED, Appointment.Status.NO_SHOW)
-        lines = [
-            'BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Meridian//Patient appointments//EN',
-            'CALSCALE:GREGORIAN', 'METHOD:PUBLISH', 'BEGIN:VEVENT',
-            f'UID:appointment-{appointment.pk}-practice-{self.patient_company.pk}@meridian.local',
-            f'DTSTAMP:{stamp(appointment.updated_at)}', f'DTSTART:{stamp(appointment.starts_at)}',
-            f'DTEND:{stamp(appointment.starts_at + timedelta(minutes=appointment.duration_minutes))}',
-            'SUMMARY:Meridian appointment',
-            f'DESCRIPTION:{_ical_escape("Appointment at " + self.patient_company.name + ". Check your patient portal for details and any changes.")}',
-            f'URL:{_ical_escape(request.build_absolute_uri(reverse("portal:patient-appointments")))}',
-            f'STATUS:{"CANCELLED" if cancelled else "CONFIRMED"}',
-            'CLASS:PRIVATE', 'END:VEVENT', 'END:VCALENDAR',
-        ]
-        response = HttpResponse('\r\n'.join(_ical_fold(line) for line in lines) + '\r\n', content_type='text/calendar; charset=utf-8')
-        response['Content-Disposition'] = f'attachment; filename="appointment-{appointment.pk}.ics"'
-        response['Cache-Control'] = 'private, no-store'
-        response['X-Content-Type-Options'] = 'nosniff'
-        return response
+        return calendar_file(
+            appointment, product='Patient appointments', summary='Meridian appointment',
+            description=f'Appointment at {self.patient_company.name}. Check your patient portal for details and any changes.',
+            url=request.build_absolute_uri(reverse('portal:patient-appointments')),
+        )

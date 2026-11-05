@@ -84,9 +84,10 @@ class PracticeSettings(CompanyScopedModel):
     # When a prescription or price change asks the patient to approve a new debit order (care.billing.review_mandates).
     new_debit_order = models.CharField('Ask for a new debit order', max_length=10, choices=NewDebitOrder.choices,
                                        default=NewDebitOrder.ANY_CHANGE)
-    # Weekly shipping and Dispatch history (care.operations) for doctors as well as administrators.
+    # Weekly shipping and Dispatch history (care.operations) for doctors as well as administrators. Off by default:
+    # shipping is administrative work for practice administrators and Super Admins.
     doctors_ship = models.BooleanField(
-        'Doctors can set up and ship parcels', default=True,
+        'Doctors can set up and ship parcels', default=False,
         help_text='Weekly shipping and Dispatch history for doctors: marking parcels ready, checking payment, locking the '
                   'week, booking The Courier Guy and recording the collection.',
     )
@@ -976,14 +977,20 @@ class ClinicalNote(PatientCompanyScopedModel):
 class LabRequest(PatientCompanyScopedModel):
     class Status(models.TextChoices):
         REQUESTED = 'requested', 'Requested'
+        # The patient had the tests and marked them Done on My Tasks; the lab doesn't usually send them a report.
+        DONE = 'done', 'Done, review pending'
         UPLOADED = 'uploaded', 'Results uploaded'
         REVIEWED = 'reviewed', 'Reviewed'
 
     requested_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='lab_requests')
     panel_name = models.CharField(max_length=255)
     requested_on = models.DateField(default=timezone.localdate)
+    # Required by: tests not done and reviewed a week after it pause the subscription and shipping (care.blood_tests).
     due_on = models.DateField(null=True, blank=True)
     status = models.CharField(max_length=16, choices=Status.choices, default=Status.REQUESTED)
+    done_at = models.DateTimeField(null=True, blank=True)
+    # When the patient was told, on the Required by date, that their subscription will be paused until it's done.
+    due_notice_sent_at = models.DateTimeField(null=True, blank=True)
     result_summary = models.TextField(blank=True)
     reviewed_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name='reviewed_lab_requests')
     reviewed_at = models.DateTimeField(null=True, blank=True)

@@ -6,12 +6,13 @@ from datetime import timedelta
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
+from django.core.exceptions import PermissionDenied, ValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import Client, RequestFactory, TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from care.clinical import create_lab_request, review_lab_request, save_consultation, submit_lab_result
+from care.clinical import create_lab_request, mark_lab_done, review_lab_request, save_consultation, submit_lab_result, undo_lab_done
 from care.models import Appointment, AuditEvent, ClinicalEncounter, ClinicalNote, ClinicalTask, ClinicianAssignment, LabRequest, LabResult
 from care.widgets import floor_quarter_hour
 from practices.models import Company, CompanyMembership, Patient
@@ -311,17 +312,46 @@ class ClinicalPortalTests(TestCase):
                          {'Alice': '', 'Beth': ''})
         self.assertNotContains(page, 'console-status--past')
 
-    def test_lab_create_uses_patient_practice_and_duplicate_post_is_idempotent(self):
+    def test_old_request_page_sends_doctors_to_the_overview_and_takes_no_posts(self):
+        # Blood tests are requested on the record's Overview, with the PathCare form and a Required by date.
         self.login()
         url = reverse('portal:clinical-lab-create', args=[self.patient.pk])
-        token = self.client.get(url).context['clinical_context']
-        data = {'clinical_context': token, 'panel_name': 'Requested blood panel', 'due_on': ''}
-        response = self.client.post(url, data)
-        lab = LabRequest.objects.get()
-        self.assertRedirects(response, reverse('portal:clinical-lab-detail', args=[lab.pk]), fetch_redirect_response=False)
-        self.assertEqual(self.client.post(url, data).status_code, 302)
-        self.assertEqual(LabRequest.objects.count(), 1)
-        self.assertEqual((lab.company_id, lab.patient_id, lab.requested_by_id), (self.company.pk, self.patient.pk, self.doctor.pk))
+        self.assertRedirects(self.client.get(url), f'{reverse("portal:patient-detail", args=[self.patient.pk])}?tab=overview#record-bloods',
+                             fetch_redirect_response=False)
+        self.assertEqual(self.client.post(url, {'panel_name': 'Requested blood panel'}).status_code, 405)
+        self.assertFalse(LabRequest.objects.exists())
+
+    def test_patient_marks_blood_tests_done_on_my_tasks_then_sees_review_pending_and_reviewed(self):
+        lab = self.lab(due_on=timezone.localdate() + timedelta(days=7))
+        self.login(self.patient_user)
+        treatment = reverse('portal:patient-treatment')
+        page = self.client.get(treatment)
+        task = next(task for task in page.context['tasks'] if task['title'] == 'Get your blood tests done')
+        self.assertIn('your subscription and deliveries are paused until they are', task['body'])
+        done = task['actions'][0]
+        self.assertEqual((done['label'], done['primary'], done['post']['action'], done['post']['next']), ('Mark as done', True, 'done', 'tasks'))
+        self.assertContains(page, '<input type="hidden" name="action" value="done">', html=True)
+        open_before = page.context['open_task_count']
+        self.assertRedirects(self.client.post(done['url'], done['post']), treatment, fetch_redirect_response=False)
+        lab.refresh_from_db()
+        self.assertEqual(lab.status, 'done')
+        page = self.client.get(treatment)
+        self.assertContains(page, 'Review pending')
+        self.assertContains(page, 'Your blood tests are waiting for review')
+        self.assertEqual(page.context['open_task_count'], open_before - 1)
+        # The doctor’s review task opens the request, where Mark as reviewed is one click with an optional note.
+        self.login()
+        url = reverse('portal:clinical-lab-detail', args=[lab.pk])
+        detail = self.client.get(url)
+        self.assertContains(detail, 'marked these blood tests done')
+        self.assertContains(detail, '>Mark as reviewed</button>')
+        self.client.post(url, {'clinical_context': detail.context['clinical_context'], 'action': 'review', 'review_note': ''})
+        lab.refresh_from_db()
+        self.assertEqual((lab.status, lab.review_task.status), ('reviewed', 'done'))
+        self.login(self.patient_user)
+        page = self.client.get(treatment)
+        self.assertContains(page, 'Your blood tests have been reviewed')
+        self.assertContains(page, '>Reviewed</span>')
 
     def test_patient_uploads_owned_pdf_but_cannot_address_other_records(self):
         lab = self.lab()
@@ -353,6 +383,53 @@ class ClinicalPortalTests(TestCase):
         self.assertFalse(LabResult.objects.exists())
         lab.refresh_from_db()
         self.assertEqual(lab.status, 'requested')
+
+    def test_the_requesting_doctor_or_a_super_admin_marks_done_blood_tests_as_not_done_but_the_patient_cannot(self):
+        lab = self.lab()
+        mark_lab_done(lab_request=lab, actor=self.patient_user)
+        lab.refresh_from_db()
+        review_task = lab.review_task
+        url = reverse('portal:clinical-lab-detail', args=[lab.pk])
+        # The patient can't: their page offers nothing, refuses the action, and the change itself refuses them.
+        self.login(self.patient_user)
+        patient_url = reverse('portal:patient-lab-detail', args=[lab.pk])
+        patient_page = self.client.get(patient_url)
+        self.assertNotContains(patient_page, 'Mark as not done')
+        self.client.post(patient_url, {'clinical_context': patient_page.context['clinical_context'], 'action': 'undo_done'})
+        lab.refresh_from_db()
+        self.assertEqual(lab.status, 'done')
+        # Nor can another doctor or a practice administrator.
+        for user in (self.patient_user, self.colleague, self.admin):
+            with self.subTest(user=user.email), self.assertRaises(PermissionDenied):
+                undo_lab_done(lab_request=lab, actor=user)
+        # The requesting doctor sets them back from the notice of the patient's Done.
+        self.login()
+        detail = self.client.get(url)
+        self.assertContains(detail, 'value="undo_done">Mark as not done</button>')
+        response = self.client.post(url, {'clinical_context': detail.context['clinical_context'], 'action': 'undo_done'})
+        self.assertRedirects(response, url, fetch_redirect_response=False)
+        lab.refresh_from_db()
+        review_task.refresh_from_db()
+        self.assertEqual((lab.status, lab.done_at, lab.review_task_id, review_task.status), ('requested', None, None, 'cancelled'))
+        self.assertTrue(AuditEvent.objects.filter(action='lab_request.done_undone', actor=self.doctor).exists())
+        self.assertNotContains(self.client.get(url), 'Mark as not done')
+        # The patient's My Tasks asks them to mark them done again.
+        self.login(self.patient_user)
+        page = self.client.get(reverse('portal:patient-treatment'))
+        task = next(task for task in page.context['tasks'] if task['title'] == 'Get your blood tests done')
+        self.assertEqual(task['actions'][0]['label'], 'Mark as done')
+        # Done again, a Super Admin who didn't ask for them can set them back too.
+        mark_lab_done(lab_request=lab, actor=self.patient_user)
+        self.login(self.super_admin)
+        detail = self.client.get(url)
+        self.assertContains(detail, 'Mark as not done')
+        self.client.post(url, {'clinical_context': detail.context['clinical_context'], 'action': 'undo_done'})
+        lab.refresh_from_db()
+        self.assertEqual(lab.status, 'requested')
+        # Once reviewed, they stay reviewed.
+        review_lab_request(lab_request=lab, actor=self.doctor)
+        with self.assertRaises(ValidationError):
+            undo_lab_done(lab_request=lab, actor=self.doctor)
 
     def test_only_requestor_can_review_and_patient_never_sees_internal_review_text(self):
         lab = self.uploaded_lab()
@@ -410,7 +487,6 @@ class ClinicalPortalTests(TestCase):
         for route, args, data in (
             ('clinical-consultation-create', [self.patient.pk], self.consultation_data(self.token())),
             ('clinical-consultation-detail', [encounter.pk], self.consultation_data(self.token(record=encounter))),
-            ('clinical-lab-create', [self.patient.pk], {'clinical_context': self.token(kind='lab'), 'panel_name': 'Blocked'}),
             ('clinical-lab-detail', [lab.pk], {'clinical_context': self.token(kind='lab', record=lab), 'action': 'review', 'review_note': 'Blocked'}),
         ):
             with self.subTest(route=route):

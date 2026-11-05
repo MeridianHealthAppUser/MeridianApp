@@ -65,7 +65,6 @@ class PatientWorkspaceFormTests(TestCase):
             ('new-consultation', 'consultations', reverse('portal:clinical-consultation-create', args=[self.patient.pk])),
             ('draft-consultation', 'consultations', reverse('portal:clinical-consultation-detail', args=[self.encounter.pk])),
             ('signed-consultation', 'consultations', reverse('portal:clinical-consultation-detail', args=[self.signed.pk])),
-            ('new-blood-test', 'blood-tests', reverse('portal:clinical-lab-create', args=[self.patient.pk])),
             ('blood-test', 'blood-tests', reverse('portal:clinical-lab-detail', args=[self.lab.pk])),
             ('appointment', 'appointments', reverse('portal:appointment-detail', args=[self.appointment.pk])),
         ]

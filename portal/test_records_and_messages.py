@@ -355,6 +355,41 @@ class RecordsAndMessagesTests(TestCase):
         self.login(self.admin)
         self.assertEqual(self.client.get(view_url).status_code, 403)
 
+    def test_a_doctor_requests_blood_tests_on_the_blood_results_tab_and_comes_back_to_it(self):
+        self.login(self.doctor)
+        page = self.record(tab='blood-tests')
+        self.assertContains(page, 'data-dialog-open="record-bloods-start"')
+        self.assertContains(page, 'id="record-bloods-dialog"')
+        self.assertContains(page, '<input type="hidden" name="return_tab" value="blood-tests">', count=2, html=True)
+        self.assertContains(page, 'record_overview.js')
+        # A mistake keeps the doctor on the tab, with the tests still filled in.
+        response = self.send_bloods(return_tab='blood-tests', due_on='not a date')
+        self.assertEqual((response.status_code, response.context['workspace_tab']), (400, 'blood-tests'))
+        self.assertContains(response, 'Choose a valid date for Required by', status_code=400)
+        response = self.send_bloods(return_tab='blood-tests')
+        self.assertRedirects(response, f'{reverse("portal:patient-detail", args=[self.patient.pk])}?tab=blood-tests#blood-test-requests')
+        self.assertContains(response, 'Blood test form emailed to rm-nadia@example.test')
+        # The Overview's card says where it came from too, so its sends stay on the Overview.
+        self.assertContains(self.record(tab='overview'), '<input type="hidden" name="return_tab" value="overview">', count=2, html=True)
+
+    def test_the_preview_asks_for_an_optional_requested_by_date_and_explains_what_happens_next(self):
+        self.login(self.doctor)
+        page = self.record(tab='overview')
+        self.assertContains(page, '<label for="record-bloods-due">Required by (optional)</label>', html=True)
+        self.assertContains(page, f'name="due_on" min="{timezone.localdate():%Y-%m-%d}"')
+        self.assertContains(page, 'What happens next')
+        self.assertContains(page, 'a week after that date, until you mark them Reviewed')
+        self.assertContains(page, 'Subscription and shipping will be unaffected if ‘Required by’ is left blank.')
+        # A date in the past is refused and nothing is sent.
+        response = self.send_bloods(due_on=(timezone.localdate() - timedelta(days=1)).isoformat())
+        self.assertContains(response, 'Choose today or a later date for Required by', status_code=400)
+        self.assertFalse(PathCareRequestForm.objects.exists())
+        due = timezone.localdate() + timedelta(days=14)
+        self.send_bloods(due_on=due.isoformat(), submission_key='3e9f2c4b-5c3d-4f88-8a61-ac4d5e6f7081')
+        lab = PathCareRequestForm.objects.get().lab_request
+        self.assertEqual(lab.due_on, due)
+        self.assertContains(self.record(tab='overview', log='clinical'), f'Required by {due:%-d %b %Y}.')
+
     def test_a_doctor_without_pathcare_details_is_told_to_ask_the_practice(self):
         self.doctor.pathcare_code = ''
         self.doctor.save(update_fields=['pathcare_code'])
@@ -462,6 +497,17 @@ class RecordsAndMessagesTests(TestCase):
                     self.assertContains(page, tab)
                 self.assertContains(page, 'console-nav__item is-active" aria-current')
         self.assertContains(self.client.get(reverse('portal:patient-list')), 'Mokoena')
+
+    def test_billing_columns_are_for_administrators_not_doctors(self):
+        self.login(self.doctor)
+        page = self.client.get(reverse('portal:patient-list'))
+        self.assertNotContains(page, '<th scope="col">Cycle</th>', html=True)
+        self.assertNotContains(page, '<th scope="col">Next debit</th>', html=True)
+        CompanyMembership.objects.filter(user=self.admin).update(role=CompanyMembership.Role.SUPER_ADMIN)
+        self.login(self.admin)
+        page = self.client.get(reverse('portal:patient-list'))
+        self.assertContains(page, '<th scope="col">Cycle</th>', html=True)
+        self.assertContains(page, '<th scope="col">Next debit</th>', html=True)
 
 
 class StaffReadStateSeedTests(TestCase):

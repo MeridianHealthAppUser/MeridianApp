@@ -1,0 +1,6 @@
+{% extends 'emails/base.html' %}{% block content %}
+        <p style="margin:0 0 16px;">Hello{% if greeting %} {{ greeting }}{% endif %},</p>
+        <p style="margin:0 0 16px;">{{ doctor }} asked for your blood tests ({{ tests }}) to be done by today, {{ due_on|date:"l j F" }}.</p>
+        <p style="margin:0 0 16px;">If they aren’t done and reviewed by your doctor by {{ pauses_on|date:"l j F" }}, your subscription and deliveries will be paused until they are. Once you’ve had them, mark them Done on My Tasks so your doctor can review them.</p>
+        {% include 'emails/button.html' with label='Go to My Tasks' %}
+{% endblock %}

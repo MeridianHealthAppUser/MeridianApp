@@ -283,10 +283,12 @@ def patient_treatment_context(request, company, patient, *, enrollment_form=None
     without scripts)."""
     from .patient_summary import (
         billing_tasks, current_authorization, latest_weight,
-        next_consult, open_lab_requests, patient_tasks, previous_prescriptions, treatment_overview, treatment_timeline,
+        next_consult, patient_tasks, task_lab_requests, previous_prescriptions, treatment_overview, treatment_timeline,
     )
 
     from care.billing import patient_summary as billing_summary, prescription_amount
+
+    from .clinical_forms import make_clinical_context
 
     from .patient_shop import shop_context
 
@@ -298,12 +300,14 @@ def patient_treatment_context(request, company, patient, *, enrollment_form=None
     treatment_authorization = current.authorization if current and current.authorization_id else authorization
     prescription_query = request.GET.copy()
     prescription_query.pop('prescription_page', None)
+    tasks = billing_tasks(current) + patient_tasks(
+        authorization=authorization, plan=current, consult=consult, weight=weight, labs=task_lab_requests(company, patient),
+        lab_context=lambda lab: make_clinical_context(request, company, patient, 'lab', lab),
+    )
     context.update(
         next_consult=consult,
-        tasks=billing_tasks(current) + patient_tasks(
-            authorization=authorization, plan=current, consult=consult, weight=weight,
-            labs=open_lab_requests(company, patient),
-        ),
+        tasks=tasks,
+        open_task_count=sum(1 for task in tasks if not task['settled']),
         previous_prescriptions=Paginator(previous_prescriptions(company, patient), 12).get_page(request.GET.get('prescription_page')),
         prescription_query=prescription_query.urlencode(),
         today=timezone.localdate(),

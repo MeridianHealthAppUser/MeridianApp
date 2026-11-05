@@ -4,6 +4,7 @@ Anything that stops a form being made or emailed is shown as an error toast.
 """
 
 import logging
+from datetime import date
 
 from django.conf import settings
 from django.contrib import messages
@@ -32,6 +33,16 @@ logger = logging.getLogger(__name__)
 UNEXPECTED_ERROR = 'Something went wrong making the blood test form, so nothing was sent. Try again in a moment.'
 
 
+def _due_on(value):
+    """The Required by date from the preview dialog: None when left blank."""
+    if not value:
+        return None
+    try:
+        return date.fromisoformat(value)
+    except (TypeError, ValueError):
+        raise ValidationError('Choose a valid date for Required by, or leave it blank.') from None
+
+
 def _pdf_response(content, filename):
     response = HttpResponse(bytes(content), content_type='application/pdf')
     response['Content-Disposition'] = f'inline; filename="{filename}"'
@@ -57,10 +68,14 @@ class BloodTestMixin(LoginRequiredMixin, StaffCompanyRequiredMixin):
 
         return f'{workspace_url(patient)}{query}#{anchor}'
 
+    def return_tab(self):
+        """The record tab the request came from: the Blood results tab, or else the Overview."""
+        return 'blood-tests' if self.request.POST.get('return_tab') == 'blood-tests' else 'overview'
+
     def render_overview(self, patient, status=400, **overrides):
         from .patient_workspace import workspace_tab_context
 
-        context = workspace_tab_context(self.request, self.company, self.membership, patient, 'overview', **overrides)
+        context = workspace_tab_context(self.request, self.company, self.membership, patient, self.return_tab(), **overrides)
         return render(self.request, 'portal/patient_workspace.html', context, status=status)
 
 
@@ -99,26 +114,32 @@ class BloodTestPreviewPdfView(BloodTestMixin, View):
 class BloodTestRequestView(BloodTestMixin, View):
     def post(self, request, pk):
         patient = self.setup_request(pk)
-        tests = request.POST.get('tests', '')
+        tests, due = request.POST.get('tests', ''), request.POST.get('due_on', '').strip()
         try:
             validate_workflow_context(request, self.company, 'patient-bloods', patient=patient)
             form = request_blood_tests(company=self.company, patient=patient, actor=request.user, tests=tests,
-                                       submission_key=request.POST.get('submission_key') or None, request=request)
+                                       due_on=_due_on(due), submission_key=request.POST.get('submission_key') or None,
+                                       request=request)
         except ValidationError as error:
+            # The reason is an error toast; Request blood tests opens the preview again with what was entered.
             messages.error(request, ' '.join(error.messages))
-            return self.render_overview(patient, bloods_tests=tests)
+            return self.render_overview(patient, bloods_tests=tests, bloods_due_on=due)
         except (PermissionDenied, Http404):
             raise
         except Exception:
             logger.exception('Blood test request failed for patient %s.', patient.pk)
             messages.error(request, UNEXPECTED_ERROR)
-            return self.render_overview(patient, status=500, bloods_tests=tests)
+            return self.render_overview(patient, status=500, bloods_tests=tests, bloods_due_on=due)
         if email_failed(form):
             messages.error(request, EMAIL_NOT_SET_UP if not settings.EMAIL_ENABLED else
                            f'The blood test form is in the clinical log, but the email to {form.email_to} '
                            'couldn’t be sent. Use Resend in the log to try again.')
         else:
             messages.success(request, f'Blood test form emailed to {form.email_to}. It is in the clinical log.')
+        if self.return_tab() == 'blood-tests':
+            from .patient_workspace import workspace_url
+
+            return redirect(f'{workspace_url(patient, "blood-tests")}#blood-test-requests')
         return redirect(self.overview_url(patient, '&log=clinical', f'log-blood-{form.lab_request_id}'))
 
 

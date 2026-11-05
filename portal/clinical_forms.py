@@ -86,12 +86,6 @@ class ConsultationForm(forms.Form):
         return value
 
 
-class LabRequestForm(forms.Form):
-    panel_name = forms.CharField(label='Requested tests / panel', max_length=255)
-    due_on = forms.DateField(label='Requested by (optional)', required=False,
-                              widget=forms.DateInput(attrs={'type': 'date'}))
-
-
 class LabUploadForm(forms.Form):
     report = forms.FileField(label='Blood-test report (PDF, up to 5 MB)',
                               widget=forms.ClearableFileInput(attrs={'accept': '.pdf,application/pdf'}))
@@ -108,14 +102,9 @@ class LabUploadForm(forms.Form):
 
 
 class LabReviewForm(forms.Form):
-    review_note = forms.CharField(label='Clinical review note (internal)', max_length=10000,
-                                  strip=False, widget=forms.Textarea(attrs={'rows': 6}))
-
-    def clean_review_note(self):
-        value = self.cleaned_data['review_note']
-        if not value.strip():
-            raise ValidationError('Add a clinical review note before completing the review.')
-        return value
+    # Reviewed is one click (care.clinical.review_lab_request); a note is optional.
+    review_note = forms.CharField(label='Review note (optional, internal)', max_length=10000, required=False,
+                                  strip=False, widget=forms.Textarea(attrs={'rows': 4}))
 
 
 class ClinicalFilterForm(forms.Form):

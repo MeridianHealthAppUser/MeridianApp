@@ -113,6 +113,11 @@
 .is-page-loading { min-height:18rem; position:relative; }
 .workspace-page-loader { animation:workspace-page-loader-in .18s ease; -webkit-backdrop-filter:blur(2px); backdrop-filter:blur(2px); background:var(--c-f4f8f9-760); inset:0; position:absolute; z-index:5; }
 .workspace-page-loader--instant { animation:none; }
+/* From an open modal dialog, which is drawn above the page: inside it, fixed to the screen so it covers the dialog
+   however far it is scrolled, with the spinner in the middle. It dims like the dialog's backdrop rather than
+   washing the screen pale. */
+.workspace-page-loader--dialog { background:var(--c-183643-350); position:fixed; z-index:10; }
+.workspace-page-loader--dialog .workspace-page-loader__inner { align-items:center; inset:0; margin:0; position:absolute; }
 .workspace-page-loader__inner { display:flex; justify-content:center; margin-top:6rem; position:sticky; top:calc(45vh - 32px); }
 .workspace-page-loader__spinner { display:block; height:64px; position:relative; width:64px; }
 /* Each arc turns as a whole element, so Safari keeps it spinning on the graphics layer even after it

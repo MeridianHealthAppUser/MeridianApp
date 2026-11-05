@@ -206,11 +206,14 @@ def doctor_name(doctor):
 
 
 @transaction.atomic
-def request_blood_tests(*, company, patient, actor, tests, submission_key=None, request=None):
-    """Create the blood-test request with its filled form, add it to the clinical log and queue the email."""
+def request_blood_tests(*, company, patient, actor, tests, due_on=None, submission_key=None, request=None):
+    """Create the blood-test request with its filled form, add it to the clinical log and queue the email. due_on is
+    the optional Required by date, which can pause the subscription and shipping (care.blood_tests)."""
     company, patient = _lock_context(company, patient, actor)
     _require_doctor(company, actor)
     tests = clean_tests(tests)
+    if due_on is not None and due_on < timezone.localdate():
+        raise ValidationError('Choose today or a later date for Required by, or leave it blank.')
     if not actor.pathcare_name.strip() or not actor.pathcare_code.strip():
         raise ValidationError(DOCTOR_DETAILS_MISSING)
     email = patient_email(company, patient)
@@ -218,7 +221,7 @@ def request_blood_tests(*, company, patient, actor, tests, submission_key=None, 
         raise ValidationError('This patient has no email address on file, so the form can’t be emailed.')
     content = fill_form(form_values(company=company, patient=patient, doctor=actor, tests=tests))
     lab = create_lab_request(company=company, patient=patient, actor=actor, panel_name=_one_line(tests)[:255],
-                             submission_key=submission_key, request=request)
+                             due_on=due_on, submission_key=submission_key, request=request)
     existing = PathCareRequestForm.objects.filter(lab_request=lab).first()
     if existing is not None:
         return existing  # A repeated submission (a double click) sends nothing twice.

@@ -1,11 +1,11 @@
 {% extends 'portal/staff_page_base.html' %}
 {% load static workspace_ui %}
 {% block title %}Blood tests | {{ company.name }} | Meridian{% endblock %}
-{% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/clinical_workflow.css' %}?v=20261104a">{% endblock %}
+{% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/clinical_workflow.css' %}?v=20261105a">{% endblock %}
 
 {% block breadcrumbs %}{% breadcrumbs 'Blood tests' %}{% endblock %}
 {% block page_heading %}
-  <header class="staff-page-header"><div><h1>Blood tests</h1><p>Track requested tests, uploaded reports and clinician review at {{ company.name }}.</p></div>{% if can_create %}<div class="clinical-heading-actions">{% if filter_form.cleaned_data.patient %}<a class="console-button console-button--primary" href="{% url 'portal:clinical-lab-create' filter_form.cleaned_data.patient.pk %}">Request blood tests</a>{% else %}<a class="console-button console-button--primary" href="{% url 'portal:patient-list' %}">Choose a patient</a>{% endif %}</div>{% endif %}</header>
+  <header class="staff-page-header"><div><h1>Blood tests</h1><p>Track requested tests, uploaded reports and clinician review at {{ company.name }}.</p></div>{% if can_create %}<div class="clinical-heading-actions">{% if filter_form.cleaned_data.patient %}<a class="console-button console-button--primary" href="{% url 'portal:patient-detail' filter_form.cleaned_data.patient.pk %}?tab=overview#record-bloods">Request blood tests</a>{% else %}<a class="console-button console-button--primary" href="{% url 'portal:patient-list' %}">Choose a patient</a>{% endif %}</div>{% endif %}</header>
 {% endblock %}
 
 {% block page_content %}
@@ -23,12 +23,12 @@
       <header class="staff-page-card__header"><div><h2 id="lab-list-heading">Blood-test requests</h2></div><span class="staff-page-card__count">{{ page_obj.paginator.count }} request{{ page_obj.paginator.count|pluralize }}</span></header>
       {% if filter_form.errors %}<div class="staff-filter-error" role="alert">Correct the filter fields above to view requests.</div>{% else %}
         <div class="clinical-table-wrap"><table class="clinical-table" aria-labelledby="lab-list-heading">
-          <thead><tr><th scope="col">Patient</th><th scope="col">Panel / tests</th><th scope="col">Requested by</th><th scope="col">Due</th><th scope="col">Status</th><th scope="col">Action</th></tr></thead>
+          <thead><tr><th scope="col">Patient</th><th scope="col">Panel / tests</th><th scope="col">Doctor</th><th scope="col">Required by</th><th scope="col">Status</th><th scope="col">Action</th></tr></thead>
           <tbody>{% for lab_request in lab_requests %}<tr>
             <td data-label="Patient"><span class="clinical-table__person">{{ lab_request.patient }}</span></td>
             <td data-label="Panel / tests"><span class="clinical-table__panel">{{ lab_request.panel_name }}</span></td>
-            <td data-label="Requested by">{{ lab_request.requested_by.full_name }}</td>
-            <td data-label="Due">{% if lab_request.due_on %}<time datetime="{{ lab_request.due_on|date:'Y-m-d' }}">{{ lab_request.due_on|date:"j M Y" }}</time>{% else %}Not specified{% endif %}</td>
+            <td data-label="Doctor">{{ lab_request.requested_by.full_name }}</td>
+            <td data-label="Required by">{% if lab_request.due_on %}<time datetime="{{ lab_request.due_on|date:'Y-m-d' }}">{{ lab_request.due_on|date:"j M Y" }}</time>{% else %}Not specified{% endif %}</td>
             <td data-label="Status"><span class="console-status console-status--{{ lab_request.status }}">{{ lab_request.get_status_display }}</span></td>
             <td data-label="Action"><a class="console-button console-button--secondary" href="{% url 'portal:clinical-lab-detail' lab_request.pk %}">Open request<span class="sr-only"> for {{ lab_request.patient }}</span></a></td>
           </tr>{% empty %}<tr><td class="clinical-table__empty" colspan="6">No blood-test requests match this view.</td></tr>{% endfor %}</tbody>

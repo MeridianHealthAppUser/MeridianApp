@@ -68,6 +68,8 @@ AUDIT_LABELS = {
     'lab_request.created': 'Blood test requested',
     'lab_result.uploaded': 'Blood test report uploaded',
     'blood_result.recorded': 'Blood result recorded',
+    'lab_request.done': 'Blood tests marked done by the patient',
+    'lab_request.done_undone': 'Blood tests marked as not done',
     'lab_request.reviewed': 'Blood test report reviewed',
     'treatment.authorized': 'Treatment authorization recorded',
     'subscription.enrolled_local': 'Subscription started',

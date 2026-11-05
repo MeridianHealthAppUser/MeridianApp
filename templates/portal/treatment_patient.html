@@ -15,20 +15,20 @@
     <div class="patient-section-head">
       <div class="patient-section-head__copy">
         <h2 class="patient-eyebrow" id="treatment-tasks-heading">My Tasks</h2>
-        <p>Raised from your record. Each one clears itself once it’s done.</p>
+        <p>Raised from your record. Each one updates as it’s done, then clears itself.</p>
       </div>
-      {% if tasks %}<span class="patient-pill patient-pill--amber">{{ tasks|length }} open</span>{% else %}<span class="patient-pill patient-pill--teal">All clear</span>{% endif %}
+      {% if open_task_count %}<span class="patient-pill patient-pill--amber">{{ open_task_count }} open</span>{% else %}<span class="patient-pill patient-pill--teal">All clear</span>{% endif %}
     </div>
     <div class="patient-stack">
       {% for task in tasks %}
         <article class="patient-bar patient-bar--task{% if task.urgent %} patient-bar--urgent{% endif %}">
-          <span class="patient-pill {% if task.urgent %}patient-pill--amber{% else %}patient-pill--blue{% endif %}">{% if task.urgent %}Action needed{% else %}To do{% endif %}</span>
+          <span class="patient-pill {% if task.pill == 'Reviewed' %}patient-pill--teal{% elif task.urgent %}patient-pill--amber{% else %}patient-pill--blue{% endif %}">{% if task.pill %}{{ task.pill }}{% elif task.urgent %}Action needed{% else %}To do{% endif %}</span>
           <div class="patient-bar__copy">
             <h3 class="patient-bar__title">{{ task.title }}</h3>
             <p class="patient-bar__body">{{ task.body }}</p>
           </div>
           {% if task.actions %}<div class="patient-bar__actions">
-            {% for action in task.actions %}<a class="console-button {% if action.primary %}console-button--primary{% else %}console-button--secondary{% endif %}" href="{{ action.url }}">{{ action.label }}</a>{% endfor %}
+            {% for action in task.actions %}{% if action.post %}<form method="post" action="{{ action.url }}">{% csrf_token %}{% for name, value in action.post.items %}<input type="hidden" name="{{ name }}" value="{{ value }}">{% endfor %}<button class="console-button {% if action.primary %}console-button--primary{% else %}console-button--secondary{% endif %}" type="submit">{{ action.label }}</button></form>{% else %}<a class="console-button {% if action.primary %}console-button--primary{% else %}console-button--secondary{% endif %}" href="{{ action.url }}">{{ action.label }}</a>{% endif %}{% endfor %}
           </div>{% endif %}
         </article>
       {% empty %}

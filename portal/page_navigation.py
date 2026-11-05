@@ -97,7 +97,7 @@ HTML_PAGE_ROUTES = frozenset(STAFF_PAGES) | frozenset(PATIENT_PAGES) | frozenset
     'activity-statement-create', 'activity-statement-detail',
     'appointment-book', 'appointment-detail',
     'clinical-consultation-create', 'clinical-consultation-detail',
-    'clinical-lab-create', 'clinical-lab-detail',
+    'clinical-lab-detail',
     'compounding-create', 'compounding-detail',
     'conversation-manage', 'team-conversation-manage',
     'dropout-detail', 'lead-detail', 'lead-follow-up',
@@ -136,7 +136,7 @@ NATIVE_GET_ROUTES = frozenset((
     'patient-appointment-video-status', 'staff-message-status', 'patient-message-status',
     'public-terms', 'public-privacy', 'public-contact',
     'questionnaire', 'questionnaire-result', 'questionnaire-checkout',
-    'appointment-book-times', 'patient-booking-times', 'patient-appointment-calendar',
+    'appointment-book-times', 'patient-booking-times', 'patient-appointment-calendar', 'appointment-calendar',
     'compounding-print', 'metrics-export', 'activity-statement-export',
     'staff-patient-record-export', 'staff-patient-record-history',
     'staff-patient-record-excel', 'staff-patient-record-workbook',
@@ -150,6 +150,8 @@ NATIVE_GET_ROUTES = frozenset((
     'email-unsubscribe', 'ops-shipment-label',
     # The old My Medications address redirects to My Treatment's once-off items, only on ordinary navigation.
     'patient-pharmacy',
+    # The old Request blood tests address redirects to the record's Overview, where blood tests are requested.
+    'clinical-lab-create',
     # Preparing a provider card form or settling its return has GET side effects;
     # a content request must be rejected before either view runs.
     'patient-card-form', 'patient-payment-return',

@@ -108,6 +108,15 @@ class StaffMenuTests(TestCase):
                     self.assertIn(reverse(f'portal:{name}'), paths)
                 self.assertEqual(self.client.get(reverse(f'portal:{name}')).status_code, 200)
 
+    def test_doctors_do_not_ship_unless_the_practice_turns_it_on(self):
+        # Shipping is administrative work, so a practice without the setting saved keeps doctors out of it.
+        PracticeSettings.objects.filter(company=self.company).delete()
+        self.login('doctor')
+        overview = self.client.get(reverse('portal:desktop-dashboard')).content.decode()
+        self.assertNotIn(f'href="{reverse("portal:ops-shipping")}"', overview)
+        for name in ('ops-shipping', 'ops-history'):
+            self.assertEqual(self.client.get(reverse(f'portal:{name}')).status_code, 403)
+
     def test_doctors_who_ship_get_weekly_shipping_and_dispatch_history_only(self):
         PracticeSettings.objects.filter(company=self.company).update(doctors_ship=True)
         self.login('doctor')

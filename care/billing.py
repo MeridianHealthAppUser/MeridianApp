@@ -452,6 +452,10 @@ def bill_subscription(subscription, *, today=None):
     subscription = PatientSubscription.objects.select_for_update(of=('self',)).select_related('authorization').get(pk=subscription.pk)
     if subscription.status not in BILLABLE:
         return []
+    from .blood_tests import pause_reason
+
+    if pause_reason(subscription.company_id, subscription.patient_id, today):
+        return []  # Paused for blood tests: nothing is collected until the doctor reviews them (care.blood_tests).
     mandate = DebitMandate.objects.filter(subscription=subscription, status__in=LIVE_MANDATES).order_by('-approved_at', '-pk').first()
     if mandate is None:
         return []

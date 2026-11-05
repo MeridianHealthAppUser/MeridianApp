@@ -1,7 +1,7 @@
 {% extends 'portal/patient_workspace_base.html' %}
 {% load static %}
 {% block title %}Blood-test request | {{ patient }} | Meridian{% endblock %}
-{% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/clinical_workflow.css' %}?v=20261104a">{% endblock %}
+{% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/clinical_workflow.css' %}?v=20261105a">{% endblock %}
 {% block patient_workspace_heading_actions %}
   <a class="console-button console-button--quiet" href="{{ workspace_return_url }}">{{ workspace_return_label }}</a>
 {% endblock %}
@@ -30,27 +30,29 @@
       </section>
 
       <section class="staff-page-card" aria-labelledby="clinical-review-heading">
-        <header class="staff-page-card__header"><div><h2 id="clinical-review-heading">Clinical review</h2><p>The requesting doctor reviews the report and records their assessment.</p></div></header>
+        <header class="staff-page-card__header"><div><h2 id="clinical-review-heading">Clinical review</h2><p>The requesting doctor marks the blood tests Reviewed, which shows on the patient’s My Tasks.</p></div></header>
         <div class="clinical-panel-body">
+          {% if lab_request.status == 'done' %}<div class="clinical-notice"><p>{{ patient.first_name }} marked these blood tests done{% if lab_request.done_at %} on {{ lab_request.done_at|date:"j M Y" }}{% endif %}.{% if can_undo_done %} If they haven’t had them yet, mark them as not done and {{ patient.first_name }} is asked to mark them done again.{% endif %}</p>{% if can_undo_done %}<form class="clinical-form-actions" method="post" action="{{ request.path }}">{% csrf_token %}<input type="hidden" name="clinical_context" value="{{ clinical_context }}"><button class="console-button console-button--secondary" type="submit" name="action" value="undo_done">Mark as not done</button></form>{% endif %}</div>{% endif %}
+          {% if pauses_on and lab_request.status != 'reviewed' %}<p class="clinical-panel-description">Required by {{ lab_request.due_on|date:"j M Y" }}. If they aren’t marked Reviewed by {{ pauses_on|date:"j M Y" }}, {{ patient.first_name }}’s subscription and shipping pause until they are.</p>{% endif %}
           {% if can_review %}
             <form class="console-form" method="post" action="{{ request.path }}">
               {% csrf_token %}<input type="hidden" name="clinical_context" value="{{ clinical_context }}">
               {{ review_form.non_field_errors }}
               <div class="console-form__field"><label for="{{ review_form.review_note.id_for_label }}">{{ review_form.review_note.label }}</label>{{ review_form.review_note }}{{ review_form.review_note.errors }}<span class="helptext">This is an internal clinical note. It is not displayed in the patient portal.</span></div>
-              <div class="clinical-form-actions"><button class="console-button console-button--primary" type="submit" name="action" value="review">Complete review</button></div>
+              <div class="clinical-form-actions"><button class="console-button console-button--primary" type="submit" name="action" value="review">Mark as reviewed</button></div>
             </form>
           {% elif lab_request.status == 'reviewed' %}
             {{ review_form.non_field_errors }}
             {{ review_form.review_note.errors }}
             <div class="clinical-summary">{% if lab_request.result_summary %}<p>{{ lab_request.result_summary|linebreaksbr }}</p>{% else %}<p class="clinical-summary-empty">This request has been reviewed. No review summary was recorded.</p>{% endif %}</div>
             <p class="clinical-review-metadata">{% if lab_request.reviewed_by %}Reviewed by {{ lab_request.reviewed_by.full_name }}{% else %}Review recorded{% endif %}{% if lab_request.reviewed_at %} · {{ lab_request.reviewed_at|date:"j M Y, H:i" }} SAST{% endif %}.</p>
-          {% elif result %}{{ review_form.non_field_errors }}{{ review_form.review_note.errors }}<p class="clinical-panel-description">The report is awaiting review by {{ lab_request.requested_by.full_name }}. Only the original requesting doctor can complete this review.</p>{% else %}{{ review_form.non_field_errors }}{{ review_form.review_note.errors }}<p class="clinical-panel-description">A report must be uploaded before the requesting doctor can complete the review.</p>{% endif %}
+          {% else %}{{ review_form.non_field_errors }}{{ review_form.review_note.errors }}<p class="clinical-panel-description">Waiting for review by {{ lab_request.requested_by.titled_name }}. Only the doctor who asked for these blood tests can mark them Reviewed.</p>{% endif %}
         </div>
       </section>
     </div>
 
     <aside class="staff-page-card" aria-labelledby="clinical-request-details-heading"><header class="staff-page-card__header"><div><h2 id="clinical-request-details-heading">Request details</h2></div></header><div class="clinical-panel-body"><dl class="clinical-facts">
-      <div><dt>Patient</dt><dd>{{ patient }}</dd></div><div><dt>Practice</dt><dd>{{ company.name }}</dd></div><div><dt>Requested by</dt><dd>{{ lab_request.requested_by.full_name }}</dd></div><div><dt>Requested</dt><dd>{{ lab_request.requested_on|date:"j M Y" }}</dd></div><div><dt>Due</dt><dd>{{ lab_request.due_on|date:"j M Y"|default:"Not specified" }}</dd></div><div><dt>Status</dt><dd>{{ lab_request.get_status_display }}</dd></div>
+      <div><dt>Patient</dt><dd>{{ patient }}</dd></div><div><dt>Practice</dt><dd>{{ company.name }}</dd></div><div><dt>Doctor</dt><dd>{{ lab_request.requested_by.full_name }}</dd></div><div><dt>Requested</dt><dd>{{ lab_request.requested_on|date:"j M Y" }}</dd></div><div><dt>Required by</dt><dd>{{ lab_request.due_on|date:"j M Y"|default:"Not specified" }}</dd></div><div><dt>Status</dt><dd>{{ lab_request.get_status_display }}</dd></div>
     </dl></div></aside>
   </div>
 {% endblock %}

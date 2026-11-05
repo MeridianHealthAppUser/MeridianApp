@@ -1,0 +1,11 @@
+{# The tests for a blood test request, on the Overview's card or in a dialog on the Blood results tab (in_dialog), #}
+{# whose Request blood tests button sits outside the form. Without scripts it posts to the preview. #}
+<form class="record-bloods-form" id="record-bloods-form" method="post" action="{% url 'portal:patient-blood-tests-preview' patient.pk %}" data-bloods-form>
+  {% csrf_token %}
+  <input type="hidden" name="workflow_context" value="{{ bloods_context_token }}">
+  <input type="hidden" name="return_tab" value="{{ workspace_tab }}">
+  <label for="record-bloods-tests">Tests and relevant clinical data</label>
+  <textarea id="record-bloods-tests" name="tests" rows="3" maxlength="300" required placeholder="e.g. FBC, ferritin, TSH">{{ bloods_tests|default:'' }}</textarea>
+  <p class="record-card__note">Fills a PathCare request form with the patient’s details, emails it to them and adds it to the clinical log.</p>
+  {% if not in_dialog %}<button class="console-button console-button--primary" type="submit"{% if pathcare_blocked %} disabled{% endif %}>Request blood tests</button>{% endif %}
+</form>

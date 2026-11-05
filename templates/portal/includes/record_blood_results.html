@@ -23,9 +23,9 @@
   </table></div>
 </section>
 
-<div class="patient-workspace-toolbar"><h2>Blood test requests</h2><div class="patient-workspace-actions">
+<div class="patient-workspace-toolbar" id="blood-test-requests"><h2>Blood test requests</h2><div class="patient-workspace-actions">
   {% if filter_menu %}{% include 'portal/includes/filter_menu.html' %}{% endif %}
-  {% if is_doctor and can_change_record %}<a class="console-button console-button--secondary" href="{% url 'portal:clinical-lab-create' patient.pk %}">Request blood tests</a>{% endif %}
+  {% if can_request_bloods %}<a class="console-button console-button--secondary" href="{% url 'portal:patient-detail' patient.pk %}?tab=overview#record-bloods" data-dialog-open="record-bloods-start" aria-haspopup="dialog">Request blood tests</a>{% endif %}
 </div></div>
 <section class="patient-workspace-panel">
   <div class="patient-workspace-table-wrap"><table class="patient-workspace-table">
@@ -38,6 +38,24 @@
   </table></div>
   {% include 'portal/patient_workspace_pagination.html' %}
 </section>
+
+{% if can_request_bloods %}
+  {# Request blood tests, opened by its button above: the tests here, then the preview to send, which comes back to #}
+  {# this tab. Without scripts the button opens the Overview's card instead. #}
+  <div data-record-bloods>
+    <dialog class="record-dialog" id="record-bloods-start" aria-labelledby="record-bloods-start-title">
+      <h2 id="record-bloods-start-title">Request blood tests</h2>
+      <p class="record-dialog__sub">{{ patient }} &middot; PathCare clinical request form</p>
+      {% if pathcare_blocked %}<p class="record-error" role="alert">{{ pathcare_blocked_message }}</p>{% endif %}
+      {% include 'portal/includes/record_bloods_form.html' with in_dialog=True %}
+      <div class="record-dialog__actions">
+        <a class="console-button console-button--secondary" href="{{ workspace_url }}" data-dialog-close>Cancel</a>
+        <button class="console-button console-button--primary" type="submit" form="record-bloods-form"{% if pathcare_blocked %} disabled{% endif %}>Request blood tests</button>
+      </div>
+    </dialog>
+    {% include 'portal/includes/record_bloods_dialog.html' %}
+  </div>
+{% endif %}
 
 {% if blood_result_form %}
   {# Opened by Record blood result above, or by its link without scripts. It opens by itself after a form error. #}

@@ -14,14 +14,14 @@ from django.utils.decorators import method_decorator
 from django.views import View
 from django.views.decorators.cache import never_cache
 
-from care.clinical import create_lab_request, review_lab_request, save_consultation, submit_lab_result
+from care.clinical import mark_lab_done, review_lab_request, save_consultation, submit_lab_result, undo_lab_done
 from care.models import ClinicalEncounter, LabRequest, LabResult, PathCareRequestForm
 from care.patient_files import read_patient_file
 from care.services import record_audit
 from practices.models import CompanyMembership, Patient
 
 from .clinical_forms import (
-    ClinicalFilterForm, ConsultationForm, LabRequestForm, LabReviewForm, LabUploadForm,
+    ClinicalFilterForm, ConsultationForm, LabReviewForm, LabUploadForm,
     make_clinical_context, validate_clinical_context,
 )
 from .patient_views import patient_page_context
@@ -221,37 +221,15 @@ class LabListView(StaffClinicalView):
 
 
 class LabCreateView(StaffClinicalView):
-    nav_section = 'labs'
-    page_title = 'Request blood tests'
-
-    def display(self, request, patient, form, status=200):
-        from .patient_workspace import patient_workspace_context
-
-        context = self.context(
-            patient=patient, form=form, clinical_context=_form_context(request, self.company, patient, 'lab'),
-        )
-        context.update(patient_workspace_context(request, self.company, self.membership, patient, 'blood-tests'))
-        return render(request, 'portal/clinical_lab_form.html', context, status=status)
+    """The old Request blood tests page. Blood tests are requested on the record's Overview, with the PathCare form and
+    an optional Required by date, so this address takes doctors there."""
+    http_method_names = ('get', 'head', 'options')
 
     def get(self, request, patient_pk):
-        self.require_doctor()
-        return self.display(request, self.patient_for(patient_pk), LabRequestForm())
+        from .patient_workspace import workspace_url
 
-    def post(self, request, patient_pk):
         self.require_doctor()
-        patient, form = self.patient_for(patient_pk), LabRequestForm(request.POST)
-        valid = form.is_valid()
-        try:
-            context = validate_clinical_context(request, self.company, patient, 'lab')
-            if valid:
-                lab_request = create_lab_request(company=self.company, patient=patient, actor=request.user,
-                                                 submission_key=context['submission_key'], request=request,
-                                                 **form.cleaned_data)
-                messages.success(request, 'Blood-test request saved. It is available in the patient portal.')
-                return redirect('portal:clinical-lab-detail', pk=lab_request.pk)
-        except ValidationError as error:
-            _error(form, error)
-        return self.display(request, patient, form, status=400)
+        return redirect(f'{workspace_url(self.patient_for(patient_pk))}#record-bloods')
 
 
 def _result_metadata(lab_request):
@@ -267,12 +245,19 @@ class LabDetailView(StaffClinicalView):
     def display(self, request, lab_request, upload_form=None, review_form=None, status=200):
         from .patient_workspace import patient_workspace_context
 
+        from care.blood_tests import pauses_on
+
         result = _result_metadata(lab_request)
         owner = self.is_doctor and lab_request.requested_by_id == request.user.pk
+        state = lab_request.status
         context = self.context(
-            lab_request=lab_request, patient=lab_request.patient, result=result,
-            can_upload=owner and result is None and lab_request.status == LabRequest.Status.REQUESTED,
-            can_review=owner and result is not None and lab_request.status == LabRequest.Status.UPLOADED,
+            lab_request=lab_request, patient=lab_request.patient, result=result, pauses_on=pauses_on(lab_request),
+            can_upload=owner and result is None and state in (LabRequest.Status.REQUESTED, LabRequest.Status.DONE),
+            # The doctor may have the results from the PathCare portal before the patient marks the tests Done.
+            can_review=owner and (state in (LabRequest.Status.REQUESTED, LabRequest.Status.DONE) or (
+                state == LabRequest.Status.UPLOADED and result is not None)),
+            # Marked done by mistake: the requesting doctor or a Super Admin sets it back. The patient can't.
+            can_undo_done=state == LabRequest.Status.DONE and (owner or self.membership.role == CompanyMembership.Role.SUPER_ADMIN),
             upload_form=upload_form if upload_form is not None else LabUploadForm(),
             review_form=review_form if review_form is not None else LabReviewForm(),
             clinical_context=_form_context(request, self.company, lab_request.patient, 'lab', lab_request),
@@ -289,8 +274,10 @@ class LabDetailView(StaffClinicalView):
     def post(self, request, pk):
         lab_request = get_object_or_404(self.labs(), pk=pk)
         self.check_record(lab_request.patient)
-        self.require_doctor(lab_request.requested_by_id)
         action = request.POST.get('action', '')
+        if action == 'undo_done':
+            return self.undo_done(request, lab_request)
+        self.require_doctor(lab_request.requested_by_id)
         form = LabUploadForm(request.POST, request.FILES) if action == 'upload' else LabReviewForm(request.POST)
         valid = form.is_valid()
         try:
@@ -309,6 +296,18 @@ class LabDetailView(StaffClinicalView):
             _error(form, error)
         return self.display(request, lab_request, status=400,
                             **{'upload_form' if action == 'upload' else 'review_form': form})
+
+    def undo_done(self, request, lab_request):
+        """Mark as not done, for the requesting doctor or a Super Admin (care.clinical.undo_lab_done checks)."""
+        try:
+            validate_clinical_context(request, self.company, lab_request.patient, 'lab', lab_request)
+            undo_lab_done(lab_request=lab_request, actor=request.user, request=request)
+        except ValidationError as error:
+            messages.error(request, ' '.join(error.messages))
+        else:
+            messages.success(request, f'Marked as not done. {lab_request.patient.first_name} is asked to mark them done '
+                                      'once they’ve had them.')
+        return redirect('portal:clinical-lab-detail', pk=lab_request.pk)
 
 
 class PatientLabBase(LoginRequiredMixin, PatientPortalRequiredMixin, View):
@@ -356,7 +355,7 @@ class PatientLabDetailView(PatientLabBase):
         return render(request, 'portal/patient_lab_detail.html', self.context(
             lab_request=lab_request, result=result, pathcare_form=pathcare_form,
             pathcare_form_url=reverse('portal:patient-lab-form', args=[lab_request.pk]) if pathcare_form else '',
-            can_upload=result is None and lab_request.status == LabRequest.Status.REQUESTED,
+            can_upload=result is None and lab_request.status in (LabRequest.Status.REQUESTED, LabRequest.Status.DONE),
             upload_form=form if form is not None else LabUploadForm(),
             clinical_context=_form_context(request, self.patient_company, self.patient, 'lab', lab_request),
             report_download_url=reverse('portal:patient-lab-result-download', args=[lab_request.pk]) if result else '',
@@ -367,6 +366,8 @@ class PatientLabDetailView(PatientLabBase):
 
     def post(self, request, pk):
         lab_request = get_object_or_404(self.labs(), pk=pk)
+        if request.POST.get('action') == 'done':
+            return self.mark_done(request, lab_request)
         form = LabUploadForm(request.POST, request.FILES)
         valid = form.is_valid()
         try:
@@ -380,6 +381,19 @@ class PatientLabDetailView(PatientLabBase):
         except ValidationError as error:
             _error(form, error)
         return self.display(request, lab_request, form, status=400)
+
+    def mark_done(self, request, lab_request):
+        """Done, from this page or from the task on My Tasks, which it goes back to."""
+        try:
+            validate_clinical_context(request, self.patient_company, self.patient, 'lab', lab_request)
+            mark_lab_done(lab_request=lab_request, actor=request.user, request=request)
+        except ValidationError as error:
+            messages.error(request, ' '.join(error.messages))
+        else:
+            messages.success(request, 'Thank you. Your doctor has been asked to review your blood tests.')
+        if request.POST.get('next') == 'tasks':
+            return redirect('portal:patient-treatment')
+        return redirect('portal:patient-lab-detail', pk=lab_request.pk)
 
 
 def _download(request, lab_request):

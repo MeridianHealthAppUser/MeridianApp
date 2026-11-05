@@ -39,16 +39,21 @@
     if (!field.value.trim()) return;  // The browser asks for the required text.
     event.preventDefault();
     fill(field.value.trim());
+    // On the Blood results tab the tests are typed in a dialog of their own, which the preview takes over from.
+    card.closest('dialog')?.close();
     if (dialog.open) dialog.close();
     dialog.showModal();
     preview();
   });
   // A preview the server opened (without scripts) shows the form too.
   if (dialog.hasAttribute('open') && field.value.trim()) preview();
+  // Request blood tests on the Blood results tab comes here, ready to type the tests in.
+  else if (window.location.hash === '#record-bloods') field.focus();
 })();
 
 (() => {
-  const root = document.querySelector('[data-record-overview], [data-record-weight]');
+  // The Blood results tab has only the Request blood tests dialogs.
+  const root = document.querySelector('[data-record-overview], [data-record-weight], [data-record-bloods]');
   if (!root) return;
   root.classList.add('is-enhanced');
 

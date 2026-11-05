@@ -71,12 +71,15 @@
           <div><dt>{{ row.label }}</dt><dd>{% include 'portal/includes/record_summary_value.html' with field=row.field label=row.label kind='text' current=row.value display=row.value|default:'Not recorded' %}</dd></div>
         {% endfor %}
       </dl>
-      <h3 class="record-card__subhead">Safety flags</h3>
-      <dl class="record-rows record-rows--summary">
-        {% for flag in summary_flags %}
-          <div><dt>{{ flag.label }}</dt><dd>{% include 'portal/includes/record_summary_value.html' with field=flag.field label=flag.label kind='select' current=flag.value display=flag.display choices=flag.choices level=flag.level %}</dd></div>
-        {% endfor %}
-      </dl>
+      {# The screening questionnaire turns away anyone with a safety flag, so they show only when one is raised. #}
+      {% if summary_has_flag %}
+        <h3 class="record-card__subhead">Safety flags</h3>
+        <dl class="record-rows record-rows--summary">
+          {% for flag in summary_flags %}
+            <div><dt>{{ flag.label }}</dt><dd>{% include 'portal/includes/record_summary_value.html' with field=flag.field label=flag.label kind='select' current=flag.value display=flag.display choices=flag.choices level=flag.level %}</dd></div>
+          {% endfor %}
+        </dl>
+      {% endif %}
       <p class="record-card__foot">{% if summary_seeded_from %}Populated from the screening assessment on {{ summary_seeded_from|date:'j M Y' }}{% else %}No screening assessment on record{% endif %} &middot; {% if summary_edit_count %}{{ summary_edit_count }} edit{{ summary_edit_count|pluralize }} since{% else %}unedited since{% endif %}</p>
       {% if summary_edits %}
         <ul class="record-edits" aria-label="Edit history">
@@ -131,14 +134,7 @@
       <section class="staff-page-card record-card" id="record-bloods" aria-labelledby="record-bloods-heading">
         <h2 class="record-card__eyebrow" id="record-bloods-heading">Request blood tests</h2>
         {% if pathcare_blocked %}<p class="record-error" role="alert">{{ pathcare_blocked_message }}</p>{% endif %}
-        <form class="record-bloods-form" method="post" action="{% url 'portal:patient-blood-tests-preview' patient.pk %}" data-bloods-form>
-          {% csrf_token %}
-          <input type="hidden" name="workflow_context" value="{{ bloods_context_token }}">
-          <label for="record-bloods-tests">Tests and relevant clinical data</label>
-          <textarea id="record-bloods-tests" name="tests" rows="3" maxlength="300" required placeholder="e.g. FBC, ferritin, TSH">{{ bloods_tests|default:'' }}</textarea>
-          <p class="record-card__note">Fills a PathCare request form with the patient’s details, emails it to them and adds it to the clinical log.</p>
-          <button class="console-button console-button--primary" type="submit"{% if pathcare_blocked %} disabled{% endif %}>Request blood tests</button>
-        </form>
+        {% include 'portal/includes/record_bloods_form.html' %}
       </section>
     {% endif %}
   </div>
@@ -167,41 +163,7 @@
   </dialog>
 {% endif %}
 
-{% if can_request_bloods and not pathcare_blocked %}
-  <dialog class="record-dialog record-dialog--wide" id="record-bloods-dialog" aria-labelledby="record-bloods-title"{% if open_dialog == 'bloods' %} open{% endif %}>
-    <h2 id="record-bloods-title">Request blood tests</h2>
-    <p class="record-dialog__sub">{{ patient }} &middot; PathCare clinical request form</p>
-    <div class="record-bloods-preview">
-      <div class="record-bloods-preview__form">
-        <iframe name="record-bloods-frame" class="record-bloods-frame" title="The filled PathCare form" data-bloods-frame></iframe>
-        <p class="record-dialog__help"><button class="record-link-button" type="submit" form="record-bloods-preview-form" formtarget="_blank">Open the filled form in a new tab</button></p>
-      </div>
-      <dl class="record-rows">
-        {% for row in pathcare_summary %}<div><dt>{{ row.label }}</dt><dd{% if row.missing %} class="is-rose"{% endif %}>{% if row.missing %}Missing{% else %}{{ row.value }}{% endif %}</dd></div>{% endfor %}
-        <div><dt>Medical aid no.</dt><dd class="is-muted">Left blank</dd></div>
-        <div><dt>Tests</dt><dd data-bloods-tests-preview>{{ bloods_tests|default:''|linebreaksbr }}</dd></div>
-      </dl>
-    </div>
-    {% if pathcare_has_missing %}<p class="record-dialog__help">A missing value leaves that box blank. You can still send the form.</p>{% endif %}
-    <p class="record-dialog__help">The medical aid number isn’t stored. You or the patient can write it on the form.</p>
-    <form id="record-bloods-preview-form" method="post" action="{% url 'portal:patient-blood-tests-preview-pdf' patient.pk %}" target="record-bloods-frame" data-bloods-preview-form>
-      {% csrf_token %}
-      <input type="hidden" name="workflow_context" value="{{ bloods_context_token }}">
-      <input type="hidden" name="tests" value="{{ bloods_tests|default:'' }}" data-bloods-tests-input>
-    </form>
-    <form method="post" action="{% url 'portal:patient-blood-tests' patient.pk %}" data-bloods-send-form>
-      {% csrf_token %}
-      <input type="hidden" name="workflow_context" value="{{ bloods_context_token }}">
-      <input type="hidden" name="submission_key" value="{{ bloods_submission_key }}">
-      <input type="hidden" name="tests" value="{{ bloods_tests|default:'' }}" data-bloods-tests-input>
-      <div class="record-dialog__actions">
-        <a class="console-button console-button--secondary" href="{{ workspace_url }}#record-bloods" data-dialog-close>Cancel</a>
-        {% if patient_email %}<button class="console-button console-button--primary" type="submit">Email to {{ patient_email }}</button>
-        {% else %}<span class="record-error">This patient has no email address on file.</span>{% endif %}
-      </div>
-    </form>
-  </dialog>
-{% endif %}
+{% include 'portal/includes/record_bloods_dialog.html' %}
 
 {% if can_prescribe %}
   {# Initiate prescription: a medicine, one of its starting plans from the Pharmacy catalogue, and how long it runs. #}

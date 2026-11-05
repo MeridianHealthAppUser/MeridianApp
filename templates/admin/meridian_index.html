@@ -10,10 +10,15 @@
     {% include 'includes/practice_role_switcher.html' %}
     <section class="md-welcome" aria-labelledby="overview-heading">
         <div>
+            <h1 id="overview-heading">Meridian Health</h1>
+        </div>
+        {% comment %}
+        <div>
             <p class="md-eyebrow"><span class="md-dot" aria-hidden="true"></span> {{ meridian_dashboard.scope_label }}</p>
             <h1 id="overview-heading">A clearer picture.<br><span>Better care.</span></h1>
             <p class="md-welcome__description">Your people, appointments and practice activity, together in one place.</p>
         </div>
+        {% endcomment %}
         <div class="md-welcome__aside">
             <span class="md-welcome__symbol" aria-hidden="true"><i class="fas fa-heartbeat"></i></span>
             <p class="md-welcome__caption">THE PRACTICE AT A GLANCE</p>

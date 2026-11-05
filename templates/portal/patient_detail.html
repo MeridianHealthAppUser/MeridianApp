@@ -48,7 +48,7 @@
                 <a class="console-button console-button--secondary" href="{% url 'portal:treatment-authorisations' %}?patient={{ patient.pk }}">Authorisations</a>
                 {% if can_add_clinical_note %}
                   <a class="console-button console-button--primary" href="{% url 'portal:clinical-consultation-create' patient.pk %}">New consultation note</a>
-                  <a class="console-button console-button--primary" href="{% url 'portal:clinical-lab-create' patient.pk %}">Request blood tests</a>
+                  <a class="console-button console-button--primary" href="{% url 'portal:patient-detail' patient.pk %}?tab=overview#record-bloods">Request blood tests</a>
                   <a class="console-button console-button--primary" href="{% url 'portal:treatment-authorisation-create' patient.pk %}">Authorise treatment</a>
                 {% endif %}
               </div>

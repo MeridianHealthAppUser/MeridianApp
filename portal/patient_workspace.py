@@ -265,6 +265,11 @@ def workspace_tab_context(request, company, membership, patient, tab, **override
         from .blood_result_views import blood_results_context
 
         context.update(blood_results_context(request, company, membership, patient, context, **overrides))
+        if membership.is_prescriber and context['can_change_record']:
+            # A doctor requests blood tests here too, in a dialog that comes back to this tab.
+            from .record_overview import bloods_context
+
+            context.update(bloods_context(request, company, patient))
         context.update(paginated(request, patient, tab, scoped(LabRequest, company, patient).select_related('requested_by').defer('result_summary').order_by('-requested_on', '-pk'), LabRequest.Status.choices))
     elif tab == 'notes':
         # Signed consult notes and general notes, newest first: the same list as Patient notes in a conversation.

@@ -18,7 +18,7 @@
     <link rel="stylesheet" href="{% static 'css/base.css' %}?v=20261104a">
     {% if page_navigation_config %}<link rel="stylesheet" href="{% static 'css/page_navigation.css' %}?v=20261104a"><script src="{% static 'js/page_lifecycle.js' %}" defer></script>{% endif %}
     {% block extra_css %}{% endblock %}
-    {% if is_workspace_page %}<link rel="stylesheet" href="{% static 'css/workspace_polish.css' %}?v=20261104a"><script src="{% static 'js/workspace_polish.js' %}" defer></script>{% endif %}
+    {% if is_workspace_page %}<link rel="stylesheet" href="{% static 'css/workspace_polish.css' %}?v=20261105b"><script src="{% static 'js/workspace_polish.js' %}?v=20261105a" defer></script>{% endif %}
     {% if user.is_authenticated %}<link rel="stylesheet" href="{% static 'css/account_menu.css' %}?v=20261104a"><script src="{% static 'js/account_menu.js' %}" defer></script><script src="{% static 'js/theme.js' %}?v=20261024a" defer></script>{% endif %}
     {% if active_membership.role == 'super_admin' and not is_patient_portal %}<link rel="stylesheet" href="{% static 'css/demo_data.css' %}?v=20261104a"><script src="{% static 'js/demo_data.js' %}?v=20261103a" defer></script>{% endif %}
     {% if can_switch_practice_role %}<link rel="stylesheet" href="{% static 'css/practice_role_switcher.css' %}?v=20261104a">{% endif %}

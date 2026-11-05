@@ -212,8 +212,15 @@
 .record-bloods-preview { align-items: start; display: grid; gap: 1rem; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); margin-top: .9rem; }
 .record-bloods-frame { background: var(--c-f3f6f7); border: 1px solid var(--console-line); border-radius: .6rem; display: block; height: 22rem; width: 100%; }
 .record-bloods-preview .record-rows { margin: 0; }
+.record-bloods-due { align-items: start; display: grid; gap: 1rem; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); margin-top: .9rem; }
+.record-bloods-due .console-form__field { margin: .7rem 0 0; }
+/* Styled like every other date on the platform (.console-form input, console.css). */
+.record-bloods-due input[type="date"] { background: var(--c-ffffff); border: 1px solid var(--c-cfdfe5); border-radius: .55rem; color: var(--console-ink); font: inherit; font-size: .84rem; min-width: 0; padding: .62rem .7rem; width: 100%; }
+.record-bloods-due input[type="date"]:focus { border-color: var(--console-teal); box-shadow: 0 0 0 3px var(--c-1d4a5f-120); outline: none; }
+.record-bloods-next .record-dialog__help:first-of-type { margin-top: .4rem; }
 .record-rows .is-muted { color: var(--c-8d9ea7); font-weight: 500; }
-.record-link-button { background: none; border: 0; color: var(--console-teal-dark); cursor: pointer; font: inherit; font-weight: 700; padding: 0; text-decoration: underline; text-underline-offset: .15em; }
+.record-bloods-open.console-button { margin-top: .6rem; }
+.record-bloods-open svg { flex: 0 0 auto; }
 
 @media (max-width: 62.5rem) {
   .record-overview { grid-template-columns: 1fr; }
@@ -221,7 +228,7 @@
 
 @media (max-width: 40rem) {
   .record-messages { padding-inline: .85rem; }
-  .record-bloods-preview { grid-template-columns: 1fr; }
+  .record-bloods-preview, .record-bloods-due { grid-template-columns: 1fr; }
   .record-bloods-frame { height: 16rem; }
   .record-log__header, .record-card { padding-inline: .85rem; }
   .record-log__list { padding-inline: .85rem; }

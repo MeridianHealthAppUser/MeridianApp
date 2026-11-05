@@ -1,0 +1,6 @@
+{% extends 'emails/base.txt' %}{% block content %}Hello{% if greeting %} {{ greeting }}{% endif %},
+
+{{ doctor }} asked for your blood tests ({{ tests }}) to be done by today, {{ due_on|date:"l j F" }}.
+
+If they aren’t done and reviewed by your doctor by {{ pauses_on|date:"l j F" }}, your subscription and deliveries will be paused until they are. Once you’ve had them, mark them Done on My Tasks so your doctor can review them.
+{{ url }}{% endblock %}

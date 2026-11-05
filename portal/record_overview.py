@@ -37,7 +37,7 @@ LEAD_KINDS = {'consult', 'note'}
 def signed_consults(company, patient):
     """Signed consult notes, newest first: log entries, and the dots on the weight chart."""
     return [{'id': f'consult-{encounter.pk}', 'kind': 'consult', 'at': encounter.occurred_at,
-             'by': (encounter.signed_by or encounter.clinician).full_name, 'tag': '',
+             'by': (encounter.signed_by or encounter.clinician).titled_name, 'tag': '',
              'text': encounter.clinical_summary, 'consult_id': encounter.pk}
             for encounter in ClinicalEncounter.objects.for_company(company).filter(
                 patient=patient, status=ClinicalEncounter.Status.SIGNED,
@@ -54,14 +54,14 @@ def clinical_log(company, patient, membership=None, viewer=None):
         visible, patient=patient, signed_encounter__isnull=True,
     ).select_related('author').order_by('-created_at', '-pk')[:LOG_LIMIT]:
         entries.append({'id': f'note-{note.pk}', 'kind': 'note', 'at': note.created_at,
-                        'by': note.author.full_name if note.author_id else '', 'private': note.is_private,
+                        'by': note.author.titled_name if note.author_id else '', 'private': note.is_private,
                         'tag': '' if note.note_type == ClinicalNote.NoteType.GENERAL else note.get_note_type_display(),
                         'text': note.body})
     for result in BloodResult.objects.for_company(company).filter(patient=patient).select_related(
         'recorded_by', 'file',
     ).defer('file__content').order_by('-created_at', '-pk')[:LOG_LIMIT]:
         entries.append({'id': f'result-{result.pk}', 'kind': 'result', 'at': result.created_at,
-                        'by': result.recorded_by.full_name if result.recorded_by_id else '', 'tag': 'Blood results',
+                        'by': result.recorded_by.titled_name if result.recorded_by_id else '', 'tag': 'Blood results',
                         'result': result,
                         'text': f'{result.lab_name}, taken {date_format(result.taken_on, "j M Y")}: {result.results}'})
     for lab in LabRequest.objects.for_company(company).filter(patient=patient).select_related(
@@ -69,9 +69,10 @@ def clinical_log(company, patient, membership=None, viewer=None):
     ).defer('result_summary').order_by('-created_at', '-pk')[:LOG_LIMIT]:
         form = getattr(lab, 'pathcare_form', None)
         entries.append({'id': f'blood-{lab.pk}', 'kind': 'blood', 'at': lab.created_at,
-                        'by': lab.requested_by.full_name if lab.requested_by_id else '', 'automatic': not lab.requested_by_id,
+                        'by': lab.requested_by.titled_name if lab.requested_by_id else '', 'automatic': not lab.requested_by_id,
                         'tag': 'Blood form', 'form': form,
-                        'text': f'PathCare form for {form.tests} sent.' if form else f'Blood form for {lab.panel_name} sent.'})
+                        'text': (f'PathCare form for {form.tests} sent.' if form else f'Blood form for {lab.panel_name} sent.')
+                                + (f' Required by {date_format(lab.due_on, "j M Y")}.' if lab.due_on else '')})
     # A starting plan is one line, on its first step.
     for authorization in TreatmentAuthorization.objects.for_company(company).filter(
         patient=patient, product__company=company,
@@ -79,7 +80,7 @@ def clinical_log(company, patient, membership=None, viewer=None):
         text = authorization.log_text or (
             f'Prescription recorded: {prescription_label(authorization)}, valid to {authorization.expires_on:%-d %b %Y}.')
         entries.append({'id': f'prescription-{authorization.pk}', 'kind': 'prescription', 'at': authorization.created_at,
-                        'by': authorization.prescribed_by.full_name, 'tag': 'Prescription', 'text': text})
+                        'by': authorization.prescribed_by.titled_name, 'tag': 'Prescription', 'text': text})
     entries.sort(key=lambda entry: entry['at'], reverse=True)
     for entry in entries:
         entry['lead'] = entry['kind'] in LEAD_KINDS

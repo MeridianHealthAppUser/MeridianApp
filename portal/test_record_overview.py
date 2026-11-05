@@ -101,8 +101,8 @@ class RecordOverviewTests(TestCase):
         # Valid but expiring within 30 days.
         self.assertContains(response, f'Prescribed to {self.prescription.expires_on.day} {self.prescription.expires_on:%b}')
         self.assertContains(response, 'Renewal due')
-        self.assertContains(response, 'Cape Town')
-        # Title, Age, Location, Prescribing doctor (no pen for a doctor) and ID number.
+        # Title, Age, Prescribing doctor (no pen for a doctor) and ID number. Location isn't shown, nor sent in the page.
+        self.assertNotContains(response, 'Cape Town')
         for fact in ('<dt>Title</dt>', '<dt>Age</dt><dd>34</dd>', '<dt>Prescribing doctor</dt>', '<dt>ID number</dt><dd>9201015800087</dd>'):
             self.assertContains(response, fact, html=False)
         self.assertNotContains(response, 'Date of birth')
@@ -121,6 +121,15 @@ class RecordOverviewTests(TestCase):
         self.assertEqual([dot['id'] for dot in chart['consults']], [self.consult.pk])
         self.assertEqual(len(chart['bars']), 1)
         self.assertEqual(chart['goal_pill'], '')
+
+    def test_log_entries_name_the_clinician_with_their_title(self):
+        get_user_model().objects.filter(pk=self.doctor.pk).update(title='DR')
+        self.login(self.doctor)
+        names = {entry['by'] for entry in self.page().context['clinical_log']}
+        self.assertEqual(names, {'Dr Sam Marchant'})
+        # Without a title, just their name.
+        get_user_model().objects.filter(pk=self.doctor.pk).update(title='')
+        self.assertEqual({entry['by'] for entry in self.page().context['clinical_log']}, {'Sam Marchant'})
 
     def test_dispensed_filter_and_history_without_a_consent_card(self):
         self.login(self.doctor)
@@ -160,6 +169,12 @@ class RecordOverviewTests(TestCase):
         self.assertEqual(response.context['open_dialog'], 'change')
         self.assertContains(response, 'Use Renew to extend it', status_code=400)
         self.assertEqual(TreatmentAuthorization.objects.count(), 1)
+
+    def test_safety_flags_show_in_summary_data_only_when_one_is_raised(self):
+        self.login(self.doctor)
+        self.assertNotContains(self.page(), '<h3 class="record-card__subhead">Safety flags</h3>', html=True)
+        PatientClinicalSummary.objects.create(company=self.company, patient=self.patient, pancreatitis='yes')
+        self.assertContains(self.page(), '<h3 class="record-card__subhead">Safety flags</h3>', html=True)
 
     def test_a_safety_flag_needs_the_tick(self):
         PatientClinicalSummary.objects.create(company=self.company, patient=self.patient, pancreatitis='yes')

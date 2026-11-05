@@ -8,7 +8,7 @@ timeline shows are the catalogue dose's reference prices, labelled as such.
 from datetime import timedelta
 from decimal import Decimal, InvalidOperation
 
-from django.db.models import Case, DateTimeField, DurationField, ExpressionWrapper, F, IntegerField, OuterRef, Subquery, Value, When
+from django.db.models import Case, DateTimeField, DurationField, ExpressionWrapper, F, IntegerField, OuterRef, Q, Subquery, Value, When
 from django.db.models.functions import Cast
 from django.urls import reverse
 from django.utils import timezone
@@ -26,6 +26,7 @@ from video.access import attach_video_join
 # still time to book one. Weight check-ins are prompted weekly.
 RENEWAL_WINDOW_DAYS = 45
 WEIGHT_PROMPT_DAYS = 7
+REVIEWED_TASK_DAYS = 14  # Reviewed blood tests stay on My Tasks this long, marked Reviewed.
 
 
 def current_plan(company, patient):
@@ -341,9 +342,12 @@ def next_delivery(company, patient):
     ).order_by('scheduled_for', 'pk').first()
 
 
-def open_lab_requests(company, patient):
-    return list(LabRequest.objects.for_company(company).filter(
-        patient=patient, status=LabRequest.Status.REQUESTED,
+def task_lab_requests(company, patient):
+    """Blood tests on My Tasks: still to do, waiting for the doctor's review, and reviewed in the last two weeks."""
+    reviewed_since = timezone.now() - timedelta(days=REVIEWED_TASK_DAYS)
+    return list(LabRequest.objects.for_company(company).filter(patient=patient).filter(
+        Q(status__in=(LabRequest.Status.REQUESTED, LabRequest.Status.DONE, LabRequest.Status.UPLOADED))
+        | Q(status=LabRequest.Status.REVIEWED, reviewed_at__gte=reviewed_since),
     ).select_related('requested_by').order_by('due_on', 'requested_on', 'pk')[:5])
 
 
@@ -413,9 +417,12 @@ def medical_information(*, profile, intake, weight, recorded_height=None, start_
     return rows
 
 
-def _task(title, body, actions, *, urgent=False):
-    return {'title': title, 'body': body, 'urgent': urgent,
-            'actions': [{'label': label, 'url': url, 'primary': primary} for label, url, primary in actions]}
+def _task(title, body, actions, *, urgent=False, pill='', settled=False):
+    """pill replaces To do / Action needed; a settled task needs nothing from the patient and isn't counted as open.
+    An action with fields is a button that posts them."""
+    return {'title': title, 'body': body, 'urgent': urgent, 'pill': pill, 'settled': settled,
+            'actions': [{'label': label, 'url': url, 'primary': primary, 'post': post[0] if post else None}
+                        for label, url, primary, *post in actions]}
 
 
 def billing_tasks(plan):
@@ -439,8 +446,9 @@ def billing_tasks(plan):
                   [(summary['action'], reverse('portal:patient-billing'), True)], urgent=summary['state'] != 'pending')]
 
 
-def patient_tasks(*, authorization, plan, consult, weight, labs):
-    """What needs doing, most urgent first. Each task disappears once its record changes."""
+def patient_tasks(*, authorization, plan, consult, weight, labs, lab_context=None):
+    """What needs doing, most urgent first. Each task disappears once its record changes. lab_context(lab) signs the
+    Done button of blood tests still to do."""
     today = timezone.localdate()
     book_url = reverse('portal:patient-appointments') + '?book=1'
     tasks = []
@@ -460,14 +468,36 @@ def patient_tasks(*, authorization, plan, consult, weight, labs):
             'can review your treatment.',
             [('Book a consult', book_url, True)], urgent=True,
         ))
+    # Blood tests: Done once the patient has had them, then the doctor's review (care.blood_tests).
+    from care.blood_tests import pauses_on
+
     for lab in labs:
-        due = f' Please have it done by {date_format(lab.due_on, "j F")}.' if lab.due_on else ''
-        tasks.append(_task(
-            'Get your blood tests done',
-            f'{lab.requested_by.full_name} asked for {lab.panel_name} on {date_format(lab.requested_on, "j F")}.{due} '
-            'When you have the report, upload it so your doctor can review it.',
-            [('Upload your results', reverse('portal:patient-lab-detail', args=[lab.pk]), True)],
-        ))
+        doctor, url = lab.requested_by.titled_name, reverse('portal:patient-lab-detail', args=[lab.pk])
+        if lab.status == LabRequest.Status.REVIEWED:
+            tasks.append(_task(
+                'Your blood tests have been reviewed',
+                f'{doctor} reviewed your blood tests ({lab.panel_name}) on {date_format(timezone.localtime(lab.reviewed_at), "j F")}.',
+                [('View', url, False)], pill='Reviewed', settled=True,
+            ))
+        elif lab.status in (LabRequest.Status.DONE, LabRequest.Status.UPLOADED):
+            tasks.append(_task(
+                'Your blood tests are waiting for review',
+                f'You’ve had your blood tests ({lab.panel_name}). {doctor} has been asked to review them.',
+                [('View', url, False)], pill='Review pending', settled=True,
+            ))
+        else:
+            due = (f' Please have them done by {date_format(lab.due_on, "j F")}. If they aren’t done and reviewed by '
+                   f'{date_format(pauses_on(lab), "j F")}, your subscription and deliveries are paused until they are.'
+                   if lab.due_on else '')
+            actions = [('View request', url, False)]
+            if lab_context is not None:
+                actions.insert(0, ('Mark as done', url, True, {'clinical_context': lab_context(lab), 'action': 'done', 'next': 'tasks'}))
+            tasks.append(_task(
+                'Get your blood tests done',
+                f'{doctor} asked for {lab.panel_name} on {date_format(lab.requested_on, "j F")}.{due} Once you’ve had '
+                'them, mark them Done so your doctor can review them.',
+                actions, urgent=bool(lab.due_on and lab.due_on <= today),
+            ))
     if weight is None or (today - weight.recorded_on).days >= WEIGHT_PROMPT_DAYS:
         tasks.append(_task(
             'Log this week’s weight',

@@ -256,12 +256,11 @@ def submit_lab_result(*, lab_request, actor, filename, content, request=None):
         if result.sha256 == digest:
             return result
         raise ValidationError('A report has already been uploaded. The original cannot be overwritten; contact your clinician.')
-    if lab.status != LabRequest.Status.REQUESTED:
+    # A patient who marked the tests Done can still add the report, for the review already asked of the doctor.
+    if lab.status not in (LabRequest.Status.REQUESTED, LabRequest.Status.DONE):
         raise ValidationError('This request no longer accepts a new report. Contact your clinician.')
     doctor = lab.requested_by
-    if not doctor.is_active or not CompanyMembership.objects.filter(
-        company=company, user=doctor, is_active=True, clinician_type__in=CompanyMembership.PRESCRIBER_TYPES,
-    ).exists():
+    if not _doctor_is_active(company, doctor):
         raise ValidationError('The requesting clinician is no longer active. Contact your practice before uploading.')
     file = store_patient_file(company=company, patient=patient, kind=PatientFile.Kind.LAB_RESULT, filename=filename,
                               content=content, uploaded_by=actor)
@@ -271,7 +270,8 @@ def submit_lab_result(*, lab_request, actor, filename, content, request=None):
     )
     result.full_clean()
     result.save()
-    lab.review_task = _new_workflow_task(company, patient, doctor, 'Review laboratory results')
+    if lab.review_task_id is None:
+        lab.review_task = _new_workflow_task(company, patient, doctor, 'Review laboratory results')
     lab.status = LabRequest.Status.UPLOADED
     lab.full_clean()
     lab.save(update_fields=('status', 'review_task', 'updated_at'))
@@ -283,29 +283,90 @@ def submit_lab_result(*, lab_request, actor, filename, content, request=None):
     return result
 
 
+def _doctor_is_active(company, doctor):
+    return doctor.is_active and CompanyMembership.objects.filter(
+        company=company, user=doctor, is_active=True, clinician_type__in=CompanyMembership.PRESCRIBER_TYPES,
+    ).exists()
+
+
 @transaction.atomic
-def review_lab_request(*, lab_request, actor, review_note, request=None):
+def mark_lab_done(*, lab_request, actor, request=None):
+    """The patient has had the blood tests (the lab doesn't usually send them a report): the requesting doctor gets a
+    task to review them, and the patient's task shows the review is pending."""
+    company, patient, lab = _locked_lab(lab_request, actor)
+    if actor.pk != patient.user_id:
+        raise PermissionDenied('Only the patient marks their blood tests done.')
+    if lab.status == LabRequest.Status.DONE:
+        return lab
+    if lab.status != LabRequest.Status.REQUESTED:
+        raise ValidationError('Your doctor already has these blood tests.')
+    if not _doctor_is_active(company, lab.requested_by):
+        raise ValidationError('The doctor who asked for these blood tests is no longer active. Contact your practice.')
+    lab.review_task = _new_workflow_task(company, patient, lab.requested_by, 'Review blood tests')
+    lab.status, lab.done_at = LabRequest.Status.DONE, timezone.now()
+    lab.full_clean()
+    lab.save(update_fields=('status', 'done_at', 'review_task', 'updated_at'))
+    record_audit(company=company, actor=actor, patient=patient, action='lab_request.done', target=lab, request=request,
+                 metadata={'review_task_id': lab.review_task_id})
+    _patient_event(lab, 'Blood tests done', 'Your doctor has been asked to review them.')
+    return lab
+
+
+@transaction.atomic
+def undo_lab_done(*, lab_request, actor, request=None):
+    """Mark as not done: the patient marked the blood tests done before having them. The requesting doctor or a Super
+    Admin sets them back to requested (patients can't): the review task is cancelled and the patient's task asks them
+    to mark them done again. A Required by pause is unchanged; only a review lifts it."""
+    company, patient, lab = _locked_lab(lab_request, actor)
+    if not CompanyMembership.objects.filter(company=company, user=actor, is_active=True,
+                                            role=CompanyMembership.Role.SUPER_ADMIN).exists():
+        _require_doctor(company, actor, lab.requested_by_id)
+    if lab.status == LabRequest.Status.REQUESTED:
+        return lab
+    if lab.status != LabRequest.Status.DONE:
+        raise ValidationError('Only blood tests marked done and not yet reviewed can be marked as not done.')
+    task = lab.review_task_id and ClinicalTask.objects.select_for_update().filter(
+        pk=lab.review_task_id, company=company, patient=patient).first()
+    if task and task.status not in (ClinicalTask.Status.DONE, ClinicalTask.Status.CANCELLED):
+        task.status, task.completed_at = ClinicalTask.Status.CANCELLED, None
+        task.save(update_fields=('status', 'completed_at', 'updated_at'))
+    lab.status, lab.done_at, lab.review_task = LabRequest.Status.REQUESTED, None, None
+    lab.full_clean()
+    lab.save(update_fields=('status', 'done_at', 'review_task', 'updated_at'))
+    record_audit(company=company, actor=actor, patient=patient, action='lab_request.done_undone', target=lab,
+                 request=request, metadata={'review_task_id': task.pk if task else None})
+    _patient_event(lab, 'Blood tests not done yet', 'Your practice marked your blood tests as not done. Mark them done '
+                   'once you’ve had them.')
+    return lab
+
+
+@transaction.atomic
+def review_lab_request(*, lab_request, actor, review_note='', request=None):
+    """The requesting doctor marks the blood tests Reviewed, with an optional note. Doctors often read results on the
+    PathCare portal, so this needn't wait for the patient to mark them Done. It lifts a pause they caused."""
     company, patient, lab = _locked_lab(lab_request, actor)
     _require_doctor(company, actor, lab.requested_by_id)
-    review_note = _text(review_note, label='The review note')
+    review_note = _text(review_note, label='The review note', required=False)
     if lab.status == LabRequest.Status.REVIEWED:
         if lab.reviewed_by_id == actor.pk and lab.result_summary == review_note:
             return lab
         raise ValidationError('This laboratory review is immutable. Record a separate follow-up note for a correction.')
-    if lab.status != LabRequest.Status.UPLOADED or not LabResult.objects.filter(lab_request=lab, company=company, patient=patient).exists():
-        raise ValidationError('Upload the laboratory report before completing its review.')
-    if lab.review_task_id is None:
-        raise ValidationError('This request has no linked review task. Contact your practice.')
+    if lab.status == LabRequest.Status.UPLOADED and not LabResult.objects.filter(lab_request=lab, company=company, patient=patient).exists():
+        raise ValidationError('The uploaded report is missing. Contact your practice.')
     lab.result_summary = review_note
     lab.reviewed_by = actor
     lab.reviewed_at = timezone.now()
     lab.status = LabRequest.Status.REVIEWED
     lab.full_clean()
-    lab.review_task = _complete_workflow_task(lab.review_task, company, patient, actor, request)
+    if lab.review_task_id is not None:
+        lab.review_task = _complete_workflow_task(lab.review_task, company, patient, actor, request)
     lab.save(update_fields=('result_summary', 'reviewed_by', 'reviewed_at', 'status', 'updated_at'))
+    from .blood_tests import lift_pause
+
+    lift_pause(lab)
     record_audit(
         company=company, actor=actor, patient=patient, action='lab_request.reviewed', target=lab, request=request,
         metadata={'review_task_id': lab.review_task_id},
     )
-    _patient_event(lab, 'Laboratory report reviewed', 'Your requesting clinician has reviewed your report.')
+    _patient_event(lab, 'Blood tests reviewed', 'Your doctor has reviewed your blood tests.')
     return lab

@@ -319,6 +319,24 @@ class StaffAppointmentDetailView(LoginRequiredMixin, StaffCompanyRequiredMixin, 
     pass
 
 
+class StaffAppointmentCalendarView(StaffAppointmentDetailView):
+    """Download on a doctor's Calendar & Bookings: the appointment for their own calendar, without the patient's name
+    (portal.calendar_files). The link asks them to sign in to Meridian for who it's with."""
+
+    http_method_names = ('get', 'head', 'options')
+
+    def get(self, request, pk):
+        from .calendar_files import calendar_file
+
+        appointment = self.resolve(pk)
+        kind = appointment.get_appointment_type_display()
+        return calendar_file(
+            appointment, product='Staff appointments', summary=f'Meridian: {kind}',
+            description=f'{kind} at {self.company.name}. Open it in Meridian for the patient and any changes.',
+            url=request.build_absolute_uri(reverse('portal:appointment-detail', args=[appointment.pk])),
+        )
+
+
 class StaffAppointmentTimeView(StaffAppointmentDetailView):
     """Change time, from the appointment's page: moves it and emails the patient and clinician."""
 

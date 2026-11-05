@@ -246,6 +246,11 @@ Billing (`care/billing.py`) and The Courier Guy (`care/courier.py`) were added o
   that once the parcel has been collected.
 - `TCG_WEBHOOK_TOKEN` enables the tracking callback. See [Courier Guy webhook setup](COURIER_WEBHOOK.md) for the
   exact live URL, provider setup, payload examples, response codes and delivery behaviour.
+- Schedule `python manage.py run_blood_test_checks` once a day (the `blood-test-checks` job). On a blood-test
+  request's Requested by date it emails a patient who hasn't marked the tests Done that their subscription will be
+  paused, and it holds the parcels of patients whose tests weren't reviewed a week after that date
+  (`care/blood_tests.py`). The pause itself applies without the job; the job sends the email and moves the parcels
+  to Held on Weekly shipping.
 - Schedule `python manage.py send_journey_emails` once a day (the `journey-emails` job) for the email journeys
   (`care/journeys.py`). Every journey email starts switched off: a Super Admin rewrites and switches each on under
   Settings > Email journeys.

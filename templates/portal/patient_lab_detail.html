@@ -1,7 +1,7 @@
 {% extends 'portal/patient_page_base.html' %}
 {% load static workspace_ui %}
 {% block title %}Your blood-test request | Meridian{% endblock %}
-{% block patient_extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/clinical_workflow.css' %}?v=20261104a">{% endblock %}
+{% block patient_extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/clinical_workflow.css' %}?v=20261105a">{% endblock %}
 
 {% block patient_breadcrumbs %}{% breadcrumbs 'My Treatment' 'portal:patient-treatment' 'Blood tests' 'portal:patient-labs' 'Request' %}{% endblock %}
 {% block patient_heading %}
@@ -23,12 +23,23 @@
           {% if pathcare_form_url %}
             <div class="clinical-file-card clinical-file-card--form"><div><strong>Your PathCare form</strong><p>Take it, printed or on your phone, to any PathCare collection point. We also emailed it to you{% if pathcare_form.emailed_at %} on {{ pathcare_form.emailed_at|date:"j M Y" }}{% endif %}.</p></div><div class="clinical-file-card__actions"><a class="console-button console-button--secondary" data-no-loader href="{{ pathcare_form_url }}" target="_blank" rel="noopener">Open form</a><a class="console-button console-button--secondary" data-no-loader href="{{ pathcare_form_url }}?download=1">Download PDF</a></div></div>
           {% endif %}
-          <p class="clinical-panel-description">Once your results are ready, upload the report here for your doctor to review. Check that the report is yours and matches this request.</p>
+          {# The lab doesn't usually give patients a report: Done is enough for the doctor to review (care.blood_tests). #}
+          {% if lab_request.status == 'done' %}
+            <div class="clinical-notice"><p>You marked these blood tests done{% if lab_request.done_at %} on {{ lab_request.done_at|date:"j M Y" }}{% endif %}. Your doctor has been asked to review them.</p></div>
+            <p class="clinical-panel-description">If the lab gave you a report, you can still upload it for your doctor.</p>
+          {% else %}
+            <p class="clinical-panel-description">Once you’ve had the tests, mark them Done so your doctor can review them.{% if lab_request.due_on %} Please have them done by {{ lab_request.due_on|date:"j F Y" }}.{% endif %}</p>
+            <form class="console-form" method="post" action="{{ request.path }}">
+              {% csrf_token %}<input type="hidden" name="clinical_context" value="{{ clinical_context }}">
+              <div class="clinical-form-actions"><button class="console-button console-button--primary" type="submit" name="action" value="done">Mark as done</button></div>
+            </form>
+            <p class="clinical-panel-description">If the lab gave you a report, you can upload it instead. Check that the report is yours and matches this request.</p>
+          {% endif %}
           <form class="console-form" method="post" enctype="multipart/form-data" action="{{ request.path }}">
             {% csrf_token %}<input type="hidden" name="clinical_context" value="{{ clinical_context }}">
             {{ upload_form.non_field_errors }}
             <div class="console-form__field"><label for="{{ upload_form.report.id_for_label }}">{{ upload_form.report.label }}</label>{{ upload_form.report }}{{ upload_form.report.errors }}<span class="helptext">One PDF report, no larger than 5 MB. You cannot replace it after uploading.</span></div>
-            <div class="clinical-form-actions"><button class="console-button console-button--primary" type="submit" name="action" value="upload">Upload report</button></div>
+            <div class="clinical-form-actions"><button class="console-button console-button--secondary" type="submit" name="action" value="upload">Upload report</button></div>
           </form>
         {% else %}
           {{ upload_form.non_field_errors }}
@@ -40,7 +51,7 @@
     </section>
 
     <aside class="console-card" aria-labelledby="patient-lab-details-heading"><header class="console-card__header"><div class="console-card__heading"><h2 id="patient-lab-details-heading">Request details</h2></div></header><div class="clinical-panel-body"><dl class="clinical-facts">
-      <div><dt>Practice</dt><dd>{{ patient_company.name }}</dd></div><div><dt>Doctor</dt><dd>{{ lab_request.requested_by.full_name }}</dd></div><div><dt>Requested</dt><dd>{{ lab_request.requested_on|date:"j M Y" }}</dd></div><div><dt>Due</dt><dd>{{ lab_request.due_on|date:"j M Y"|default:"Not specified" }}</dd></div><div><dt>Status</dt><dd>{{ lab_request.get_status_display }}</dd></div>
+      <div><dt>Practice</dt><dd>{{ patient_company.name }}</dd></div><div><dt>Doctor</dt><dd>{{ lab_request.requested_by.full_name }}</dd></div><div><dt>Requested</dt><dd>{{ lab_request.requested_on|date:"j M Y" }}</dd></div><div><dt>Required by</dt><dd>{{ lab_request.due_on|date:"j M Y"|default:"Not specified" }}</dd></div><div><dt>Status</dt><dd>{{ lab_request.get_status_display }}</dd></div>
     </dl></div></aside>
   </div>
 {% endblock %}

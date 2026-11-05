@@ -1,7 +1,7 @@
 {% extends 'portal/patient_page_base.html' %}
 {% load static workspace_ui %}
 {% block title %}Your blood tests | Meridian{% endblock %}
-{% block patient_extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/clinical_workflow.css' %}?v=20261104a">{% endblock %}
+{% block patient_extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/clinical_workflow.css' %}?v=20261105a">{% endblock %}
 
 {% block patient_breadcrumbs %}{% breadcrumbs 'My Treatment' 'portal:patient-treatment' 'Blood tests' %}{% endblock %}
 {% block patient_heading %}
@@ -20,11 +20,11 @@
       </header>
       {% if filter_form.errors %}<div class="clinical-panel-body"><p class="clinical-panel-description" role="alert">Correct the status filter to view your requests.</p></div>{% else %}
         <div class="clinical-table-wrap"><table class="clinical-table" aria-labelledby="patient-lab-list-heading">
-          <thead><tr><th scope="col">Panel / tests</th><th scope="col">Requested by</th><th scope="col">Due</th><th scope="col">Status</th><th scope="col">Action</th></tr></thead>
+          <thead><tr><th scope="col">Panel / tests</th><th scope="col">Doctor</th><th scope="col">Required by</th><th scope="col">Status</th><th scope="col">Action</th></tr></thead>
           <tbody>{% for lab_request in lab_requests %}<tr>
             <td data-label="Panel / tests"><span class="clinical-table__panel">{{ lab_request.panel_name }}</span></td>
-            <td data-label="Requested by">{{ lab_request.requested_by.full_name }}</td>
-            <td data-label="Due">{% if lab_request.due_on %}<time datetime="{{ lab_request.due_on|date:'Y-m-d' }}">{{ lab_request.due_on|date:"j M Y" }}</time>{% else %}Not specified{% endif %}</td>
+            <td data-label="Doctor">{{ lab_request.requested_by.full_name }}</td>
+            <td data-label="Required by">{% if lab_request.due_on %}<time datetime="{{ lab_request.due_on|date:'Y-m-d' }}">{{ lab_request.due_on|date:"j M Y" }}</time>{% else %}Not specified{% endif %}</td>
             <td data-label="Status"><span class="console-status console-status--{{ lab_request.status }}">{{ lab_request.get_status_display }}</span></td>
             <td data-label="Action"><div class="clinical-row-actions"><a class="console-button console-button--secondary" href="{% url 'portal:patient-lab-detail' lab_request.pk %}">Open request</a>{% if lab_request.form_url %}<a class="console-button console-button--secondary" data-no-loader href="{{ lab_request.form_url }}?download=1">Download form<span class="sr-only"> for {{ lab_request.panel_name }}</span></a>{% endif %}</div></td>
           </tr>{% empty %}<tr><td class="clinical-table__empty" colspan="5">No blood-test requests match this view. Requests from your doctor will appear here.</td></tr>{% endfor %}</tbody>
