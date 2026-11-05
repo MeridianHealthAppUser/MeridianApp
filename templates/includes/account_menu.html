@@ -19,12 +19,12 @@
         {# Super Admins only: clinicians and practice administrators don't need it. #}{% if active_company and active_membership.role == 'super_admin' %}<a href="{% url 'portal:account-access-history' %}">My access history</a>{% endif %}
       {% endif %}
     </nav>
+    {% if user.is_superuser and user.is_staff %}<div class="account-menu__links account-menu__section"><a href="{% url 'admin:index' %}"><svg class="account-menu__link-icon" aria-hidden="true" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>Admin Panel</a></div>{% endif %}
     {# Light, dark, or as the device is set (static/js/theme.js); saved in this browser. #}
     <div class="account-menu__theme account-menu__section" role="group" aria-label="Appearance">
       <span>Appearance</span>
       <div class="account-menu__theme-choices"><button type="button" data-theme-choice="system" aria-pressed="true">Device</button><button type="button" data-theme-choice="light" aria-pressed="false">Light</button><button type="button" data-theme-choice="dark" aria-pressed="false">Dark</button></div>
     </div>
-    {% if user.is_superuser and user.is_staff %}<div class="account-menu__links account-menu__section"><a href="{% url 'admin:index' %}">Practice administration</a></div>{% endif %}
     {% include 'includes/practice_role_switcher.html' %}
     {% if identity.is_patient and active_company %}<div class="account-menu__links account-menu__section"><a href="{% url 'portal:desktop-dashboard' %}">Switch to workspace</a></div>{% elif not identity.is_patient and active_patient %}<div class="account-menu__links account-menu__section"><a href="{% url 'portal:patient-dashboard' %}">Switch to my care</a></div>{% endif %}
     <form class="account-menu__signout account-menu__section" method="post" action="{% url 'accounts:logout' %}">{% csrf_token %}<button type="submit">Sign out</button></form>

@@ -19,6 +19,7 @@
 .account-menu__links { display:grid; gap:.1rem; }
 .account-menu__links a,.account-menu__signout button { align-items:center; background:transparent; border:0; border-radius:.55rem; color:var(--c-335464); display:flex; font:inherit; font-size:.8rem; font-weight:600; line-height:1.4; min-height:2.75rem; padding:.65rem .7rem; text-align:left; text-decoration:none; width:100%; }
 .account-menu__links a:hover { background:var(--c-edf7f2); color:var(--c-184153); }
+.account-menu__link-icon { fill:none; flex:0 0 auto; height:1rem; margin-right:.5rem; stroke:currentColor; stroke-width:1.7; width:1rem; }
 .account-menu__section { border-top:1px solid var(--c-edf2ef); margin:.35rem 0 0; padding-top:.35rem; }
 .account-menu__signout button { color:var(--c-8e4347); cursor:pointer; }
 .account-menu__signout button:hover { background:var(--c-fff2f0); }
