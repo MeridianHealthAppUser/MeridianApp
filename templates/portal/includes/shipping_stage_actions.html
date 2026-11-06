@@ -2,7 +2,7 @@
   <section class="ops-step-panel" id="shipping-panel-pending" data-shipping-panel="pending" aria-labelledby="shipping-step-pending"{% if shipping_step != 'pending' %} hidden{% endif %}>
     <form id="shipping-bulk-confirm" method="post" action="{% url 'portal:ops-shipping-confirm' %}">
       {% csrf_token %}<input type="hidden" name="list_query" value="{{ list_query }}"><input type="hidden" name="workflow_context" value="{{ confirm_context }}"><input type="hidden" name="week" value="{{ week_start|date:'Y-m-d' }}">
-      <button class="console-button console-button--primary" type="submit">Confirm &amp; lock selected</button>
+      <button class="console-button console-button--primary" type="submit" data-modal-open="shipping-confirm-dialog" aria-haspopup="dialog">Confirm &amp; lock selected</button>
     </form>
     <div class="shipping-help" data-shipping-help>
       <button type="button" class="shipping-help-trigger" aria-label="About Pending" aria-describedby="shipping-help-pending" aria-expanded="false">{% include 'portal/includes/shipping_help_icon.html' %}</button>

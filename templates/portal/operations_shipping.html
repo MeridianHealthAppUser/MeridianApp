@@ -1,6 +1,6 @@
 {% extends 'portal/operations_base.html' %}
 {% load static workspace_ui %}
-{% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/dialogs.css' %}?v=20261104d"><script src="{% static 'js/dialogs.js' %}?v=20261102a" defer></script><script src="{% static 'js/shipping_workflow.js' %}?v=20261103a" defer></script><script src="{% static 'js/shipping_notes.js' %}?v=20261102a" defer></script><script src="{% static 'js/shipping_help.js' %}?v=20261102b" defer></script>{% endblock %}
+{% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/dialogs.css' %}?v=20261104d"><script src="{% static 'js/dialogs.js' %}?v=20261102a" defer></script><script src="{% static 'js/shipping_workflow.js' %}?v=20261105a" defer></script><script src="{% static 'js/shipping_notes.js' %}?v=20261102a" defer></script><script src="{% static 'js/shipping_help.js' %}?v=20261102b" defer></script>{% endblock %}
 {% block title %}Weekly shipping | Meridian{% endblock %}
 {% block breadcrumbs %}{% breadcrumbs 'Operations' %}{% endblock %}
 {% block page_heading %}<header class="staff-page-header"><div><h1>Operations</h1><p>{{ company.name }} · Confirm the week’s parcels, arrange the courier and follow their delivery.</p></div><div class="ops-actions">{% if can_edit %}<a class="console-button console-button--primary" href="?{{ list_query }}&amp;create=1" data-modal-open="create-shipment" aria-haspopup="dialog">Create shipment</a>{% endif %}</div></header>{% page_tabs %}{% endblock %}
@@ -8,11 +8,12 @@
   {# A shipping week at a time, as Calendar & Bookings' Week view; the search and Filters keep the week. #}
   <header class="shipping-primary-toolbar">
   {% if can_edit and not filter_form.errors %}
+    {# Each stage loads its shipments from the server, in the app like any other tab; without scripts it's a normal link. #}
     <div id="shipping-workflow">
       <ol class="ops-steps" data-shipping-tabs aria-label="Shipping stages">
         {% for step in shipping_steps %}
           <li>
-            <a class="ops-step{% if step.complete %} is-complete{% endif %}{% if step.current %} is-current{% endif %}" id="shipping-step-{{ step.key }}" href="{{ step.url }}" data-shipping-step="{{ step.key }}" data-native-navigation aria-controls="shipping-panel-{{ step.key }}" aria-selected="{{ step.selected|yesno:'true,false' }}"{% if step.current %} aria-current="step"{% endif %}>
+            <a class="ops-step{% if step.complete %} is-complete{% endif %}{% if step.current %} is-current{% endif %}" id="shipping-step-{{ step.key }}" href="{{ step.url }}" data-shipping-step="{{ step.key }}" aria-controls="shipping-panel-{{ step.key }}" aria-selected="{{ step.selected|yesno:'true,false' }}"{% if step.current %} aria-current="step"{% endif %}>
               <span class="ops-step__label"><span class="ops-step__title">{{ step.title }}</span> <span class="ops-step__count"><span class="sr-only">Shipments: </span>{{ step.count|default:0 }}</span></span>
             </a>
           </li>
@@ -73,6 +74,17 @@
   {% endif %}</div>
 </section>
 <div data-search-region="pages">{% include 'portal/operations_pagination.html' with pagination_label='Shipping list' %}</div>
+
+{# Confirm & lock asks first (static/js/shipping_workflow.js names the parcel or the count); its Confirm & lock sends
+   the form whose button opened it. Without scripts those buttons send their form at once. #}
+<dialog class="app-dialog app-dialog--alert" id="shipping-confirm-dialog" aria-labelledby="shipping-confirm-title" aria-describedby="shipping-confirm-text">
+  <div class="app-dialog__body">
+    <h2 id="shipping-confirm-title" data-confirm-title>Confirm &amp; lock parcels?</h2>
+    <p class="app-dialog__detail" data-confirm-detail hidden></p>
+    <p class="app-dialog__sub" id="shipping-confirm-text">Each parcel is checked, its stock is reserved and it moves to Confirmed &amp; Locked, ready for courier booking.</p>
+    <div class="app-dialog__actions"><button class="console-button console-button--secondary" type="button" data-dialog-close>Cancel</button><button class="console-button console-button--primary" type="submit" data-confirm-accept>Confirm &amp; lock</button></div>
+  </div>
+</dialog>
 
 <dialog class="app-dialog" id="shipment-note-dialog" aria-labelledby="shipment-note-title" aria-describedby="shipment-note-patient"{% if note_open %} open{% endif %}>
   <div class="app-dialog__body">
