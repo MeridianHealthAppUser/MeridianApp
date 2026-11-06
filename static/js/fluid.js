@@ -458,11 +458,13 @@
   document.addEventListener('pointercancel', endDrag, true);
 
   /* The side menu. The toggle collapses it to its icons and back; the choice is kept for this browser and applied
-     before the page is drawn (base.html). Collapsed, an icon shows its label beside it on hover, and a section's
-     icon opens its pages beside it, on hover or press. */
+     before the page is drawn (base.html). A section opens its pages beside it, on hover or press, whether the menu
+     is open or collapsed; collapsed, an icon also shows its label beside it on hover. */
   const wide = window.matchMedia('(min-width: 52.001rem)');
   const collapsed = () => html.dataset.sidebar === 'collapsed';
   const RAIL_ITEMS = '.console-sidebar a[href], .patient-navigation a[href]';
+  // A section's row: its summary, or the link of a section that is one page (Inventory, Operations, Administration).
+  const SECTION_HEAD = ':scope > summary, :scope > a.console-nav__top';
   const labelOf = element => (element.querySelector('.console-nav__text, .patient-navigation__label, .console-nav__label, :scope > span:not(.nav-badge)') || element).textContent.trim();
 
   function syncToggles() {
@@ -482,11 +484,13 @@
 
   const popoverHost = element => element.closest('.meridian-console');
   const canPop = typeof HTMLElement.prototype.showPopover === 'function';
-  function place(popover, beside) {
+  // A label sits level with its icon; a section's pages open from the top of its row, like a submenu.
+  function place(popover, beside, { fromTop = false } = {}) {
     const rail = beside.closest('.console-sidebar, .patient-navigation') || beside;
     const box = beside.getBoundingClientRect();
     const left = Math.max(box.right, rail.getBoundingClientRect().right) + 10;
-    const top = Math.min(Math.max(8, box.top + box.height / 2 - popover.offsetHeight / 2), window.innerHeight - popover.offsetHeight - 8);
+    const wanted = fromTop ? box.top - 6 : box.top + box.height / 2 - popover.offsetHeight / 2;
+    const top = Math.min(Math.max(8, wanted), window.innerHeight - popover.offsetHeight - 8);
     Object.assign(popover.style, { left: `${left}px`, top: `${top}px` });
   }
 
@@ -517,7 +521,7 @@
   }
   function openFlyout(group, { focus = false } = {}) {
     const host = popoverHost(group);
-    const summary = group.querySelector('summary');
+    const summary = group.querySelector(SECTION_HEAD);
     if (!host || !summary || !canPop) return;
     window.clearTimeout(flyoutTimer);
     hideTip();
@@ -533,7 +537,7 @@
         const left = flyoutGroup;
         flyoutGroup?.removeAttribute('data-fluid-flyout');
         flyoutGroup = null;
-        if (returnFocus) left?.querySelector('summary')?.focus();
+        if (returnFocus) left?.querySelector(SECTION_HEAD)?.focus();
       });
       flyout.addEventListener('click', event => { if (event.target.closest('a[href]')) { returnFocus = false; closeFlyout(); } });
       flyout.addEventListener('keydown', event => {
@@ -556,16 +560,16 @@
       group.dataset.fluidFlyout = '';
     }
     if (!flyout.matches(':popover-open')) flyout.showPopover();
-    place(flyout, summary);
+    place(flyout, summary, { fromTop: true });
     if (focus) flyout.querySelector('a[href]')?.focus();
   }
 
   document.addEventListener('click', event => {
     if (!enabled()) return;
     if (event.target.closest?.('[data-rail-toggle]')) { setCollapsed(!collapsed()); return; }
-    const summary = collapsed() && wide.matches && event.target.closest?.('.console-sidebar .console-nav__toggle');
+    const summary = wide.matches && event.target.closest?.('.console-sidebar .console-nav__toggle');
     if (!summary) return;
-    // Collapsed, a section stays as it is; its pages open beside it instead.
+    // A section stays as it is; its pages open beside it instead.
     event.preventDefault();
     const group = summary.closest('.console-nav__group');
     if (flyoutGroup === group && flyout?.matches(':popover-open') && event.detail) closeFlyout();
@@ -575,11 +579,12 @@
   document.addEventListener('pointerover', event => {
     if (event.pointerType !== 'mouse' || !wide.matches || !enabled()) return;
     const inFlyout = flyout?.contains(event.target);
-    const group = collapsed() && !inFlyout && event.target.closest?.('.console-sidebar .console-nav__group');
+    const group = !inFlyout && event.target.closest?.('.console-sidebar .console-nav__group');
     if (inFlyout || (group && group === flyoutGroup)) window.clearTimeout(flyoutTimer);
     else if (group) { window.clearTimeout(flyoutTimer); flyoutTimer = window.setTimeout(() => openFlyout(group), 140); }
 
-    const target = event.target.closest?.('[data-rail-toggle]') || (collapsed() && event.target.closest?.(RAIL_ITEMS));
+    // Open, the toggle and every page show their own labels; collapsed, each gets its label beside it.
+    const target = !group && collapsed() && event.target.closest?.(`[data-rail-toggle], ${RAIL_ITEMS}`);
     if (!target || target === tipTarget) return;
     tipTarget = target;
     window.clearTimeout(tipTimer);

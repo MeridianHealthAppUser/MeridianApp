@@ -1,8 +1,8 @@
 {% extends 'portal/staff_page_base.html' %}{% load static l10n workspace_ui %}
 {% block title %}Metrics and cohorts | Meridian{% endblock %}
-{% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/reporting_dashboard.css' %}?v=20261104a">{% endblock %}
-{% block breadcrumbs %}{% breadcrumbs 'Metrics and cohorts' %}{% endblock %}
-{% block page_heading %}<header class="staff-page-header"><div><h1>Metrics and cohorts</h1><p>A clear view of patient activity, care delivery and recorded progress.</p></div></header>{% endblock %}
+{% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/reporting_dashboard.css' %}?v=20261106a">{% endblock %}
+{% block breadcrumbs %}{% breadcrumbs 'Insights' %}{% endblock %}
+{% block page_heading %}<header class="staff-page-header"><div><h1>Insights</h1><p>A clear view of patient activity, care delivery and recorded progress.</p></div></header>{% page_tabs %}{% endblock %}
 {% block page_content %}
 <div class="metrics-dashboard">
   <section class="metrics-panel metrics-filters" aria-label="Report filters"><form method="get" class="console-form" novalidate>

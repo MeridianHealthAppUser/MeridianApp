@@ -5,7 +5,7 @@
     <thead><tr>{% if privacy_staff %}<th scope="col">Patient</th>{% endif %}<th scope="col">Request</th><th scope="col">Submitted</th><th scope="col">Status</th><th scope="col">Action</th></tr></thead>
     <tbody>{% for item in page_obj %}<tr>
       {% if privacy_staff %}<td>{{ item.patient }}</td>{% endif %}<td>{{ item.get_kind_display }}</td><td>{{ item.created_at|date:"j M Y, H:i" }}</td><td><span class="console-status">{{ item.get_status_display }}</span></td>
-      <td><a class="privacy-link" href="{% if privacy_staff %}{% url 'portal:staff-data-request-detail' item.pk %}{% else %}{% url 'portal:patient-data-request-detail' item.pk %}{% endif %}">Open request</a></td>
+      <td><a class="console-button console-button--secondary" href="{% if privacy_staff %}{% url 'portal:staff-data-request-detail' item.pk %}{% else %}{% url 'portal:patient-data-request-detail' item.pk %}{% endif %}">Open request</a></td>
     </tr>{% empty %}<tr><td colspan="{% if privacy_staff %}5{% else %}4{% endif %}">No requests match these filters.</td></tr>{% endfor %}</tbody>
   </table></div>
 {% endif %}

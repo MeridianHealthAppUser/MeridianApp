@@ -1,5 +1,4 @@
 {% load workspace_ui %}{% staff_menu as menu %}
-{% include 'portal/includes/sidebar_toggle.html' %}
 <nav class="console-nav{% if menu.flat %} console-nav--flat{% endif %}" aria-label="Staff pages" data-rail-navigation>
   {% if menu.flat %}
   {# Clinicians: one flat list with icons, like the patient app's menu. #}
@@ -7,12 +6,20 @@
   {% else %}
   <a class="console-nav__top{% if nav_section == 'overview' %} is-active{% endif %}"{% if nav_section == 'overview' %} aria-current="page"{% endif %} href="{% url 'portal:desktop-dashboard' %}">{% include 'portal/includes/nav_icon.html' with name='overview' %}<span>Overview</span></a>
   {% for section in menu.sections %}
+  {% if section.link %}
+  {# Inventory, Operations and Administration are one page each: the row opens it, and its tabs open beside it on hover (static/js/fluid.js). #}
+  <div class="console-nav__group console-nav__group--link">
+    <a class="console-nav__top console-nav__top--section{% if section.link.current %} is-active{% endif %}"{% if section.link.current %} aria-current="{{ section.link.current }}"{% endif %} href="{{ section.link.url }}" data-navigation-link="{{ section.key }}">{% include 'portal/includes/nav_icon.html' with name=section.key %}<span class="console-nav__text">{{ section.label }}</span>{% include 'portal/includes/nav_badge.html' with count=section.link.badge badge_label=section.link.badge_label %}</a>
+  {% else %}
   <details class="console-nav__group" data-navigation-group="{{ section.key }}" open>
-    <summary class="console-nav__toggle"><span class="console-nav__label">{% include 'portal/includes/nav_icon.html' with name=section.key %}{{ section.label }}</span></summary>
+    {# Its pages open beside it, on hover or press (static/js/fluid.js), so its row carries their unread count. #}
+    <summary class="console-nav__toggle"><span class="console-nav__label">{% include 'portal/includes/nav_icon.html' with name=section.key %}{{ section.label }}</span>{% if section.key == 'care' %}{% include 'portal/includes/live_message_badge.html' with kind='total' count=section.badge dot=True %}{% else %}{% include 'portal/includes/nav_badge.html' with count=section.badge badge_label=section.badge_label %}{% endif %}</summary>
+  {% endif %}
     <div class="console-nav__links">
       {% for item in section.items %}<a{% if item.current %} class="is-active" aria-current="{{ item.current }}"{% endif %} href="{{ item.url }}"><span class="console-nav__text">{{ item.label }}</span>{% if item.key == 'records' %}{% include 'portal/includes/live_message_badge.html' with kind='total' count=item.badge dot=True %}{% else %}{% include 'portal/includes/nav_badge.html' with count=item.badge badge_label=item.badge_label %}{% endif %}</a>{% endfor %}
     </div>
-  </details>
+  {% if section.link %}</div>{% else %}</details>{% endif %}
   {% endfor %}
   {% endif %}
 </nav>
+{% include 'portal/includes/sidebar_toggle.html' %}

@@ -155,7 +155,8 @@ class SinglePracticeSurfacesTests(TestCase):
                 self.assertNotIn(reverse('portal:management-practices'), paths)
                 self.assertNotContains(response, 'company-switcher')
                 self.assertIn(reverse('portal:management-users'), paths)
-        self.assertIn(reverse('portal:staff-menu-section', args=['settings']),
+        # Settings is one page of tabs, so the mobile bar opens its first tab directly.
+        self.assertIn(reverse('portal:treatment-review-rules'),
                       actionable_paths(self.client.get(reverse('portal:mobile-dashboard'))))
 
     def test_profile_save_does_not_modify_or_audit_other_practice_data(self):

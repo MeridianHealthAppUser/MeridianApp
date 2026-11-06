@@ -1,7 +1,8 @@
 """The staff menu, defined once for the desktop sidebar, the mobile bar and the mobile section pages.
 
 Clinicians and practice administrators get one flat list with icons. Super Admins get sections.
-Operations and Administration are each one page of tabs (page_tabs) for whoever opens them.
+Operations and Administration are each one page of tabs (page_tabs) for whoever opens them: their menu row opens the
+page, and their tabs open beside it on hover.
 """
 
 from django.urls import reverse
@@ -9,7 +10,7 @@ from django.urls import reverse
 from care.models import MedicationProduct
 from care.operations import can_ship
 
-# Each tab: its nav_section key, label and page. Super Admins see the same pages listed in their sections.
+# Each tab: its nav_section key, label and page.
 OPERATIONS_TABS = (
     ('subscriptions', 'Patient orders', 'portal:treatment-subscriptions'),
     # Weekly shipping holds what was Dispatch stock (the week's pens) since 24 Oct 2026.
@@ -24,7 +25,26 @@ ADMINISTRATION_TABS = (
     # The communications log: every email sent to a patient or an enquiry.
     ('emails', 'Emails', 'portal:email-log'),
 )
-TAB_GROUPS = {'operations': ('Operations', OPERATIONS_TABS), 'administration': ('Administration', ADMINISTRATION_TABS)}
+# The Inventory page's own tabs (inventory_tabs.html), which the menu lists beside Inventory on hover.
+INVENTORY_TABS = (
+    ('inventory', 'Inventory', 'portal:inventory'),
+    ('consumption', 'Consumption', 'portal:inventory-consumption'),
+    ('catalogue', 'Catalogue', 'portal:ops-catalogue'),
+)
+# Insights and Settings are one page of tabs each too, for Super Admins (James, 6 Nov 2026).
+INSIGHTS_TABS = (
+    ('metrics', 'Metrics and cohorts', 'portal:metrics'),
+    ('statements', 'Activity statements', 'portal:activity-statements'),
+)
+SETTINGS_TABS = (
+    ('review_rules', 'Review rules', 'portal:treatment-review-rules'),
+    ('users', 'Users and roles', 'portal:management-users'),
+    ('email_journeys', 'Email journeys', 'portal:email-journeys'),
+    ('policies', 'Policy versions', 'portal:policy-list'),
+    ('practice_settings', 'Practice settings', 'portal:practice-settings'),
+)
+TAB_GROUPS = {'operations': ('Operations', OPERATIONS_TABS), 'administration': ('Administration', ADMINISTRATION_TABS),
+              'insights': ('Insights', INSIGHTS_TABS), 'settings': ('Settings', SETTINGS_TABS)}
 # The Operations tabs a doctor has when the practice lets doctors ship (Practice settings).
 PATIENT_ORDER_TABS = (('subscriptions', 'Subscriptions', 'portal:treatment-subscriptions'),
                       ('orders', 'Non-prescription requests', 'portal:ops-orders'))
@@ -56,12 +76,15 @@ def uses_flat_menu(membership):
 
 
 def page_tabs(nav_section, *, data_requests=0, membership=None):
-    """The Operations or Administration tabs for the page at nav_section, with the current one marked; None for any
-    other page. Data requests carries its count, as the menu does. A doctor sees only Weekly shipping and Dispatch
-    history; a practice administrator doesn't see Data requests."""
+    """The Operations, Administration, Insights or Settings tabs for the page at nav_section, with the current one
+    marked; None for any other page. Data requests carries its count, as the menu does. A doctor sees only Weekly
+    shipping and Dispatch history (so no Insights tabs on Activity statements); a practice administrator doesn't see
+    Data requests."""
     order_section = nav_section in ('subscriptions', 'orders')
     active_section = 'subscriptions' if order_section else nav_section
     for key, (label, tabs) in TAB_GROUPS.items():
+        if key in ('insights', 'settings') and membership is not None and membership.role != 'super_admin':
+            continue  # Super Admins' pages; anyone else allowed one of them gets just that page.
         if membership is not None and membership.role == 'doctor':
             tabs = tuple(tab for tab in tabs if tab[0] in SHIPPING_TABS)
         elif membership is not None and membership.role == 'practice_admin':
@@ -83,9 +106,25 @@ def _tab_items(group):
 
 
 def _group_item(group, short_label):
-    """Operations or Administration as one menu entry: it opens the first tab and stays current on all of them."""
+    """A group of tabs as one menu entry: it opens the first tab and stays current on all of them (and on Patient
+    orders' Non-prescription requests, and on Practices under Settings)."""
     label, tabs = TAB_GROUPS[group]
-    return _item(group, label, tabs[0][2], also=tuple(tab[0] for tab in tabs) + (('orders',) if group == 'operations' else ()), short_label=short_label)
+    extra = {'operations': ('orders',), 'settings': ('practices',)}.get(group, ())
+    return _item(group, label, tabs[0][2], also=tuple(tab[0] for tab in tabs) + extra, short_label=short_label)
+
+
+# Super Admin sections that are one page of tabs: the section's own row opens that page in one click, and its tabs
+# open beside it on hover.
+SINGLE_PAGE_SECTIONS = ('inventory', 'operations', 'administration', 'insights', 'settings')
+
+
+def _inventory_item():
+    """Inventory as one menu entry: it opens the Inventory tab and stays current on Consumption and Catalogue."""
+    return _item('inventory', 'Inventory', 'portal:inventory', also=tuple(tab[0] for tab in INVENTORY_TABS[1:]))
+
+
+def _section_link(key):
+    return _inventory_item() if key == 'inventory' else _group_item(key, TAB_GROUPS[key][0])
 
 
 RECORDS_TITLE = 'Patient Records & Messages'
@@ -118,7 +157,7 @@ def build_flat_menu(membership, *, nav_section='', unread=0, data_requests=0):
     ]
     if membership.is_admin:
         items += [_item('purchasing', 'Purchasing', 'portal:purchasing', short_label='Purchase'),
-                  _item('inventory', 'Inventory', 'portal:inventory', also=('catalogue',)),
+                  _inventory_item(),
                   _group_item('operations', 'Operations'), _group_item('administration', 'Admin')]
     elif membership.role == 'doctor' and can_ship(membership.company, membership):
         items.append(_item('operations', 'Weekly shipping', 'portal:ops-shipping', also=SHIPPING_TABS, short_label='Shipping'))
@@ -156,35 +195,32 @@ def build_staff_menu(membership, *, multi_practice=False, nav_section='', unread
             _item('purchasing', 'Purchasing', 'portal:purchasing'),
             *([_item('suppliers', 'Suppliers', 'portal:supplier-list')] if super_admin else []),
         ] if admin else []),
-        ('inventory', 'Inventory', 'Inventory', [_item('inventory', 'Inventory', 'portal:inventory', also=('catalogue',))] if admin else []),
+        ('inventory', 'Inventory', 'Inventory', [_item(*tab) for tab in INVENTORY_TABS] if admin else []),
         ('operations', 'Operations', 'Operations', _tab_items('operations') if admin else []),
         ('administration', 'Administration', 'Admin', _tab_items('administration') if admin else []),
-        # Insights is for Super Admins only.
-        ('insights', 'Insights', 'Insights', [
-            _item('metrics', 'Metrics and cohorts', 'portal:metrics'),
-            _item('statements', 'Activity statements', 'portal:activity-statements'),
-        ] if super_admin else []),
+        # Insights and Settings are for Super Admins only.
+        ('insights', 'Insights', 'Insights', _tab_items('insights') if super_admin else []),
+        # Practices, only when the app runs more than one, is in the menu but not among the Settings tabs.
         ('settings', 'Settings', 'Settings', [
-            _item('review_rules', 'Review rules', 'portal:treatment-review-rules'),
+            *_tab_items('settings'),
             *([_item('practices', 'Practices', 'portal:management-practices')] if multi_practice else []),
-            _item('users', 'Users and roles', 'portal:management-users'),
-            _item('email_journeys', 'Email journeys', 'portal:email-journeys'),
-            _item('policies', 'Policy versions', 'portal:policy-list'),
-            _item('practice_settings', 'Practice settings', 'portal:practice-settings'),
         ] if super_admin else []),
     ]
     menu = []
     for key, label, short_label, items in sections:
         if not items:
             continue
-        for item in items:
+        # A single-page section's row is a link to that page, on the desktop menu and the mobile bar alike.
+        link = _section_link(key) if key in SINGLE_PAGE_SECTIONS else None
+        for item in items + ([link] if link else []):
             item['current'] = _current(item, nav_section)
-        _set_badges(items, unread=unread, data_requests=data_requests)
+        _set_badges(items + ([link] if link else []), unread=unread, data_requests=data_requests)
         labels = {item['badge_label'] for item in items if item['badge']}
         menu.append({
-            'key': key, 'label': label, 'short_label': short_label, 'items': items,
-            'url': reverse('portal:staff-menu-section', args=[key]),
+            'key': key, 'label': label, 'short_label': short_label, 'items': items, 'link': link,
+            'url': link['mobile_url'] if link else reverse('portal:staff-menu-section', args=[key]),
             'active': nav_section == f'section:{key}' or any(item['current'] for item in items),
+            'current': 'page' if nav_section == f'section:{key}' else (link['current'] if link else 'true'),
             # The mobile bar shows sections only, so a section carries the counts of the pages inside it.
             'badge': sum(item['badge'] for item in items),
             'badge_label': labels.pop() if len(labels) == 1 else 'waiting item',

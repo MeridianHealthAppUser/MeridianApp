@@ -264,34 +264,48 @@
   /* Each row starts its icon where the narrow rail centres it. */
   .workspace-page .meridian-console :is(.console-nav a.console-nav__top, .console-nav--flat a.console-nav__item, .console-nav__toggle, .patient-navigation a) { padding-left: var(--fluid-icon-inset); position: relative; white-space: nowrap; }
   .workspace-page .meridian-console .console-nav .console-nav__toggle .console-nav__label { gap: .7rem; }
-  .workspace-page .meridian-console .console-nav a.console-nav__top { gap: .7rem; }
+  /* Overview, Inventory, Operations and Administration are links; their border is taken from the inset so their icons
+     line up with the sections'. */
+  .workspace-page .meridian-console .console-nav a.console-nav__top { gap: .7rem; padding-left: calc(var(--fluid-icon-inset) - 1px); }
   .workspace-page .meridian-console :is(.console-nav__text, .console-nav__top > span, .patient-navigation__label) { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
   .workspace-page .meridian-console .console-nav a, .workspace-page .meridian-console .patient-navigation a, .workspace-page .meridian-console .console-nav__toggle { transition: background-color .2s ease, color .2s ease, transform var(--fluid-bouncy) var(--fluid-spring-bouncy); -webkit-tap-highlight-color: transparent; }
   .workspace-page .meridian-console :is(.console-nav a, .patient-navigation a, .console-nav__toggle):active { transform: scale(.96); transition-duration: .1s, .1s, 90ms; }
-  .workspace-page .meridian-console .patient-navigation__top { align-items: center; display: flex; flex: 0 0 auto; gap: .2rem; margin-bottom: .6rem; min-width: 0; }
-  .workspace-page .meridian-console .patient-navigation__top .patient-navigation__heading { margin: 0; overflow: hidden; white-space: nowrap; }
 
-  .meridian-console .fluid-rail-toggle { align-items: center; background: transparent; border: 0; border-radius: .7rem; color: var(--console-muted); cursor: pointer; display: inline-flex; flex: 0 0 auto; height: 2.25rem; justify-content: center; margin: 0 0 .35rem calc(var(--fluid-icon-inset) + var(--fluid-icon) / 2 - 1.125rem); padding: 0; transition: background-color .2s ease, color .2s ease, transform var(--fluid-bouncy) var(--fluid-spring-bouncy); width: 2.25rem; -webkit-tap-highlight-color: transparent; }
-  .meridian-console .patient-navigation__top .fluid-rail-toggle { margin-bottom: 0; }
-  .meridian-console .fluid-rail-toggle svg { fill: none; height: 1.2rem; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.7; width: 1.2rem; }
+  /* The collapse toggle sits at the foot of the menu: a row like the pages above it, its icon in line with theirs,
+     in a lighter grey than they are. Its label fades under the edge with theirs when the menu collapses. */
+  .meridian-console .fluid-rail-toggle { align-items: center; background: transparent; border: 0; border-radius: .65rem; color: color-mix(in srgb, var(--c-556e7b) 70%, var(--console-card)); cursor: pointer; display: flex; flex: 0 0 auto; font: inherit; font-size: .59rem; font-weight: 800; gap: .7rem; letter-spacing: .11em; line-height: 1.3; margin: auto 0 0; min-height: 2.4rem; padding: 0 .6rem 0 var(--fluid-icon-inset); text-align: left; text-transform: uppercase; transition: background-color .2s ease, color .2s ease, transform var(--fluid-bouncy) var(--fluid-spring-bouncy); white-space: nowrap; width: 100%; -webkit-tap-highlight-color: transparent; }
+  .patient-app .meridian-console .patient-navigation .fluid-rail-toggle { color: color-mix(in srgb, var(--patient-ink-2) 70%, var(--console-card)); padding-left: calc(var(--fluid-icon-inset) + 1px); }
+  .meridian-console .fluid-rail-toggle svg { fill: none; flex: 0 0 auto; height: var(--fluid-icon); stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.7; width: var(--fluid-icon); }
+  .meridian-console .fluid-rail-toggle .fluid-rail-toggle__icon--expand,
+  :root[data-sidebar="collapsed"] .meridian-console .fluid-rail-toggle .fluid-rail-toggle__icon--collapse { display: none; }
+  :root[data-sidebar="collapsed"] .meridian-console .fluid-rail-toggle .fluid-rail-toggle__icon--expand { display: block; }
+  .meridian-console .fluid-rail-toggle__label { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
   .meridian-console .fluid-rail-toggle:hover { background: color-mix(in srgb, var(--console-teal-soft) 45%, transparent); color: var(--console-teal-dark); }
-  .meridian-console .fluid-rail-toggle:active { transform: scale(.9); transition-duration: .1s, .1s, 90ms; }
-  .meridian-console .fluid-rail-toggle:focus-visible { outline: 2px solid var(--console-teal); outline-offset: 1px; }
+  .meridian-console .fluid-rail-toggle:active { transform: scale(.96); transition-duration: .1s, .1s, 90ms; }
+  .meridian-console .fluid-rail-toggle:focus-visible { outline: 2px solid var(--console-teal); outline-offset: -2px; }
 
-  /* Collapsed: labels, section chevrons and the pages inside sections give way to the icons. A section's pages open
-     beside it instead (fluid.js), and the section holding the current page is marked. */
-  .workspace-page .meridian-console :is(.console-sidebar, .patient-navigation) :is(.console-nav__text, .console-nav__top > span, .patient-navigation__label, .patient-navigation__heading, .console-sidebar__practice > div, .console-person__copy) { transition: opacity .2s ease .08s; }
+  /* A section's pages open beside it (fluid.js), on hover or press, whether the menu is open or collapsed: the menu
+     itself is one row per page or section, all the same height. The section holding the current page is marked, its
+     chevron points to where its pages open, and its unread count sits on its row. */
+  .workspace-page .meridian-console .console-sidebar :is(.console-nav__toggle, a.console-nav__top) { margin: 0; min-height: 2.6rem; }
+  .workspace-page .meridian-console .console-nav__group > .console-nav__links { display: none; }
+  .workspace-page .meridian-console .console-nav__group > .console-nav__toggle::after { transform: rotate(-45deg); }
+  .workspace-page .meridian-console .console-nav__group:has([aria-current]) > .console-nav__toggle { background: var(--console-teal-soft); color: var(--console-teal-dark); }
+  .workspace-page .meridian-console .console-nav__group[data-fluid-flyout] > :is(.console-nav__toggle, a.console-nav__top:not(.is-active)) { background: color-mix(in srgb, var(--console-teal-soft) 55%, transparent); color: var(--console-teal-dark); }
+  .workspace-page .meridian-console .console-nav__toggle > :is(.nav-badge, .message-unread-dot) { margin-left: auto; }
+  /* A one-page section's row opens its page; its chevron says its pages also open beside it. */
+  .workspace-page .meridian-console .console-nav__group--link > a.console-nav__top .console-nav__text { flex: 1 1 auto; }
+  .workspace-page .meridian-console .console-nav__group--link > a.console-nav__top::after { border-bottom: 1.5px solid currentColor; border-right: 1.5px solid currentColor; content: ''; flex: 0 0 auto; height: .35rem; margin-right: .2rem; transform: rotate(-45deg); transition: opacity .2s ease; width: .35rem; }
+
+  /* Collapsed: labels and section chevrons give way to the icons. */
+  .workspace-page .meridian-console :is(.console-sidebar, .patient-navigation) :is(.console-nav__text, .console-nav__top > span, .patient-navigation__label, .fluid-rail-toggle__label, .console-sidebar__practice > div, .console-person__copy) { transition: opacity .2s ease .08s; }
   .workspace-page .meridian-console .console-nav__label { transition: color .2s ease; }
   .workspace-page .meridian-console .console-nav__toggle::after { transition: opacity .2s ease, transform var(--fluid-medium) var(--fluid-spring-bouncy); }
-  :root[data-sidebar="collapsed"] .workspace-page .meridian-console :is(.console-sidebar, .patient-navigation) :is(.console-nav__text, .console-nav__top > span, .patient-navigation__label, .patient-navigation__heading, .console-sidebar__practice > div, .console-person__copy) { opacity: 0; transition-delay: 0s; transition-duration: .1s; }
-  :root[data-sidebar="collapsed"] .workspace-page .meridian-console .console-nav__toggle::after { opacity: 0; }
+  :root[data-sidebar="collapsed"] .workspace-page .meridian-console :is(.console-sidebar, .patient-navigation) :is(.console-nav__text, .console-nav__top > span, .patient-navigation__label, .fluid-rail-toggle__label, .console-sidebar__practice > div, .console-person__copy) { opacity: 0; transition-delay: 0s; transition-duration: .1s; }
+  :root[data-sidebar="collapsed"] .workspace-page .meridian-console :is(.console-nav__toggle, .console-nav__group--link > a.console-nav__top)::after { opacity: 0; }
   :root[data-sidebar="collapsed"] .workspace-page .meridian-console .console-nav__toggle .console-nav__label { font-size: 0; letter-spacing: 0; }
-  :root[data-sidebar="collapsed"] .workspace-page .meridian-console .console-nav__group > .console-nav__links { display: none; }
-  :root[data-sidebar="collapsed"] .workspace-page .meridian-console .console-nav__group:has([aria-current]) > .console-nav__toggle { background: var(--console-teal-soft); color: var(--console-teal-dark); }
-  :root[data-sidebar="collapsed"] .workspace-page .meridian-console .console-nav__group[data-fluid-flyout] > .console-nav__toggle { background: color-mix(in srgb, var(--console-teal-soft) 55%, transparent); color: var(--console-teal-dark); }
-  :root[data-sidebar="collapsed"] .workspace-page .meridian-console .console-nav__group > .console-nav__toggle { margin: .15rem 0; }
   /* An unread count becomes a dot on the icon. */
-  :root[data-sidebar="collapsed"] .workspace-page .meridian-console :is(.console-nav, .patient-navigation) :is(.nav-badge, .patient-navigation__badge) { font-size: 0; height: .55rem; left: calc(var(--fluid-icon-inset) + var(--fluid-icon) - .2rem); margin: 0; min-width: .55rem; padding: 0; position: absolute; top: .45rem; width: .55rem; }
+  :root[data-sidebar="collapsed"] .workspace-page .meridian-console :is(.console-nav, .patient-navigation) :is(.nav-badge, .patient-navigation__badge, .message-unread-dot) { font-size: 0; height: .55rem; left: calc(var(--fluid-icon-inset) + var(--fluid-icon) - .2rem); margin: 0; min-width: .55rem; padding: 0; position: absolute; top: .45rem; width: .55rem; }
   :root[data-sidebar="collapsed"] .workspace-page .meridian-console .console-sidebar__practice { background: transparent; padding-left: calc(var(--fluid-icon-inset) + var(--fluid-icon) / 2 - 1.15rem); }
 }
 

@@ -2,9 +2,9 @@
 {% load static workspace_ui %}
 {% block title %}Users and roles | {{ company.name }} | Meridian{% endblock %}
 {% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/management.css' %}?v=20261104a">{% endblock %}
-{% block breadcrumbs %}{% breadcrumbs 'Users and roles' %}{% endblock %}
+{% block breadcrumbs %}{% breadcrumbs 'Settings' %}{% endblock %}
 {% block page_heading %}
-<header class="staff-page-header"><div><h1>Users and roles</h1><p>{% if multi_practice_enabled %}One shared login, a role in each practice. Add and remove practice access without changing someone’s identity or their other memberships.{% else %}Manage your team's roles and access to Meridian Health without changing their account details.{% endif %}</p></div><a class="console-button console-button--primary" href="{% url 'portal:management-user-create' %}">Add staff access</a></header>
+<header class="staff-page-header"><div><h1>Settings</h1><p>{% if multi_practice_enabled %}One shared login, a role in each practice. Add and remove practice access without changing someone’s identity or their other memberships.{% else %}Manage your team's roles and access to Meridian Health without changing their account details.{% endif %}</p></div><a class="console-button console-button--primary" href="{% url 'portal:management-user-create' %}">Add staff access</a></header>{% page_tabs %}
 {% endblock %}
 {% block page_content %}
   <section class="staff-page-card management-filter-card"><form method="get" class="management-filters">

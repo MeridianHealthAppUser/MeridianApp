@@ -1821,6 +1821,14 @@
   }
 }
 
+/* In dark mode a text box, date selector or dropdown that doesn't set its own background would take the browser's
+   neutral grey, which sits apart from the app's blues. It takes the same surface as the app's styled fields instead.
+   Zero specificity, so a field styled anywhere else keeps its own look; light mode is unchanged. */
+:where(:root[data-theme="dark"]) :where(input:not([type=checkbox], [type=radio], [type=range], [type=color], [type=file], [type=submit], [type=button], [type=reset], [type=image]), textarea, select) { background-color: var(--c-ffffff); }
+@media (prefers-color-scheme: dark) {
+  :where(:root:not([data-theme="light"])) :where(input:not([type=checkbox], [type=radio], [type=range], [type=color], [type=file], [type=submit], [type=button], [type=reset], [type=image]), textarea, select) { background-color: var(--c-ffffff); }
+}
+
 /* The logo's dark lettering would disappear on a dark page: it is turned light, keeping its blues. */
 :root[data-theme="dark"] .platform-logo { filter: invert(1) hue-rotate(180deg); }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .platform-logo { filter: invert(1) hue-rotate(180deg); } }

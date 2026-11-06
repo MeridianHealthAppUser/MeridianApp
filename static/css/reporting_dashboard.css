@@ -14,9 +14,11 @@
 .metrics-period { color:var(--c-365868); font-weight:650; }
 .metrics-context__note { margin-left:auto; }
 .metrics-kpis { display:grid; gap:12px; grid-template-columns:repeat(4,minmax(0,1fr)); }
-.metrics-kpi { border-top:3px solid var(--metric-color); padding:15px 18px 13px; }
+/* The headline measures are standard tiles, as on Overview: no coloured stroke, the app's own surface, line and dot. */
+.metrics-kpi { background:var(--console-card); border:1px solid var(--console-line); border-radius:.9rem; box-shadow:0 4px 13px var(--c-1a3846-025); padding:15px 18px 13px; }
 .metrics-kpi__top { align-items:center; display:flex; font-size:12px; font-weight:650; justify-content:space-between; }
 .metrics-dot { background:var(--metric-color); border-radius:50%; height:6px; width:6px; }
+.metrics-kpi .metrics-dot { background:var(--console-teal); opacity:.9; }
 .metrics-kpi > strong { color:var(--c-1d3d4c); display:block; font-size:34px; font-variant-numeric:tabular-nums; letter-spacing:-.06em; line-height:1.2; margin:7px 0; }
 .metrics-kpi p { color:var(--c-6a8491); font-size:11px; line-height:1.4; margin:0 0 6px; }
 .metrics-kpi__period { color:var(--c-8699a3); font-size:9px; letter-spacing:.05em; text-transform:uppercase; }

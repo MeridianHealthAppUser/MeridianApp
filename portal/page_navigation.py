@@ -44,7 +44,7 @@ STAFF_PAGES = {
     'purchasing': Page('Purchasing', 'purchasing', 'admin'),
     'supplier-list': Page('Suppliers', 'suppliers', 'super_admin'),
     'inventory': Page('Inventory', 'inventory', 'admin'),
-    'inventory-consumption': Page('Consumption', 'inventory', 'admin'),
+    'inventory-consumption': Page('Consumption', 'consumption', 'admin'),
     'desktop-dashboard': Page('Overview', 'overview'),
     'mobile-dashboard': Page('Overview', 'overview'),
     'staff-tasks': Page('My tasks', 'tasks'),

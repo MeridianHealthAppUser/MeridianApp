@@ -74,6 +74,9 @@
 .inventory-movements-toggle svg { width:1.1rem; height:1.1rem; stroke:currentColor; stroke-width:2.3; stroke-linecap:round; stroke-linejoin:round; }
 .inventory-movements[open] .inventory-movements-toggle svg { transform:rotate(180deg); }
 .inventory-movements-placeholder { padding:1.2rem; margin:0; color:var(--console-muted); }
+/* A dispatch's shipment is a button beside its reason. */
+.inventory-movement-reference { align-items:center; display:flex; flex-wrap:wrap; gap:.4rem .7rem; }
+.inventory-movement-reference small { display:block; }
 .inventory-movements-tools { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:.75rem; padding:1rem 1.2rem; }
 .inventory-movements-tools h3 { margin:0; font-size:1rem; }
 .inventory-movements-tools p { margin:.25rem 0 0; font-size:.8rem; color:var(--console-muted); }

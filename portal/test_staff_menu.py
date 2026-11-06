@@ -12,6 +12,7 @@ from care.models import PracticeSettings
 from care.team_messaging import start_team_conversation
 from practices.models import Company, CompanyMembership, Patient
 from practices.services import ACTIVE_COMPANY_SESSION_KEY
+from .navigation import page_tabs
 from .test_markup import actionable_paths
 
 
@@ -48,12 +49,18 @@ class StaffMenuTests(TestCase):
             # Clinicians and practice administrators have a flat menu instead of sections.
             'doctor': [],
             'practice_admin': [],
-            'super_admin': ['care', 'purchasing', 'inventory', 'operations', 'administration', 'insights', 'settings'],
+            'super_admin': ['care', 'purchasing'],
         }
         for role, sections in expected.items():
             with self.subTest(role=role):
                 self.login(role)
                 self.assertEqual(self.bar_sections(), sections)
+        # Inventory, Operations, Administration, Insights and Settings are one page each, so the bar opens the page itself.
+        html = self.client.get(reverse('portal:mobile-dashboard')).content.decode()
+        bar = html[html.index('class="mobile-bottom-nav staff-mobile-nav"'):]
+        paths = actionable_paths('<nav ' + bar[:bar.index('</nav>')] + '</nav>')
+        for name in ('inventory', 'treatment-subscriptions', 'staff-leads', 'metrics', 'treatment-review-rules'):
+            self.assertIn(reverse(f'portal:{name}'), paths)
 
     def test_a_section_page_lists_its_options_and_hidden_sections_are_not_found(self):
         self.login('super_admin')
@@ -69,6 +76,27 @@ class StaffMenuTests(TestCase):
             for section in ('care', 'purchasing', 'inventory', 'operations', 'administration', 'insights', 'settings'):
                 self.assertEqual(self.client.get(reverse('portal:staff-menu-section', args=[section])).status_code, 404)
         self.assertEqual(self.client.get(reverse('portal:staff-menu-section', args=['invented'])).status_code, 404)
+
+    def test_insights_and_settings_are_pages_of_tabs_for_super_admins(self):
+        # James, 6 Nov 2026: like Operations and Administration, each is one page with its pages as tabs.
+        self.login('super_admin')
+        groups = (('Insights', ('metrics', 'activity-statements')),
+                  ('Settings', ('treatment-review-rules', 'management-users', 'email-journeys', 'practice-settings')))
+        for heading, pages in groups:
+            for name in pages:
+                with self.subTest(page=name):
+                    page = self.client.get(reverse(f'portal:{name}'))
+                    self.assertContains(page, f'<h1>{heading}</h1>', html=True)
+                    tabs = page.content.decode()
+                    tabs = tabs[tabs.index(f'aria-label="{heading} sections"'):]
+                    tabs = actionable_paths('<nav ' + tabs[:tabs.index('</nav>')] + '</nav>')
+                    for other in pages:
+                        self.assertIn(reverse(f'portal:{other}'), tabs)
+        # Anyone else allowed one of these pages (a clinician's Activity statements) gets just that page, no tabs.
+        for role in ('doctor', 'practice_admin'):
+            membership = CompanyMembership.objects.get(user=self.people[role])
+            self.assertIsNone(page_tabs('statements', membership=membership))
+            self.assertIsNone(page_tabs('users', membership=membership))
 
     def test_purchasing_section_opens_its_dedicated_page(self):
         self.login('super_admin')

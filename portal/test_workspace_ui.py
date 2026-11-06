@@ -116,9 +116,18 @@ class WorkspacePresentationTests(TestCase):
         self.login(self.super_admin)
         response = self.page('desktop-dashboard')
         self.assertContains(response, 'data-rail-navigation')
-        for group in ('Care', 'Purchasing', 'Inventory', 'Operations', 'Administration', 'Insights', 'Settings'):
+        for group in ('Care', 'Purchasing'):
             self.assertContains(response, f'data-navigation-group="{group.lower()}"')
             self.assertContains(response, f'</svg>{group}</span>')
+        # Inventory, Operations, Administration, Insights and Settings are one page each: the row opens it in one
+        # click, and its tabs are listed for the menu to open beside it on hover.
+        for group, page in (('Inventory', 'inventory'), ('Operations', 'treatment-subscriptions'), ('Administration', 'staff-leads'),
+                            ('Insights', 'metrics'), ('Settings', 'treatment-review-rules')):
+            self.assertNotContains(response, f'data-navigation-group="{group.lower()}"')
+            self.assertContains(response, f'href="{reverse(f"portal:{page}")}" data-navigation-link="{group.lower()}">')
+            self.assertContains(response, f'</svg><span class="console-nav__text">{group}</span>')
+        for name in ('inventory-consumption', 'ops-catalogue', 'ops-shipping', 'ops-history', 'ops-billing', 'dropouts', 'email-log'):
+            self.assertContains(response, f'href="{reverse(f"portal:{name}")}"')
         paths = actionable_paths(response)
         for name in ('staff-tasks', 'staff-schedule', 'purchasing', 'inventory', 'policy-list', 'management-users', 'metrics', 'staff-data-requests'):
             self.assertIn(reverse(f'portal:{name}'), paths)

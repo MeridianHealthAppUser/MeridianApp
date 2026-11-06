@@ -1,6 +1,5 @@
 {% load static %}
 <nav class="patient-navigation" aria-label="Patient navigation">
-  <div class="patient-navigation__top">{% include 'portal/includes/sidebar_toggle.html' %}<p class="patient-navigation__heading">Your care</p></div>
   <div class="patient-navigation__links" data-scroll-navigation>
     <a href="{% url 'portal:patient-dashboard' %}"{% if patient_nav == 'home' %} class="is-active" aria-current="{% if patient_section == 'overview' %}page{% else %}true{% endif %}"{% endif %}>
       <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="m3 10 9-7 9 7v10H3Z"/><path d="M9 20v-7h6v7"/></svg><span class="patient-navigation__label">Home</span>
@@ -18,5 +17,6 @@
       <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M21 15a3 3 0 0 1-3 3H9l-6 3V6a3 3 0 0 1 3-3h12a3 3 0 0 1 3 3Z"/><path d="M7 8h10M7 12h7"/></svg><span class="patient-navigation__label"><span class="patient-navigation__prefix">My </span>Messages</span>{% include 'portal/includes/live_message_badge.html' with kind='patient' count=patient_unread_messages dot=True %}
     </a>
   </div>
+  {% include 'portal/includes/sidebar_toggle.html' %}
 </nav>
 <script src="{% static 'js/navigation.js' %}" defer></script>

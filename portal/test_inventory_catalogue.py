@@ -63,7 +63,10 @@ class InventoryCatalogueTests(OperationsPortalFixture):
         self.assertIn(inventory.get('aria-current'), ('page', 'true'))
         operations = [link for link in links if link.get('href') == reverse('portal:treatment-subscriptions')]
         self.assertTrue(all('aria-current' not in link for link in operations))
-        self.assertFalse(any(link.get('href') == reverse('portal:ops-catalogue') for link in links))
+        # Catalogue is a tab of Inventory, never a menu row of its own: a Super Admin's menu lists it once, among the
+        # Inventory tabs that open beside Inventory on hover (James, 6 Nov 2026); the flat menu leaves it out.
+        catalogue = [link for link in links if link.get('href') == reverse('portal:ops-catalogue')]
+        self.assertEqual(len(catalogue), 1 if response.context['active_membership'].role == 'super_admin' else 0)
 
     def test_inventory_subtabs_have_consistent_destinations_and_active_states(self):
         pages = (('inventory', {}, 'Inventory'), ('ops-catalogue', {}, 'Catalogue'),

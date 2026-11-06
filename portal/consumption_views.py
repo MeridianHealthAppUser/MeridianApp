@@ -57,7 +57,7 @@ def url_with(name, query):
 
 
 class ConsumptionView(OperationsView):
-    nav_section, page_title, shipping = 'inventory', 'Consumption', False
+    nav_section, page_title, shipping = 'consumption', 'Consumption', False
     http_method_names = ('get', 'head', 'options')
 
     def get(self, request):
@@ -118,7 +118,7 @@ def detail_scope(company, pk, week):
 
 
 class ConsumptionDetailView(OperationsView):
-    nav_section, page_title, shipping = 'inventory', 'Consumption detail', False
+    nav_section, page_title, shipping = 'consumption', 'Consumption detail', False
     http_method_names = ('get', 'head', 'options')
 
     def get(self, request, pk, week):
@@ -148,7 +148,7 @@ class ConsumptionDetailView(OperationsView):
 
 
 class ConsumptionExportView(OperationsView):
-    nav_section, page_title, shipping = 'inventory', 'Consumption', False
+    nav_section, page_title, shipping = 'consumption', 'Consumption', False
     http_method_names = ('get', 'head', 'options')
 
     def get(self, request, pk=None, week=None):

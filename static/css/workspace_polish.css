@@ -68,7 +68,8 @@
   .workspace-page .console-sidebar__practice p { font-size:.59rem; }
   .workspace-page .console-sidebar__practice strong { font-size:.76rem; line-height:1.4; overflow-wrap:anywhere; }
   .workspace-page .console-nav { display:flex; flex:1 1 auto; flex-direction:column; gap:.12rem; min-height:0; overflow-y:auto; overscroll-behavior-y:contain; padding:.1rem .25rem .65rem .05rem; scrollbar-color:var(--c-bfd5cc) transparent; scrollbar-width:thin; }
-  .workspace-page .console-nav__label { color:var(--c-8c9ca5); display:block; flex:0 0 auto; font-size:.59rem; letter-spacing:.11em; margin:.8rem 0 .2rem; padding:0 .65rem; }
+  /* Section headings read like Overview: Care, Purchasing, Inventory and so on. */
+  .workspace-page .console-nav__label { color:var(--c-8c9ca5); display:block; flex:0 0 auto; font-size:.79rem; font-weight:600; letter-spacing:0; margin:.8rem 0 .2rem; padding:0 .65rem; text-transform:none; }
   .workspace-page .console-nav a { border:1px solid transparent; border-radius:.55rem; color:var(--c-556e7b); flex:0 0 auto; font-size:.79rem; font-weight:600; gap:.5rem; line-height:1.3; min-height:2.1rem; padding:.45rem .65rem; }
   .workspace-page .console-nav a::before { height:.22rem; width:.22rem; flex:0 0 auto; }
   .workspace-page .console-nav a.is-active { background:var(--console-teal-soft); border-color:var(--console-teal-line); color:var(--console-teal-dark); font-weight:750; }
