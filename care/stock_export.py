@@ -11,7 +11,7 @@ from openpyxl.utils import get_column_letter
 
 
 SAST = ZoneInfo('Africa/Johannesburg')
-HEADERS = ('Date (SAST)', 'Product', 'Category', 'Quantity', 'Batch', 'Expires on',
+HEADERS = ('Date', 'Product', 'Category', 'Quantity', 'Batch', 'Expires on',
            'Reference / reason', 'Shipment ID', 'Recorded by', 'Stock override')
 
 

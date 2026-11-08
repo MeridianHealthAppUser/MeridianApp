@@ -6,7 +6,7 @@
 {% block breadcrumbs %}{% breadcrumbs 'Consultations' %}{% endblock %}
 {% block page_heading %}
   <header class="staff-page-header">
-    <div><h1>Consultations</h1><p>Draft and signed consultation records at {{ company.name }}. Times are shown in South Africa time (SAST).</p></div>
+    <div><h1>Consultations</h1><p>Draft and signed consultation records at {{ company.name }}.</p></div>
     {% if can_create %}
       <div class="clinical-heading-actions">
         {% if filter_form.cleaned_data.patient %}<a class="console-button console-button--primary" href="{% url 'portal:clinical-consultation-create' filter_form.cleaned_data.patient.pk %}">New consultation</a>{% else %}<a class="console-button console-button--primary" href="{% url 'portal:patient-list' %}">Choose a patient</a>{% endif %}
@@ -33,7 +33,7 @@
           <thead><tr><th scope="col">Patient</th><th scope="col">Consultation</th><th scope="col">Clinician</th><th scope="col">Status</th><th scope="col">Action</th></tr></thead>
           <tbody>{% for encounter in consultations %}<tr>
             <td data-label="Patient"><span class="clinical-table__person">{{ encounter.patient }}</span></td>
-            <td data-label="Consultation"><div class="clinical-table__date"><time datetime="{{ encounter.occurred_at|date:'c' }}">{{ encounter.occurred_at|date:"j M Y" }}</time><span>{{ encounter.occurred_at|date:"H:i" }} SAST</span></div></td>
+            <td data-label="Consultation"><div class="clinical-table__date"><time datetime="{{ encounter.occurred_at|date:'c' }}">{{ encounter.occurred_at|date:"j M Y" }}</time><span>{{ encounter.occurred_at|date:"H:i" }}</span></div></td>
             <td data-label="Clinician">{{ encounter.clinician.full_name }}</td>
             <td data-label="Status"><span class="console-status{% if encounter.status == 'signed' %} console-status--active{% endif %}">{{ encounter.get_status_display }}</span></td>
             <td data-label="Action"><a class="console-button console-button--secondary" href="{{ encounter.detail_url }}">Open note<span class="sr-only"> for {{ encounter.patient }}</span></a></td>

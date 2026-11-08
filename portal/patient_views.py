@@ -6,16 +6,17 @@ from urllib.parse import urlencode
 from django import forms
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.paginator import Paginator
-from django.db.models import Count, DateTimeField, DurationField, ExpressionWrapper, F, IntegerField, OuterRef, Q, Subquery, Value
-from django.db.models.functions import Cast, Coalesce
+from django.db.models import Count, OuterRef, Q, Subquery
+from django.db.models.functions import Coalesce
 from django.http import Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
+from django.utils.formats import date_format
 from django.views import View
 
 from care.forms import PatientMessageForm, PatientThreadForm, WeightEntryForm
-from care.messaging import mark_patient_messages_read
+from care.messaging import mark_patient_messages_read, practice_administrators
 from care.models import (
     Appointment, MessageThread, PatientMessage, PracticeSettings, WeightEntry,
 )
@@ -24,6 +25,7 @@ from video.access import attach_video_join
 
 from .inbox import latest_from, search_text, search_threads
 from .patient_context import make_patient_context
+from .patient_summary import with_scheduled_end
 from .people_tags import in_join_order
 from .realtime_context import records_conversation_view
 from .video_links import safe_video_link
@@ -31,16 +33,18 @@ from .workflow_context import make_workflow_context
 from .views import PatientPortalRequiredMixin, PatientThreadCreateView
 
 
-APPOINTMENT_STATUS_CHOICES = (('upcoming', 'Upcoming'), ('history', 'Past and cancelled'), ('all', 'All appointments'))
-# My Appointments opens on every appointment, so a past or cancelled one stays in sight.
-APPOINTMENT_STATUS_DEFAULT = 'all'
+# My Appointments' two tabs, split by scheduled end (start + length): Upcoming (where it opens) hasn't ended yet, so an
+# appointment under way stays there until it's due to finish (James, 8 Nov 2026); Past has ended.
+APPOINTMENT_TABS = (('upcoming', 'Upcoming'), ('past', 'Past'))
+# Each tab's Status filter offers only what's possible there: attendance (Completed, No show) is recorded only once an
+# appointment has ended (care/appointment_lifecycle.py), so an upcoming one is Booked or Cancelled.
+APPOINTMENT_TAB_STATUSES = {
+    'upcoming': (Appointment.Status.BOOKED, Appointment.Status.CANCELLED),
+    'past': tuple(Appointment.Status),
+}
 APPOINTMENT_WHEN_CHOICES = (('', 'Any time'), ('today', 'Today'), ('week', 'This week'), ('month', 'This month'))
 # The appointment just booked, shown once at the top of My Appointments (portal/patient_care_views.py).
 JUST_BOOKED = 'patient_just_booked'
-
-
-class AppointmentFilterForm(forms.Form):
-    status = forms.ChoiceField(choices=APPOINTMENT_STATUS_CHOICES)
 
 
 def _when_bounds(when):
@@ -80,6 +84,16 @@ def unread_patient_messages(request, company, patient):
     return PatientMessage.objects.for_company(company).filter(
         thread__company=company, thread__patient=patient, read_at__isnull=True,
     ).exclude(sender=request.user).count()
+
+
+def appointment_change_request_url(appointment, administrator):
+    """Request a change: a new message asking for another time, to a practice administrator (their clinician when the
+    practice has none), who is emailed about it as usual and moves the appointment."""
+    when = date_format(timezone.localtime(appointment.starts_at), 'D j M Y, H:i')
+    query = {'compose': 1, 'subject': f'Request to change my appointment: {when}'}
+    if administrator is not None:
+        query['to'] = administrator.pk
+    return f"{reverse('portal:patient-messages')}?{urlencode(query)}#patient-conversation"
 
 
 def patient_page_context(request, company, patient, section, title):
@@ -143,30 +157,24 @@ def _paginate(request, queryset, per_page=20):
     }
 
 
-def _with_appointment_end(queryset):
-    # Ongoing booked consultations remain on Upcoming until the scheduled end.
-    duration = ExpressionWrapper(Cast('duration_minutes', IntegerField()) * Value(timedelta(minutes=1)), output_field=DurationField())
-    return queryset.annotate(scheduled_ends_at=ExpressionWrapper(F('starts_at') + duration, output_field=DateTimeField()))
-
-
 def _appointment_list(request, company, patient, now):
-    """My Appointments' table and its Filters: Status (All appointments to start with), Date, Clinician and Appointment type."""
+    """My Appointments' Upcoming and Past tabs, and the Filters within them: Status, Date, Clinician and Appointment
+    type. Upcoming runs soonest first, Past latest first. Whatever's filtered stays filtered on the other tab, except
+    Status, whose choices differ between the two."""
     from django.contrib.auth import get_user_model
     from .filter_menus import choice_section, filter_menu, ticked_ids, ticked_values
 
-    form, status = _filter(request, AppointmentFilterForm, APPOINTMENT_STATUS_DEFAULT)
+    tab = request.GET.get('tab') if request.GET.get('tab') in dict(APPOINTMENT_TABS) else 'upcoming'
     when = request.GET.get('when', '') if request.GET.get('when', '') in dict(APPOINTMENT_WHEN_CHOICES) else ''
     clinicians = ticked_ids(request.GET.getlist('clinician'))
     types = [value for value in ticked_values(request.GET.getlist('type')) if value in Appointment.Type.values]
+    statuses = [value for value in ticked_values(request.GET.getlist('status')) if value in APPOINTMENT_TAB_STATUSES[tab]]
     yours = Appointment.objects.for_company(company).filter(patient=patient)
-    upcoming = Q(scheduled_ends_at__gte=now, status=Appointment.Status.BOOKED)
-    appointments = _with_appointment_end(yours.select_related('clinician'))
-    if status == 'upcoming':
-        appointments = appointments.filter(upcoming)
-    elif status == 'history':
-        appointments = appointments.exclude(upcoming)
-    elif status is None:
-        appointments = appointments.none()
+    appointments = with_scheduled_end(yours.select_related('clinician'))
+    if tab == 'upcoming':
+        appointments = appointments.filter(scheduled_ends_at__gt=now).order_by('starts_at', 'pk')
+    else:
+        appointments = appointments.filter(scheduled_ends_at__lte=now).order_by('-starts_at', '-pk')
     if when:
         start, end = _when_bounds(when)
         appointments = appointments.filter(starts_at__gte=start, starts_at__lt=end)
@@ -174,31 +182,46 @@ def _appointment_list(request, company, patient, now):
         appointments = appointments.filter(clinician_id__in=clinicians)
     if types:
         appointments = appointments.filter(appointment_type__in=types)
-    appointments = appointments.order_by('-starts_at', '-pk') if status == 'history' else appointments.order_by('starts_at', 'pk')
+    if statuses:
+        appointments = appointments.filter(status__in=statuses)
     context = _paginate(request, appointments)
-    kept = {key: value for key, value in {'status': request.GET.get('status', ''), 'when': when, 'clinician': clinicians,
-                                         'type': types}.items() if value}
-    context['pagination_query'] = urlencode(kept, doseq=True)
+    action = reverse('portal:patient-appointments')
+    filters = {key: value for key, value in {'status': statuses, 'when': when, 'clinician': clinicians, 'type': types}.items() if value}
+
+    def on_tab(value, **query):
+        # Upcoming is the page's own address, so only Past is spelt out. Status stays with its own tab.
+        if value != tab:
+            query.pop('status', None)
+        query = urlencode({**({'tab': value} if value != 'upcoming' else {}), **query}, doseq=True)
+        return f'{action}?{query}' if query else action
+
+    context['pagination_query'] = on_tab(tab, **filters).partition('?')[2]
+    context['appointment_tabs'] = [{'label': label, 'url': on_tab(value, **filters), 'active': value == tab}
+                                   for value, label in APPOINTMENT_TABS]
     # Only the clinicians they've had appointments with.
     people = get_user_model().objects.filter(pk__in=yours.values('clinician_id')).order_by('first_name', 'last_name', 'pk')
-    action = reverse('portal:patient-appointments')
-    context.update(filter_form=form, filter_menu=filter_menu(
-        action=action, clear_url=action, label='Filter appointments', form=form, sections=[
-            choice_section('status', 'Status', APPOINTMENT_STATUS_CHOICES, [request.GET.get('status', APPOINTMENT_STATUS_DEFAULT)], pick=True,
-                           default=APPOINTMENT_STATUS_DEFAULT, errors=form.errors.get('status', ())),
+    context.update(appointment_tab=tab, filter_menu=filter_menu(
+        action=action, clear_url=on_tab(tab), label='Filter appointments',
+        hidden=[('tab', tab)] if tab != 'upcoming' else [], sections=[
+            choice_section('status', 'Status', [(status.value, status.label) for status in APPOINTMENT_TAB_STATUSES[tab]], statuses),
             choice_section('when', 'Date', APPOINTMENT_WHEN_CHOICES, [when], icon='date', pick=True, default=''),
-            choice_section('clinician', 'Clinician', [(person.pk, person.full_name) for person in people], clinicians, icon='person'),
+            choice_section('clinician', 'Clinician', [(person.pk, person.titled_name) for person in people], clinicians, icon='person'),
             choice_section('type', 'Appointment type', Appointment.Type.choices, types, icon='type'),
         ]))
     context['appointments'] = list(context['page_obj'].object_list)
     context['video_server_time'] = now
-    attach_video_join(context['appointments'], request.user.pk, allowed_role='patient', now=now)
-    # Cancel on a row opens the appointment page's own dialog, for each booking the patient can still cancel.
+    if tab == 'upcoming':
+        # Past is only a history, with no Join.
+        attach_video_join(context['appointments'], request.user.pk, allowed_role='patient', now=now)
+    # Each booking the patient can still change gets Request a change (the appointment page's message) and Cancel,
+    # which opens the appointment page's own dialog.
     from .appointment_detail_views import AppointmentStatusForm
-    for appointment in context['appointments']:
-        if appointment.status == Appointment.Status.BOOKED and appointment.starts_at > now:
-            appointment.cancel_form = AppointmentStatusForm(cancel_only=True, auto_id=f'cancel_{appointment.pk}_%s')
-            appointment.cancel_context = make_workflow_context(request, company, 'appointment-status', appointment, patient=patient)
+    changeable = [item for item in context['appointments'] if item.status == Appointment.Status.BOOKED and item.starts_at > now]
+    administrator = practice_administrators(company).first() if changeable else None
+    for appointment in changeable:
+        appointment.change_request_url = appointment_change_request_url(appointment, administrator)
+        appointment.cancel_form = AppointmentStatusForm(cancel_only=True, auto_id=f'cancel_{appointment.pk}_%s')
+        appointment.cancel_context = make_workflow_context(request, company, 'appointment-status', appointment, patient=patient)
     return context
 
 

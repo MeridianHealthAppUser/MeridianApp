@@ -458,6 +458,15 @@ class PatientShopPortalTests(OperationsPortalFixture):
         MedicationProduct.objects.filter(pk=self.open_product.pk).update(price=0)
         self.assertEqual(self.page('patient-treatment').context['shop_products'], [])
 
+    def test_an_item_in_the_basket_offers_update_basket_only_once_its_quantity_changes(self):
+        self.add_item(quantity=2)
+        response = self.page('patient-treatment')
+        # The form knows the basket's quantity; the script hides Update basket while the field still says it.
+        self.assertContains(response, 'class="patient-product__form" data-in-basket="2"')
+        self.assertContains(response, 'type="submit" data-basket-update>Update basket')
+        self.assertContains(response, '2 in your basket')
+        self.assertContains(response, 'js/basket_quantity.js')
+
     def test_add_place_and_pay_puts_the_order_on_the_next_shipping_list(self):
         from care.billing import parcel_payment
         from care.parcels import shipping_day_from, shipping_weekday

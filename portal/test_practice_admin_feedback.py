@@ -370,7 +370,7 @@ class OperationsFeedbackTests(SessionMixin, OperationsFixture):
         workbook = load_workbook(BytesIO(content))
         self.addCleanup(workbook.close)
         rows = list(workbook.active.iter_rows(values_only=True))
-        self.assertEqual(list(rows[0][:3]), ['Shipment', 'Planned date', 'Dispatched (SAST)'])
+        self.assertEqual(list(rows[0][:3]), ['Shipment', 'Planned date', 'Dispatched'])
         row = dict(zip(rows[0], rows[1]))
         self.assertEqual(row['Note'], 'Fragile')
         self.assertEqual(row['Doctor'], self.doctor.titled_name)

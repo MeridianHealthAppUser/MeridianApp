@@ -34,12 +34,12 @@
                     {% for start, end in day_form.periods %}
                       <div class="schedule-pattern-times" data-time-range data-working-period>
                         <div class="console-form__field">
-                          <label{% if not forloop.first %} class="sr-only"{% endif %} for="{{ start.id_for_label }}">From<span class="sr-only"> on {{ day_form.day_label }}{% if not forloop.first %}, hours {{ forloop.counter }}{% endif %} (SAST)</span></label>
+                          <label{% if not forloop.first %} class="sr-only"{% endif %} for="{{ start.id_for_label }}">From<span class="sr-only"> on {{ day_form.day_label }}{% if not forloop.first %}, hours {{ forloop.counter }}{% endif %}</span></label>
                           {{ start }}
                           {{ start.errors }}
                         </div>
                         <div class="console-form__field">
-                          <label{% if not forloop.first %} class="sr-only"{% endif %} for="{{ end.id_for_label }}">Until<span class="sr-only"> on {{ day_form.day_label }}{% if not forloop.first %}, hours {{ forloop.counter }}{% endif %} (SAST)</span></label>
+                          <label{% if not forloop.first %} class="sr-only"{% endif %} for="{{ end.id_for_label }}">Until<span class="sr-only"> on {{ day_form.day_label }}{% if not forloop.first %}, hours {{ forloop.counter }}{% endif %}</span></label>
                           {{ end }}
                           {{ end.errors }}
                         </div>
@@ -113,12 +113,12 @@
             </div>
             <div class="schedule-field-pair" data-time-range>
               <div class="console-form__field">
-                <label for="{{ special_day_form.starts_at.id_for_label }}">From<span class="sr-only"> (SAST)</span></label>
+                <label for="{{ special_day_form.starts_at.id_for_label }}">From</label>
                 {{ special_day_form.starts_at }}
                 {{ special_day_form.starts_at.errors }}
               </div>
               <div class="console-form__field">
-                <label for="{{ special_day_form.ends_at.id_for_label }}">To<span class="sr-only"> (SAST)</span></label>
+                <label for="{{ special_day_form.ends_at.id_for_label }}">To</label>
                 {{ special_day_form.ends_at }}
                 {{ special_day_form.ends_at.errors }}
               </div>

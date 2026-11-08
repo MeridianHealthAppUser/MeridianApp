@@ -62,7 +62,7 @@ def _table(title, headers, rows, empty):
 def overview_rows(company, patient):
     """The Overview tab: the clinical and dispensed history, current prescription, weight and summary data."""
     log = clinical_log(company, patient)
-    yield from _table('Clinical history', ('Date (SAST)', 'Who', 'Type', 'Entry'), (
+    yield from _table('Clinical history', ('Date', 'Who', 'Type', 'Entry'), (
         (_when(entry['at']), entry['by'] or ('Automatic' if entry.get('automatic') else ''), LOG_TYPES[entry['kind']], entry['text'])
         for entry in log), 'No clinical entries yet.')
     yield from _table('Dispensed history', ('Date', 'Medicine', 'Month', 'Detail'), (
@@ -104,7 +104,7 @@ def history_rows(timeline):
         while batch := list(islice(index, 200)):
             yield from timeline.render_rows(batch)
 
-    yield 'header', ('Date (SAST)', 'Category', 'Event', 'Detail', 'Recorded by')
+    yield 'header', ('Date', 'Category', 'Event', 'Detail', 'Recorded by')
     for entry in entries():
         yield '', (_when(entry['at']), entry['category_label'], entry['title'], entry['detail'], entry['actor'])
 
@@ -142,37 +142,37 @@ def workbook_sheets(request, company, patient, timeline):
     return [
         ('Overview', overview_rows(company, patient), (18, 26, 22, 70), False),
         ('History', history_rows(timeline), (18, 18, 40, 60, 24), True),
-        ('Appointments', _sheet(('Date and time (SAST)', 'Appointment', 'Duration (minutes)', 'Doctor', 'Status'), (
+        ('Appointments', _sheet(('Date and time', 'Appointment', 'Duration (minutes)', 'Doctor', 'Status'), (
             (_when(row.starts_at), row.get_appointment_type_display(), row.duration_minutes, _person(row.clinician), row.get_status_display())
             for row in appointments)), (20, 22, 12, 24, 14), True),
-        ('Consultations', _sheet(('Date (SAST)', 'Doctor', 'Status', 'Signed by', 'Consult note'), (
+        ('Consultations', _sheet(('Date', 'Doctor', 'Status', 'Signed by', 'Consult note'), (
             (_when(row.occurred_at), _person(row.clinician), row.get_status_display(), _person(row.signed_by), row.clinical_summary)
             for row in consultations)), (18, 24, 12, 24, 80), True),
         ('Blood results', blood_rows(results, labs), (16, 40, 60, 24, 16), False),
-        ('Notes', _sheet(('Date (SAST)', 'Type', 'Author', 'Note', 'Tags'), (
+        ('Notes', _sheet(('Date', 'Type', 'Author', 'Note', 'Tags'), (
             (_when(row.created_at), row.get_note_type_display(), _person(row.author), row.body, ', '.join(tag.name for tag in row.tags.all()))
             for row in notes)), (18, 16, 24, 80, 24), True),
         ('Weight', _sheet(('Date', 'Weight (kg)', 'Note', 'Recorded by'), (
             (_day(row.recorded_on), row.weight_kg, row.note, _person(row.recorded_by)) for row in weights)), (14, 12, 40, 24), True),
-        ('Messages', _sheet(('Conversation', 'Status', 'Date (SAST)', 'From', 'Message'), (
+        ('Messages', _sheet(('Conversation', 'Status', 'Date', 'From', 'Message'), (
             (row.thread.subject, 'Closed' if row.thread.is_closed else 'Open', _when(row.created_at), sender(row), row.body)
             for row in messages)), (30, 10, 18, 24, 80), True),
-        ('Tasks', _sheet(('Task', 'Description', 'Assigned to', 'Due (SAST)', 'Status', 'Tags'), (
+        ('Tasks', _sheet(('Task', 'Description', 'Assigned to', 'Due', 'Status', 'Tags'), (
             (row.title, row.description, _person(row.assigned_to, 'Unassigned'), _when(row.due_at) or 'No due date',
              row.get_status_display(), ', '.join(tag.name for tag in row.tags.all())) for row in tasks)), (32, 50, 24, 18, 14, 24), True),
-        ('Payments', _sheet(('Due date', 'Amount (R)', 'Stored status', 'Recorded paid date (SAST)'), (
+        ('Payments', _sheet(('Due date', 'Amount (R)', 'Stored status', 'Recorded paid date'), (
             (_day(row.due_on), row.amount, row.get_status_display(), _when(row.paid_at) or 'Not recorded') for row in payments)),
             (14, 12, 16, 22), True),
         ('Treatment', _sheet(('Medication', 'Dose', 'Doctor', 'Valid from', 'Valid to', 'Status'), (
             (row.product.name, row.max_dose, _person(row.prescribed_by), _day(row.starts_on), _day(row.expires_on), row.get_status_display())
             for row in treatment)), (26, 18, 24, 14, 14, 14), True),
-        ('Dispatch history', _sheet(('Scheduled', 'Parcel', 'Status', 'Tracking', 'Dispatched (SAST)'), (
+        ('Dispatch history', _sheet(('Scheduled', 'Parcel', 'Status', 'Tracking', 'Dispatched'), (
             (_day(row.scheduled_for), row.cycle_number, row.get_status_display(), row.tracking_number or 'Not dispatched', _when(row.dispatched_at))
             for row in deliveries)), (14, 8, 16, 24, 20), True),
         ('Export details', _sheet(('Field', 'Value'), (
             ('Patient', str(patient)), ('Record number', patient.medical_record_number or 'Not recorded'),
             ('Practice', company.name), ('Exported by', request.user.full_name),
-            ('Exported (SAST)', _when(timezone.now())), ('Excluded', EXCLUDED),
+            ('Exported', _when(timezone.now())), ('Excluded', EXCLUDED),
         )), (22, 90), True),
     ]
 

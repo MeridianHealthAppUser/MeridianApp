@@ -1,5 +1,5 @@
 {% extends 'portal/operations_base.html' %}{% load static %}
 {% block title %}Consumption detail | Meridian{% endblock %}
-{% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/dialogs.css' %}?v=20261104d"><link rel="stylesheet" href="{% static 'css/inventory.css' %}?v=20261106a"><link rel="stylesheet" href="{% static 'css/consumption.css' %}?v=20261104a">{% endblock %}
+{% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/dialogs.css' %}?v=20261108a"><link rel="stylesheet" href="{% static 'css/inventory.css' %}?v=20261106a"><link rel="stylesheet" href="{% static 'css/consumption.css' %}?v=20261104a">{% endblock %}
 {% block page_heading %}<header class="staff-page-header"><div><h1>Inventory</h1><p>Manage your stock and medication catalogue.</p></div></header>{% endblock %}
 {% block operations_content %}{% include 'portal/includes/inventory_tabs.html' %}<section class="staff-page-card">{% include 'portal/includes/consumption_detail.html' %}</section>{% endblock %}

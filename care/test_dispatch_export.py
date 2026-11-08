@@ -96,7 +96,7 @@ class DispatchHistoryWorkbookTests(SimpleTestCase):
 
     def test_naive_dispatch_timestamp_is_kept_as_local_sast(self):
         local = datetime(2026, 11, 3, 9, 30)
-        sheet = self.workbook((self.row(**{'Dispatched (SAST)': local}),)).active
+        sheet = self.workbook((self.row(**{'Dispatched': local}),)).active
 
         self.assertEqual(sheet['C2'].value, local)
 

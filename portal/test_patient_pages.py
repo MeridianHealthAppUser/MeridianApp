@@ -293,35 +293,36 @@ class PatientStandalonePagesTests(TestCase):
         entries[0].refresh_from_db()
         self.assertIsNotNone(entries[0].read_at)
 
-    def test_appointments_upcoming_history_and_all_are_practice_owned(self):
+    def test_appointments_upcoming_and_past_tabs_are_practice_owned(self):
+        # Split by start time alone: a cancelled booking that hasn't come round yet is still Upcoming.
         self.login()
-        for status, expected in (
-            ('upcoming', {self.upcoming.pk}),
-            ('history', {self.past.pk, self.cancelled.pk}),
-            ('all', {self.upcoming.pk, self.past.pk, self.cancelled.pk}),
+        for params, expected in (
+            ({}, {self.upcoming.pk, self.cancelled.pk}),
+            ({'tab': 'upcoming'}, {self.upcoming.pk, self.cancelled.pk}),
+            ({'tab': 'past'}, {self.past.pk}),
+            # An unknown tab opens Upcoming rather than everything.
+            ({'tab': 'invented-tab'}, {self.upcoming.pk, self.cancelled.pk}),
         ):
-            with self.subTest(status=status):
-                response = self.page('patient-appointments', status=status)
+            with self.subTest(params=params):
+                response = self.page('patient-appointments', **params)
                 self.assertEqual({appointment.pk for appointment in response.context['page_obj']}, expected)
 
-    def test_appointments_are_paginated_twenty_at_a_time(self):
+    def test_appointments_are_paginated_twenty_at_a_time_within_a_tab(self):
         for days in range(30, 55):
             self.appointment(days=days)
         self.login()
-        first = self.page('patient-appointments', status='upcoming')
-        second = self.page('patient-appointments', status='upcoming', page=2)
+        first = self.page('patient-appointments')
+        second = self.page('patient-appointments', page=2)
         self.assertEqual(len(first.context['page_obj']), 20)
-        self.assertEqual(len(second.context['page_obj']), 6)
+        self.assertEqual(len(second.context['page_obj']), 7)
         first_ids = {record.pk for record in first.context['page_obj']}
         self.assertFalse(first_ids & {record.pk for record in second.context['page_obj']})
-        self.assertEqual(first.context['page_obj'].paginator.count, 26)
-
-    def test_invalid_appointment_filter_does_not_show_an_unfiltered_list(self):
-        self.login()
-        response = self.page('patient-appointments', status='invented-status')
-        self.assertEqual(response.status_code, 200)
-        self.assertIn('status', response.context['filter_form'].errors)
-        self.assertEqual(list(response.context['page_obj']), [])
+        self.assertEqual(first.context['page_obj'].paginator.count, 27)
+        for days in range(-30, -5):
+            self.appointment(days=days)
+        past = self.page('patient-appointments', tab='past')
+        self.assertEqual(past.context['page_obj'].paginator.count, 26)
+        self.assertIn('href="?tab=past&amp;page=2"', past.content.decode())
 
     def test_progress_history_contains_only_current_patients_weights(self):
         self.login()

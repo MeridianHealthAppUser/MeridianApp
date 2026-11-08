@@ -2,7 +2,7 @@
 {% load static workspace_ui %}
 
 {% block title %}My Appointments | Meridian{% endblock %}
-{% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/info_tips.css' %}?v=20261104a"><script src="{% static 'js/info_tips.js' %}?v=20261008a" defer></script><link rel="stylesheet" href="{% static 'css/dialogs.css' %}?v=20261104d"><script src="{% static 'js/dialogs.js' %}?v=20261022a" defer></script><link rel="stylesheet" href="{% static 'css/time_slots.css' %}?v=20261104a"><script src="{% static 'js/appointment_booking.js' %}?v=20261022d" defer></script><script src="{% static 'js/appointment_video.js' %}?v=20261018" defer></script><link rel="stylesheet" href="{% static 'css/filter_menu.css' %}?v=20261104a"><script src="{% static 'js/filter_menu.js' %}?v=20261008b" defer></script>{% endblock %}
+{% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/info_tips.css' %}?v=20261104a"><script src="{% static 'js/info_tips.js' %}?v=20261008a" defer></script><link rel="stylesheet" href="{% static 'css/dialogs.css' %}?v=20261108a"><script src="{% static 'js/dialogs.js' %}?v=20261022a" defer></script><link rel="stylesheet" href="{% static 'css/time_slots.css' %}?v=20261104a"><script src="{% static 'js/appointment_booking.js' %}?v=20261022d" defer></script><script src="{% static 'js/appointment_video.js' %}?v=20261106a" defer></script><link rel="stylesheet" href="{% static 'css/filter_menu.css' %}?v=20261104a"><script src="{% static 'js/filter_menu.js' %}?v=20261008b" defer></script>{% endblock %}
 {% block patient_content_class %}patient-appointments{% endblock %}
 
 {% block patient_breadcrumbs %}{% breadcrumbs 'My Appointments' %}{% endblock %}
@@ -20,48 +20,55 @@
 
 {% block patient_content %}
 <div class="patient-page-stack patient-appointments__body">
-  {% include 'portal/includes/patient_next_consult.html' with consult=just_booked eyebrow='Booked' %}
+  {# The appointment just booked, this once; otherwise the next consult, as on My Treatment (with Join while it's open). #}
+  {% if just_booked %}{% include 'portal/includes/patient_next_consult.html' with consult=just_booked eyebrow='Booked' %}{% else %}{% include 'portal/includes/patient_next_consult.html' with consult=next_consult %}{% endif %}
 
   <section class="console-card" aria-labelledby="patient-appointments-heading">
     <header class="console-card__header">
       <div class="console-card__heading">
         <h2 id="patient-appointments-heading">My Appointments</h2>
-        <p>{{ page_obj.paginator.count }} appointment{{ page_obj.paginator.count|pluralize }} in this view · times in SAST</p>
       </div>
-      {% include 'portal/includes/filter_menu.html' with filter_menu_class='filter-menu--compact' %}
+      {# How many are on this tab with these filters, beside Filters, as on Purchasing. #}
+      <div class="staff-list-tools">
+        <span class="staff-page-card__count">{{ page_obj.paginator.count }} appointment{{ page_obj.paginator.count|pluralize }}</span>
+        {% include 'portal/includes/filter_menu.html' with filter_menu_class='filter-menu--compact' %}
+      </div>
     </header>
-    {% if not filter_form.errors %}
-      <div class="patient-table-wrap">
-        <table class="patient-table patient-appointment-table" aria-labelledby="patient-appointments-heading" data-appointment-video data-status-url="{% url 'portal:patient-appointment-video-status' %}" data-video-scope="{{ request.realtime_scope }}" data-server-time="{{ video_server_time|date:'c' }}">
-          <thead><tr><th scope="col">Date and time</th><th scope="col">Appointment</th><th scope="col">Clinician</th><th scope="col">Status</th><th class="patient-table__fit" scope="col">Actions</th></tr></thead>
-          <tbody>
-            {% for appointment in appointments %}
-              <tr data-video-appointment-id="{{ appointment.pk }}" data-video-opens-at="{{ appointment.video_join_opens_at|date:'c' }}" data-video-closes-at="{{ appointment.video_join_closes_at|date:'c' }}">
-                <td data-label="Date and time"><div class="patient-table__when"><div class="patient-table__date"><time datetime="{{ appointment.starts_at|date:'c' }}">{{ appointment.starts_at|date:"j M Y" }}</time><span>{{ appointment.starts_at|date:"H:i" }} · {{ appointment.duration_minutes }} minutes</span></div><span data-appointment-video-note{% if appointment.video_room_url or not appointment.video_join_message %} hidden{% endif %}><span class="info-tip" data-info-tip><button class="info-tip__button" type="button" aria-label="When the video room opens" aria-describedby="video-join-{{ appointment.pk }}">i</button><span class="info-tip__bubble" id="video-join-{{ appointment.pk }}" role="tooltip">{{ appointment.video_join_message }}{% if appointment.video_join_opens_at %} Join window: {{ appointment.video_join_opens_at|date:'j M, H:i' }}–{{ appointment.video_join_closes_at|date:'H:i' }} SAST.{% endif %}</span></span></span></div></td>
-                <td data-label="Appointment">{{ appointment.get_appointment_type_display }}</td>
-                <td data-label="Clinician">{% if appointment.clinician %}{{ appointment.clinician.full_name }}{% else %}Your care team{% endif %}</td>
-                <td data-label="Status"><span class="console-status console-status--{{ appointment.status }}">{{ appointment.get_status_display }}</span></td>
-                <td class="patient-table__fit" data-label="Actions">
-                  {# Small secondary buttons with short text, as on Calendar & Bookings: Download (a calendar file), Details and, #}
-                  {# while it can still be cancelled, Cancel in a dialog below. Join comes first while the room is open. A new #}
-                  {# time is asked of support, and the practice moves the appointment. A cancelled appointment has nothing to #}
-                  {# download and its Details is greyed out. #}
-                  <div class="patient-table__actions">
-                    <span data-appointment-video-action{% if not appointment.video_room_url %} hidden{% endif %}><a class="console-button console-button--primary patient-row-action" data-appointment-video-join{% if appointment.video_room_url %} href="{{ appointment.video_room_url }}"{% endif %}>Join video call</a></span>
-                    {% if appointment.status != 'cancelled' %}<a class="console-button console-button--secondary patient-row-action" data-no-loader href="{% url 'portal:patient-appointment-calendar' appointment.pk %}">{% include 'portal/includes/calendar_download_icon.html' %}Download<span class="sr-only"> to your calendar</span></a>
-                    <a class="console-button console-button--secondary patient-row-action" href="{% url 'portal:patient-appointment-detail' appointment.pk %}">Details</a>{% else %}<button class="console-button console-button--secondary patient-row-action" type="button" disabled>Details</button>{% endif %}
-                    {% if appointment.cancel_form %}<a class="console-button console-button--secondary console-button--cancel patient-row-action" href="{% url 'portal:patient-appointment-detail' appointment.pk %}?update=status" data-modal-open="cancel-appointment-{{ appointment.pk }}" aria-haspopup="dialog">Cancel<span class="sr-only"> this appointment</span></a>{% endif %}
-                  </div>
-                </td>
-              </tr>
-            {% empty %}
-              <tr><td class="patient-table__empty" colspan="5">No appointments match this view. Try another view or contact your care team.</td></tr>
-            {% endfor %}
-          </tbody>
-        </table>
-        <span class="sr-only" data-appointment-video-announcement role="status" aria-live="polite"></span>
-      </div>
-    {% endif %}
+    {# Upcoming (where the page opens) hasn't ended yet, so one under way stays there until it's due to finish; Past #}
+    {# has ended. Filters carry across. The same pill tabs as Purchasing's (fluid.css and fluid.js). Past is only a #}
+    {# history (James, 8 Nov 2026): no Actions column, no Join and no video notes, so the live Join script isn't wired. #}
+    <nav class="patient-order-subtabs" aria-label="Appointments">{% for tab in appointment_tabs %}<a href="{{ tab.url }}"{% if tab.active %} class="is-active" aria-current="page"{% endif %}>{{ tab.label }}</a>{% endfor %}</nav>
+    <div class="patient-table-wrap">
+      <table class="patient-table patient-appointment-table" aria-labelledby="patient-appointments-heading"{% if appointment_tab == 'upcoming' %} data-appointment-video data-status-url="{% url 'portal:patient-appointment-video-status' %}" data-video-scope="{{ request.realtime_scope }}" data-server-time="{{ video_server_time|date:'c' }}"{% endif %}>
+        <thead><tr><th scope="col">Date and time</th><th scope="col">Appointment</th><th scope="col">Clinician</th><th scope="col">Status</th>{% if appointment_tab == 'upcoming' %}<th class="patient-table__fit" scope="col">Actions</th>{% endif %}</tr></thead>
+        <tbody>
+          {% for appointment in appointments %}
+            <tr{% if appointment_tab == 'upcoming' %} data-video-appointment-id="{{ appointment.pk }}" data-video-opens-at="{{ appointment.video_join_opens_at|date:'c' }}" data-video-closes-at="{{ appointment.video_join_closes_at|date:'c' }}"{% endif %}>
+              <td data-label="Date and time"><div class="patient-table__when"><div class="patient-table__date"><time datetime="{{ appointment.starts_at|date:'c' }}">{{ appointment.starts_at|date:"j M Y" }}</time><span>{{ appointment.starts_at|date:"H:i" }} · {{ appointment.duration_minutes }} minutes</span></div>{% if appointment_tab == 'upcoming' %}<span data-appointment-video-note{% if appointment.video_room_url or not appointment.video_join_message %} hidden{% endif %}><span class="info-tip" data-info-tip><button class="info-tip__button" type="button" aria-label="When the video room opens" aria-describedby="video-join-{{ appointment.pk }}">i</button><span class="info-tip__bubble" id="video-join-{{ appointment.pk }}" role="tooltip">{{ appointment.video_join_message }}{% if appointment.video_join_opens_at %} Join window: {{ appointment.video_join_opens_at|date:'j M, H:i' }}–{{ appointment.video_join_closes_at|date:'H:i' }}.{% endif %}</span></span></span>{% endif %}</div></td>
+              <td data-label="Appointment">{{ appointment.get_appointment_type_display }}</td>
+              <td data-label="Clinician">{% if appointment.clinician %}{{ appointment.clinician.titled_name }}{% else %}Your care team{% endif %}</td>
+              <td data-label="Status"><span class="console-status console-status--{{ appointment.status }}">{{ appointment.get_status_display }}</span></td>
+              {% if appointment_tab == 'upcoming' %}<td class="patient-table__fit{% if appointment.status == 'cancelled' %} patient-table__fit--none{% endif %}" data-label="Actions">
+                {# Small secondary buttons with short text, as on Calendar & Bookings. Join, with a video icon, comes first #}
+                {# while the room is open; then Details and, while the booking can still be changed, Request a change (a #}
+                {# message to the practice, which moves the appointment, as on the appointment's page) and Cancel in a #}
+                {# dialog below. Dr Czech keeps the calendar download off the list (Nov 2026): it's Add to calendar on the #}
+                {# appointment's page. A cancelled appointment has no actions at all. #}
+                <div class="patient-table__actions">
+                  <span data-appointment-video-action{% if not appointment.video_room_url %} hidden{% endif %}><a class="console-button console-button--primary patient-row-action" data-appointment-video-join{% if appointment.video_room_url %} href="{{ appointment.video_room_url }}"{% endif %}>{% include 'portal/includes/video_call_icon.html' %}Join video call</a></span>
+                  {% if appointment.status != 'cancelled' %}<a class="console-button console-button--secondary patient-row-action" href="{% url 'portal:patient-appointment-detail' appointment.pk %}">Details</a>{% endif %}
+                  {% if appointment.change_request_url %}<a class="console-button console-button--secondary patient-row-action" href="{{ appointment.change_request_url }}">Request a change</a>{% endif %}
+                  {% if appointment.cancel_form %}<a class="console-button console-button--secondary console-button--cancel patient-row-action" href="{% url 'portal:patient-appointment-detail' appointment.pk %}?update=status" data-modal-open="cancel-appointment-{{ appointment.pk }}" aria-haspopup="dialog">Cancel<span class="sr-only"> this appointment</span></a>{% endif %}
+                </div>
+              </td>{% endif %}
+            </tr>
+          {% empty %}
+            <tr><td class="patient-table__empty" colspan="{% if appointment_tab == 'upcoming' %}5{% else %}4{% endif %}">{% if filter_menu.count %}No {% if appointment_tab == 'past' %}past{% else %}upcoming{% endif %} appointments match these filters.{% elif appointment_tab == 'past' %}You have no past appointments.{% else %}You have no upcoming appointments. Use Book Appointment to book one.{% endif %}</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% if appointment_tab == 'upcoming' %}<span class="sr-only" data-appointment-video-announcement role="status" aria-live="polite"></span>{% endif %}
+    </div>
   </section>
   {% include 'portal/includes/patient_pagination.html' with pagination_label='Appointment' %}
   {% for appointment in appointments %}{% if appointment.cancel_form %}
@@ -70,9 +77,10 @@
     <dialog class="app-dialog" id="cancel-appointment-{{ appointment.pk }}" aria-labelledby="cancel-appointment-{{ appointment.pk }}-title">
       <div class="app-dialog__body">
         <h2 id="cancel-appointment-{{ appointment.pk }}-title">Update booking status</h2>
-        <p class="app-dialog__sub">{{ appointment.get_appointment_type_display }}{% if appointment.clinician %} with {{ appointment.clinician.full_name }}{% endif %} on {{ appointment.starts_at|date:'D j M Y, H:i' }} SAST.</p>
+        <p class="app-dialog__sub">{{ appointment.get_appointment_type_display }}{% if appointment.clinician %} with {{ appointment.clinician.titled_name }}{% endif %} on {{ appointment.starts_at|date:'D j M Y, H:i' }}.</p>
         <form class="console-form" method="post" action="{% url 'portal:patient-appointment-detail' appointment.pk %}">{% csrf_token %}<input type="hidden" name="workflow_context" value="{{ appointment.cancel_context }}"><input type="hidden" name="next" value="{{ request.get_full_path }}">{% for field in appointment.cancel_form %}{% include 'portal/includes/form_field.html' %}{% endfor %}
-          <div class="app-dialog__actions"><button class="console-button console-button--secondary" type="button" data-dialog-close>Cancel</button><button class="console-button console-button--primary" type="submit">Confirm status update</button></div>
+          {% include 'portal/includes/appointment_cancellation_policy.html' %}
+          <div class="app-dialog__actions"><button class="console-button console-button--secondary" type="button" data-dialog-close>Cancel</button><button class="console-button console-button--primary" type="submit">Confirm cancellation</button></div>
         </form>
       </div>
     </dialog>

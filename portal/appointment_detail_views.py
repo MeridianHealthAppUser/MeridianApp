@@ -1,7 +1,7 @@
 from datetime import datetime, time as time_of_day, timedelta
-from urllib.parse import urlencode
 
 from django import forms
+from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.exceptions import ValidationError
@@ -24,7 +24,7 @@ from care.widgets import QUARTER_HOUR_CHOICES
 from care.models import Appointment, ClinicalEncounter, MessageThread
 from practices.models import Patient
 from .clinical_forms import ConsultationForm, make_clinical_context
-from .patient_views import patient_page_context
+from .patient_views import appointment_change_request_url, patient_page_context
 from .record_access import limit_patient_choices, limited_by_assignment, require_record_view
 from .views import PatientPortalRequiredMixin, StaffCompanyRequiredMixin
 from .workflow_context import make_workflow_context, validate_workflow_context
@@ -119,10 +119,11 @@ class AppointmentTimeForm(forms.Form):
 
 class AppointmentStatusForm(forms.Form):
     status = forms.ChoiceField(choices=(('cancelled', 'Cancel booking'), ('completed', 'Record completed'), ('no_show', 'Record no show')))
-    reason = forms.CharField(label='Note / cancellation reason', max_length=500, required=False, widget=forms.Textarea(attrs={'rows': 3}))
-    confirm = forms.BooleanField(label='I confirm this appointment update. A new time must be agreed separately.')
+    reason = forms.CharField(label='Note / Cancellation Reason (Optional)', max_length=500, required=False, widget=forms.Textarea(attrs={'rows': 3}))
+    # No confirmation tick (Nov 2026): opening the dialog and pressing its confirm button is already two clicks. The
+    # dialog shows the 24-hour cancellation policy instead (includes/appointment_cancellation_policy.html).
 
-    def __init__(self, *args, attendance=False, staff=False, cancel_only=False, preconfirmed=False, **kwargs):
+    def __init__(self, *args, attendance=False, staff=False, cancel_only=False, **kwargs):
         super().__init__(*args, **kwargs)
         if not attendance:
             self.fields['status'].choices = (('cancelled', 'Cancel booking'),)
@@ -130,11 +131,6 @@ class AppointmentStatusForm(forms.Form):
             # Someone who can only cancel sees the status greyed out, and it submits as a cancellation whatever is sent.
             self.fields['status'].disabled = True
             self.fields['status'].initial = 'cancelled'
-        if preconfirmed:
-            # Ticked and hidden: the confirmation step isn't asked of this person.
-            self.fields['confirm'].disabled = True
-            self.fields['confirm'].initial = True
-            self.fields['confirm'].widget = forms.HiddenInput()
         if staff:
             self.fields['reason'].help_text = 'For a cancellation, the patient sees this in the app and in their cancellation email.'
 
@@ -221,11 +217,10 @@ class AppointmentDetailMixin:
 
     def status_form(self, appointment, data=None):
         # Patients and practice administrators never record attendance, so cancelling is their only update.
-        # Practice administrators cancel without ticking the confirmation.
         practice_admin = not self.patient_portal and self.membership.role == 'practice_admin'
         return AppointmentStatusForm(
             data, attendance=self.attendance(appointment), staff=not self.patient_portal,
-            cancel_only=self.patient_portal or practice_admin, preconfirmed=practice_admin)
+            cancel_only=self.patient_portal or practice_admin)
 
     def consultation_note(self, request, company, appointment, can_write_notes):
         """Write consultation note opens a modal with a new note's form: this appointment chosen when it's yours,
@@ -244,7 +239,7 @@ class AppointmentDetailMixin:
         return dict(consultation_form=form, consultation_context=make_clinical_context(request, company, appointment.patient, 'consultation'))
 
     def display(self, request, appointment, form=None, status=200, time_form=None):
-        from video.views import appointment_video_context
+        from video.access import attach_video_join
 
         company = self.patient_company if self.patient_portal else self.company
         context = patient_page_context(request, company, self.patient, 'appointments', 'Appointment details') if self.patient_portal else dict(company=company, active_membership=self.membership, nav_section='schedule')
@@ -254,17 +249,15 @@ class AppointmentDetailMixin:
                 patient=appointment.patient, is_closed=False, participants=request.user).first(),
             form=form if form is not None else self.status_form(appointment),
             workflow_context=request.POST.get('workflow_context', '') if request.method == 'POST' else make_workflow_context(request, company, 'appointment-status', appointment, patient=self.patient if self.patient_portal else None))
-        if self.patient_portal:
-            # A patient asks for a new time in a message to a practice administrator (their clinician when the
-            # practice has none), who is emailed about it as usual and moves the appointment.
-            when = date_format(timezone.localtime(appointment.starts_at), 'D j M Y, H:i')
-            query = {'compose': 1, 'subject': f'Request to change my appointment: {when} SAST'}
-            administrator = practice_administrators(company).first()
-            if administrator is not None:
-                query['to'] = administrator.pk
-            context['change_request_url'] = f"{reverse('portal:patient-messages')}?{urlencode(query)}#patient-conversation"
+        if self.patient_portal and context['can_edit']:
+            # Like Cancel, only before the start: after that the booking can't be changed.
+            context['change_request_url'] = appointment_change_request_url(appointment, practice_administrators(company).first())
         allowed_role = 'patient' if self.patient_portal else ('doctor' if self.membership.is_clinician else None)
-        context.update(appointment_video_context(request, appointment, allowed_role=allowed_role))
+        attach_video_join([appointment], request.user.pk, allowed_role=allowed_role)
+        if self.patient_portal and appointment.video_join_closes_at and timezone.now() <= appointment.video_join_closes_at:
+            # Until the join window ends, the patient's Video consultation card says the call happens there (under Join
+            # while the room is open).
+            context['video_room_opens_minutes'] = settings.VIDEO_JOIN_EARLY_MINUTES
         if self.can_change_time(appointment):
             local = timezone.localtime(appointment.starts_at)
             context.update(can_change_time=True, time_dialog_open=time_form is not None or request.GET.get('update') == 'time',
@@ -296,7 +289,8 @@ class AppointmentDetailMixin:
         try:
             token = validate_workflow_context(request, company, 'appointment-status', appointment, patient=self.patient if self.patient_portal else None)
             if valid:
-                change_appointment_status(appointment=appointment, actor=request.user, expected_updated=token['updated'], patient_portal=self.patient_portal, request=request, **form.cleaned_data)
+                change_appointment_status(appointment=appointment, actor=request.user, expected_updated=token['updated'], patient_portal=self.patient_portal, request=request,
+                                          confirm=True, **form.cleaned_data)
                 if form.cleaned_data['status'] == 'cancelled' and not self.patient_portal:
                     messages.success(request, f'Appointment with {appointment.patient} cancelled.')
                     back = schedule_return(request)
@@ -351,8 +345,8 @@ class StaffAppointmentTimeView(StaffAppointmentDetailView):
             if valid:
                 moved = reschedule_appointment(appointment=appointment, actor=request.user, starts_at=form.starts_at(),
                                                expected_updated=token['updated'], request=request)
-                messages.success(request, f'Appointment moved to {date_format(timezone.localtime(moved.starts_at), "D j M, H:i")} '
-                                          'SAST. The patient and clinician have been emailed.')
+                messages.success(request, f'Appointment moved to {date_format(timezone.localtime(moved.starts_at), "D j M, H:i")}. '
+                                          'The patient and clinician have been emailed.')
                 return schedule_return(request) or redirect('portal:appointment-detail', pk=pk)
         except ValidationError as error:
             for message in error.messages:

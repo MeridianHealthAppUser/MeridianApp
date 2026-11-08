@@ -131,7 +131,7 @@ class InventoryMovementTests(OperationsPortalFixture):
         _, workbook = self.workbook()
         self.assertEqual(workbook.active.max_row, 1)
         self.assertEqual([cell.value for cell in workbook.active[1]],
-                         ['Date (SAST)', 'Product', 'Category', 'Quantity', 'Batch', 'Expires on',
+                         ['Date', 'Product', 'Category', 'Quantity', 'Batch', 'Expires on',
                           'Reference / reason', 'Shipment ID', 'Recorded by', 'Stock override'])
         workbook.close()
 
@@ -160,8 +160,8 @@ class InventoryMovementTests(OperationsPortalFixture):
         with timezone.override('UTC'):
             _, workbook = self.workbook()
         row = next(row for row in self.workbook_cells(workbook) if row['Reference / reason'].value == movement.reason)
-        self.assertEqual(row['Date (SAST)'].value, datetime(2026, 11, 3, 0, 45))
-        self.assertEqual(row['Date (SAST)'].data_type, 'd')
+        self.assertEqual(row['Date'].value, datetime(2026, 11, 3, 0, 45))
+        self.assertEqual(row['Date'].data_type, 'd')
         self.assertEqual(row['Product'].value, str(self.product))
         self.assertEqual(row['Category'].value, self.product.get_category_display())
         self.assertEqual(row['Category'].data_type, 's')

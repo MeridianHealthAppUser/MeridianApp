@@ -13,7 +13,7 @@ from .record_views import RECORD_TIMEZONE
 
 _INVALID_XML = re.compile(r'[^\x09\x0a\x0d\x20-\ud7ff\ue000-\ufffd\U00010000-\U0010ffff]')
 _NAMESPACE = 'http://schemas.openxmlformats.org/spreadsheetml/2006/main'
-_HEADERS = ('Date and time (SAST)', 'Practice', 'Category', 'Event', 'Detail', 'Recorded by',
+_HEADERS = ('Date and time', 'Practice', 'Category', 'Event', 'Detail', 'Recorded by',
             'Patient record', 'Source type', 'Source record', 'Patient-provided profile details', 'Part')
 
 

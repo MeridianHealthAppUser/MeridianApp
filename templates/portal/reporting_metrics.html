@@ -12,7 +12,7 @@
     </div>
   </form></section>
   {% if metrics %}
-  <div class="metrics-context"><span class="metrics-period">{{ start|date:'j M Y' }} — {{ end|date:'j M Y' }}</span><span>{% for practice in practices %}{{ practice.name }}{% if not forloop.last %} · {% endif %}{% endfor %}</span><span class="metrics-context__note">Inclusive dates · SAST</span></div>
+  <div class="metrics-context"><span class="metrics-period">{{ start|date:'j M Y' }} — {{ end|date:'j M Y' }}</span><span>{% for practice in practices %}{{ practice.name }}{% if not forloop.last %} · {% endif %}{% endfor %}</span><span class="metrics-context__note">Inclusive dates</span></div>
   <section class="metrics-kpis" aria-label="Key measures">{% for label, value, period, detail, tone in dashboard.kpis %}<article class="metrics-kpi metrics-tone--{{ tone }}"><div class="metrics-kpi__top"><span>{{ label }}</span><span class="metrics-dot" aria-hidden="true"></span></div><strong>{{ value }}</strong><p>{{ detail }}</p><span class="metrics-kpi__period">{{ period }}</span></article>{% endfor %}</section>
   <div class="metrics-chart-grid">
     <section class="metrics-panel metrics-activity" aria-labelledby="activity-title">

@@ -107,7 +107,7 @@ class RecordWorkbookTests(TestCase):
         titles = [row[0] for row in overview if row[0] in ('Clinical history', 'Dispensed history', 'Current prescription',
                                                            'Weight over time', 'Summary data')]
         self.assertEqual(titles, ['Clinical history', 'Dispensed history', 'Current prescription', 'Weight over time', 'Summary data'])
-        self.assertIn(['Date (SAST)', 'Who', 'Type', 'Entry'], overview)
+        self.assertIn(['Date', 'Who', 'Type', 'Entry'], overview)
         consult = next(row for row in overview if 'SIGNED_CONSULT_NOTE' in row)
         self.assertEqual(consult[1:3], ['Sam Marchant', 'Consult note'])
         note = next(row for row in overview if 'SHARED_GENERAL_NOTE' in row)
@@ -119,7 +119,7 @@ class RecordWorkbookTests(TestCase):
         self.assertEqual(overview[weights + 1:weights + 3], [['2026-09-01', '92.40'], ['2026-10-01', '89.10']])
         self.assertIn('<v>92.40</v>', archive.read('xl/worksheets/sheet1.xml').decode())
         self.assertEqual(sheets['Weight'][0], ['Date', 'Weight (kg)', 'Note', 'Recorded by'])
-        self.assertEqual(sheets['Appointments'][0], ['Date and time (SAST)', 'Appointment', 'Duration (minutes)', 'Doctor', 'Status'])
+        self.assertEqual(sheets['Appointments'][0], ['Date and time', 'Appointment', 'Duration (minutes)', 'Doctor', 'Status'])
         self.assertEqual(sheets['Payments'][1][:2], ['2026-10-01', '630.00'])
         # Blood results: the results recorded by hand, then the blood test requests.
         blood = [row for row in sheets['Blood results'] if row]

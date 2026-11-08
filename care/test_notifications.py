@@ -167,7 +167,7 @@ class AppointmentNotificationTests(NotificationTestCase):
         self.assertIn('Your appointment is confirmed.', patient.body)
         self.assertIn('Appointment: Follow-up\n'
                       f'Date: {starts:%A} {starts.day} {starts:%B %Y}\n'
-                      f'Time: 10:00 SAST · 30 minutes\n'
+                      f'Time: 10:00 · 30 minutes\n'
                       'With: Dr Sam Marchant', patient.body)
         self.assertIn(f'{SITE}/patient/appointments/', patient.body)
         html = self.html(patient)

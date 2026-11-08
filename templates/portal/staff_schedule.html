@@ -2,7 +2,7 @@
 {% load static workspace_ui %}
 
 {% block title %}{{ title|default:page_title }} | {{ company.name }} | Meridian{% endblock %}
-{% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/schedule_availability.css' %}?v=20261105a"><link rel="stylesheet" href="{% static 'css/dialogs.css' %}?v=20261104d"><script src="{% static 'js/dialogs.js' %}?v=20261022a" defer></script><link rel="stylesheet" href="{% static 'css/time_slots.css' %}?v=20261104a"><script src="{% static 'js/appointment_booking.js' %}?v=20261022d" defer></script><script src="{% static 'js/time_ranges.js' %}?v=20261011a" defer></script><script src="{% static 'js/working_hours.js' %}?v=20261012a" defer></script><script src="{% static 'js/submit_on_change.js' %}?v=20261017a" defer></script>{% endblock %}
+{% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/schedule_availability.css' %}?v=20261105a"><link rel="stylesheet" href="{% static 'css/dialogs.css' %}?v=20261108a"><script src="{% static 'js/dialogs.js' %}?v=20261022a" defer></script><link rel="stylesheet" href="{% static 'css/time_slots.css' %}?v=20261104a"><script src="{% static 'js/appointment_booking.js' %}?v=20261022d" defer></script><script src="{% static 'js/time_ranges.js' %}?v=20261011a" defer></script><script src="{% static 'js/working_hours.js' %}?v=20261012a" defer></script><script src="{% static 'js/submit_on_change.js' %}?v=20261017a" defer></script>{% endblock %}
 
 
 {% block breadcrumbs %}{% breadcrumbs page_title %}{% endblock %}
@@ -205,7 +205,7 @@
           <ul class="schedule-attention-list">
             {% for appointment in affected_appointments %}
               <li>
-                <div><strong>{{ appointment.patient }}</strong><time datetime="{{ appointment.starts_at|date:'c' }}">{{ appointment.starts_at|date:"j M Y, H:i" }} SAST · {{ appointment.get_appointment_type_display }}</time><p>{{ appointment.attention_reason }}</p></div>
+                <div><strong>{{ appointment.patient }}</strong><time datetime="{{ appointment.starts_at|date:'c' }}">{{ appointment.starts_at|date:"j M Y, H:i" }} · {{ appointment.get_appointment_type_display }}</time><p>{{ appointment.attention_reason }}</p></div>
                 {% if appointment.attention_url %}<a class="console-button console-button--secondary" href="{{ appointment.attention_url }}">Review appointment<span class="sr-only"> for {{ appointment.patient }}</span></a>{% endif %}
               </li>
             {% empty %}
@@ -233,7 +233,7 @@
       <dialog class="app-dialog" id="edit-appointment-{{ appointment.pk }}" aria-labelledby="edit-appointment-{{ appointment.pk }}-title">
         <div class="app-dialog__body">
           <h2 id="edit-appointment-{{ appointment.pk }}-title">Edit appointment</h2>
-          <p class="app-dialog__sub">{{ appointment.patient }} · {{ appointment.get_appointment_type_display }} with {{ appointment.clinician.titled_name }}, {{ appointment.duration_minutes }} minutes. Now {{ appointment.starts_at|date:'D j M Y, H:i' }} SAST.</p>
+          <p class="app-dialog__sub">{{ appointment.patient }} · {{ appointment.get_appointment_type_display }} with {{ appointment.clinician.titled_name }}, {{ appointment.duration_minutes }} minutes. Now {{ appointment.starts_at|date:'D j M Y, H:i' }}.</p>
           <form class="console-form" method="post" action="{% url 'portal:appointment-change-time' appointment.pk %}">{% csrf_token %}<input type="hidden" name="workflow_context" value="{{ appointment.time_context }}"><input type="hidden" name="next" value="{{ request.get_full_path }}">
             <div class="booking-fields" data-booking-form data-times-url="{% url 'portal:appointment-book-times' %}" data-exclude-appointment="{{ appointment.pk }}">
               <input type="hidden" name="clinician" value="{{ appointment.clinician_id }}"><input type="hidden" name="patient" value="{{ appointment.patient_id }}"><input type="hidden" name="duration_minutes" value="{{ appointment.duration_minutes }}">
@@ -251,8 +251,8 @@
       <dialog class="app-dialog" id="cancel-appointment-{{ appointment.pk }}" aria-labelledby="cancel-appointment-{{ appointment.pk }}-title">
         <div class="app-dialog__body">
           <h2 id="cancel-appointment-{{ appointment.pk }}-title">Cancel appointment</h2>
-          <p class="app-dialog__sub">{{ appointment.patient }} · {{ appointment.get_appointment_type_display }} with {{ appointment.clinician.titled_name }} on {{ appointment.starts_at|date:'D j M Y, H:i' }} SAST.</p>
-          <form class="console-form" method="post" action="{% url 'portal:appointment-detail' appointment.pk %}">{% csrf_token %}<input type="hidden" name="workflow_context" value="{{ appointment.cancel_context }}"><input type="hidden" name="next" value="{{ request.get_full_path }}"><input type="hidden" name="status" value="cancelled"><input type="hidden" name="confirm" value="on">
+          <p class="app-dialog__sub">{{ appointment.patient }} · {{ appointment.get_appointment_type_display }} with {{ appointment.clinician.titled_name }} on {{ appointment.starts_at|date:'D j M Y, H:i' }}.</p>
+          <form class="console-form" method="post" action="{% url 'portal:appointment-detail' appointment.pk %}">{% csrf_token %}<input type="hidden" name="workflow_context" value="{{ appointment.cancel_context }}"><input type="hidden" name="next" value="{{ request.get_full_path }}"><input type="hidden" name="status" value="cancelled">
             <div class="console-form__field">
               <label for="cancel_{{ appointment.pk }}_reason">Reason</label>
               <textarea id="cancel_{{ appointment.pk }}_reason" name="reason" rows="3" maxlength="500" required aria-describedby="cancel_{{ appointment.pk }}_reason_help"></textarea>

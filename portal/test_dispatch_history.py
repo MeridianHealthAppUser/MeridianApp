@@ -305,7 +305,7 @@ class DispatchHistoryTests(OperationsPortalFixture):
         self.assertEqual((cells['Shipment'].value, cells['Shipment'].data_type), (shipment.pk, 'n'))
         self.assertEqual((cells['Quantity'].value, cells['Quantity'].data_type), (3, 'n'))
         self.assertEqual((cells['Planned date'].value, cells['Planned date'].data_type), (date(2026, 11, 3), 'd'))
-        self.assertEqual((cells['Dispatched (SAST)'].value, cells['Dispatched (SAST)'].data_type),
+        self.assertEqual((cells['Dispatched'].value, cells['Dispatched'].data_type),
                          (datetime(2026, 11, 3, 0, 45), 'd'))
         expected = {'Patient': snapshot['patient_name'], 'ID / passport': '+00123', 'Practice': '#N/A',
                     'Product': '=1+1', 'Dose': '@SUM(A1)', 'Batch and expiry': '-1+1', 'Tracking': '=TRACK',

@@ -146,49 +146,104 @@ class PatientCareTests(TestCase):
         self.login()
         self.create_appointment(starts_at=self.starts_at + timedelta(days=1))
         self.assertIsNone(self.client.get(self.url('patient-appointments')).context['just_booked'])
-        self.assertNotContains(self.client.get(self.url('patient-appointments')), 'id="next-consult-title"')
+        # Without a new booking the banner is the next consult, as on My Treatment.
+        self.assertContains(self.client.get(self.url('patient-appointments')), '<p class="patient-eyebrow">Your next consult</p>', html=True)
         self.client.post(self.url('patient-book-appointment'), self.booking_data())
         appointment = Appointment.objects.get(starts_at=self.starts_at)
         page = self.client.get(self.url('patient-appointments'))
         self.assertEqual(page.context['just_booked'], appointment)
         self.assertContains(page, '<p class="patient-eyebrow">Booked</p>', html=True)
         self.assertContains(page, f'{self.url("patient-appointment-detail", pk=appointment.pk)}')
-        # Gone when they come back.
-        self.assertNotContains(self.client.get(self.url('patient-appointments')), 'id="next-consult-title"')
+        # Back to the next consult when they come back.
+        again = self.client.get(self.url('patient-appointments'))
+        self.assertNotContains(again, '<p class="patient-eyebrow">Booked</p>', html=True)
+        self.assertContains(again, '<p class="patient-eyebrow">Your next consult</p>', html=True)
 
-    def test_appointments_filter_by_status_date_clinician_and_type(self):
+    def test_appointments_upcoming_and_past_tabs_and_their_filters(self):
         self.login()
         now = timezone.localtime()
-        # Today and still upcoming whatever the time: it started a few minutes ago (never before midnight) and its
-        # 15 minutes haven't ended. Half an hour ahead would be tomorrow when the tests run after 23:30 SAST.
+        # Upcoming and Past split on the scheduled end (start + length), so one under way is still on Upcoming. Today's
+        # two follow-ups sit either side of now; the earlier one is never before midnight, the later one never after
+        # (tests run any time of day). A 15-minute one that started 20 minutes ago has ended.
         midnight = now.replace(hour=0, minute=0, second=0, microsecond=0)
-        today = self.create_appointment(starts_at=max(now - timedelta(minutes=5), midnight), appointment_type='follow_up')
+        started = self.create_appointment(starts_at=max(now - timedelta(minutes=5), midnight), appointment_type='follow_up')
+        ended = self.create_appointment(starts_at=now - timedelta(minutes=20))
+        soon = self.create_appointment(starts_at=min(now + timedelta(minutes=5), midnight + timedelta(hours=23, minutes=59)),
+                                       appointment_type='follow_up')
         later = self.create_appointment(starts_at=now + timedelta(days=40), clinician=self.other_doctor)
         past = self.create_appointment(starts_at=now - timedelta(days=3), status='completed')
 
         def listed(**query):
             return self.client.get(self.url('patient-appointments'), query).context['appointments']
 
-        # All appointments to start with, so a past or cancelled one stays in sight.
-        self.assertEqual(listed(), [past, today, later])
-        self.assertEqual(listed(status='upcoming'), [today, later])
-        self.assertEqual(listed(status='history'), [past])
-        self.assertEqual(listed(status='all', when='today'), [today])
-        self.assertEqual(listed(status='upcoming', when='month'), [today] if later.starts_at.month != now.month else [today, later])
-        self.assertEqual(listed(status='upcoming', clinician=self.other_doctor.pk), [later])
-        self.assertEqual(listed(status='upcoming', type='follow_up'), [today])
-        self.assertEqual(listed(status='upcoming', type=['follow_up', 'review']), [today, later])
-        page = self.client.get(self.url('patient-appointments'), {'clinician': self.other_doctor.pk, 'type': 'review'})
+        # Upcoming to start with, soonest first; Past latest first. It moves to Past once its time is up.
+        self.assertEqual(listed(), [started, soon, later])
+        self.assertEqual(listed(tab='past'), [ended, past])
+        self.assertEqual(listed(when='today'), [started, soon])
+        self.assertEqual(listed(tab='past', when='today'), [ended] if timezone.localtime(ended.starts_at).date() == now.date() else [])
+        self.assertEqual(listed(when='month'), [started, soon] if later.starts_at.month != now.month else [started, soon, later])
+        self.assertEqual(listed(clinician=self.other_doctor.pk), [later])
+        self.assertEqual(listed(type='follow_up'), [started, soon])
+        self.assertEqual(listed(type=['follow_up', 'review']), [started, soon, later])
+        # The next consult's banner sits on top, as on My Treatment (the one under way, until it ends).
+        top = self.client.get(self.url('patient-appointments'))
+        self.assertEqual(top.context['next_consult'], started)
+        self.assertContains(top, '<p class="patient-eyebrow">Your next consult</p>', html=True)
+        page = self.client.get(self.url('patient-appointments'), {'tab': 'past', 'clinician': self.other_doctor.pk, 'type': 'review'})
         self.assertContains(page, '<h2 id="patient-appointments-heading">My Appointments</h2>', html=True)
-        self.assertNotContains(page, 'All your consults')
-        self.assertNotContains(page, 'View appointments')
+        # The tabs keep the filters; the filters (and Clear) keep the tab.
+        tabs = f'{self.url("patient-appointments")}?clinician={self.other_doctor.pk}&amp;type=review'
+        past_tab = f'{self.url("patient-appointments")}?tab=past&amp;clinician={self.other_doctor.pk}&amp;type=review'
+        # The same pill tabs as Purchasing's.
+        self.assertContains(page, f'<nav class="patient-order-subtabs" aria-label="Appointments"><a href="{tabs}">Upcoming</a>'
+                                  f'<a href="{past_tab}" class="is-active" aria-current="page">Past</a></nav>')
+        self.assertContains(page, '<input type="hidden" name="tab" value="past">')
+        self.assertContains(page, 'No past appointments match these filters.')
+        # The count of what's shown sits beside Filters, as on Purchasing; no "in this view · times in SAST" line.
+        self.assertContains(page, '<span class="staff-page-card__count">0 appointments</span>', html=True)
+        self.assertContains(self.client.get(self.url('patient-appointments'), {'tab': 'past'}),
+                            '<span class="staff-page-card__count">2 appointments</span>', html=True)
+        self.assertNotContains(page, 'in this view')
         menu = page.context['filter_menu']
+        self.assertEqual(menu['clear_url'], f'{self.url("patient-appointments")}?tab=past')
         self.assertEqual([section['label'] for section in menu['sections']], ['Status', 'Date', 'Clinician', 'Appointment type'])
         self.assertEqual([option['label'] for option in menu['sections'][1]['options']], ['Any time', 'Today', 'This week', 'This month'])
-        # Only the clinicians they've had appointments with; All appointments is the default, so it isn't counted.
+        # Only the clinicians they've had appointments with.
         self.assertEqual([option['label'] for option in menu['sections'][2]['options']], ['Doctor One', 'Doctor Two'])
         self.assertEqual(menu['count'], 2)
         self.assertContains(page, 'class="filter-menu filter-menu--compact"')
+        # Status, ticking any of them: all four on Past, but only Booked and Cancelled on Upcoming (attendance is
+        # recorded once it has ended). Each tab keeps its own; switching tabs drops it.
+        cancelled = self.create_appointment(starts_at=now - timedelta(days=5), status='cancelled')
+        no_show = self.create_appointment(starts_at=now - timedelta(days=6), status='no_show')
+        called_off = self.create_appointment(starts_at=now + timedelta(days=50), status='cancelled')
+        self.assertEqual(listed(tab='past'), [ended, past, cancelled, no_show])
+        self.assertEqual(listed(tab='past', status='completed'), [past])
+        self.assertEqual(listed(tab='past', status=['cancelled', 'no_show']), [cancelled, no_show])
+        self.assertEqual(listed(tab='past', status='booked'), [ended])
+        self.assertEqual(listed(tab='past', status='invented'), [ended, past, cancelled, no_show])
+        self.assertEqual(listed(), [started, soon, later, called_off])
+        self.assertEqual(listed(status='booked'), [started, soon, later])
+        self.assertEqual(listed(status='cancelled'), [called_off])
+        self.assertEqual(listed(status='completed'), [started, soon, later, called_off])
+        page = self.client.get(self.url('patient-appointments'), {'tab': 'past', 'status': ['completed', 'cancelled'], 'when': 'week'})
+        menu = page.context['filter_menu']
+        self.assertEqual([section['label'] for section in menu['sections']], ['Status', 'Date', 'Clinician', 'Appointment type'])
+        self.assertEqual([(option['label'], option['checked']) for option in menu['sections'][0]['options']],
+                         [('Booked', False), ('Completed', True), ('Cancelled', True), ('No show', False)])
+        self.assertEqual(menu['count'], 3)
+        self.assertContains(page, f'<a href="{self.url("patient-appointments")}?when=week">Upcoming</a>')
+        self.assertContains(page, f'href="{self.url("patient-appointments")}?tab=past&amp;status=completed&amp;status=cancelled&amp;when=week"')
+        page = self.client.get(self.url('patient-appointments'), {'status': 'cancelled', 'when': 'week'})
+        menu = page.context['filter_menu']
+        self.assertEqual([(option['label'], option['checked']) for option in menu['sections'][0]['options']],
+                         [('Booked', False), ('Cancelled', True)])
+        self.assertContains(page, f'<a href="{self.url("patient-appointments")}?tab=past&amp;when=week">Past</a>')
+        self.assertContains(page, f'href="{self.url("patient-appointments")}?status=cancelled&amp;when=week"')
+        # Upcoming is the page's own address.
+        upcoming = self.client.get(self.url('patient-appointments'))
+        self.assertContains(upcoming, f'<a href="{self.url("patient-appointments")}" class="is-active" aria-current="page">Upcoming</a>')
+        self.assertNotContains(upcoming, 'name="tab"')
 
     def test_csrf_protects_booking(self):
         client = Client(enforce_csrf_checks=True)

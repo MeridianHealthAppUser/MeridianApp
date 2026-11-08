@@ -61,7 +61,7 @@ def book_staff_appointment(*, company, patient, actor, clinician, starts_at, dur
     appointment.save()
     AvailabilitySlot.objects.for_company(company).filter(clinician=clinician, starts_at=starts_at, ends_at=starts_at + timedelta(minutes=duration_minutes), is_booked=False, appointment__isnull=True).update(is_booked=True, appointment=appointment, updated_at=timezone.now())
     PatientEvent.objects.create(company=company, patient=patient, category='appointment', title='Appointment booked',
-        detail=f'{appointment.get_appointment_type_display()} booked for {timezone.localtime(starts_at):%d %B %Y at %H:%M} SAST.',
+        detail=f'{appointment.get_appointment_type_display()} booked for {timezone.localtime(starts_at):%d %B %Y at %H:%M}.',
         source_type=appointment._meta.label_lower, source_id=str(appointment.pk))
     record_audit(company=company, actor=actor, patient=patient, action='appointment.created', target=appointment, request=request)
     notify('appointment_booked', appointment.pk, actor.pk)
@@ -120,7 +120,7 @@ def reschedule_appointment(*, appointment, actor, starts_at, expected_updated, r
     PatientEvent.objects.create(company=appointment.company, patient=appointment.patient, category='appointment',
         title='Appointment moved',
         detail=f'{appointment.get_appointment_type_display()} moved from {timezone.localtime(previous):%d %B %Y at %H:%M} '
-               f'to {timezone.localtime(starts_at):%d %B %Y at %H:%M} SAST.',
+               f'to {timezone.localtime(starts_at):%d %B %Y at %H:%M}.',
         source_type=appointment._meta.label_lower, source_id=str(appointment.pk))
     record_audit(company=appointment.company, actor=actor, patient=appointment.patient, action='appointment.time_changed',
                  target=appointment, request=request, metadata={'from': previous.isoformat(), 'to': starts_at.isoformat()})
@@ -179,7 +179,7 @@ def change_appointment_status(*, appointment, actor, status, expected_updated, c
         AvailabilitySlot.objects.for_company(appointment.company).filter(appointment=appointment).update(appointment=None, is_booked=False, updated_at=timezone.now())
     PatientEvent.objects.create(company=appointment.company, patient=appointment.patient, category='appointment',
         title=f'Appointment {appointment.get_status_display().lower()}',
-        detail=f'{timezone.localtime(appointment.starts_at):%d %B %Y at %H:%M} SAST.' + (f' {reason}' if reason else ''),
+        detail=f'{timezone.localtime(appointment.starts_at):%d %B %Y at %H:%M}.' + (f' {reason}' if reason else ''),
         source_type=appointment._meta.label_lower, source_id=str(appointment.pk))
     record_audit(company=appointment.company, actor=actor, patient=appointment.patient, action='appointment.status_changed', target=appointment, request=request, metadata={'from': 'booked', 'to': status})
     if status == 'cancelled':

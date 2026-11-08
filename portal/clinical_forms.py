@@ -51,13 +51,13 @@ def validate_clinical_context(request, company, patient, kind, record=None):
 class ConsultationAppointmentChoice(forms.ModelChoiceField):
     def label_from_instance(self, appointment):
         starts = timezone.localtime(appointment.starts_at).strftime('%d %b %Y, %H:%M')
-        return f'{starts} SAST · {appointment.get_appointment_type_display()} · {appointment.get_status_display()}'
+        return f'{starts} · {appointment.get_appointment_type_display()} · {appointment.get_status_display()}'
 
 
 class ConsultationForm(forms.Form):
     appointment = ConsultationAppointmentChoice(queryset=Appointment.objects.none(), required=False,
                                          empty_label='General consultation (no appointment link)')
-    occurred_at = QuarterHourDateTimeField(label='Consultation date and time (SAST)')
+    occurred_at = QuarterHourDateTimeField(label='Consultation date and time')
     summary = forms.CharField(label='Consultation note', required=False, max_length=10000,
                               strip=False, widget=forms.Textarea(attrs={'rows': 12}))
     confirm_signature = forms.BooleanField(label='I confirm this is the final note', required=False)

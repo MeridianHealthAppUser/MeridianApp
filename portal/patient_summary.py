@@ -314,17 +314,20 @@ def latest_authorization(company, patient):
     ).order_by('-expires_on', '-pk').first()
 
 
-def next_consult(request, company, patient):
-    """The next booked consultation that has not finished, with its video join state."""
-    now = timezone.now()
+def with_scheduled_end(appointments):
+    """Each appointment's scheduled end, start + length, as scheduled_ends_at."""
     duration = ExpressionWrapper(
         Cast('duration_minutes', IntegerField()) * Value(timedelta(minutes=1)), output_field=DurationField(),
     )
-    appointment = Appointment.objects.for_company(company).filter(
+    return appointments.annotate(scheduled_ends_at=ExpressionWrapper(F('starts_at') + duration, output_field=DateTimeField()))
+
+
+def next_consult(request, company, patient):
+    """The next booked consultation that has not finished, with its video join state."""
+    now = timezone.now()
+    appointment = with_scheduled_end(Appointment.objects.for_company(company).filter(
         patient=patient, status=Appointment.Status.BOOKED,
-    ).annotate(
-        scheduled_ends_at=ExpressionWrapper(F('starts_at') + duration, output_field=DateTimeField()),
-    ).filter(scheduled_ends_at__gte=now).select_related('clinician').order_by('starts_at', 'pk').first()
+    )).filter(scheduled_ends_at__gte=now).select_related('clinician').order_by('starts_at', 'pk').first()
     if appointment is not None:
         attach_video_join([appointment], request.user.pk, allowed_role='patient', now=now)
     return appointment

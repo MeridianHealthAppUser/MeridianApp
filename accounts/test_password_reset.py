@@ -62,8 +62,8 @@ class PasswordResetTests(TestCase):
         email = mail.outbox[0]
         html, mimetype = email.alternatives[0]
         self.assertEqual(mimetype, 'text/html')
-        # "Link valid until 20:49 SAST, 10 October 2026.", from either side of a minute boundary.
-        expiries = {f'Link valid until {moment:%H:%M %Z}, {moment.day} {moment:%B %Y}.'
+        # "Link valid until 20:49, 10 October 2026.", from either side of a minute boundary.
+        expiries = {f'Link valid until {moment:%H:%M}, {moment.day} {moment:%B %Y}.'
                     for moment in (sent_at + timedelta(hours=1), timezone.localtime() + timedelta(hours=1))}
         for part in (email.body, html):
             self.assertTrue(any(line in part for line in expiries), part)

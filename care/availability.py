@@ -250,7 +250,7 @@ def notify_practice_of_conflicts(*, company, clinician, actor, starts_at, ends_a
     ).exists():
         return None
     lines = [
-        f'{appointment.starts_at.astimezone(SAST):%a %-d %b %Y, %H:%M} SAST · {appointment.patient} · '
+        f'{appointment.starts_at.astimezone(SAST):%a %-d %b %Y, %H:%M} · {appointment.patient} · '
         f'{appointment.get_appointment_type_display()}'
         for appointment in affected
     ]

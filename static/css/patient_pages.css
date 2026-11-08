@@ -67,6 +67,7 @@
 .patient-table__actions .console-button:disabled { cursor: not-allowed; opacity: .5; }
 /* Row actions: small buttons with short text, as on Calendar & Bookings; Cancel is console-button--cancel. */
 .patient-table__actions .patient-row-action.console-button { font-size: .68rem; min-height: 2rem; padding: .35rem .65rem; }
+/* Download to calendar: the calendar icon alone, a square button. */
 /* An Actions column as wide as its buttons, on the right of the table; with less room the buttons wrap, still right. */
 .patient-table .patient-table__fit { text-align: right; white-space: nowrap; width: 1%; }
 .patient-table__fit .patient-table__actions { flex-wrap: nowrap; justify-content: flex-end; }
@@ -77,6 +78,18 @@
 }
 .patient-table__note { color: var(--patient-text); max-width: 23rem; overflow-wrap: anywhere; white-space: normal; }
 .patient-table__empty { color: var(--patient-text); text-align: center; }
+/* An appointment's page: the date and time over the type, length, clinician and status tag; the actions on the right. */
+.patient-appointment-heading { display: grid; gap: .45rem 1rem; grid-template-areas: "title actions" "details details"; grid-template-columns: minmax(0, 1fr) auto; }
+.patient-appointment-heading h1 { align-self: center; grid-area: title; margin: .2rem 0 0; }
+.patient-appointment-heading > p { align-items: center; display: flex; flex-wrap: wrap; gap: .35rem .6rem; grid-area: details; }
+.patient-appointment-heading .patient-page-heading__actions { grid-area: actions; justify-content: flex-end; }
+@media (max-width: 42rem) {
+  .patient-appointment-heading { grid-template-areas: "title" "details" "actions"; grid-template-columns: minmax(0, 1fr); }
+  .patient-appointment-heading .patient-page-heading__actions { justify-content: flex-start; }
+}
+/* Pill tabs inside a card, under its header (My Appointments' Upcoming and Past): fluid.css draws them, as on
+   Purchasing; here they keep the card's inset rather than meeting its edge. */
+.patient-page-content .console-card > .patient-order-subtabs { display: flex; margin: .85rem 1.2rem; }
 .patient-pagination { align-items: center; display: flex; flex-wrap: wrap; gap: .85rem; justify-content: center; margin-top: 1.2rem; }
 .patient-pagination > span { color: var(--patient-text); font-size: .8rem; }
 .patient-account-facts { display: grid; gap: 0; margin: 0; }
@@ -123,6 +136,7 @@
   .patient-page-content .console-metrics > :last-child:nth-child(3) { grid-column: 1 / -1; }
   .patient-page-content .metric-card { min-height: 6.5rem; }
   .patient-page-content .console-card__header, .patient-page-content .console-card__body { padding-inline: 1rem; }
+  .patient-page-content .console-card > .patient-order-subtabs { margin-inline: 1rem; }
   .patient-page-content .console-form input, .patient-page-content .console-form textarea, .patient-page-content .console-form select { font-size: 1rem; }
   .patient-page-content .console-form__row { grid-template-columns: 1fr; }
   .patient-page-content .console-list__item { align-items: start; }
@@ -139,6 +153,8 @@
   .patient-table .patient-table__fit { text-align: left; width: auto; }
   .patient-table__fit .patient-table__actions { justify-content: flex-start; }
   .patient-table .patient-table__empty { display: block; padding: .75rem 0; }
+  /* A cancelled appointment has no actions, so on a phone its row has no empty Actions line. */
+  .patient-table .patient-table__fit--none { display: none; }
   .patient-table__empty::before { display: none; }
   .patient-consent-list li { flex-wrap: wrap; gap: .6rem; }
 }

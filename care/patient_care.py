@@ -91,7 +91,7 @@ def book_patient_appointment(*, company, patient, actor, clinician_id, starts_at
     PatientEvent.objects.create(
         company=company, patient=patient, category=PatientEvent.Category.APPOINTMENT,
         title='Appointment booked',
-        detail=f'{appointment.get_appointment_type_display()} with {clinician.full_name} on {timezone.localtime(starts_at, SAST):%d %B %Y at %H:%M} SAST.',
+        detail=f'{appointment.get_appointment_type_display()} with {clinician.full_name} on {timezone.localtime(starts_at, SAST):%d %B %Y at %H:%M}.',
         source_type=appointment._meta.label_lower, source_id=str(appointment.pk), is_patient_visible=True,
     )
     record_audit(company=company, actor=actor, patient=patient, action='appointment.patient_booked', target=appointment, request=request)

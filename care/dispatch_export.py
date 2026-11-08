@@ -13,7 +13,7 @@ from openpyxl.utils import get_column_letter
 
 SAST = ZoneInfo('Africa/Johannesburg')
 HEADERS = (
-    'Shipment', 'Planned date', 'Dispatched (SAST)', 'Practice', 'Patient', 'ID / passport', 'Doctor',
+    'Shipment', 'Planned date', 'Dispatched', 'Practice', 'Patient', 'ID / passport', 'Doctor',
     'Product', 'Dose', 'Quantity', 'Batch and expiry', 'Status', 'Tracking', 'Hold reason', 'Note',
     'Deliver to', 'Contact number', 'Waybill',
 )

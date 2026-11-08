@@ -237,7 +237,7 @@ class RecordHistoryTests(TestCase):
         response, workbook = self.xlsx(first.context['timeline_download_url'])
         rows = self.cells(workbook['xl/worksheets/sheet1.xml'])
         self.assertEqual(len(rows) - 1, first.context['page_obj'].paginator.count)
-        self.assertEqual(rows[0][0], 'Date and time (SAST)')
+        self.assertEqual(rows[0][0], 'Date and time')
         self.assertIn('no-store', response.headers['Cache-Control'])
         self.assertIn(f'patient-{self.patient.pk}-history.xlsx', response.headers['Content-Disposition'])
         self.assertEqual(response.headers['X-Content-Type-Options'], 'nosniff')

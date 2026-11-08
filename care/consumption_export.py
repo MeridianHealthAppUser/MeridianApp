@@ -22,7 +22,7 @@ SAST = ZoneInfo('Africa/Johannesburg')
 TEAL, INK, MUTED = '007F79', '153F44', '607C87'
 HEADER_ROW = 7
 _ILLEGAL_TEXT = re.compile(r'[\x00-\x08\x0b\x0c\x0e-\x1f]')
-DETAIL_HEADERS = ('Week starting', 'Dispatched (SAST)', 'Product', 'Strength', 'Category', 'Quantity',
+DETAIL_HEADERS = ('Week starting', 'Dispatched', 'Product', 'Strength', 'Category', 'Quantity',
                   'Patient', 'Doctor', 'Shipment', 'Waybill', 'Tracking', 'Dose', 'Batch note', 'Parcel line')
 DETAIL_WIDTHS = (19, 24, 36, 23, 25, 13, 29, 29, 14, 26, 26, 26, 33, 15)
 

@@ -2,7 +2,7 @@
 {% load static workspace_ui %}
 
 {% block title %}Leads | {{ company.name }} | Meridian{% endblock %}
-{% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/leads.css' %}?v=20261104a"><link rel="stylesheet" href="{% static 'css/filter_menu.css' %}?v=20261104a"><script src="{% static 'js/filter_menu.js' %}?v=20261008b" defer></script><link rel="stylesheet" href="{% static 'css/conversation_search.css' %}?v=20261104a"><script src="{% static 'js/conversation_search.js' %}?v=20261005" defer></script><link rel="stylesheet" href="{% static 'css/backoffice.css' %}?v=20261104a"><link rel="stylesheet" href="{% static 'css/dialogs.css' %}?v=20261104d"><script src="{% static 'js/dialogs.js' %}?v=20261022a" defer></script>{% endblock %}
+{% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/leads.css' %}?v=20261104a"><link rel="stylesheet" href="{% static 'css/filter_menu.css' %}?v=20261104a"><script src="{% static 'js/filter_menu.js' %}?v=20261008b" defer></script><link rel="stylesheet" href="{% static 'css/conversation_search.css' %}?v=20261104a"><script src="{% static 'js/conversation_search.js' %}?v=20261005" defer></script><link rel="stylesheet" href="{% static 'css/backoffice.css' %}?v=20261104a"><link rel="stylesheet" href="{% static 'css/dialogs.css' %}?v=20261108a"><script src="{% static 'js/dialogs.js' %}?v=20261022a" defer></script>{% endblock %}
 
 {% block breadcrumbs %}{% breadcrumbs 'Administration' %}{% endblock %}
 {% block page_heading %}
@@ -30,7 +30,7 @@
                 <td data-label="BMI">{% if lead.bmi %}{{ lead.bmi|floatformat:1 }}{% else %}—{% endif %}</td>
                 <td data-label="Screening"><span class="lead-status lead-status--{{ lead.screening_status }}">{{ lead.get_screening_status_display }}</span></td>
                 <td data-label="Stage">{{ lead.get_stage_display }}{% if lead.follow_up_status %}<span class="staff-lead-secondary">Follow-up: {{ lead.follow_up_status }}{% if lead.next_contact_on %} · {{ lead.next_contact_on|date:'j M' }}{% endif %}</span>{% endif %}</td>
-                <td data-label="Submitted"><time datetime="{{ lead.created_at|date:'c' }}">{{ lead.created_at|date:"j M Y, H:i" }} SAST</time></td>
+                <td data-label="Submitted"><time datetime="{{ lead.created_at|date:'c' }}">{{ lead.created_at|date:"j M Y, H:i" }}</time></td>
                 <td data-label="Actions"><a class="console-button console-button--quiet" href="{% url 'portal:lead-detail' lead.pk %}">Open lead</a></td>
               </tr>
             {% empty %}<tr><td colspan="8"><div class="staff-empty-state"><p>No leads match these filters for {{ company.name }}.</p></div></td></tr>{% endfor %}

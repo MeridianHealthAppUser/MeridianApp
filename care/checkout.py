@@ -234,7 +234,7 @@ def complete_checkout(*, lead, user, password, clinician_id, starts_at, code, re
     when = timezone.localtime(starts_at, SAST)
     PatientEvent.objects.create(
         company=company, patient=patient, category=PatientEvent.Category.APPOINTMENT, title='Initial consultation booked',
-        detail=f'{CONSULT_MINUTES}-minute initial consultation with {clinician.full_name} on {when:%d %B %Y at %H:%M} SAST.',
+        detail=f'{CONSULT_MINUTES}-minute initial consultation with {clinician.full_name} on {when:%d %B %Y at %H:%M}.',
         source_type=appointment._meta.label_lower, source_id=str(appointment.pk), is_patient_visible=True,
     )
     PatientEvent.objects.create(

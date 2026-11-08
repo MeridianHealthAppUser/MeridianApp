@@ -49,7 +49,7 @@ def read_checkout_slot(token, lead, owner):
 
 
 class CheckoutDateForm(forms.Form):
-    date = forms.DateField(label='Date (SAST)', widget=forms.DateInput(attrs={'type': 'date', 'form': 'checkout-date-form'}))
+    date = forms.DateField(label='Date', widget=forms.DateInput(attrs={'type': 'date', 'form': 'checkout-date-form'}))
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)

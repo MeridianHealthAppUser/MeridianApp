@@ -36,7 +36,7 @@ def appointment_details(appointment, *, patient=None, clinician=None):
     rows += [
         ('Appointment', appointment.get_appointment_type_display()),
         ('Date', f'{starts:%A} {starts.day} {starts:%B %Y}'),
-        ('Time', f'{starts:%H:%M} {starts.tzname()} · {appointment.duration_minutes} minutes'),
+        ('Time', f'{starts:%H:%M} · {appointment.duration_minutes} minutes'),
     ]
     if clinician:
         rows.append(('With', clinician))

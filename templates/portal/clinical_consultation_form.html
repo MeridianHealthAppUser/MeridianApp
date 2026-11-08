@@ -30,7 +30,7 @@
       <div class="clinical-panel-body"><dl class="clinical-facts">
         <div><dt>Patient</dt><dd>{{ patient }}</dd></div><div><dt>Practice</dt><dd>{{ company.name }}</dd></div>
         <div><dt>Clinician</dt><dd>{% if encounter %}{{ encounter.clinician.full_name }}{% else %}{{ user.full_name }}{% endif %}</dd></div>
-        {% if encounter %}<div><dt>Consultation</dt><dd>{{ encounter.occurred_at|date:"j M Y, H:i" }} SAST</dd></div>{% if encounter.appointment %}<div><dt>Appointment</dt><dd>{{ encounter.appointment.get_appointment_type_display }} · {{ encounter.appointment.starts_at|date:"j M Y, H:i" }} SAST</dd></div>{% endif %}{% if encounter.signed_at %}<div><dt>Signed</dt><dd>{{ encounter.signed_at|date:"j M Y, H:i" }} SAST</dd></div>{% endif %}{% if encounter.signed_by %}<div><dt>Signed by</dt><dd>{{ encounter.signed_by.full_name }}</dd></div>{% endif %}{% endif %}
+        {% if encounter %}<div><dt>Consultation</dt><dd>{{ encounter.occurred_at|date:"j M Y, H:i" }}</dd></div>{% if encounter.appointment %}<div><dt>Appointment</dt><dd>{{ encounter.appointment.get_appointment_type_display }} · {{ encounter.appointment.starts_at|date:"j M Y, H:i" }}</dd></div>{% endif %}{% if encounter.signed_at %}<div><dt>Signed</dt><dd>{{ encounter.signed_at|date:"j M Y, H:i" }}</dd></div>{% endif %}{% if encounter.signed_by %}<div><dt>Signed by</dt><dd>{{ encounter.signed_by.full_name }}</dd></div>{% endif %}{% endif %}
       </dl></div>
     </aside>
   </div>

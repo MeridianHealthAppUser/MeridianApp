@@ -61,7 +61,7 @@ class TaskFilterForm(forms.Form):
 
 class ScheduleFilterForm(forms.Form):
     date = forms.DateField(
-        label='Date (SAST)',
+        label='Date',
         validators=[MinValueValidator(date(1900, 1, 1)), MaxValueValidator(date(2100, 12, 31))],
         widget=forms.DateInput(attrs={'type': 'date', 'min': '1900-01-01', 'max': '2100-12-31'}),
     )

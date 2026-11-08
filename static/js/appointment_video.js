@@ -83,7 +83,7 @@
     if (!item.opensAt || !item.closesAt || !Number.isFinite(opens.valueOf()) || !Number.isFinite(closes.valueOf())) return item.message;
     const date = new Intl.DateTimeFormat('en-GB', { timeZone: 'Africa/Johannesburg', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false });
     const time = new Intl.DateTimeFormat('en-GB', { timeZone: 'Africa/Johannesburg', hour: '2-digit', minute: '2-digit', hour12: false });
-    return `${item.message} Join window: ${date.format(opens)}–${time.format(closes)} SAST.`;
+    return `${item.message} Join window: ${date.format(opens)}–${time.format(closes)}.`;
   }
 
   function apply(data) {

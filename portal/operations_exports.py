@@ -37,7 +37,7 @@ def operations_table(table, request, company, membership):
     if form.cleaned_data['status']:
         orders = orders.filter(status__in=form.cleaned_data['status'])
     orders = _search(orders, form.cleaned_data['q'], 'patient__first_name', 'patient__last_name')
-    return ExportTable('Non-prescription requests', ('Request', 'Patient', 'Requested (SAST)',
+    return ExportTable('Non-prescription requests', ('Request', 'Patient', 'Requested',
         'Reference subtotal (ZAR)', 'Status'), ((order.pk, str(order.patient), order.submitted_at,
         order.subtotal, order.get_status_display()) for order in orders), widths=(14, 32, 26, 29, 30))
 

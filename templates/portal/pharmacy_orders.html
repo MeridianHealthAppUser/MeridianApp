@@ -10,7 +10,7 @@
     <thead><tr><th scope="col">Order</th><th scope="col">Placed</th><th scope="col">Status</th><th scope="col">Amount</th><th scope="col">Action</th></tr></thead>
     <tbody>{% for order in orders %}<tr>
       <td data-label="Order">{{ order.pk }}</td>
-      <td data-label="Placed">{{ order.submitted_at|date:'j M Y, H:i'|default:'Not placed' }}{% if order.submitted_at %} SAST{% endif %}</td>
+      <td data-label="Placed">{{ order.submitted_at|date:'j M Y, H:i'|default:'Not placed' }}</td>
       <td data-label="Status">{{ order.get_status_display }}{% if order.paid_at %} · Paid{% endif %}</td>
       <td data-label="Amount">R{{ order.subtotal|floatformat:"-2" }}</td>
       <td data-label="Action"><a class="console-button console-button--secondary" href="{% url 'portal:patient-order-detail' order.pk %}">Open order</a></td>

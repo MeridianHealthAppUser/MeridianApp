@@ -261,7 +261,19 @@ class VideoHTTPTests(AppointmentLifecycleFixture):
                 self.assertNotContains(response, self.url())
         self.login(self.patient_user)
         self.assertContains(self.client.get(reverse('portal:patient-appointments')), self.url())
-        self.assertContains(self.client.get(reverse('portal:patient-appointment-detail', args=[self.booking.pk])), self.url())
+        detail = self.client.get(reverse('portal:patient-appointment-detail', args=[self.booking.pk]))
+        self.assertContains(detail, self.url())
+        # While the room is open the banner from My Appointments is on top, with Join but no Details, and the line
+        # under the date is left out; the Video consultation card keeps its text but not a second Join.
+        html = detail.content.decode()
+        self.assertContains(detail, self.url(), count=1)
+        self.assertContains(detail, '<p class="patient-eyebrow">Meeting room is now open</p>', html=True)
+        self.assertNotContains(detail, '>Details</a>')
+        self.assertNotContains(detail, f'{self.booking.duration_minutes} minutes · ')
+        self.assertLess(html.index('id="next-consult-title"'), html.index('>Video consultation</h2>'))
+        self.assertContains(detail, '</svg>Join video call</a>')
+        self.assertLess(html.index('>Join video call</a>'), html.index('Your video consultation happens here.'))
+        self.assertLess(html.index('Your video consultation happens here.'), html.index('<span>Join window: '))
 
     def test_staff_schedule_links_do_not_give_admins_room_access(self):
         date = timezone.localdate(self.booking.starts_at).isoformat()
@@ -271,12 +283,28 @@ class VideoHTTPTests(AppointmentLifecycleFixture):
         self.login(self.admin)
         self.assertNotContains(self.client.get(url), self.url())
 
-    def test_in_progress_booking_remains_on_upcoming_and_overview(self):
+    def test_in_progress_booking_stays_on_upcoming_with_join_until_it_ends(self):
+        # My Appointments splits on the scheduled end (start + length), so one under way is still on Upcoming, with
+        # Join; Past is only a history, with no actions.
         Appointment.objects.filter(pk=self.booking.pk).update(starts_at=self.now - timedelta(minutes=2))
         self.login(self.patient_user)
-        for name in ('portal:patient-appointments', 'portal:patient-dashboard'):
-            response = self.client.get(reverse(name))
+        for url in (reverse('portal:patient-appointments'), reverse('portal:patient-dashboard'), reverse('portal:patient-treatment')):
+            response = self.client.get(url)
             self.assertContains(response, self.url())
+            # The banner's heading says the room is open, and the line under it is only the date and time.
+            self.assertContains(response, '<p class="patient-eyebrow">Meeting room is now open</p>', html=True)
+            self.assertNotContains(response, 'the room is open now')
+        past = self.client.get(reverse('portal:patient-appointments') + '?tab=past')
+        # Only the next-consult banner above the tabs has Join; the Past table has none.
+        self.assertContains(past, self.url(), count=1)
+        self.assertNotContains(past, 'data-appointment-video')
+        self.assertNotContains(past, '>Actions</th>')
+        # Once its time is up it's on Past, still with no actions.
+        Appointment.objects.filter(pk=self.booking.pk).update(starts_at=self.now - timedelta(minutes=self.booking.duration_minutes))
+        self.assertNotContains(self.client.get(reverse('portal:patient-appointments')), f'data-video-appointment-id="{self.booking.pk}"')
+        past = self.client.get(reverse('portal:patient-appointments') + '?tab=past')
+        self.assertEqual([row.pk for row in past.context['appointments']], [self.booking.pk])
+        self.assertNotContains(past, '>Details</a>')
 
     def test_future_booking_explains_join_window_without_fake_or_external_link(self):
         Appointment.objects.filter(pk=self.booking.pk).update(starts_at=self.now + timedelta(days=1),
@@ -296,26 +324,25 @@ class VideoHTTPTests(AppointmentLifecycleFixture):
         self.assertEqual(response.context['form'].fields['video_link'].widget.input_type, 'hidden')
         self.assertContains(response, 'No external meeting link is needed')
 
-    def test_history_is_paginated_practice_scoped_and_not_attendance(self):
+    def test_appointment_pages_show_no_connection_history_but_it_is_still_kept(self):
+        # Dr Czech, Nov 2026: nobody needs to see it on the appointment; the records stay for the Django admin.
         start = self.now - timedelta(days=1)
-        rows = [CallSession(company=self.company, appointment=self.booking, patient=self.patient,
-            doctor=self.doctor, started_at=start + timedelta(minutes=index),
-            last_seen_at=start + timedelta(minutes=index, seconds=10),
-            lease_expires_at=start + timedelta(minutes=index, seconds=60),
-            ended_at=start + timedelta(minutes=index, seconds=20)) for index in range(23)]
-        CallSession.objects.bulk_create(rows)
-        # Deliberately malformed legacy metadata must never cross the page's
-        # company/patient scope even when its appointment FK points here.
-        CallSession.objects.create(company=self.beta, appointment=self.booking, patient=self.beta_patient,
-            doctor=self.doctor, started_at=start, last_seen_at=start, lease_expires_at=start + timedelta(minutes=1))
-        self.login(self.patient_user)
-        url = reverse('portal:patient-appointment-detail', args=[self.booking.pk])
+        CallSession.objects.create(
+            company=self.company, appointment=self.booking, patient=self.patient, doctor=self.doctor, started_at=start,
+            last_seen_at=start + timedelta(seconds=10), lease_expires_at=start + timedelta(seconds=60),
+            ended_at=start + timedelta(seconds=20))
         before = AuditEvent.objects.count()
-        response = self.client.get(url)
-        self.assertEqual(response.context['call_history_page'].paginator.count, 23)
-        self.assertEqual(len(response.context['call_sessions']), 20)
-        self.assertContains(response, 'not recordings or proof of consultation attendance')
-        self.assertEqual(len(self.client.get(url + '?call_page=2').context['call_sessions']), 3)
+        for actor, url in ((self.patient_user, reverse('portal:patient-appointment-detail', args=[self.booking.pk])),
+                           (self.doctor, reverse('portal:appointment-detail', args=[self.booking.pk]))):
+            with self.subTest(actor=actor):
+                self.login(actor)
+                response = self.client.get(url)
+                self.assertContains(response, '>Video consultation</h2>')
+                self.assertContains(response, self.url())
+                self.assertNotContains(response, 'Connection history')
+                self.assertNotContains(response, 'Signalling duration')
+                self.assertNotIn('call_sessions', response.context)
+        self.assertEqual(CallSession.objects.filter(appointment=self.booking).count(), 1)
         self.assertEqual(AuditEvent.objects.count(), before)
         self.booking.refresh_from_db()
         self.assertEqual(self.booking.status, 'booked')

@@ -1449,3 +1449,7 @@
   .staff-list-tools { flex: 1 1 100%; flex-wrap: wrap; }
   .staff-list-tools .conversation-search { flex: 1 1 100%; }
 }
+
+/* The video consultation note on an appointment's page, on its own line under Join: the join window, then why the room isn't open, smaller and in italics. */
+.video-join-note { display: flex; flex-direction: column; gap: .2rem; width: 100%; }
+.video-join-note small { color: var(--console-muted); font-size: .78rem; font-style: italic; }

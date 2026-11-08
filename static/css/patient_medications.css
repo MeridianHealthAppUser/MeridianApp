@@ -18,7 +18,8 @@
 .patient-product__form .patient-product__price { margin-right: auto; }
 .patient-product__form input { border: 1px solid var(--console-line); border-radius: .55rem; color: var(--console-ink); font: inherit; font-size: .85rem; min-height: 2.35rem; padding: .3rem .45rem; text-align: center; width: 3.6rem; }
 .patient-product__form input:focus { border-color: var(--console-teal); box-shadow: 0 0 0 3px var(--patient-focus-ring, var(--c-1d4a5f-160)); outline: none; }
-.patient-product__form .console-button { min-height: 2.35rem; }
+.patient-product__form .console-button { flex: 1 1 100%; min-height: 2.35rem; }
+.patient-product__form .console-button[hidden] { display: none; }
 .patient-product__note { color: var(--console-muted); font-size: .72rem; line-height: 1.5; margin: 0; }
 
 /* Basket: items on the left, the total, delivery address and Pay on the right. */

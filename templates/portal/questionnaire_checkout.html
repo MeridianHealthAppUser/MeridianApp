@@ -31,7 +31,7 @@
 
       <section class="questionnaire-card" aria-labelledby="checkout-time-heading">
         <h2 id="checkout-time-heading">1. Choose a time</h2>
-        <p>{{ consult_minutes }} minutes by video with a doctor, shown in South Africa time (SAST). The time is checked again when you pay.</p>
+        <p>{{ consult_minutes }} minutes by video with a doctor. The time is checked again when you pay.</p>
         <div class="questionnaire-date-row">
           <div class="question-field">{{ date_form.date.label_tag }}{{ date_form.date }}{% for error in date_form.date.errors %}<small class="field-error">{{ error }}</small>{% endfor %}</div>
           <button type="submit" form="checkout-date-form" class="questionnaire-button questionnaire-button--secondary">Show times</button>

@@ -38,7 +38,7 @@
               {# As in the practice console: the latest message, and on the right its time today or its date. #}
               <span class="patient-inbox-thread__last">
                 <span class="patient-inbox-thread__preview">{% if thread.latest_body %}{% if thread.latest_from %}<strong>{{ thread.latest_from }}:</strong> {% endif %}{{ thread.latest_body|truncatechars:90 }}{% else %}No messages yet{% endif %}</span>
-                {% if thread.last_activity %}<time datetime="{{ thread.last_activity|date:'c' }}" title="{{ thread.last_activity|date:'j M Y, H:i' }} SAST">{{ thread.last_activity|list_when }}</time>{% endif %}
+                {% if thread.last_activity %}<time datetime="{{ thread.last_activity|date:'c' }}" title="{{ thread.last_activity|date:'j M Y, H:i' }}">{{ thread.last_activity|list_when }}</time>{% endif %}
               </span>
               {% if thread.unread_count %}<span class="sr-only">{{ thread.unread_count }} unread</span>{% endif %}
             </a>
@@ -99,7 +99,7 @@
         <header class="patient-conversation__header" data-live-region="header">
           <div>
             <h2 id="patient-conversation-heading">{{ selected_thread.subject|default:"Your care" }}</h2>
-            <p>With {% for row in selected_thread.participant_rows %}{{ row.user.full_name }}{% if not forloop.last %}, {% endif %}{% empty %}{{ patient_company.name }}{% endfor %} · kept in your medical record · times in SAST</p>
+            <p>With {% for row in selected_thread.participant_rows %}{{ row.user.full_name }}{% if not forloop.last %}, {% endif %}{% empty %}{{ patient_company.name }}{% endfor %} · kept in your medical record</p>
             {% for row in selected_thread.participant_rows %}{% if row.added_by %}<p class="patient-conversation__joined">{{ row.added_by.full_name }} added {{ row.user.full_name }} · {{ row.created_at|date:"j M, H:i" }}</p>{% endif %}{% endfor %}
           </div>
           {% if selected_thread.is_closed %}<span class="patient-inbox-pill">Closed</span>{% endif %}

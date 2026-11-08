@@ -97,7 +97,7 @@ def purchase_order_workbook(order):
     sheet.row_dimensions[2].height = 27
     for row, label, value, other_label, other in (
         (3, 'Reference', order.reference, 'Status', order.get_status_display()),
-        (4, 'Created (SAST)', _created(order), 'ETA', order.eta),
+        (4, 'Created', _created(order), 'ETA', order.eta),
         (5, 'Supplier', order.supplier_name or 'Unassigned', 'Email', order.supplier_email),
     ):
         write(row, 1, label, bold=True)
@@ -178,7 +178,7 @@ def purchase_order_pdf(order):
     if demo:
         notice = ParagraphStyle('DemoNotice', parent=title, fontSize=11, textColor=colors.HexColor('#9A5A00'))
         story.extend([paragraph(DEMO_LABEL, notice), Spacer(1, 12)])
-    created = _created(order).strftime('%d %b %Y, %H:%M') + ' SAST'
+    created = _created(order).strftime('%d %b %Y, %H:%M')
     metadata = Table([
         [paragraph('Created', small), paragraph(created), paragraph('Status', small), paragraph(order.get_status_display())],
         [paragraph('ETA', small), paragraph(order.eta.strftime('%d %b %Y') if order.eta else '-'),

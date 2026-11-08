@@ -68,7 +68,7 @@
                       </div>
                     {% endif %}
                   {% endwith %}
-                  {% if task.due_at %}<p class="staff-task-table__due{% if task.is_overdue %} is-overdue{% endif %}">Due <time datetime="{{ task.due_at|date:'c' }}">{{ task.due_at|date:"j M Y, H:i" }} SAST</time>{% if task.is_overdue %} · Overdue{% endif %}</p>{% endif %}
+                  {% if task.due_at %}<p class="staff-task-table__due{% if task.is_overdue %} is-overdue{% endif %}">Due <time datetime="{{ task.due_at|date:'c' }}">{{ task.due_at|date:"j M Y, H:i" }}</time>{% if task.is_overdue %} · Overdue{% endif %}</p>{% endif %}
                 </td>
                 <td data-label="Patient / general">
                   {# Practice administrators don't open patient records, so theirs is the name only. #}
@@ -76,10 +76,10 @@
                 </td>
                 <td data-label="Assigned to">{% if task.assigned_to %}{{ task.assigned_to.full_name }}{% else %}Unassigned{% endif %}</td>
                 <td data-label="Raised" class="staff-task-table__raised">
-                  <time datetime="{{ task.created_at|date:'c' }}">{{ task.created_at|date:"j M Y, H:i" }} SAST</time>
+                  <time datetime="{{ task.created_at|date:'c' }}">{{ task.created_at|date:"j M Y, H:i" }}</time>
                   {% if task.created_by %}<span>by {{ task.created_by.full_name }}</span>{% endif %}
                 </td>
-                <td data-label="Workflow status"><span class="console-status console-status--{{ task.status }}">{{ task.get_status_display }}</span>{% if task.completed_at %}<span class="staff-task-table__completed">Completed {{ task.completed_at|date:"j M, H:i" }} SAST</span>{% endif %}</td>
+                <td data-label="Workflow status"><span class="console-status console-status--{{ task.status }}">{{ task.get_status_display }}</span>{% if task.completed_at %}<span class="staff-task-table__completed">Completed {{ task.completed_at|date:"j M, H:i" }}</span>{% endif %}</td>
                 <td class="staff-task-table__actions-cell" data-label="Actions">
                   <div class="staff-task-table__actions">
                     {% if task.workflow_url %}<a class="console-button console-button--secondary" href="{{ task.workflow_url }}">{{ task.workflow_label }}</a>{% if task.also_editable %}<a class="console-button console-button--secondary" href="{% url 'portal:task-edit' task.pk %}">Edit task</a>{% endif %}{% elif task.is_clinical_workflow %}<span class="staff-task-table__due">Completed by the responsible doctor in the clinical workflow.</span>{% else %}<a class="console-button console-button--secondary" href="{% url 'portal:task-edit' task.pk %}">Edit task</a>{% endif %}

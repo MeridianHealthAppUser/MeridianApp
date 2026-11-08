@@ -118,7 +118,8 @@ class PatientAppointmentVideoActionTests(AppointmentLifecycleFixture):
             page = self.client.get(url)
         self.assertContains(page, 'data-appointment-video')
         self.assertContains(page, 'data-video-appointment-id="%s"' % self.booking.pk)
-        self.assertContains(page, 'data-appointment-video-join href="%s">Join video call</a>' % reverse('video:room', args=[self.booking.pk]))
+        self.assertContains(page, 'data-appointment-video-join href="%s"><svg aria-hidden="true"' % reverse('video:room', args=[self.booking.pk]))
+        self.assertContains(page, '</svg>Join video call</a>')
         with patch('portal.patient_views.timezone.now', return_value=self.now - timedelta(minutes=1)):
             future = self.client.get(url)
         self.assertContains(future, '<span data-appointment-video-action hidden>')

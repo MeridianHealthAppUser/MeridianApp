@@ -6,7 +6,7 @@
 {% block patient_content_class %}patient-home{% endblock %}
 
 {% block patient_content %}
-  {% if next_consult.video_room_url %}{% include 'portal/includes/patient_next_consult.html' with consult=next_consult eyebrow='Your consult is open' %}{% endif %}
+  {% if next_consult.video_room_url %}{% include 'portal/includes/patient_next_consult.html' with consult=next_consult %}{% endif %}
   <section class="patient-home__heading" aria-labelledby="patient-dashboard-heading">
     <h1 id="patient-dashboard-heading">Welcome back, {{ patient.first_name|default:user.first_name }}.</h1>
     <div class="patient-home__actions">

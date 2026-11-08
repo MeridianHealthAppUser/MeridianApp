@@ -14,7 +14,7 @@ class TaskEditorForm(TagFieldsMixin, CompanyBoundModelForm):
         model = ClinicalTask
         # Tag through-records are written by the service, with their company key.
         fields = ('title', 'description', 'patient', 'assigned_to', 'priority', 'status', 'due_at')
-        labels = {'description': 'Note', 'due_at': 'Due date and time (SAST)'}
+        labels = {'description': 'Note', 'due_at': 'Due date and time'}
         widgets = {
             'description': forms.Textarea(attrs={'rows': 4}),
         }

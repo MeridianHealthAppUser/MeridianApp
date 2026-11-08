@@ -3,7 +3,6 @@
 from django.conf import settings
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import ImproperlyConfigured
-from django.core.paginator import Paginator
 from django.http import Http404, HttpResponse, JsonResponse
 from django.middleware.csrf import get_token
 from django.template.loader import get_template
@@ -82,17 +81,3 @@ def ice_config(request, appointment_id):
     except ImproperlyConfigured:
         return JsonResponse({'error': 'Video consultations are temporarily unavailable.'}, status=503)
     return JsonResponse(configuration)
-
-
-def appointment_video_context(request, appointment, *, allowed_role):
-    """Called only after the containing detail page's own tenant/role lookup."""
-    from .access import attach_video_join
-    from .models import CallSession
-
-    attach_video_join([appointment], request.user.pk, allowed_role=allowed_role)
-    sessions = CallSession.objects.filter(
-        company_id=appointment.company_id, appointment_id=appointment.pk,
-        patient_id=appointment.patient_id,
-    ).select_related('doctor').order_by('-started_at', '-pk')
-    page = Paginator(sessions, 20).get_page(request.GET.get('call_page'))
-    return {'call_history_page': page, 'call_sessions': page.object_list}

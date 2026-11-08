@@ -111,7 +111,7 @@ class PurchaseExportTests(SimpleTestCase):
         reader = PdfReader(BytesIO(content))
         self.assertEqual(len(reader.pages), 1)
         text = reader.pages[0].extract_text()
-        for expected in ('Meridian Test & Partners', 'PO-00021', '03 Nov 2026, 14:15 SAST',
+        for expected in ('Meridian Test & Partners', 'PO-00021', '03 Nov 2026, 14:15',
                          '12 Nov 2026', 'Supplier', 'Semaglutide at order', '2.0 mg',
                          'Recorded supplier & partners', 'orders@supplier.example', 'Code: SUP-001',
                          'Ordered', 'Received', 'Remaining', 'Total units', 'Page 1'):

@@ -13,7 +13,7 @@
     {% if thread.about %}<span class="record-inbox-thread__about"><span class="person-tags__label">Patient:</span>{% include 'portal/includes/person_tag.html' with tag=thread.about %}</span>{% endif %}
     <span class="record-inbox-thread__last">
       <span class="record-inbox-thread__preview">{% if thread.latest_body %}{% if thread.latest_from %}<strong>{{ thread.latest_from }}:</strong> {% endif %}{{ thread.latest_body|truncatechars:90 }}{% else %}No messages yet{% endif %}</span>
-      {% if thread.last_activity %}<time datetime="{{ thread.last_activity|date:'c' }}" title="{{ thread.last_activity|date:'j M Y, H:i' }} SAST">{{ thread.last_activity|list_when }}</time>{% endif %}
+      {% if thread.last_activity %}<time datetime="{{ thread.last_activity|date:'c' }}" title="{{ thread.last_activity|date:'j M Y, H:i' }}">{{ thread.last_activity|list_when }}</time>{% endif %}
     </span>
   </a>
   {% if thread.read_state_url %}

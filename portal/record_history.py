@@ -149,8 +149,8 @@ class ClinicalRecordExcelView(SignedHistoryMixin, View):
             ('Scope', self.filters['scope']), ('Care purpose', self.filters.get('reason', '')),
             ('Activity filter', self.filters['category']),
             ('From date', self.filters.get('date_from') or ''), ('To date', self.filters.get('date_to') or ''),
-            ('History snapshot (SAST)', timezone.localtime(self.filters['snapshot'], RECORD_TIMEZONE).isoformat()),
-            ('Downloaded (SAST)', timezone.localtime(timezone.now(), RECORD_TIMEZONE).isoformat()),
+            ('History snapshot', timezone.localtime(self.filters['snapshot'], RECORD_TIMEZONE).isoformat()),
+            ('Downloaded', timezone.localtime(timezone.now(), RECORD_TIMEZONE).isoformat()),
             ('Excluded', 'Private notes; unsigned consultations; attachment bytes; internal events; arbitrary audit metadata and IP addresses.'),
             ('Format', 'All cells are text. Very long entries continue in additional rows. Unsupported XML control characters are replaced.'),
         ]

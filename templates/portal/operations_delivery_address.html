@@ -13,7 +13,7 @@
   </section>
   <section class="staff-page-card ops-panel" aria-labelledby="delivery-current-heading">
     <h2 id="delivery-current-heading">On file</h2>
-    {% if address %}<address class="ops-address">{{ address.recipient|default:patient }}<br>{% for line in address.lines %}{{ line }}<br>{% endfor %}{{ address.phone }}</address>{% if address.instructions %}<p>{{ address.instructions }}</p>{% endif %}<p>Last changed {{ address.updated_at|date:'j M Y, H:i' }} SAST{% if address.updated_by %} by {% if address.updated_by_id == patient.user_id %}the patient{% else %}{{ address.updated_by.full_name }}{% endif %}{% endif %}.</p>{% else %}<p>No delivery address yet. The patient gives one when they start their subscription, or on My profile.</p>{% endif %}
+    {% if address %}<address class="ops-address">{{ address.recipient|default:patient }}<br>{% for line in address.lines %}{{ line }}<br>{% endfor %}{{ address.phone }}</address>{% if address.instructions %}<p>{{ address.instructions }}</p>{% endif %}<p>Last changed {{ address.updated_at|date:'j M Y, H:i' }}{% if address.updated_by %} by {% if address.updated_by_id == patient.user_id %}the patient{% else %}{{ address.updated_by.full_name }}{% endif %}{% endif %}.</p>{% else %}<p>No delivery address yet. The patient gives one when they start their subscription, or on My profile.</p>{% endif %}
     <p>The patient sees the change on My profile. It’s recorded in the practice’s audit log.</p>
   </section>
 </div>{% endblock %}

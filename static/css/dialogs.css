@@ -9,6 +9,7 @@
 .app-dialog__sub { color: var(--console-muted, var(--c-627883)); font-size: .82rem; line-height: 1.55; margin: -.5rem 0 1rem; }
 .app-dialog .console-form { display: grid; gap: .9rem; margin: 0; }
 .app-dialog .console-form textarea { resize: vertical; width: 100%; }
+.app-dialog__policy { color: var(--console-muted, var(--c-627883)); font-size: .82rem; line-height: 1.55; margin: 0 0 1rem; }
 .app-dialog__actions { display: flex; flex-wrap: wrap; gap: .6rem; justify-content: flex-end; }
 @media (max-width: 760px) { .app-dialog__body { padding: 1.1rem; } }
 /* A dialog's button that waits until its form has everything it needs, such as a booking's time. */
