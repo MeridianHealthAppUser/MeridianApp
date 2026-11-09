@@ -147,17 +147,19 @@ class PatientCareTests(TestCase):
         self.create_appointment(starts_at=self.starts_at + timedelta(days=1))
         self.assertIsNone(self.client.get(self.url('patient-appointments')).context['just_booked'])
         # Without a new booking the banner is the next consult, as on My Treatment.
-        self.assertContains(self.client.get(self.url('patient-appointments')), '<p class="patient-eyebrow">Your next consult</p>', html=True)
+        self.assertContains(self.client.get(self.url('patient-appointments')), 'data-waiting-text="Your next consult">Your next consult</p>')
         self.client.post(self.url('patient-book-appointment'), self.booking_data())
         appointment = Appointment.objects.get(starts_at=self.starts_at)
         page = self.client.get(self.url('patient-appointments'))
         self.assertEqual(page.context['just_booked'], appointment)
-        self.assertContains(page, '<p class="patient-eyebrow">Booked</p>', html=True)
-        self.assertContains(page, f'{self.url("patient-appointment-detail", pk=appointment.pk)}')
+        self.assertContains(page, 'data-waiting-text="Booked">Booked</p>')
+        # Its one action is Open meeting room, greyed out until the room opens; there's no appointment page to open.
+        self.assertContains(page, f'aria-disabled="true" aria-describedby="next-consult-video-{appointment.pk}"><svg')
+        self.assertNotContains(page, f'href="{self.url("patient-appointment-detail", pk=appointment.pk)}"')
         # Back to the next consult when they come back.
         again = self.client.get(self.url('patient-appointments'))
-        self.assertNotContains(again, '<p class="patient-eyebrow">Booked</p>', html=True)
-        self.assertContains(again, '<p class="patient-eyebrow">Your next consult</p>', html=True)
+        self.assertNotContains(again, '>Booked</p>')
+        self.assertContains(again, '>Your next consult</p>')
 
     def test_appointments_upcoming_and_past_tabs_and_their_filters(self):
         self.login()
@@ -188,7 +190,7 @@ class PatientCareTests(TestCase):
         # The next consult's banner sits on top, as on My Treatment (the one under way, until it ends).
         top = self.client.get(self.url('patient-appointments'))
         self.assertEqual(top.context['next_consult'], started)
-        self.assertContains(top, '<p class="patient-eyebrow">Your next consult</p>', html=True)
+        self.assertContains(top, '>Your next consult</p>')
         page = self.client.get(self.url('patient-appointments'), {'tab': 'past', 'clinician': self.other_doctor.pk, 'type': 'review'})
         self.assertContains(page, '<h2 id="patient-appointments-heading">My Appointments</h2>', html=True)
         # The tabs keep the filters; the filters (and Clear) keep the tab.
@@ -518,44 +520,37 @@ class PatientCareTests(TestCase):
         self.assertIn('category=message', response.context['pagination_query'])
         self.assertIn('sort=oldest', response.context['pagination_query'])
 
-    def test_calendar_download_is_private_owned_utc_and_read_only(self):
+    def test_patients_have_no_calendar_download_in_the_app(self):
+        # Dr Czech, Nov 2026: Add to calendar is the file attached to the confirmation email (care.test_notifications).
         self.login()
+        appointment = self.create_appointment()
+        self.assertEqual(self.client.get(f'/patient/appointments/{appointment.pk}/calendar.ics').status_code, 404)
+
+    def calendar(self, appointment):
+        from care.calendar_files import patient_calendar_text
+
+        appointment = Appointment.objects.select_related('company').get(pk=appointment.pk)
+        return patient_calendar_text(appointment, 'https://app.meridian.test/patient/appointments/')
+
+    def test_patient_calendar_file_is_utc_and_holds_nothing_private(self):
         appointment = self.create_appointment(outcome_notes='Private clinical outcome', video_link='https://example.test/private-zoom')
-        before = self.counts()
-        response = self.client.get(self.url('patient-appointment-calendar', pk=appointment.pk))
-        self.assertEqual(response.status_code, 200)
-        self.assertIn('text/calendar', response.headers['Content-Type'])
-        self.assertIn('attachment', response.headers['Content-Disposition'])
-        self.assertIn('no-store', response.headers['Cache-Control'])
-        self.assertIn('private', response.headers['Cache-Control'])
-        self.assertIn('DTSTART:' + self.starts_at.astimezone(__import__('datetime').timezone.utc).strftime('%Y%m%dT%H%M%SZ'), response.content.decode())
-        self.assertNotIn('Private clinical outcome', response.content.decode())
-        self.assertNotIn('private-zoom', response.content.decode())
-        self.assertEqual(self.client.head(self.url('patient-appointment-calendar', pk=appointment.pk)).status_code, 200)
-        self.assertEqual(self.counts(), before)
+        text = self.calendar(appointment)
+        self.assertIn('DTSTART:' + self.starts_at.astimezone(__import__('datetime').timezone.utc).strftime('%Y%m%dT%H%M%SZ'), text)
+        self.assertIn('STATUS:CONFIRMED', text)
+        self.assertNotIn('Private clinical outcome', text)
+        self.assertNotIn('private-zoom', text)
+        self.assertNotIn(self.patient.first_name, text)
+        Appointment.objects.filter(pk=appointment.pk).update(status=Appointment.Status.CANCELLED)
+        self.assertIn('STATUS:CANCELLED', self.calendar(appointment))
 
-    def test_calendar_denies_other_patient_and_other_practice(self):
-        self.login()
-        for changes in ({'patient': self.other_patient}, {'company': self.beta, 'patient': self.beta_patient}):
-            appointment = self.create_appointment(**changes)
-            self.assertEqual(self.client.get(self.url('patient-appointment-calendar', pk=appointment.pk)).status_code, 404)
-
-    def test_calendar_marks_cancelled_appointments(self):
-        self.login()
-        appointment = self.create_appointment(status=Appointment.Status.CANCELLED)
-        response = self.client.get(self.url('patient-appointment-calendar', pk=appointment.pk))
-        self.assertIn('STATUS:CANCELLED', response.content.decode())
-
-    def test_calendar_escapes_injection_and_folds_utf8_safely(self):
-        self.login()
+    def test_calendar_file_escapes_injection_and_folds_utf8_safely(self):
         self.company.name = 'Practice; north, south\\east\r\nATTENDEE:mailto:attacker@example.test ' + 'é' * 70
         self.company.save()
-        appointment = self.create_appointment()
-        response = self.client.get(self.url('patient-appointment-calendar', pk=appointment.pk))
-        lines = response.content.decode().split('\r\n')
+        text = self.calendar(self.create_appointment())
+        lines = text.split('\r\n')
         self.assertTrue(all(len(line.encode('utf-8')) <= 75 for line in lines))
         self.assertFalse(any(line.startswith('ATTENDEE:') for line in lines))
-        unfolded = response.content.decode().replace('\r\n ', '')
+        unfolded = text.replace('\r\n ', '')
         self.assertIn(r'Practice\; north\, south\\east\nATTENDEE', unfolded)
 
     def weight(self, day, weight='90.0', **changes):

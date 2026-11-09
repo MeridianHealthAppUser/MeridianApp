@@ -5,5 +5,7 @@
 {% for label, value in details %}{{ label }}: {{ value }}{% if not forloop.last %}
 {% endif %}{% endfor %}
 
+To add it to your calendar, open the calendar file attached to this email.
+
 You can find it, and any of your other appointments, under My Appointments in the Meridian Health app:
 {{ url }}{% endblock %}

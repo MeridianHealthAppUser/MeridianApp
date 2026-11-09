@@ -2,7 +2,7 @@
 {% load static workspace_ui %}
 
 {% block title %}My Appointments | Meridian{% endblock %}
-{% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/info_tips.css' %}?v=20261104a"><script src="{% static 'js/info_tips.js' %}?v=20261008a" defer></script><link rel="stylesheet" href="{% static 'css/dialogs.css' %}?v=20261108a"><script src="{% static 'js/dialogs.js' %}?v=20261022a" defer></script><link rel="stylesheet" href="{% static 'css/time_slots.css' %}?v=20261104a"><script src="{% static 'js/appointment_booking.js' %}?v=20261022d" defer></script><script src="{% static 'js/appointment_video.js' %}?v=20261106a" defer></script><link rel="stylesheet" href="{% static 'css/filter_menu.css' %}?v=20261104a"><script src="{% static 'js/filter_menu.js' %}?v=20261008b" defer></script>{% endblock %}
+{% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/info_tips.css' %}?v=20261104a"><script src="{% static 'js/info_tips.js' %}?v=20261008a" defer></script><link rel="stylesheet" href="{% static 'css/dialogs.css' %}?v=20261108a"><script src="{% static 'js/dialogs.js' %}?v=20261022a" defer></script><link rel="stylesheet" href="{% static 'css/time_slots.css' %}?v=20261104a"><script src="{% static 'js/appointment_booking.js' %}?v=20261022d" defer></script><script src="{% static 'js/appointment_video.js' %}?v=20261108a" defer></script><link rel="stylesheet" href="{% static 'css/filter_menu.css' %}?v=20261104a"><script src="{% static 'js/filter_menu.js' %}?v=20261008b" defer></script>{% endblock %}
 {% block patient_content_class %}patient-appointments{% endblock %}
 
 {% block patient_breadcrumbs %}{% breadcrumbs 'My Appointments' %}{% endblock %}
@@ -49,16 +49,15 @@
               <td data-label="Clinician">{% if appointment.clinician %}{{ appointment.clinician.titled_name }}{% else %}Your care team{% endif %}</td>
               <td data-label="Status"><span class="console-status console-status--{{ appointment.status }}">{{ appointment.get_status_display }}</span></td>
               {% if appointment_tab == 'upcoming' %}<td class="patient-table__fit{% if appointment.status == 'cancelled' %} patient-table__fit--none{% endif %}" data-label="Actions">
-                {# Small secondary buttons with short text, as on Calendar & Bookings. Join, with a video icon, comes first #}
-                {# while the room is open; then Details and, while the booking can still be changed, Request a change (a #}
-                {# message to the practice, which moves the appointment, as on the appointment's page) and Cancel in a #}
-                {# dialog below. Dr Czech keeps the calendar download off the list (Nov 2026): it's Add to calendar on the #}
-                {# appointment's page. A cancelled appointment has no actions at all. #}
+                {# Small buttons with short text, as on Calendar & Bookings (Dr Czech, Nov 2026: no appointment page, so no #}
+                {# Details). Open meeting room, greyed out until the room opens and then blue; then, while the booking can #}
+                {# still be changed, Request a change and Cancel, plain buttons that don't invite either (not red), each #}
+                {# opening a dialog below with the cancellation policy. No calendar download: it's attached to the #}
+                {# confirmation email. A cancelled appointment has no actions at all. #}
                 <div class="patient-table__actions">
-                  <span data-appointment-video-action{% if not appointment.video_room_url %} hidden{% endif %}><a class="console-button console-button--primary patient-row-action" data-appointment-video-join{% if appointment.video_room_url %} href="{{ appointment.video_room_url }}"{% endif %}>{% include 'portal/includes/video_call_icon.html' %}Join video call</a></span>
-                  {% if appointment.status != 'cancelled' %}<a class="console-button console-button--secondary patient-row-action" href="{% url 'portal:patient-appointment-detail' appointment.pk %}">Details</a>{% endif %}
-                  {% if appointment.change_request_url %}<a class="console-button console-button--secondary patient-row-action" href="{{ appointment.change_request_url }}">Request a change</a>{% endif %}
-                  {% if appointment.cancel_form %}<a class="console-button console-button--secondary console-button--cancel patient-row-action" href="{% url 'portal:patient-appointment-detail' appointment.pk %}?update=status" data-modal-open="cancel-appointment-{{ appointment.pk }}" aria-haspopup="dialog">Cancel<span class="sr-only"> this appointment</span></a>{% endif %}
+                  {% if appointment.status == 'booked' %}{% include 'portal/includes/meeting_room_button.html' with row=True note='video-join-' %}{% endif %}
+                  {% if appointment.change_request_url %}<a class="console-button console-button--secondary patient-row-action" href="{{ appointment.change_dialog_url }}" data-modal-open="change-appointment-{{ appointment.pk }}" aria-haspopup="dialog">Request a change</a>{% endif %}
+                  {% if appointment.cancel_form %}<a class="console-button console-button--secondary patient-row-action" href="{{ appointment.cancel_dialog_url }}" data-modal-open="cancel-appointment-{{ appointment.pk }}" aria-haspopup="dialog">Cancel<span class="sr-only"> this appointment</span></a>{% endif %}
                 </div>
               </td>{% endif %}
             </tr>
@@ -72,15 +71,30 @@
   </section>
   {% include 'portal/includes/patient_pagination.html' with pagination_label='Appointment' %}
   {% for appointment in appointments %}{% if appointment.cancel_form %}
-    {# The appointment page's Update booking status dialog, coming back here once cancelled. A mistake opens it again #}
-    {# on the appointment's page; without scripts the Cancel link opens it there. #}
-    <dialog class="app-dialog" id="cancel-appointment-{{ appointment.pk }}" aria-labelledby="cancel-appointment-{{ appointment.pk }}-title">
+    {# Request a change (Dr Czech, Nov 2026): the cancellation policy first, as patients often ask minutes before, then #}
+    {# on to a message to the practice, who move the appointment. Within 24 hours it says plainly that a change now #}
+    {# means a new fee. #}
+    <dialog class="app-dialog" id="change-appointment-{{ appointment.pk }}" aria-labelledby="change-appointment-{{ appointment.pk }}-title"{% if appointment.change_dialog_open %} open{% endif %}>
       <div class="app-dialog__body">
-        <h2 id="cancel-appointment-{{ appointment.pk }}-title">Update booking status</h2>
+        <h2 id="change-appointment-{{ appointment.pk }}-title">Request a change</h2>
         <p class="app-dialog__sub">{{ appointment.get_appointment_type_display }}{% if appointment.clinician %} with {{ appointment.clinician.titled_name }}{% endif %} on {{ appointment.starts_at|date:'D j M Y, H:i' }}.</p>
-        <form class="console-form" method="post" action="{% url 'portal:patient-appointment-detail' appointment.pk %}">{% csrf_token %}<input type="hidden" name="workflow_context" value="{{ appointment.cancel_context }}"><input type="hidden" name="next" value="{{ request.get_full_path }}">{% for field in appointment.cancel_form %}{% include 'portal/includes/form_field.html' %}{% endfor %}
+        {% if appointment.late_notice %}<p class="app-dialog__alert">Your appointment is in less than 24 hours, so changing it now means a new consultation fee.</p>{% endif %}
+        <p class="app-dialog__text">To change the time, message the practice and they'll move your appointment.</p>
+        {% include 'portal/includes/appointment_cancellation_policy.html' %}
+        <div class="app-dialog__actions"><button class="console-button console-button--secondary" type="button" data-dialog-close>Close</button><a class="console-button console-button--primary" href="{{ appointment.change_request_url }}">{% include 'portal/includes/message_icon.html' %}Message the practice</a></div>
+      </div>
+    </dialog>
+    {# Cancel appointment (Dr Czech, Nov 2026): within 24 hours it says plainly that cancelling now is billed in full; #}
+    {# then the reason they must give (no status to choose: cancelling is all a patient can do) and the policy. Keep #}
+    {# appointment closes it. Back here once cancelled; a mistake is a message here. #}
+    <dialog class="app-dialog" id="cancel-appointment-{{ appointment.pk }}" aria-labelledby="cancel-appointment-{{ appointment.pk }}-title"{% if appointment.cancel_dialog_open %} open{% endif %}>
+      <div class="app-dialog__body">
+        <h2 id="cancel-appointment-{{ appointment.pk }}-title">Cancel appointment</h2>
+        <p class="app-dialog__sub">{{ appointment.get_appointment_type_display }}{% if appointment.clinician %} with {{ appointment.clinician.titled_name }}{% endif %} on {{ appointment.starts_at|date:'D j M Y, H:i' }}.</p>
+        {% if appointment.late_notice %}<p class="app-dialog__alert">Your appointment is in less than 24 hours, so if you cancel now it will be billed in full and not refunded.</p>{% endif %}
+        <form class="console-form" method="post" action="{% url 'portal:patient-appointment-cancel' appointment.pk %}">{% csrf_token %}<input type="hidden" name="workflow_context" value="{{ appointment.cancel_context }}"><input type="hidden" name="next" value="{{ request.get_full_path }}">{% include 'portal/includes/form_field.html' with field=appointment.cancel_form.reason %}
           {% include 'portal/includes/appointment_cancellation_policy.html' %}
-          <div class="app-dialog__actions"><button class="console-button console-button--secondary" type="button" data-dialog-close>Cancel</button><button class="console-button console-button--primary" type="submit">Confirm cancellation</button></div>
+          <div class="app-dialog__actions"><button class="console-button console-button--secondary" type="button" data-dialog-close>Keep appointment</button><button class="console-button console-button--primary" type="submit">Confirm cancellation</button></div>
         </form>
       </div>
     </dialog>

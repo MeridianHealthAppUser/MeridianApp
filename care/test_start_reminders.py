@@ -43,7 +43,12 @@ class StartReminderTests(NotificationTestCase):
         sent = {email.to[0]: email for email in mail.outbox}
         self.assertEqual(set(sent), {self.patient_user.email, self.doctor.email})
         self.assertTrue(all(email.subject.startswith('Starting soon:') for email in sent.values()))
-        self.assertIn(f'{SITE}/patient/appointments/{appointment.pk}/', sent[self.patient_user.email].body)
+        # Patients have no page for one appointment: the room is joined from My Appointments.
+        patient = sent[self.patient_user.email].body
+        self.assertIn('Your meeting room is open. Join it from My Appointments in the Meridian Health app:\n'
+                      f'{SITE}/patient/appointments/\n', patient)
+        self.assertNotIn(f'/patient/appointments/{appointment.pk}/', patient)
+        self.assertEqual(sent[self.patient_user.email].attachments, [])
         self.assertIn(f'{SITE}/schedule/appointments/{appointment.pk}/', sent[self.doctor.email].body)
         self.assertEqual(set(AppointmentStartReminder.objects.values_list('recipient_id', flat=True)),
                          {self.patient_user.pk, self.doctor.pk})

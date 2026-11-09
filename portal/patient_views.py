@@ -45,6 +45,9 @@ APPOINTMENT_TAB_STATUSES = {
 APPOINTMENT_WHEN_CHOICES = (('', 'Any time'), ('today', 'Today'), ('week', 'This week'), ('month', 'This month'))
 # The appointment just booked, shown once at the top of My Appointments (portal/patient_care_views.py).
 JUST_BOOKED = 'patient_just_booked'
+# The cancellation policy's line: changing or cancelling closer to the start than this is charged (Request a change
+# and Cancel say so plainly, in their dialogs on My Appointments).
+LATE_CHANGE_HOURS = 24
 
 
 def _when_bounds(when):
@@ -213,15 +216,29 @@ def _appointment_list(request, company, patient, now):
     if tab == 'upcoming':
         # Past is only a history, with no Join.
         attach_video_join(context['appointments'], request.user.pk, allowed_role='patient', now=now)
-    # Each booking the patient can still change gets Request a change (the appointment page's message) and Cancel,
-    # which opens the appointment page's own dialog.
+    # Each booking the patient can still change gets Request a change and Cancel, each opening a dialog with the
+    # cancellation policy (Dr Czech, Nov 2026): Request a change's goes on to a message to the practice. Within 24
+    # hours (late_notice) both say plainly what changing or cancelling now costs. Without scripts their links open this list again with
+    # that dialog open (?update=<dialog id>, which static/js/dialogs.js tidies away).
     from .appointment_detail_views import AppointmentStatusForm
     changeable = [item for item in context['appointments'] if item.status == Appointment.Status.BOOKED and item.starts_at > now]
     administrator = practice_administrators(company).first() if changeable else None
+    opened = request.GET.get('update', '')
+
+    def dialog_url(dialog):
+        query = request.GET.copy()
+        query['update'] = dialog
+        return f'{action}?{query.urlencode()}'
+
     for appointment in changeable:
         appointment.change_request_url = appointment_change_request_url(appointment, administrator)
+        appointment.late_notice = appointment.starts_at - now < timedelta(hours=LATE_CHANGE_HOURS)
         appointment.cancel_form = AppointmentStatusForm(cancel_only=True, auto_id=f'cancel_{appointment.pk}_%s')
         appointment.cancel_context = make_workflow_context(request, company, 'appointment-status', appointment, patient=patient)
+        for kind in ('change', 'cancel'):
+            dialog = f'{kind}-appointment-{appointment.pk}'
+            setattr(appointment, f'{kind}_dialog_url', dialog_url(dialog))
+            setattr(appointment, f'{kind}_dialog_open', opened == dialog)
     return context
 
 

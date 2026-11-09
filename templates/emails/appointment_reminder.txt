@@ -5,5 +5,5 @@ This is a reminder of your upcoming appointment.
 {% for label, value in details %}{{ label }}: {{ value }}{% if not forloop.last %}
 {% endif %}{% endfor %}
 
-Everything you need is on your appointment page. If you can no longer make it, you can cancel it there:
+{% if starting %}Your meeting room is open. Join it from My Appointments in the Meridian Health app:{% else %}Your meeting room opens {{ video_room_opens_minutes }} minutes before your appointment. Join it from My Appointments in the Meridian Health app:{% endif %}
 {{ url }}{% endblock %}

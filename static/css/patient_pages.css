@@ -54,6 +54,8 @@
 .patient-table th { color: var(--patient-text); font-size: .68rem; font-weight: 500; letter-spacing: .07em; padding: .9rem 1.15rem; text-transform: uppercase; }
 .patient-table td { border-top: 1px solid var(--console-soft-line); color: var(--console-ink); font-size: .84rem; line-height: 1.55; padding: 1.15rem; vertical-align: top; }
 .patient-table tbody tr:hover { background: var(--c-f8fafb); }
+/* My Appointments: every cell sits in the middle of its row, level with the two-line date and the buttons. */
+.patient-appointment-table td { vertical-align: middle; }
 .patient-table__date { display: grid; gap: .2rem; min-width: 8rem; }
 .patient-table__date time { font-weight: 500; }
 .patient-table__date span { color: var(--patient-text); font-size: .8rem; white-space: nowrap; }
@@ -65,9 +67,9 @@
 .patient-table__actions .console-button { align-items: center; display: inline-flex; gap: .4rem; white-space: nowrap; }
 .patient-table__actions .console-button svg { flex: 0 0 auto; }
 .patient-table__actions .console-button:disabled { cursor: not-allowed; opacity: .5; }
-/* Row actions: small buttons with short text, as on Calendar & Bookings; Cancel is console-button--cancel. */
+/* Row actions: small buttons with short text, as on Calendar & Bookings. Cancel is a plain one, not red: nothing
+   should invite a cancellation (Dr Czech, Nov 2026). */
 .patient-table__actions .patient-row-action.console-button { font-size: .68rem; min-height: 2rem; padding: .35rem .65rem; }
-/* Download to calendar: the calendar icon alone, a square button. */
 /* An Actions column as wide as its buttons, on the right of the table; with less room the buttons wrap, still right. */
 .patient-table .patient-table__fit { text-align: right; white-space: nowrap; width: 1%; }
 .patient-table__fit .patient-table__actions { flex-wrap: nowrap; justify-content: flex-end; }
@@ -163,3 +165,8 @@
   .patient-pages-console .console-button { transition: none; }
   .patient-pages-console .console-button:hover { transform: none; }
 }
+
+/* Request a change's dialog on My Appointments: what happens next, and within 24 hours that a change now means a new
+   fee, in the waiting banner's colours (patient_portal.css). */
+.patient-app .app-dialog__text { color: var(--patient-ink); font-size: .9rem; line-height: 1.55; margin: 0 0 .75rem; }
+.patient-app .app-dialog__alert { background: var(--patient-bar-soft, var(--patient-amber-soft)); border: 1px solid var(--patient-bar-line, var(--patient-amber-line)); border-radius: .75rem; color: var(--patient-ink); font-size: .9rem; font-weight: 600; line-height: 1.5; margin: 0 0 .9rem; padding: .7rem .85rem; }

@@ -54,19 +54,44 @@ const opens = Date.parse(fixture.opensAt);
       const initial = page.waitForResponse(response => response.url().includes('/video-status/'));
       await page.goto('https://appointments.test/patient/appointments/');
       await initial;
-      const join = page.getByRole('link', { name: 'Join video call', exact: true });
-      assert.equal(await join.isVisible(), false, 'Join is hidden before the opening boundary');
+      // Open meeting room is always there for a booked consult, in its row and the next-consult banner: greyed out
+      // with no address until the room opens, then the blue link into it.
+      const join = page.locator('tr a[data-appointment-video-join]');
+      const banner = page.locator('[data-video-banner]');
+      const bannerJoin = banner.locator('a[data-appointment-video-join]');
+      const opened = selector => page.locator(`${selector} a[data-appointment-video-join][href]:not([aria-disabled])`);
+      const closed = selector => page.locator(`${selector} a[data-appointment-video-join][aria-disabled="true"]:not([href])`);
+      async function assertClosed(message) {
+        for (const selector of ['tr', '[data-video-banner]']) {
+          await closed(selector).waitFor({ state: 'visible' });
+          assert.equal(await page.locator(`${selector} a[data-appointment-video-join]`).getAttribute('href'), null, message);
+        }
+        assert.equal(await join.evaluate(node => node.classList.contains('console-button--secondary')), true, message);
+        assert.equal(await banner.evaluate(node => node.classList.contains('is-waiting')), true, message);
+        assert.equal(await banner.locator('[data-video-eyebrow]').textContent(), 'Your next consult', message);
+      }
+      async function assertOpen() {
+        for (const selector of ['tr', '[data-video-banner]']) await opened(selector).waitFor({ state: 'visible' });
+        assert.equal(await join.getAttribute('href'), `https://appointments.test/video/appointments/${fixture.id}/`);
+        assert.equal(await bannerJoin.getAttribute('href'), `https://appointments.test/video/appointments/${fixture.id}/`);
+        assert.equal(await join.evaluate(node => node.classList.contains('console-button--primary')), true);
+        assert.equal(await banner.evaluate(node => node.classList.contains('is-waiting')), false);
+        assert.equal(await banner.locator('[data-video-eyebrow]').textContent(), 'Meeting room is now open');
+        assert.equal(await banner.locator('[data-appointment-video-message]').isVisible(), false);
+      }
+      assert.equal(await join.textContent(), 'Open meeting room');
+      await assertClosed('Greyed out before the opening boundary');
+      assert.equal(await banner.locator('[data-appointment-video-message]').textContent(), ' · The video room opens shortly before your appointment.');
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, `Layout overflow at ${width}`);
       await page.evaluate(() => { window.sameDocumentMarker = 'kept'; });
       mode = 'open'; now = opens + 100;
       const boundary = page.waitForResponse(response => response.url().includes('/video-status/'));
       await page.clock.runFor(1100);
       await boundary;
-      await join.waitFor({ state: 'visible' });
-      assert.equal(await join.getAttribute('href'), `https://appointments.test/video/appointments/${fixture.id}/`);
+      await assertOpen();
       assert.equal(await join.evaluate(node => node.closest('td').dataset.label), 'Actions');
       assert.equal(await page.locator('[data-appointment-video-announcement]').textContent(),
-        'Your video appointment is ready to join. Use Join video call in the Actions column.');
+        'Your meeting room is open. Use Open meeting room to join.');
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, `Join layout overflow at ${width}`);
 
       async function refresh(nextMode) {
@@ -77,13 +102,14 @@ const opens = Date.parse(fixture.opensAt);
       }
 
       await refresh('cancelled');
-      await join.waitFor({ state: 'hidden' });
-      assert.equal(await page.locator('[data-appointment-video-join]').getAttribute('href'), null);
+      await assertClosed('A cancelled appointment closes');
       await refresh('moved');
-      assert.equal(await join.isVisible(), false, 'A rescheduled appointment stays closed');
-      assert.equal(await page.locator('[data-video-appointment-id]').getAttribute('data-video-opens-at'), new Date(opens + 60000).toISOString());
+      await assertClosed('A rescheduled appointment stays closed');
+      for (const holder of await page.locator('[data-video-appointment-id]').all()) {
+        assert.equal(await holder.getAttribute('data-video-opens-at'), new Date(opens + 60000).toISOString());
+      }
       await refresh('open');
-      await join.waitFor({ state: 'visible' });
+      await assertOpen();
 
       // Expiry must hide the action even while the next server request is held.
       mode = 'held';
@@ -91,11 +117,11 @@ const opens = Date.parse(fixture.opensAt);
       for (let attempts = 0; !release && attempts < 20; attempts++) await new Promise(resolve => setTimeout(resolve, 10));
       assert.ok(release, 'The simulated status request is in flight');
       await page.clock.runFor(4500);
-      assert.equal(await join.isVisible(), false, 'The call closes locally during a network delay');
+      await assertClosed('The call closes locally during a network delay');
       now = opens + 5000;
       release();
       await page.waitForResponse(item => item.url().includes('/video-status/'));
-      assert.equal(await join.isVisible(), false, 'A response after expiry cannot restore the link');
+      await assertClosed('A response after expiry cannot restore the link');
       await refresh('wrong-scope');
       const stoppedAt = statusRequests;
       await page.clock.runFor(31000);
@@ -107,6 +133,6 @@ const opens = Date.parse(fixture.opensAt);
       await context.close();
     }
     for (const width of [1440, 390, 320]) await scenario(width);
-    console.log(`Passed ${checked} appointment browser scenarios (opening, cancellation, reschedule, expiry during delay, scope changes; desktop and mobile).`);
+    console.log(`Passed ${checked} appointment browser scenarios (opening, cancellation, reschedule, expiry during delay, scope changes; table row and banner; desktop and mobile).`);
   } finally { await browser.close(); }
 })().catch(error => { console.error(error); process.exitCode = 1; });

@@ -118,17 +118,30 @@ class PatientAppointmentVideoActionTests(AppointmentLifecycleFixture):
             page = self.client.get(url)
         self.assertContains(page, 'data-appointment-video')
         self.assertContains(page, 'data-video-appointment-id="%s"' % self.booking.pk)
-        self.assertContains(page, 'data-appointment-video-join href="%s"><svg aria-hidden="true"' % reverse('video:room', args=[self.booking.pk]))
-        self.assertContains(page, '</svg>Join video call</a>')
+
+        def row(response):
+            html = response.content.decode()
+            start = html.index('<tr data-video-appointment-id="%s"' % self.booking.pk)
+            return html[start:html.index('</tr>', start)]
+
+        # Open meeting room, the blue link into the room while it's open (Dr Czech, Nov 2026: not Join video call).
+        self.assertIn('<a class="console-button console-button--primary patient-row-action" role="link" data-appointment-video-join '
+                      'href="%s" aria-describedby="video-join-%s"><svg aria-hidden="true"' % (reverse('video:room', args=[self.booking.pk]), self.booking.pk), row(page))
+        self.assertIn('</svg>Open meeting room</a>', row(page))
+        self.assertNotContains(page, 'Join video call')
+        # Before then it's still there, greyed out, with no address to follow.
         with patch('portal.patient_views.timezone.now', return_value=self.now - timedelta(minutes=1)):
             future = self.client.get(url)
-        self.assertContains(future, '<span data-appointment-video-action hidden>')
-        self.assertNotContains(future, 'data-appointment-video-join href=')
+        self.assertIn('<a class="console-button console-button--secondary patient-row-action" role="link" data-appointment-video-join '
+                      'aria-disabled="true" aria-describedby="video-join-%s"><svg' % self.booking.pk, row(future))
+        self.assertNotIn('href=', row(future).split('data-appointment-video-join', 1)[1].split('</a>', 1)[0])
 
     @skipUnless(os.getenv('MERIDIAN_PLAYWRIGHT_PATH'), 'Optional installed local browser runner is not configured')
     def test_browser_updates_actions_and_expiry_without_reloading(self):
         self.login()
-        with patch('portal.patient_views.timezone.now', return_value=self.now - timedelta(seconds=1)):
+        # The banner's next consult and the table, both a second before the room opens.
+        with patch('portal.patient_views.timezone.now', return_value=self.now - timedelta(seconds=1)), \
+                patch('portal.patient_summary.timezone.now', return_value=self.now - timedelta(seconds=1)):
             page = self.client.get(reverse('portal:patient-appointments'))
         result = subprocess.run(
             [os.environ.get('MERIDIAN_NODE') or shutil.which('node'), str(settings.BASE_DIR / 'scripts/test_appointment_video.cjs')],

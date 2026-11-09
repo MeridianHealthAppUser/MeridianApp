@@ -260,20 +260,18 @@ class VideoHTTPTests(AppointmentLifecycleFixture):
             else:
                 self.assertNotContains(response, self.url())
         self.login(self.patient_user)
-        self.assertContains(self.client.get(reverse('portal:patient-appointments')), self.url())
-        detail = self.client.get(reverse('portal:patient-appointment-detail', args=[self.booking.pk]))
-        self.assertContains(detail, self.url())
-        # While the room is open the banner from My Appointments is on top, with Join but no Details, and the line
-        # under the date is left out; the Video consultation card keeps its text but not a second Join.
-        html = detail.content.decode()
-        self.assertContains(detail, self.url(), count=1)
-        self.assertContains(detail, '<p class="patient-eyebrow">Meeting room is now open</p>', html=True)
-        self.assertNotContains(detail, '>Details</a>')
-        self.assertNotContains(detail, f'{self.booking.duration_minutes} minutes · ')
-        self.assertLess(html.index('id="next-consult-title"'), html.index('>Video consultation</h2>'))
-        self.assertContains(detail, '</svg>Join video call</a>')
-        self.assertLess(html.index('>Join video call</a>'), html.index('Your video consultation happens here.'))
-        self.assertLess(html.index('Your video consultation happens here.'), html.index('<span>Join window: '))
+        response = self.client.get(reverse('portal:patient-appointments'))
+        # While the room is open, Open meeting room is the blue link into it in the banner and in the row (Dr Czech,
+        # Nov 2026: no appointment page, so no Details, and not Join video call), and the banner says the room is open.
+        self.assertContains(response, f'<a class="console-button console-button--primary" role="link" data-appointment-video-join href="{self.url()}"', count=1)
+        self.assertContains(response, f'<a class="console-button console-button--primary patient-row-action" role="link" data-appointment-video-join href="{self.url()}"', count=1)
+        self.assertContains(response, 'data-waiting-text="Your next consult">Meeting room is now open</p>')
+        self.assertContains(response, '</svg>Open meeting room</a>', count=2)
+        self.assertNotContains(response, '>Details</a>')
+        self.assertNotContains(response, 'Join video call')
+        self.assertNotContains(response, 'aria-disabled')
+        self.assertRedirects(self.client.get(reverse('portal:patient-appointment-detail', args=[self.booking.pk])),
+                             reverse('portal:patient-appointments'), fetch_redirect_response=False)
 
     def test_staff_schedule_links_do_not_give_admins_room_access(self):
         date = timezone.localdate(self.booking.starts_at).isoformat()
@@ -292,12 +290,15 @@ class VideoHTTPTests(AppointmentLifecycleFixture):
             response = self.client.get(url)
             self.assertContains(response, self.url())
             # The banner's heading says the room is open, and the line under it is only the date and time.
-            self.assertContains(response, '<p class="patient-eyebrow">Meeting room is now open</p>', html=True)
+            self.assertContains(response, 'data-waiting-text="Your next consult">Meeting room is now open</p>')
+            self.assertContains(response, '<span id="next-consult-video-%s" data-appointment-video-message hidden>' % self.booking.pk)
             self.assertNotContains(response, 'the room is open now')
         past = self.client.get(reverse('portal:patient-appointments') + '?tab=past')
         # Only the next-consult banner above the tabs has Join; the Past table has none.
         self.assertContains(past, self.url(), count=1)
-        self.assertNotContains(past, 'data-appointment-video')
+        self.assertContains(past, 'data-appointment-video-join', count=1)
+        self.assertContains(past, '<table class="patient-table patient-appointment-table" aria-labelledby="patient-appointments-heading">')
+        self.assertNotContains(past, '<tr data-video-appointment-id')
         self.assertNotContains(past, '>Actions</th>')
         # Once its time is up it's on Past, still with no actions.
         Appointment.objects.filter(pk=self.booking.pk).update(starts_at=self.now - timedelta(minutes=self.booking.duration_minutes))
@@ -332,16 +333,17 @@ class VideoHTTPTests(AppointmentLifecycleFixture):
             last_seen_at=start + timedelta(seconds=10), lease_expires_at=start + timedelta(seconds=60),
             ended_at=start + timedelta(seconds=20))
         before = AuditEvent.objects.count()
-        for actor, url in ((self.patient_user, reverse('portal:patient-appointment-detail', args=[self.booking.pk])),
+        # Patients have no page for one appointment: their room is opened from My Appointments.
+        for actor, url in ((self.patient_user, reverse('portal:patient-appointments')),
                            (self.doctor, reverse('portal:appointment-detail', args=[self.booking.pk]))):
             with self.subTest(actor=actor):
                 self.login(actor)
                 response = self.client.get(url)
-                self.assertContains(response, '>Video consultation</h2>')
                 self.assertContains(response, self.url())
                 self.assertNotContains(response, 'Connection history')
                 self.assertNotContains(response, 'Signalling duration')
                 self.assertNotIn('call_sessions', response.context)
+        self.assertContains(response, '>Video consultation</h2>')
         self.assertEqual(CallSession.objects.filter(appointment=self.booking).count(), 1)
         self.assertEqual(AuditEvent.objects.count(), before)
         self.booking.refresh_from_db()

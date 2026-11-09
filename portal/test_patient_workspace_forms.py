@@ -132,10 +132,13 @@ class PatientWorkspaceFormTests(TestCase):
         self.assertNotContains(response, 'Sign final note')
         self.assertNotContains(response, 'Save draft')
         self.login(self.patient_user)
-        response = self.client.get(reverse('portal:patient-appointment-detail', args=[self.appointment.pk]))
+        response = self.client.get(reverse('portal:patient-appointments'))
         self.assertEqual(response.status_code, 200)
         self.assertTemplateUsed(response, 'portal/patient_page_base.html')
         self.assertNotContains(response, 'aria-label="Patient sections"')
+        # Patients have no page for one appointment; its old address goes to My Appointments.
+        self.assertRedirects(self.client.get(reverse('portal:patient-appointment-detail', args=[self.appointment.pk])),
+                             reverse('portal:patient-appointments'), fetch_redirect_response=False)
 
     def test_other_active_practice_cannot_resolve_the_patient_bound_items(self):
         self.login(company=self.beta)

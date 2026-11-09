@@ -1,7 +1,6 @@
 from datetime import datetime, time as time_of_day, timedelta
 
 from django import forms
-from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.exceptions import ValidationError
@@ -19,12 +18,10 @@ from django.views.decorators.cache import never_cache
 from care.appointment_lifecycle import book_staff_appointment, change_appointment_status, reschedule_appointment
 from care.availability import bookable_start_times, start_slots
 from care.forms import BOOKING_DURATIONS, AppointmentForm
-from care.messaging import practice_administrators
 from care.widgets import QUARTER_HOUR_CHOICES
 from care.models import Appointment, ClinicalEncounter, MessageThread
 from practices.models import Patient
 from .clinical_forms import ConsultationForm, make_clinical_context
-from .patient_views import appointment_change_request_url, patient_page_context
 from .record_access import limit_patient_choices, limited_by_assignment, require_record_view
 from .views import PatientPortalRequiredMixin, StaffCompanyRequiredMixin
 from .workflow_context import make_workflow_context, validate_workflow_context
@@ -133,6 +130,12 @@ class AppointmentStatusForm(forms.Form):
             self.fields['status'].initial = 'cancelled'
         if staff:
             self.fields['reason'].help_text = 'For a cancellation, the patient sees this in the app and in their cancellation email.'
+        else:
+            # A patient cancelling their own (Dr Czech, Nov 2026): Cancel appointment on My Appointments shows no status,
+            # as cancelling is all they can do, and asks for a reason they must give. Theirs is never emailed.
+            reason = self.fields['reason']
+            reason.label, reason.required = 'Reason for cancelling', True
+            reason.error_messages['required'] = 'Please give a reason for cancelling.'
 
     def clean_status(self):
         # A greyed-out status ignores what's sent, so refuse a forged update rather than cancel instead.
@@ -184,43 +187,38 @@ class StaffBookingView(LoginRequiredMixin, StaffCompanyRequiredMixin, View):
 
 
 class AppointmentDetailMixin:
+    """An appointment's page for staff. Patients have no page for one appointment (Dr Czech, Nov 2026): Open meeting
+    room, Request a change and Cancel are on My Appointments (PatientAppointmentCancelView)."""
+
     http_method_names = ('get', 'post', 'head', 'options')
-    patient_portal = False
 
     def resolve(self, pk):
-        company = self.patient_company if self.patient_portal else self.company
-        queryset = Appointment.objects.for_company(company).filter(patient__company=company, patient__is_active=True).select_related('patient', 'clinician')
-        if self.patient_portal:
-            queryset = queryset.filter(patient=self.patient)
+        queryset = Appointment.objects.for_company(self.company).filter(
+            patient__company=self.company, patient__is_active=True).select_related('patient', 'clinician')
         appointment = get_object_or_404(queryset, pk=pk)
         # A doctor opens their own appointments, and others only for patients whose records they can open.
-        if (not self.patient_portal and limited_by_assignment(self.membership)
-                and appointment.clinician_id != self.request.user.pk):
+        if limited_by_assignment(self.membership) and appointment.clinician_id != self.request.user.pk:
             require_record_view(self.membership, self.request.user, appointment.patient)
         return appointment
 
     def can_edit(self, appointment):
         if appointment.status != 'booked':
             return False
-        if self.patient_portal:
-            return appointment.starts_at > timezone.now()
         return self.membership.role in ('practice_admin', 'super_admin') or appointment.clinician_id == self.request.user.pk
 
     def can_change_time(self, appointment):
         """Staff move a booked appointment: administrators any, a doctor their own. Patients ask the practice."""
-        return not self.patient_portal and appointment.status == Appointment.Status.BOOKED and (
+        return appointment.status == Appointment.Status.BOOKED and (
             self.membership.role in ('practice_admin', 'super_admin') or appointment.clinician_id == self.request.user.pk)
 
     def attendance(self, appointment):
-        return (not self.patient_portal and self.membership.is_clinician and appointment.clinician_id == self.request.user.pk
+        return (self.membership.is_clinician and appointment.clinician_id == self.request.user.pk
                 and appointment.starts_at + timedelta(minutes=appointment.duration_minutes) <= timezone.now())
 
     def status_form(self, appointment, data=None):
-        # Patients and practice administrators never record attendance, so cancelling is their only update.
-        practice_admin = not self.patient_portal and self.membership.role == 'practice_admin'
-        return AppointmentStatusForm(
-            data, attendance=self.attendance(appointment), staff=not self.patient_portal,
-            cancel_only=self.patient_portal or practice_admin)
+        # Practice administrators never record attendance, so cancelling is their only update.
+        return AppointmentStatusForm(data, attendance=self.attendance(appointment), staff=True,
+                                     cancel_only=self.membership.role == 'practice_admin')
 
     def consultation_note(self, request, company, appointment, can_write_notes):
         """Write consultation note opens a modal with a new note's form: this appointment chosen when it's yours,
@@ -240,24 +238,18 @@ class AppointmentDetailMixin:
 
     def display(self, request, appointment, form=None, status=200, time_form=None):
         from video.access import attach_video_join
+        from .patient_workspace import patient_workspace_context
+        from .record_access import no_records
 
-        company = self.patient_company if self.patient_portal else self.company
-        context = patient_page_context(request, company, self.patient, 'appointments', 'Appointment details') if self.patient_portal else dict(company=company, active_membership=self.membership, nav_section='schedule')
+        company = self.company
+        context = dict(company=company, active_membership=self.membership, nav_section='schedule', page_title='Appointment details')
         context.update(appointment=appointment, can_edit=self.can_edit(appointment),
             # Staff reach only their own conversations with the patient.
-            conversation=None if self.patient_portal else MessageThread.objects.for_company(company).filter(
+            conversation=MessageThread.objects.for_company(company).filter(
                 patient=appointment.patient, is_closed=False, participants=request.user).first(),
             form=form if form is not None else self.status_form(appointment),
-            workflow_context=request.POST.get('workflow_context', '') if request.method == 'POST' else make_workflow_context(request, company, 'appointment-status', appointment, patient=self.patient if self.patient_portal else None))
-        if self.patient_portal and context['can_edit']:
-            # Like Cancel, only before the start: after that the booking can't be changed.
-            context['change_request_url'] = appointment_change_request_url(appointment, practice_administrators(company).first())
-        allowed_role = 'patient' if self.patient_portal else ('doctor' if self.membership.is_clinician else None)
-        attach_video_join([appointment], request.user.pk, allowed_role=allowed_role)
-        if self.patient_portal and appointment.video_join_closes_at and timezone.now() <= appointment.video_join_closes_at:
-            # Until the join window ends, the patient's Video consultation card says the call happens there (under Join
-            # while the room is open).
-            context['video_room_opens_minutes'] = settings.VIDEO_JOIN_EARLY_MINUTES
+            workflow_context=request.POST.get('workflow_context', '') if request.method == 'POST' else make_workflow_context(request, company, 'appointment-status', appointment))
+        attach_video_join([appointment], request.user.pk, allowed_role='doctor' if self.membership.is_clinician else None)
         if self.can_change_time(appointment):
             local = timezone.localtime(appointment.starts_at)
             context.update(can_change_time=True, time_dialog_open=time_form is not None or request.GET.get('update') == 'time',
@@ -265,18 +257,13 @@ class AppointmentDetailMixin:
                                initial={'date': local.date(), 'time': f'{local:%H:%M}'}, auto_id='time_%s'),
                            time_context=request.POST.get('workflow_context', '') if time_form is not None
                            else make_workflow_context(request, company, 'appointment-time', appointment))
-        if not self.patient_portal:
-            from .patient_workspace import patient_workspace_context
-            from .record_access import no_records
-
-            if no_records(self.membership):
-                # Practice administrators don't open patient records: the appointment is a page of its own.
-                context['page_title'] = 'Appointment details'
-                return render(request, 'portal/staff_appointment_detail.html', context, status=status)
-            context.update(patient_workspace_context(request, company, self.membership, appointment.patient, 'appointments'))
-            context.update(self.consultation_note(request, company, appointment, context.get('can_write_notes')))
-            context['page_title'] = 'Appointment details'
-        return render(request, 'portal/patient_appointment_detail.html' if self.patient_portal else 'portal/appointment_detail.html', context, status=status)
+        if no_records(self.membership):
+            # Practice administrators don't open patient records: the appointment is a page of its own.
+            return render(request, 'portal/staff_appointment_detail.html', context, status=status)
+        context.update(patient_workspace_context(request, company, self.membership, appointment.patient, 'appointments'))
+        context.update(self.consultation_note(request, company, appointment, context.get('can_write_notes')))
+        context['page_title'] = 'Appointment details'
+        return render(request, 'portal/appointment_detail.html', context, status=status)
 
     def get(self, request, pk):
         return self.display(request, self.resolve(pk))
@@ -285,23 +272,19 @@ class AppointmentDetailMixin:
         appointment = self.resolve(pk)
         form = self.status_form(appointment, request.POST)
         valid = form.is_valid()
-        company = self.patient_company if self.patient_portal else self.company
         try:
-            token = validate_workflow_context(request, company, 'appointment-status', appointment, patient=self.patient if self.patient_portal else None)
+            token = validate_workflow_context(request, self.company, 'appointment-status', appointment)
             if valid:
-                change_appointment_status(appointment=appointment, actor=request.user, expected_updated=token['updated'], patient_portal=self.patient_portal, request=request,
+                change_appointment_status(appointment=appointment, actor=request.user, expected_updated=token['updated'], request=request,
                                           confirm=True, **form.cleaned_data)
-                if form.cleaned_data['status'] == 'cancelled' and not self.patient_portal:
+                if form.cleaned_data['status'] == 'cancelled':
                     messages.success(request, f'Appointment with {appointment.patient} cancelled.')
                     back = schedule_return(request)
                     if back:
                         return back
                 else:
                     messages.success(request, 'Appointment status recorded.')
-                    back = self.patient_portal and schedule_return(request, 'portal:patient-appointments')
-                    if back:
-                        return back
-                return redirect('portal:patient-appointment-detail' if self.patient_portal else 'portal:appointment-detail', pk=pk)
+                return redirect('portal:appointment-detail', pk=pk)
         except ValidationError as error:
             for message in error.messages:
                 form.add_error(None, message)
@@ -315,12 +298,12 @@ class StaffAppointmentDetailView(LoginRequiredMixin, StaffCompanyRequiredMixin, 
 
 class StaffAppointmentCalendarView(StaffAppointmentDetailView):
     """Download on a doctor's Calendar & Bookings: the appointment for their own calendar, without the patient's name
-    (portal.calendar_files). The link asks them to sign in to Meridian for who it's with."""
+    (care.calendar_files). The link asks them to sign in to Meridian for who it's with."""
 
     http_method_names = ('get', 'head', 'options')
 
     def get(self, request, pk):
-        from .calendar_files import calendar_file
+        from care.calendar_files import calendar_file
 
         appointment = self.resolve(pk)
         kind = appointment.get_appointment_type_display()
@@ -354,5 +337,36 @@ class StaffAppointmentTimeView(StaffAppointmentDetailView):
         return self.display(request, appointment, status=400, time_form=form)
 
 
-class PatientAppointmentDetailView(LoginRequiredMixin, PatientPortalRequiredMixin, AppointmentDetailMixin, View):
-    patient_portal = True
+class PatientAppointmentDetailView(LoginRequiredMixin, PatientPortalRequiredMixin, View):
+    """The old address of a patient's appointment page, as in emails already sent: My Appointments now. Patients have
+    no page for one appointment (Dr Czech, Nov 2026)."""
+
+    http_method_names = ('get', 'head', 'options')
+
+    def get(self, request, pk):
+        return redirect('portal:patient-appointments')
+
+
+class PatientAppointmentCancelView(LoginRequiredMixin, PatientPortalRequiredMixin, View):
+    """Cancel, from its dialog on My Appointments, then back to the list as it was. Whatever stopped it is a message
+    there: someone else changed it meanwhile, it has started, or the reason is missing."""
+
+    http_method_names = ('post',)
+
+    def post(self, request, pk):
+        appointment = get_object_or_404(Appointment.objects.for_company(self.patient_company).filter(
+            patient=self.patient, patient__company=self.patient_company, patient__is_active=True,
+        ).select_related('patient', 'clinician'), pk=pk)
+        form = AppointmentStatusForm(request.POST, cancel_only=True)
+        try:
+            token = validate_workflow_context(request, self.patient_company, 'appointment-status', appointment, patient=self.patient)
+            if not form.is_valid():
+                raise ValidationError([error for errors in form.errors.values() for error in errors])
+            change_appointment_status(appointment=appointment, actor=request.user, expected_updated=token['updated'],
+                                      patient_portal=True, request=request, confirm=True, **form.cleaned_data)
+        except ValidationError as error:
+            for message in error.messages:
+                messages.error(request, message)
+        else:
+            messages.success(request, 'Appointment cancelled.')
+        return schedule_return(request, 'portal:patient-appointments') or redirect('portal:patient-appointments')

@@ -1,13 +1,11 @@
 {% comment %}join_tip: in a list of appointments, when the room isn't open the note sits behind an (i) (static/js/info_tips.js).
-  window_shown: the list has a Join window column, so the note leaves the window out.
-  join_in_banner: the patient's appointment page, where Join is in the banner on top instead.{% endcomment %}
-{% if appointment.video_room_url and not join_in_banner %}
+  window_shown: the list has a Join window column, so the note leaves the window out. Staff only: patients have Open
+  meeting room (meeting_room_button.html).{% endcomment %}
+{% if appointment.video_room_url %}
   <a class="console-button console-button--primary" href="{{ appointment.video_room_url }}">{% include 'portal/includes/video_call_icon.html' %}Join video call</a>
 {% endif %}
 {% if join_tip %}{% if appointment.video_join_message and not appointment.video_room_url %}<span class="info-tip" data-info-tip><button class="info-tip__button" type="button" aria-label="When the video room opens" aria-describedby="video-join-{{ appointment.pk }}">i</button><span class="info-tip__bubble" id="video-join-{{ appointment.pk }}" role="tooltip">{{ appointment.video_join_message }}{% if appointment.video_join_opens_at and not window_shown %} Join window: {{ appointment.video_join_opens_at|date:'j M, H:i' }}–{{ appointment.video_join_closes_at|date:'H:i' }}.{% endif %}</span></span>{% endif %}
 {% elif appointment.video_room_url or appointment.video_join_message %}
-  {# On an appointment's page, under Join while the room is open: for a patient until the window ends, where the call #}
-  {# happens and when the room opens; then the window; then why it's closed, smaller and in italics (not repeated when #}
-  {# the patient line already says when it opens). #}
-  <span class="video-join-note">{% if video_room_opens_minutes %}<span>Your video consultation happens here. The room will open {{ video_room_opens_minutes }} minutes before the scheduled start time.</span>{% endif %}{% if appointment.video_join_opens_at and not window_shown %}<span>Join window: {{ appointment.video_join_opens_at|date:'j M, H:i' }}–{{ appointment.video_join_closes_at|date:'H:i' }}.</span>{% endif %}{% if appointment.video_join_message %}{% if not video_room_opens_minutes or 'The video room opens' not in appointment.video_join_message %}<small>{{ appointment.video_join_message }}</small>{% endif %}{% endif %}</span>
+  {# On an appointment's page, under Join while the room is open: the window, then why it's closed, smaller and in italics. #}
+  <span class="video-join-note">{% if appointment.video_join_opens_at and not window_shown %}<span>Join window: {{ appointment.video_join_opens_at|date:'j M, H:i' }}–{{ appointment.video_join_closes_at|date:'H:i' }}.</span>{% endif %}{% if appointment.video_join_message %}<small>{{ appointment.video_join_message }}</small>{% endif %}</span>
 {% endif %}

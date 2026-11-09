@@ -8,7 +8,7 @@ from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.exceptions import ValidationError
 from django.core.paginator import Paginator
 from django.http import JsonResponse
-from django.shortcuts import get_object_or_404, redirect, render
+from django.shortcuts import redirect, render
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.decorators import method_decorator
@@ -17,10 +17,9 @@ from django.views.decorators.cache import never_cache
 
 from care.availability import SAST, open_slots_for_day, start_slots
 from care.clinical_summary import get_summary
-from care.models import Appointment, PatientEvent
+from care.models import PatientEvent
 from care.patient_care import book_patient_appointment, patient_busy_intervals
 from .appointment_detail_views import labelled_slots
-from .calendar_files import calendar_file
 from .patient_care_forms import BookingTimesQuery, PatientBookingForm, PatientUpdatesFilterForm
 from .patient_context import validate_patient_context
 from .patient_summary import intake_answers, latest_weight, medical_information, medical_profile
@@ -166,17 +165,3 @@ class PatientUpdatesView(PatientCarePage):
         context = self.context('updates', 'Updates', filter_form=form, events=page.object_list, category_chips=chips,
                                page_obj=page, is_paginated=page.has_other_pages(), pagination_query=urlencode(query))
         return render(request, 'portal/patient_care_updates.html', context)
-
-
-class PatientAppointmentCalendarView(PatientCarePage):
-    http_method_names = ('get', 'head', 'options')
-
-    def get(self, request, pk):
-        appointment = get_object_or_404(Appointment.objects.for_company(self.patient_company).filter(
-            patient=self.patient,
-        ), pk=pk)
-        return calendar_file(
-            appointment, product='Patient appointments', summary='Meridian appointment',
-            description=f'Appointment at {self.patient_company.name}. Check your patient portal for details and any changes.',
-            url=request.build_absolute_uri(reverse('portal:patient-appointments')),
-        )

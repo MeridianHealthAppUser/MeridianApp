@@ -32,6 +32,7 @@ from django.db import transaction
 from django.db.models import Exists, F, OuterRef, Q
 from django.utils import timezone
 
+from .calendar_files import calendar_filename, patient_calendar_text
 from .demo_safety import is_demo_record
 
 from practices.models import CompanyMembership
@@ -374,13 +375,19 @@ def _appointment_email(appointment, user, *, moved=False, reminder=False, starti
             subject = f'{"Starting soon" if starting else "Reminder"}: your appointment on {when}'
         else:
             subject = f'Your appointment has moved to {when}' if moved else f'Appointment confirmed: {when}'
-        return build_email(
+        # Everything is on My Appointments: patients have no page for one appointment (Dr Czech, Nov 2026).
+        url = site_link('portal:patient-appointments')
+        message = build_email(
             to=user.email, subject=subject, template='appointment_reminder' if reminder else 'appointment_confirmed',
-            context={'greeting': user.first_name, 'moved': moved,
+            context={'greeting': user.first_name, 'moved': moved, 'starting': starting,
+                     'video_room_opens_minutes': settings.VIDEO_JOIN_EARLY_MINUTES,
                      'details': appointment_details(appointment, clinician=person_name(appointment.clinician)),
-                     'url': site_link('portal:patient-appointment-detail', appointment.pk) if reminder
-                     else site_link('portal:patient-appointments')},
+                     'url': url},
         )
+        if not reminder:
+            # Add to calendar is this attachment, not a button in the app. Same UID, so a moved one updates the event.
+            message.attach(calendar_filename(appointment), patient_calendar_text(appointment, url), 'text/calendar')
+        return message
     patient = str(appointment.patient)
     if reminder:
         subject = f'{"Starting soon" if starting else "Reminder"}: {patient} on {when}'

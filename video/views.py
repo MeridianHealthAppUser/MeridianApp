@@ -11,7 +11,7 @@ from django.views.decorators.cache import never_cache
 from django.views.decorators.csrf import csrf_protect
 from django.views.decorators.http import require_POST, require_safe
 
-from practices.services import ACTIVE_COMPANY_SESSION_KEY, ACTIVE_PATIENT_COMPANY_SESSION_KEY
+from practices.services import ACTIVE_COMPANY_SESSION_KEY
 
 from .access import VideoAccessDenied, resolve_room_access
 
@@ -34,8 +34,7 @@ def _return_url(request, access):
         if request.session.get(ACTIVE_COMPANY_SESSION_KEY) == access.company_id:
             return reverse('portal:appointment-detail', args=[access.appointment_id])
         return reverse('portal:staff-schedule')
-    if request.session.get(ACTIVE_PATIENT_COMPANY_SESSION_KEY) == access.company_id:
-        return reverse('portal:patient-appointment-detail', args=[access.appointment_id])
+    # Patients have no page for one appointment (Dr Czech, Nov 2026): back to My Appointments.
     return reverse('portal:patient-appointments')
 
 

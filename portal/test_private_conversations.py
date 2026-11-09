@@ -215,7 +215,9 @@ class PrivateConversationTests(TestCase):
         for text in ('Suggest New Time', 'Ask to Rebook', 'Message Pat Past', 'Message Cara Current', 'Contact Care Team',
                      'Need a different time?'):
             self.assertNotContains(page, text)
-        self.assertContains(page, '>Details</a>')
+        # The row's actions: Open meeting room, and Request a change and Cancel, each opening a dialog.
+        self.assertContains(page, 'Open meeting room</a>')
+        self.assertContains(page, '>Request a change</a>')
 
     def test_migration_gives_existing_conversations_their_people(self):
         replied = MessageThread.objects.create(company=self.company, patient=self.patient, subject='Replied', opened_by=self.patient_user)

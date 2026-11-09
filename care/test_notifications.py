@@ -1,6 +1,6 @@
 """Emails about new messages, appointments and new accounts: who gets them, how often, and what they say."""
 
-from datetime import datetime, time, timedelta
+from datetime import datetime, time, timedelta, timezone as dt_timezone
 from io import StringIO
 
 from django.contrib.auth import get_user_model
@@ -11,7 +11,7 @@ from django.utils import timezone
 
 from practices.models import Company, CompanyMembership, Patient
 
-from .appointment_lifecycle import book_staff_appointment, change_appointment_status
+from .appointment_lifecycle import book_staff_appointment, change_appointment_status, reschedule_appointment
 from .availability import SAST
 from .messaging import add_participant, mark_read_by_staff
 from .models import Appointment, DoctorWorkingPattern, MessageThread, PatientMessage
@@ -179,6 +179,42 @@ class AppointmentNotificationTests(NotificationTestCase):
         self.assertIn('Patient: Nadia Mokoena\nAppointment: Follow-up', doctor.body)
         self.assertIn(f'{SITE}/schedule/?view=table&date={starts:%Y-%m-%d}', doctor.body)
         self.assertIn('>Open Calendar &amp; Bookings</a>', self.html(doctor))
+        # Add to calendar is a calendar file attached for the patient (Dr Czech, Nov 2026), not a button in the app. It
+        # names no patient; the doctor has Download on Calendar & Bookings instead.
+        for part in (patient.body, html):
+            self.assertIn('To add it to your calendar, open the calendar file attached to this email.', part)
+        self.assertEqual(len(patient.attachments), 1)
+        name, content, mimetype = patient.attachments[0]
+        self.assertEqual((name, mimetype), (f'appointment-{appointment.pk}.ics', 'text/calendar'))
+        self.assertIn(f'DTSTART:{self.utc(self.starts_at)}\r\n', content)
+        self.assertIn('SUMMARY:Meridian appointment\r\n', content)
+        self.assertIn(f'URL:{SITE}/patient/appointments/\r\n', content)
+        self.assertIn('STATUS:CONFIRMED\r\n', content)
+        self.assertNotIn('Nadia', content)
+        self.assertNotIn('Mokoena', content)
+        self.assertEqual(doctor.attachments, [])
+
+    @staticmethod
+    def utc(value):
+        return f'{value.astimezone(dt_timezone.utc):%Y%m%dT%H%M%SZ}'
+
+    def test_a_moved_appointment_emails_a_calendar_file_that_updates_the_same_event(self):
+        appointment, booked = self.book(self.admin)
+        moved_to = self.starts_at + timedelta(days=1)
+        appointment.refresh_from_db()
+        sent = self.emails(lambda: reschedule_appointment(appointment=appointment, actor=self.admin, starts_at=moved_to,
+                                                          expected_updated=appointment.updated_at.isoformat()))
+        patient = sent['nadia@notify.test']
+        self.assertIn('Your appointment has moved to a new time.', patient.body)
+        (_, before, _), = booked['nadia@notify.test'].attachments
+        (name, after, _), = patient.attachments
+        self.assertEqual(name, f'appointment-{appointment.pk}.ics')
+        # The same event, so a calendar updates it rather than adding a second one.
+        uid = f'UID:appointment-{appointment.pk}-practice-{self.company.pk}@meridian.local\r\n'
+        self.assertIn(uid, before)
+        self.assertIn(uid, after)
+        self.assertIn(f'DTSTART:{self.utc(moved_to)}\r\n', after)
+        self.assertNotIn(f'DTSTART:{self.utc(self.starts_at)}', after)
 
     def test_a_doctor_booking_their_own_appointment_only_emails_the_patient(self):
         _, sent = self.book(self.doctor)
@@ -264,8 +300,14 @@ class AppointmentNotificationTests(NotificationTestCase):
         self.assertEqual(patient.subject, f'Reminder: your appointment on {when}')
         self.assertIn('This is a reminder of your upcoming appointment.', patient.body)
         self.assertIn('Appointment: Six-month review', patient.body)
-        self.assertIn(f'{SITE}/patient/appointments/{appointment.pk}/', patient.body)
-        self.assertIn('>View appointment</a>', self.html(patient))
+        # Patients have no page for one appointment (Dr Czech, Nov 2026): the room is joined from My Appointments, and
+        # nothing here invites a cancellation.
+        self.assertIn('Your meeting room opens 15 minutes before your appointment. Join it from My Appointments in the '
+                      f'Meridian Health app:\n{SITE}/patient/appointments/\n', patient.body)
+        self.assertNotIn(f'/patient/appointments/{appointment.pk}/', patient.body)
+        self.assertNotIn('cancel', patient.body.lower())
+        self.assertIn('>View my appointments</a>', self.html(patient))
+        self.assertEqual(patient.attachments, [])
         doctor = sent['sam@notify.test']
         self.assertEqual(doctor.subject, f'Reminder: Nadia Mokoena on {when}')
         self.assertIn(f'{SITE}/schedule/appointments/{appointment.pk}/', doctor.body)

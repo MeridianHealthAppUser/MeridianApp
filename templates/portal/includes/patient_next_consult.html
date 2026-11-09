@@ -1,16 +1,17 @@
 {# The patient's next booked consult, with the real video join state: on Home (while it's open), My Treatment and My #}
-{# Appointments. No calendar download here (Dr Czech, Nov 2026): it's Add to calendar on the appointment's page. While #}
-{# the room is open the heading says so, in place of eyebrow (James, 8 Nov 2026). hide_details: on the appointment's own page. #}
+{# Appointments. No calendar download here (Dr Czech, Nov 2026): it's attached to the confirmation email. While the #}
+{# room is open the heading says so, in place of eyebrow (James, 8 Nov 2026). Its one action is Open meeting room, #}
+{# greyed out until the room opens (Dr Czech, Nov 2026: no appointment page, so no Details). On a page that loads #}
+{# static/js/appointment_video.js the banner opens and closes with the room, without a reload. #}
 {% if consult %}
-  <section class="patient-bar patient-bar--join{% if not consult.video_room_url %} is-waiting{% endif %}" aria-labelledby="next-consult-title">
+  {% with waiting=eyebrow|default:"Your next consult" %}
+  <section class="patient-bar patient-bar--join{% if not consult.video_room_url %} is-waiting{% endif %}" aria-labelledby="next-consult-title" data-appointment-video data-video-banner data-status-url="{% url 'portal:patient-appointment-video-status' %}" data-video-scope="{{ request.realtime_scope }}" data-server-time="{% if video_server_time %}{{ video_server_time|date:'c' }}{% else %}{% now 'c' %}{% endif %}" data-video-appointment-id="{{ consult.pk }}" data-video-opens-at="{{ consult.video_join_opens_at|date:'c' }}" data-video-closes-at="{{ consult.video_join_closes_at|date:'c' }}">
     <div class="patient-bar__copy">
-      <p class="patient-eyebrow">{% if consult.video_room_url %}Meeting room is now open{% else %}{{ eyebrow|default:"Your next consult" }}{% endif %}</p>
+      <p class="patient-eyebrow" data-video-eyebrow data-open-text="Meeting room is now open" data-waiting-text="{{ waiting }}">{% if consult.video_room_url %}Meeting room is now open{% else %}{{ waiting }}{% endif %}</p>
       <p class="patient-bar__title" id="next-consult-title">{{ consult.get_appointment_type_display }} with {% if consult.clinician %}{{ consult.clinician.titled_name }}{% else %}your care team{% endif %} · {{ consult.duration_minutes }} min</p>
-      <p class="patient-bar__body">{{ consult.starts_at|date:"l j F \a\t H:i" }}{% if consult.video_join_message and not consult.video_room_url %} · {{ consult.video_join_message }}{% endif %}</p>
+      <p class="patient-bar__body">{{ consult.starts_at|date:"l j F \a\t H:i" }}<span id="next-consult-video-{{ consult.pk }}" data-appointment-video-message{% if consult.video_room_url or not consult.video_join_message %} hidden{% endif %}> · {{ consult.video_join_message }}</span></p>
     </div>
-    <div class="patient-bar__actions">
-      {% if consult.video_room_url %}<a class="console-button console-button--primary" href="{{ consult.video_room_url }}">{% include 'portal/includes/video_call_icon.html' %}Join video call</a>{% endif %}
-      {% if not hide_details %}<a class="console-button console-button--secondary" href="{% url 'portal:patient-appointment-detail' consult.pk %}">Details</a>{% endif %}
-    </div>
+    <div class="patient-bar__actions">{% include 'portal/includes/meeting_room_button.html' with appointment=consult note='next-consult-video-' %}</div>
   </section>
+  {% endwith %}
 {% endif %}

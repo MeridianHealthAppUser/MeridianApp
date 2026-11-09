@@ -7,13 +7,13 @@ Meridian includes its own one-to-one appointment room. The booked doctor and pat
 1. Install updated dependencies: `.venv/bin/python -m pip install -r requirements.txt`.
 2. Apply `.venv/bin/python manage.py migrate`, then `.venv/bin/python manage.py runserver`. Daphne now serves HTTP and WebSockets on port 8000. Restart an old development server once if necessary.
 3. Sign in as the booked doctor in one browser and the patient in a separate browser/private profile. Use a booked appointment starting within fifteen minutes or currently in progress.
-4. Open **Schedule → Appointment details** or **Patient → Appointments** and choose the video join action. Administrative roles do not grant room entry.
+4. As the doctor, open **Schedule → Appointment details** and choose **Join video call**; as the patient, open **My Appointments** and choose **Open meeting room**. Administrative roles do not grant room entry.
 5. Opening the room does not activate devices. Choose **Join with camera** or **Join with audio only**, then grant browser permissions. The other participant gets an in-app banner while signed in.
 6. Use microphone/camera controls, screen sharing where supported, and **Leave** to finish. Closing the page also stops local media. Leaving does not mark attendance or sign a clinical note.
 
 The room URL is `/video/appointments/<appointment-id>/`. The practice is explicitly displayed and access is checked independently of the practice selected in another tab. Joining does not silently switch that selection. A second tab for the same person replaces the older connection; it cannot occupy a third slot.
 
-Rooms open fifteen minutes before the scheduled start and close at the scheduled end. My Appointments updates the Join video call action automatically at the opening time and checks for scheduling changes while the page is open. Cancelled, completed, missed, inactive or mismatched records cannot enter. Access is rechecked during the call. Signing out, changing a password or losing access ends signalling; these checks do not replace locking an unattended device.
+Rooms open fifteen minutes before the scheduled start and close at the scheduled end. My Appointments (and the next-consult banner on My Treatment) turns the greyed-out Open meeting room into the link into the room automatically at the opening time and checks for scheduling changes while the page is open. Cancelled, completed, missed, inactive or mismatched records cannot enter. Access is rechecked during the call. Signing out, changing a password or losing access ends signalling; these checks do not replace locking an unattended device.
 
 ## Connection behaviour and history
 

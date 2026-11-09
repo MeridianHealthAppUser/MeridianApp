@@ -1,0 +1,6 @@
+{% comment %}Open meeting room, for a patient's booked consult (Dr Czech, Nov 2026: in place of Details and Join video call).
+  Always there, greyed out until the room opens 15 minutes before, then the blue button into the room;
+  static/js/appointment_video.js switches it over without a reload. A link with no address while it's closed, so it
+  can't be followed. row: a small button in My Appointments' Actions column. note: the start of the id (before the
+  appointment's number) of the line that says when the room opens.{% endcomment %}
+<a class="console-button {% if appointment.video_room_url %}console-button--primary{% else %}console-button--secondary{% endif %}{% if row %} patient-row-action{% endif %}" role="link" data-appointment-video-join{% if appointment.video_room_url %} href="{{ appointment.video_room_url }}"{% else %} aria-disabled="true"{% endif %}{% if note %} aria-describedby="{{ note }}{{ appointment.pk }}"{% endif %}>{% include 'portal/includes/video_call_icon.html' %}Open meeting room</a>

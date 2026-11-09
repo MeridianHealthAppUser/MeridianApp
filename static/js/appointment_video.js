@@ -3,20 +3,32 @@
   const listen = lifecycle ? lifecycle.on : (target, ...args) => target?.addEventListener(...args);
   const setTimeout = lifecycle ? lifecycle.timeout : window.setTimeout.bind(window);
   const fetch = lifecycle ? lifecycle.fetch : (...args) => window.fetch(...args);
-/* My Appointments: the server authorizes each visible Join action; timers refresh
-   at its opening time and remove it at its end without reloading the page. */
+/* A patient's Open meeting room: My Appointments' table, and the next-consult banner there and on My Treatment
+   (templates/portal/includes/meeting_room_button.html). The server authorizes each visible appointment; timers
+   refresh at its opening time and close it at its end without reloading the page. Closed, the button stays, greyed
+   out with no address; open, it's the blue link into the room, and the banner says the room is open. */
 (() => {
-  const table = document.querySelector('[data-appointment-video]');
-  if (!table || !window.fetch || !window.AbortController) return;
-  const scope = table.dataset.videoScope;
-  const rows = new Map([...table.querySelectorAll('[data-video-appointment-id]')]
-    .map(row => [row.dataset.videoAppointmentId, row]));
+  const containers = [...document.querySelectorAll('[data-appointment-video]')];
+  const first = containers[0];
+  if (!first || !window.fetch || !window.AbortController) return;
+  const scope = first.dataset.videoScope;
+  // One appointment can be both in the banner and in the table.
+  const rows = new Map();
+  for (const container of containers) {
+    const items = container.matches('[data-video-appointment-id]') ? [container] : container.querySelectorAll('[data-video-appointment-id]');
+    for (const row of items) {
+      const id = row.dataset.videoAppointmentId;
+      if (!rows.has(id)) rows.set(id, []);
+      rows.get(id).push(row);
+    }
+  }
   if (!rows.size || !scope) return;
-  const endpoint = new URL(table.dataset.statusUrl, window.location.href);
+  const endpoint = new URL(first.dataset.statusUrl, window.location.href);
   if (endpoint.origin !== window.location.origin) return;
   for (const id of rows.keys()) endpoint.searchParams.append('id', id);
   const announcement = document.querySelector('[data-appointment-video-announcement]');
-  let serverTime = Date.parse(table.dataset.serverTime);
+  const everyRow = () => [...rows.values()].flat();
+  let serverTime = Date.parse(first.dataset.serverTime);
   let receivedAt = performance.now();
   let timer = null;
   let expiryTimer = null;
@@ -25,24 +37,31 @@
   let away = false;
   const currentTime = () => Number.isFinite(serverTime) ? serverTime + performance.now() - receivedAt : Date.now();
 
+  // Open (href) or closed (null). Returns whether it has just opened.
   function toggle(row, href) {
-    const holder = row.querySelector('[data-appointment-video-action]');
     const link = row.querySelector('[data-appointment-video-join]');
-    const view = row.querySelector('[data-appointment-video-view]');
-    if (!holder || !link) return;
-    const newlyAvailable = holder.hidden && !!href;
-    holder.hidden = !href;
-    if (href) link.setAttribute('href', href); else link.removeAttribute('href');
-    view?.classList.toggle('console-button--primary', !href);
-    view?.classList.toggle('console-button--secondary', !!href);
-    if (newlyAvailable && !document.hidden && announcement) {
-      announcement.textContent = 'Your video appointment is ready to join. Use Join video call in the Actions column.';
+    if (!link) return false;
+    const newlyAvailable = !link.hasAttribute('href') && !!href;
+    if (href) {
+      link.setAttribute('href', href);
+      link.removeAttribute('aria-disabled');
+    } else {
+      link.removeAttribute('href');
+      link.setAttribute('aria-disabled', 'true');
     }
+    link.classList.toggle('console-button--primary', !!href);
+    link.classList.toggle('console-button--secondary', !href);
+    if (row.hasAttribute('data-video-banner')) {
+      row.classList.toggle('is-waiting', !href);
+      const eyebrow = row.querySelector('[data-video-eyebrow]');
+      if (eyebrow) eyebrow.textContent = href ? eyebrow.dataset.openText : eyebrow.dataset.waitingText;
+    }
+    return newlyAvailable;
   }
 
   function expire() {
     const now = currentTime();
-    for (const row of rows.values()) {
+    for (const row of everyRow()) {
       const closes = Date.parse(row.dataset.videoClosesAt);
       if (Number.isFinite(closes) && now > closes) toggle(row, null);
     }
@@ -52,13 +71,13 @@
     stopped = true;
     clearTimeout(timer);
     clearTimeout(expiryTimer);
-    for (const row of rows.values()) toggle(row, null);
+    for (const row of everyRow()) toggle(row, null);
   }
 
   function scheduleExpiry() {
     clearTimeout(expiryTimer);
     if (stopped || away) return;
-    const until = [...rows.values()].map(row => Date.parse(row.dataset.videoClosesAt) - currentTime())
+    const until = everyRow().map(row => Date.parse(row.dataset.videoClosesAt) - currentTime())
       .filter(value => Number.isFinite(value) && value >= 0);
     if (until.length) expiryTimer = setTimeout(() => { expire(); scheduleExpiry(); }, Math.min(...until, 2147483000) + 1);
   }
@@ -68,7 +87,7 @@
     if (stopped || away || document.hidden) return;
     const now = currentTime();
     let delay = 30000;
-    for (const row of rows.values()) {
+    for (const row of everyRow()) {
       for (const value of [row.dataset.videoOpensAt, row.dataset.videoClosesAt]) {
         const until = Date.parse(value) - now;
         if (Number.isFinite(until) && until >= 0) delay = Math.min(delay, until + 50);
@@ -96,22 +115,34 @@
     serverTime = Math.max(Date.parse(data.serverTime), Number.isFinite(serverTime) ? currentTime() : 0);
     receivedAt = performance.now();
     const byId = new Map(data.appointments.map(item => [String(item.id), item]));
-    for (const [id, row] of rows) {
+    let opened = false;
+    for (const [id, list] of rows) {
       const item = byId.get(id);
-      row.dataset.videoOpensAt = item?.opensAt || '';
-      row.dataset.videoClosesAt = item?.closesAt || '';
       let href = null;
       if (item?.joinUrl && Date.parse(item.opensAt) <= serverTime && serverTime <= Date.parse(item.closesAt)) {
         const url = new URL(item.joinUrl, window.location.href);
         if (url.origin === window.location.origin && url.pathname === `/video/appointments/${id}/` && !url.search && !url.hash) href = url.href;
       }
-      toggle(row, href);
-      const note = row.querySelector('[data-appointment-video-note]');
-      if (note) {
-        note.hidden = !!href || !item?.message;
-        const bubble = note.querySelector('[role="tooltip"]');
-        if (bubble) bubble.textContent = item ? windowText(item) : '';
+      for (const row of list) {
+        row.dataset.videoOpensAt = item?.opensAt || '';
+        row.dataset.videoClosesAt = item?.closesAt || '';
+        if (toggle(row, href)) opened = true;
+        // The table's (i) beside the date, with the join window too; the banner's line under its title.
+        const note = row.querySelector('[data-appointment-video-note]');
+        if (note) {
+          note.hidden = !!href || !item?.message;
+          const bubble = note.querySelector('[role="tooltip"]');
+          if (bubble) bubble.textContent = item ? windowText(item) : '';
+        }
+        const message = row.querySelector('[data-appointment-video-message]');
+        if (message) {
+          message.hidden = !!href || !item?.message;
+          message.textContent = item?.message ? ` · ${item.message}` : '';
+        }
       }
+    }
+    if (opened && !document.hidden && announcement) {
+      announcement.textContent = 'Your meeting room is open. Use Open meeting room to join.';
     }
     scheduleExpiry();
   }

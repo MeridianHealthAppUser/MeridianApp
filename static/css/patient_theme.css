@@ -94,8 +94,8 @@
 .patient-app .meridian-console .console-button--primary:hover { background: var(--patient-accent-hover); border-color: var(--patient-accent-hover); }
 .patient-app .meridian-console .console-button--secondary { background: var(--patient-surface); border-color: var(--patient-line); color: var(--patient-ink); }
 .patient-app .meridian-console .console-button--secondary:hover { background: var(--patient-accent-soft); border-color: var(--patient-accent-line); }
-.patient-app .meridian-console .console-button--cancel { background: var(--patient-surface); border-color: var(--c-a73f37); color: var(--c-a73f37); }
-.patient-app .meridian-console .console-button--cancel:hover { background: var(--c-fcedeb); border-color: var(--c-a73f37); }
+/* Open meeting room while the room is closed (meeting_room_button.html): greyed out, and a click does nothing. */
+.patient-app .meridian-console .console-button[aria-disabled="true"] { background: var(--patient-surface); border-color: var(--patient-line); box-shadow: none; color: var(--patient-ink); opacity: .5; pointer-events: none; }
 .patient-app .meridian-console .console-button--quiet { background: var(--patient-surface); border-color: var(--patient-line); color: var(--patient-teal-dark); }
 .patient-app .meridian-console .console-button--quiet:hover { background: var(--patient-accent-soft); color: var(--patient-teal-dark); }
 .patient-app .meridian-console .console-button.patient-button--rose { border-color: var(--patient-rose-line); color: var(--patient-rose); }

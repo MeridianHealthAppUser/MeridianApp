@@ -12,6 +12,7 @@ from urllib.parse import urlencode
 
 from django.conf import settings
 from django.core.exceptions import PermissionDenied
+from django.contrib.messages import get_messages
 from django.core import mail
 from django.test import Client, override_settings
 from django.urls import reverse
@@ -117,7 +118,7 @@ class AppointmentDetailPageTests(AppointmentLifecycleFixture):
         cancelled = self.appointment(starts_at=self.starts_at + timedelta(days=5), status='cancelled')
         self.assertNotContains(self.client.get(self.url('appointment-detail', cancelled.pk)), 'Change time')
         self.login(self.patient_user)
-        self.assertNotContains(self.client.get(self.url('patient-appointment-detail', appointment.pk)), 'appointment-change-time')
+        self.assertNotContains(self.client.get(self.url('patient-appointments')), 'appointment-change-time')
 
     def test_booking_is_standalone_and_requires_signed_context(self):
         self.login(self.admin)
@@ -530,124 +531,201 @@ class AppointmentDetailPageTests(AppointmentLifecycleFixture):
         appointment.refresh_from_db()
         self.assertEqual(appointment.status, 'booked')
 
-    def test_patient_detail_has_safe_links_and_only_own_future_cancellation(self):
-        appointment = self.appointment(video_link='javascript:alert(1)')
-        self.login(self.patient_user)
-        url = self.url('patient-appointment-detail', appointment.pk)
-        response = self.client.get(url)
-        self.assertTemplateUsed(response, 'portal/patient_appointment_detail.html')
-        self.assertContains(response, '/static/css/patient_pages.css')
-        self.assertContains(response, 'Appointment Details</')
-        self.assertContains(response, 'Add to calendar')
-        # A new time is asked of a practice administrator in a message; the practice moves the appointment.
-        self.assertNotContains(response, 'Discuss a new time')
-        self.assertNotContains(response, 'accepted proposal')
-        when = date_format(timezone.localtime(appointment.starts_at), 'D j M Y, H:i')
-        subject = f'Request to change my appointment: {when}'
-        query = urlencode({'compose': 1, 'subject': subject, 'to': self.admin.pk})
-        self.assertContains(response, f'href="{reverse("portal:patient-messages")}?{query.replace("&", "&amp;")}#patient-conversation">Request a change</a>')
-        # The heading is the date and time, over the type, length and clinician with the status tag after them; the
-        # actions are on the right. There's no details card, so Video consultation comes first.
-        html = response.content.decode()
-        local = timezone.localtime(appointment.starts_at)
-        self.assertInHTML(f'<h1><time datetime="{local.isoformat()}">{date_format(local, "j F Y, H:i")}</time></h1>', html)
-        self.assertInHTML(f'<p>{appointment.get_appointment_type_display()} · 30 minutes · {self.doctor.titled_name} '
-                          '<span class="console-status console-status--booked">Booked</span></p>', html)
-        heading = html[html.index('patient-appointment-heading'):html.index('</header>', html.index('patient-appointment-heading'))]
-        self.assertLess(heading.index('Add to calendar'), heading.index('Request a change'))
-        self.assertLess(heading.index('Request a change'), heading.index('>Cancel appointment</a>'))
-        self.assertNotContains(response, '<h2>Appointment details</h2>')
-        self.assertNotContains(response, "To change the time, use 'Request a change' to contact support.")
-        self.assertLess(html.index('</header>'), html.index('>Video consultation</h2>'))
-        # Until the room opens, the card starts by saying the call happens there, over the join window.
-        self.assertContains(response, '<span class="video-join-note"><span>Your video consultation happens here. The room will open '
-                            f'{settings.VIDEO_JOIN_EARLY_MINUTES} minutes before the scheduled start time.</span><span>Join window: ')
-        # With video running, that line already says when the room opens, so the note's own version isn't repeated.
-        with self.settings(VIDEO_REDIS_URL='redis://video.test:6379/0'):
-            video = self.client.get(url)
-        self.assertContains(video, 'Your video consultation happens here.')
-        self.assertContains(video, '<span>Join window: ')
-        self.assertNotContains(video, 'The video room opens')
-        self.assertNotContains(video, 'temporarily unavailable')
-        self.assertNotContains(response, 'mailto:')
-        compose = self.client.get(f'{reverse("portal:patient-messages")}?{query}')
-        self.assertEqual(compose.context['thread_form'].initial, {'subject': subject, 'recipient': str(self.admin.pk)})
-        self.assertNotContains(response, 'javascript:')
-        self.assertNotContains(response, 'Write consultation note')
-        self.assertNotContains(response, 'Record completed')
-        # Cancelling is a patient's only choice, so the button says so and the status can't be changed.
-        self.assertContains(response, 'data-modal-open="appointment-status" aria-haspopup="dialog">Cancel appointment</a>')
-        self.assertTrue(response.context['form'].fields['status'].disabled)
-        self.assertInHTML('<option value="cancelled" selected>Cancel booking</option>', response.content.decode())
-        token = response.context['workflow_context']
-        self.assertEqual(self.client.post(url, self.status_data(token, status='completed')).status_code, 400)
-        appointment.refresh_from_db()
-        self.assertEqual(appointment.status, 'booked')
-        self.assertEqual(self.client.post(url, self.status_data(token)).status_code, 302)
-        appointment.refresh_from_db()
-        self.assertEqual(appointment.status, 'cancelled')
+    def cancel_token(self, appointment):
+        """The signed context of Cancel's dialog for this appointment, on My Appointments."""
+        rows = self.client.get(self.url('patient-appointments')).context['appointments']
+        return next(row for row in rows if row.pk == appointment.pk).cancel_context
 
-    def test_patient_list_gives_a_cancelled_appointment_no_actions_and_has_no_calendar_download(self):
-        booked = self.appointment()
+    def test_patients_have_no_appointment_page_and_its_old_address_goes_to_my_appointments(self):
+        # Dr Czech, Nov 2026: everything is on My Appointments. Reminder emails already sent link to the old address.
+        appointment = self.appointment()
+        other = self.appointment(patient=self.other_patient, starts_at=self.starts_at + timedelta(hours=1))
+        self.login(self.patient_user)
+        for target in (appointment, other):
+            for method in (self.client.get, self.client.head):
+                self.assertRedirects(method(self.url('patient-appointment-detail', target.pk)), self.url('patient-appointments'),
+                                     fetch_redirect_response=False)
+        self.assertEqual(self.client.post(self.url('patient-appointment-detail', appointment.pk), {}).status_code, 405)
+        self.assertEqual(self.client.get(self.url('patient-appointment-cancel', appointment.pk)).status_code, 405)
+
+    def test_patient_list_has_open_meeting_room_request_a_change_and_a_plain_cancel(self):
+        booked = self.appointment(video_link='javascript:alert(1)')
         cancelled = self.appointment(starts_at=self.starts_at + timedelta(hours=1), status='cancelled')
         self.login(self.patient_user)
-        # Both are still to come, so both are on Upcoming, where My Appointments opens.
-        html = self.client.get(self.url('patient-appointments')).content.decode()
-        self.assertNotIn(self.url('patient-appointment-detail', cancelled.pk), html)
-        self.assertNotIn(self.url('patient-appointment-calendar', cancelled.pk), html)
-        self.assertNotIn(f'cancel-appointment-{cancelled.pk}', html)
-        # A cancelled one has no Details button at all, not even a greyed-out one.
-        self.assertNotIn('disabled>Details', html)
-        self.assertIn(f'href="{self.url("patient-appointment-detail", booked.pk)}">Details</a>', html)
-        # The calendar download is on the appointment's page (Add to calendar), not in the list.
-        self.assertNotIn(self.url('patient-appointment-calendar', booked.pk), html)
-        # Request a change is on the booked one only: the appointment page's message to the practice administrator.
-        when = date_format(timezone.localtime(booked.starts_at), 'D j M Y, H:i')
-        query = urlencode({'compose': 1, 'subject': f'Request to change my appointment: {when}', 'to': self.admin.pk})
-        self.assertIn(f'href="{reverse("portal:patient-messages")}?{query.replace("&", "&amp;")}#patient-conversation">Request a change</a>', html)
+        list_url = self.url('patient-appointments')
+        html = self.client.get(list_url).content.decode()
+        # No appointment page, so no Details, and no calendar download: that's attached to the confirmation email.
+        self.assertNotIn('>Details</a>', html)
+        self.assertNotIn('calendar.ics', html)
+        self.assertNotIn('Add to calendar', html)
+        self.assertNotIn('javascript:', html)
+        # Open meeting room for the booked one, in the next-consult banner and its row, greyed out until the room opens.
+        self.assertEqual(html.count('Open meeting room</a>'), 2)
+        self.assertIn('<a class="console-button console-button--secondary patient-row-action" role="link" data-appointment-video-join '
+                      f'aria-disabled="true" aria-describedby="video-join-{booked.pk}"><svg', html)
+        self.assertNotIn('Join video call', html)
+        # Request a change and Cancel are plain buttons, neither of them red, each opening a dialog. Without scripts
+        # their links open this list with the dialog open.
+        self.assertNotIn('console-button--cancel', html)
+        for kind, label in (('change', 'Request a change'), ('cancel', 'Cancel<span class="sr-only"> this appointment</span>')):
+            self.assertIn(f'<a class="console-button console-button--secondary patient-row-action" href="{list_url}?update={kind}-appointment-{booked.pk}" '
+                          f'data-modal-open="{kind}-appointment-{booked.pk}" aria-haspopup="dialog">{label}</a>', html)
+        row = html[html.index(f'data-video-appointment-id="{booked.pk}"'):]
+        self.assertLess(row.index('Open meeting room</a>'), row.index('>Request a change</a>'))
+        self.assertLess(row.index('>Request a change</a>'), row.index('>Cancel<span'))
         self.assertEqual(html.count('>Request a change</a>'), 1)
-        # The booked one's row and the next-consult banner above the table.
-        self.assertEqual(html.count('>Details</a>'), 2)
+        # A cancelled one has no actions at all.
+        self.assertNotIn(f'change-appointment-{cancelled.pk}', html)
+        self.assertNotIn(f'cancel-appointment-{cancelled.pk}', html)
+        self.assertEqual(html.count('data-appointment-video-join'), 2)
+
+    def test_request_a_change_shows_the_cancellation_policy_then_messages_the_practice(self):
+        later = self.appointment(starts_at=timezone.now() + timedelta(days=3))
+        soon = self.appointment(starts_at=timezone.now() + timedelta(hours=5))
+        self.login(self.patient_user)
+        list_url = self.url('patient-appointments')
+        html = self.client.get(list_url).content.decode()
+
+        def dialog(appointment):
+            start = html.index(f'<dialog class="app-dialog" id="change-appointment-{appointment.pk}"')
+            return html[start:html.index('</dialog>', start)]
+
+        when = date_format(timezone.localtime(later.starts_at), 'D j M Y, H:i')
+        subject = f'Request to change my appointment: {when}'
+        query = urlencode({'compose': 1, 'subject': subject, 'to': self.admin.pk})
+        far = dialog(later)
+        self.assertIn('>Request a change</h2>', far)
+        self.assertIn(f'<p class="app-dialog__sub">{later.get_appointment_type_display()} with {self.doctor.titled_name} on {when}.</p>', far)
+        # The cancellation policy, as before cancelling, then on to a message to a practice administrator, who moves it.
+        self.assertIn('<p class="app-dialog__policy">Please note that bookings missed or cancelled within 24 hours of the scheduled '
+                      'time will be billed for in full', far)
+        self.assertIn(f'<a class="console-button console-button--primary" href="{reverse("portal:patient-messages")}?'
+                      f'{query.replace("&", "&amp;")}#patient-conversation"><svg aria-hidden="true"', far)
+        self.assertIn('<path d="M7 8h10M7 12h7"/></svg>\nMessage the practice</a>', far)
+        self.assertLess(far.index('app-dialog__policy'), far.index('Message the practice'))
+        self.assertIn('data-dialog-close>Close</button>', far)
+        self.assertNotIn('app-dialog__alert', far)
+        compose = self.client.get(f'{reverse("portal:patient-messages")}?{query}')
+        self.assertEqual(compose.context['thread_form'].initial, {'subject': subject, 'recipient': str(self.admin.pk)})
+        # Within 24 hours it says plainly that a change now means a new fee, before anything else.
+        near = dialog(soon)
+        self.assertIn('<p class="app-dialog__alert">Your appointment is in less than 24 hours, so changing it now means a new '
+                      'consultation fee.</p>', near)
+        self.assertLess(near.index('app-dialog__alert'), near.index('app-dialog__text'))
+        self.assertLess(near.index('app-dialog__text'), near.index('app-dialog__policy'))
+        # Without scripts the link opens the list with that one dialog open.
+        page = self.client.get(list_url, {'update': f'change-appointment-{later.pk}'})
+        self.assertContains(page, f'id="change-appointment-{later.pk}" aria-labelledby="change-appointment-{later.pk}-title" open>')
+        self.assertContains(page, f'id="change-appointment-{soon.pk}" aria-labelledby="change-appointment-{soon.pk}-title">')
+        self.assertContains(page, f'id="cancel-appointment-{later.pk}" aria-labelledby="cancel-appointment-{later.pk}-title">')
 
     def test_patient_can_request_a_change_or_cancel_only_before_the_start(self):
         under_way = self.appointment(starts_at=timezone.now() - timedelta(minutes=5))
         self.login(self.patient_user)
-        response = self.client.get(self.url('patient-appointment-detail', under_way.pk))
-        self.assertNotContains(response, 'Request a change')
-        self.assertNotContains(response, 'Cancel appointment')
-        # Still on Upcoming until it's due to end, but with neither there either.
+        # Still on Upcoming until it's due to end, with Open meeting room but neither of the others.
         html = self.client.get(self.url('patient-appointments')).content.decode()
         self.assertIn(f'data-video-appointment-id="{under_way.pk}"', html)
+        self.assertIn(f'aria-describedby="video-join-{under_way.pk}"><svg', html)
         self.assertNotIn('>Request a change</a>', html)
+        self.assertNotIn(f'change-appointment-{under_way.pk}', html)
         self.assertNotIn(f'cancel-appointment-{under_way.pk}', html)
+        # Nor with a dialog left open from before it started.
+        Appointment.objects.filter(pk=under_way.pk).update(starts_at=timezone.now() + timedelta(hours=1))
+        token = self.cancel_token(under_way)
+        Appointment.objects.filter(pk=under_way.pk).update(starts_at=timezone.now() - timedelta(minutes=5))
+        response = self.client.post(self.url('patient-appointment-cancel', under_way.pk), self.status_data(token), follow=True)
+        self.assertRedirects(response, self.url('patient-appointments'))
+        self.assertContains(response, 'Contact the practice about a past appointment.')
+        under_way.refresh_from_db()
+        self.assertEqual(under_way.status, 'booked')
 
-    def test_patient_cancels_from_my_appointments_in_the_appointment_pages_dialog_and_comes_back(self):
+    def test_patient_cancels_from_my_appointments_and_comes_back(self):
         booked = self.appointment()
         past = self.appointment(starts_at=timezone.now() - timedelta(days=1))
         self.login(self.patient_user)
         list_url = self.url('patient-appointments')
         response = self.client.get(list_url)
         html = response.content.decode()
-        # Cancel sits on a booking that can still be cancelled, and opens a dialog like the appointment page's.
-        self.assertIn(f'href="{self.url("patient-appointment-detail", booked.pk)}?update=status" data-modal-open="cancel-appointment-{booked.pk}" aria-haspopup="dialog">Cancel', html)
         self.assertNotIn(f'cancel-appointment-{past.pk}', html)
         row = next(appointment for appointment in response.context['appointments'] if appointment.pk == booked.pk)
+        start = html.index(f'<dialog class="app-dialog" id="cancel-appointment-{booked.pk}"')
+        dialog = html[start:html.index('</dialog>', start)]
+        # Cancel appointment (Dr Czech, Nov 2026): no status to choose, since cancelling is all a patient can do (it
+        # still submits as a cancellation whatever is sent), and a reason they must give.
+        self.assertIn(f'<h2 id="cancel-appointment-{booked.pk}-title">Cancel appointment</h2>', dialog)
         self.assertTrue(row.cancel_form.fields['status'].disabled)
-        self.assertInHTML('<option value="cancelled" selected>Cancel booking</option>', html)
-        self.assertNotIn(f'id="cancel_{booked.pk}_confirm"', html)
-        self.assertIn('<p class="app-dialog__policy">Please note that bookings missed or cancelled within 24 hours of the scheduled time will be billed for in full', html)
-        self.assertIn('type="submit">Confirm cancellation</button>', html)
-        response = self.client.post(self.url('patient-appointment-detail', booked.pk), {
-            **self.status_data(row.cancel_context), 'next': list_url})
-        self.assertRedirects(response, list_url, fetch_redirect_response=False)
+        self.assertNotIn('name="status"', dialog)
+        self.assertNotIn('<select', dialog)
+        self.assertInHTML(f'<label for="cancel_{booked.pk}_reason">Reason for cancelling</label>', dialog)
+        self.assertInHTML(f'<textarea name="reason" cols="40" rows="3" maxlength="500" required id="cancel_{booked.pk}_reason"></textarea>', dialog)
+        self.assertNotIn('Optional', dialog)
+        self.assertNotIn(f'id="cancel_{booked.pk}_confirm"', dialog)
+        self.assertIn(f'<form class="console-form" method="post" action="{self.url("patient-appointment-cancel", booked.pk)}">', dialog)
+        self.assertIn('<p class="app-dialog__policy">Please note that bookings missed or cancelled within 24 hours of the scheduled time will be billed for in full', dialog)
+        # Keep appointment closes it, beside Confirm cancellation.
+        self.assertIn('data-dialog-close>Keep appointment</button><button class="console-button console-button--primary" type="submit">Confirm cancellation</button>', dialog)
+        # Three days away, so no warning about the fee.
+        self.assertNotIn('app-dialog__alert', dialog)
+        filtered = f'{list_url}?when=month'
+        response = self.client.post(self.url('patient-appointment-cancel', booked.pk), {
+            **self.status_data(row.cancel_context), 'next': filtered})
+        self.assertRedirects(response, filtered, fetch_redirect_response=False)
+        self.assertEqual([str(message) for message in get_messages(response.wsgi_request)], ['Appointment cancelled.'])
         booked.refresh_from_db()
         self.assertEqual(booked.status, 'cancelled')
-        # Anywhere else goes to the appointment's page, as before.
+        # Anywhere else goes to My Appointments.
         other = self.appointment(starts_at=self.starts_at + timedelta(hours=2))
-        token = next(a for a in self.client.get(list_url).context['appointments'] if a.pk == other.pk).cancel_context
-        response = self.client.post(self.url('patient-appointment-detail', other.pk), {
-            **self.status_data(token), 'next': 'https://example.com/'})
-        self.assertRedirects(response, self.url('patient-appointment-detail', other.pk), fetch_redirect_response=False)
+        response = self.client.post(self.url('patient-appointment-cancel', other.pk), {
+            **self.status_data(self.cancel_token(other)), 'next': 'https://example.com/'})
+        self.assertRedirects(response, list_url, fetch_redirect_response=False)
+        other.refresh_from_db()
+        self.assertEqual(other.status, 'cancelled')
+        # Without scripts, Cancel opens the list with its dialog open.
+        third = self.appointment(starts_at=self.starts_at + timedelta(hours=4))
+        page = self.client.get(list_url, {'update': f'cancel-appointment-{third.pk}'})
+        self.assertContains(page, f'id="cancel-appointment-{third.pk}" aria-labelledby="cancel-appointment-{third.pk}-title" open>')
+
+    def test_cancelling_within_24_hours_says_plainly_it_is_billed_in_full(self):
+        soon = self.appointment(starts_at=timezone.now() + timedelta(hours=5))
+        self.login(self.patient_user)
+        html = self.client.get(self.url('patient-appointments')).content.decode()
+        start = html.index(f'<dialog class="app-dialog" id="cancel-appointment-{soon.pk}"')
+        dialog = html[start:html.index('</dialog>', start)]
+        self.assertIn('<p class="app-dialog__alert">Your appointment is in less than 24 hours, so if you cancel now it will be '
+                      'billed in full and not refunded.</p>', dialog)
+        # Before the reason, and before the form.
+        self.assertLess(dialog.index('app-dialog__alert'), dialog.index('<form'))
+
+    def test_a_patient_cancel_that_does_not_go_through_says_why_on_my_appointments(self):
+        appointment = self.appointment()
+        self.login(self.patient_user)
+        token = self.cancel_token(appointment)
+        list_url = self.url('patient-appointments')
+        # A reason is required (it's never emailed), and a blank one says so in the patient's terms.
+        for reason in ('', '   '):
+            response = self.client.post(self.url('patient-appointment-cancel', appointment.pk), {
+                **self.status_data(token, reason=reason), 'next': list_url}, follow=True)
+            self.assertRedirects(response, list_url)
+            self.assertContains(response, 'Please give a reason for cancelling.')
+            self.assertNotContains(response, 'that the patient can see')
+        appointment.refresh_from_db()
+        self.assertEqual(appointment.status, 'booked')
+        # A forged status is refused, and nothing changes.
+        response = self.client.post(self.url('patient-appointment-cancel', appointment.pk), {
+            **self.status_data(token, status='completed'), 'next': list_url}, follow=True)
+        self.assertRedirects(response, list_url)
+        self.assertContains(response, 'Select a valid choice.')
+        appointment.refresh_from_db()
+        self.assertEqual(appointment.status, 'booked')
+        # Cancelled by the practice meanwhile: the stale dialog says so, and the list has no actions for it now.
+        change_appointment_status(appointment=appointment, actor=self.admin, status='cancelled',
+            reason='Practice cancellation', confirm=True, expected_updated=appointment.updated_at.isoformat())
+        response = self.client.post(self.url('patient-appointment-cancel', appointment.pk), {
+            **self.status_data(token), 'next': list_url}, follow=True)
+        self.assertRedirects(response, list_url)
+        self.assertContains(response, 'record changed in another tab')
+        self.assertNotContains(response, 'Appointment cancelled.')
+        self.assertNotContains(response, f'cancel-appointment-{appointment.pk}')
 
     def test_legacy_staff_patient_detail_does_not_render_external_video_links_or_mutate_them(self):
         self.login(self.super_admin)
@@ -665,36 +743,23 @@ class AppointmentDetailPageTests(AppointmentLifecycleFixture):
         appointment = self.appointment()
         other = self.appointment(patient=self.other_patient, starts_at=self.starts_at + timedelta(hours=1))
         self.login(self.patient_user)
-        url = self.url('patient-appointment-detail', appointment.pk)
-        token = self.client.get(url).context['workflow_context']
-        self.assertEqual(self.client.get(self.url('patient-appointment-detail', other.pk)).status_code, 404)
+        token = self.cancel_token(appointment)
+        self.assertEqual(self.client.post(self.url('patient-appointment-cancel', other.pk), self.status_data(token)).status_code, 404)
         self.login(self.patient_user, self.beta)
-        self.assertEqual(self.client.post(url, self.status_data(token)).status_code, 404)
-        appointment.refresh_from_db()
-        self.assertEqual(appointment.status, 'booked')
-
-    def test_stale_terminal_form_error_remains_visible_on_read_only_page(self):
-        appointment = self.appointment()
-        self.login(self.patient_user)
-        url = self.url('patient-appointment-detail', appointment.pk)
-        token = self.client.get(url).context['workflow_context']
-        change_appointment_status(appointment=appointment, actor=self.admin, status='cancelled',
-            reason='Practice cancellation', confirm=True, expected_updated=appointment.updated_at.isoformat())
-        response = self.client.post(url, self.status_data(token))
-        self.assertEqual(response.status_code, 400)
-        self.assertFalse(response.context['can_edit'])
-        self.assertContains(response, 'No changes saved', status_code=400)
-        self.assertContains(response, 'record changed in another tab', status_code=400)
-        self.assertNotContains(response, 'Confirm cancellation', status_code=400)
+        self.assertEqual(self.client.post(self.url('patient-appointment-cancel', appointment.pk), self.status_data(token)).status_code, 404)
+        for item in (appointment, other):
+            item.refresh_from_db()
+            self.assertEqual(item.status, 'booked')
 
     def test_status_signed_context_bound_to_exact_appointment_and_patient_actor(self):
         first = self.appointment()
         second = self.appointment(starts_at=self.starts_at + timedelta(hours=1))
         self.login(self.patient_user)
-        token = self.client.get(self.url('patient-appointment-detail', first.pk)).context['workflow_context']
-        response = self.client.post(self.url('patient-appointment-detail', second.pk), self.status_data(token))
-        self.assertEqual(response.status_code, 400)
-        self.assertTrue(response.context['form'].non_field_errors())
+        response = self.client.post(self.url('patient-appointment-cancel', second.pk), self.status_data(self.cancel_token(first)))
+        self.assertRedirects(response, self.url('patient-appointments'), fetch_redirect_response=False)
+        sent = [str(message) for message in get_messages(response.wsgi_request)]
+        self.assertTrue(sent)
+        self.assertNotIn('Appointment cancelled.', sent)
         self.assertFalse(Appointment.objects.filter(status='cancelled').exists())
 
     def test_get_and_head_do_not_write_and_all_forms_require_csrf(self):
@@ -708,12 +773,17 @@ class AppointmentDetailPageTests(AppointmentLifecycleFixture):
             self.assertEqual(self.client.get(url).status_code, 200)
             self.assertEqual(self.client.head(url).status_code, 200)
         self.login(self.patient_user)
-        self.assertEqual(self.client.head(self.url('patient-appointment-detail', appointment.pk)).status_code, 200)
+        self.assertEqual(self.client.head(self.url('patient-appointments')).status_code, 200)
+        self.assertEqual(self.client.head(self.url('patient-appointment-detail', appointment.pk)).status_code, 302)
         self.assertEqual(AuditEvent.objects.count(), before)
         secure = Client(enforce_csrf_checks=True)
         self.login(self.admin, client=secure)
         for url in urls:
             self.assertEqual(secure.post(url, {'confirm': 'on'}).status_code, 403)
+        self.login(self.patient_user, client=secure)
+        self.assertEqual(secure.post(self.url('patient-appointment-cancel', appointment.pk), {'status': 'cancelled'}).status_code, 403)
+        appointment.refresh_from_db()
+        self.assertEqual(appointment.status, 'booked')
 
     def test_conversation_page_adds_a_clinician_and_stays_private(self):
         url = self.url('conversation-manage', self.thread.pk)
@@ -774,8 +844,8 @@ class AppointmentDetailPageTests(AppointmentLifecycleFixture):
             ('staff-cancellation', self.admin, self.url('appointment-detail', appointment.pk)),
             ('doctor-attendance', self.doctor, self.url('appointment-detail', past.pk)),
             ('colleague-readonly', self.colleague, self.url('appointment-detail', appointment.pk)),
-            ('patient-cancellation', self.patient_user, self.url('patient-appointment-detail', appointment.pk)),
-            ('patient-past-readonly', self.patient_user, self.url('patient-appointment-detail', past.pk)),
+            ('patient-appointments', self.patient_user, self.url('patient-appointments')),
+            ('patient-past-appointments', self.patient_user, self.url('patient-appointments') + '?tab=past'),
             ('conversation-management', self.doctor, self.url('conversation-manage', self.thread.pk)),
         ):
             self.login(actor)
