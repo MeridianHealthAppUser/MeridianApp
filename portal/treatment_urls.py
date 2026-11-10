@@ -2,9 +2,11 @@ from django.urls import path
 
 from . import treatment_views as views
 from . import review_views
+from .subscription_payment_views import SubscriptionPaymentsView
 
 
 urlpatterns = [
+    path('subscriptions/<int:pk>/payments/', SubscriptionPaymentsView.as_view(), name='subscription-payments'),
     path('review-rules/', review_views.ReviewRuleListView.as_view(), name='treatment-review-rules'),
     path('review-rules/new/', review_views.ReviewRuleEditorView.as_view(), name='treatment-review-rule-create'),
     path('review-rules/default/', review_views.ReviewDefaultUpdateView.as_view(), name='treatment-review-default'),

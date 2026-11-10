@@ -472,6 +472,35 @@ class PatientSubscription(PatientCompanyScopedModel):
             raise ValidationError({'authorization': 'The authorization must belong to the same company as the subscription.'})
 
 
+class SubscriptionDiscount(PatientCompanyScopedModel):
+    """An auditable pricing instruction. Paid and submitted payments keep their saved amounts."""
+    class Kind(models.TextChoices):
+        AMOUNT = 'amount', 'Rand off each payment'
+        PERCENT = 'percent', 'Percentage off each payment'
+
+    subscription = models.ForeignKey(PatientSubscription, on_delete=models.PROTECT, related_name='discounts')
+    effective_on = models.DateField()
+    payment_on = models.DateField(null=True, blank=True, help_text='One due date; blank applies to all unpaid payments from the effective date.')
+    target_cycle = models.ForeignKey('SubscriptionCycle', null=True, blank=True, on_delete=models.PROTECT, related_name='+')
+    kind = models.CharField(max_length=10, choices=Kind.choices)
+    value = models.DecimalField(max_digits=10, decimal_places=2)
+    reason = models.CharField(max_length=300, blank=True)
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT)
+
+    class Meta:
+        ordering = ('-pk',)
+        constraints = [models.CheckConstraint(condition=models.Q(value__gte=0), name='subscription_discount_nonnegative')]
+
+    def clean(self):
+        super().clean()
+        if self.subscription_id and (self.subscription.company_id != self.company_id or self.subscription.patient_id != self.patient_id):
+            raise ValidationError('The discount must belong to this subscription and patient.')
+        if self.kind == self.Kind.PERCENT and self.value > 100:
+            raise ValidationError({'value': 'Enter a percentage from 0 to 100.'})
+        if self.payment_on and self.payment_on < self.effective_on:
+            raise ValidationError('The payment must fall on or after the effective date.')
+
+
 class SubscriptionCycle(PatientCompanyScopedModel):
     """One billing period of a subscription (care.billing): what is collected for it, when, and whether it was paid.
     Its parcels are the ones planned up to its last day, so a paid cycle is what lets them go out.
@@ -492,6 +521,9 @@ class SubscriptionCycle(PatientCompanyScopedModel):
     ends_on = models.DateField(null=True, blank=True)
     due_on = models.DateField()
     amount = models.DecimalField(max_digits=10, decimal_places=2)
+    base_amount = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    discount_amount = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    discount = models.ForeignKey(SubscriptionDiscount, null=True, blank=True, on_delete=models.PROTECT, related_name='cycles')
     status = models.CharField(max_length=16, choices=Status.choices, default=Status.PENDING)
     idempotency_key = models.CharField(max_length=128, blank=True)
     mandate = models.ForeignKey('DebitMandate', null=True, blank=True, on_delete=models.PROTECT, related_name='cycles')

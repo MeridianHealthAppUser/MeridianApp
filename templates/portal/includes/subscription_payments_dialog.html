@@ -1,0 +1,24 @@
+<dialog class="app-dialog app-dialog--wide subscription-payments" id="subscription-payments-{{ payment_plan.pk }}" aria-labelledby="subscription-payments-title-{{ payment_plan.pk }}"{% if payment_open %} open{% endif %}>
+  <div class="app-dialog__body">
+    <h2 id="subscription-payments-title-{{ payment_plan.pk }}">Subscription payments</h2>
+    <p class="app-dialog__sub">{{ payment_plan.patient }} · {{ payment_plan.plan_name }}</p>
+    <div class="subscription-payment-summary"><strong>{{ payment_schedule.paid_count }} of {{ payment_schedule.total_count }} payments settled</strong><span>R{{ payment_schedule.paid_total|floatformat:2 }} paid to date</span></div>
+    <p class="patient-small">Planned payments are estimates through the prescribed course{% if payment_schedule.projected_through %} ending {{ payment_schedule.projected_through|date:'j M Y' }}{% endif %}. Paid and processing amounts stay unchanged.</p>
+    <div class="treatment-table-wrap"><table class="treatment-table subscription-payment-table">
+      <thead><tr><th scope="col">Due</th><th scope="col">Original</th><th scope="col">Discount</th><th scope="col">Amount</th><th scope="col">Status</th><th scope="col">Paid on</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead>
+      <tbody>{% for row in payment_schedule.rows %}<tr><td>{{ row.due_on|date:'j M Y' }}{% if row.projected %}<small>Planned</small>{% endif %}</td><td>{% if row.base is not None %}R{{ row.base|floatformat:2 }}{% else %}Not priced{% endif %}</td><td>{% if row.discount_amount %}<span class="subscription-discount-label">−R{{ row.discount_amount|floatformat:2 }}</span>{% if row.discount.kind == 'percent' %}<small>{{ row.discount.value|floatformat:'-2' }}% off</small>{% endif %}{% else %}—{% endif %}</td><td>{% if row.amount is not None %}<strong>R{{ row.amount|floatformat:2 }}</strong>{% else %}Not priced{% endif %}</td><td>{{ row.status }}</td><td>{{ row.paid_at|date:'j M Y'|default:'—' }}</td><td>{% if row.editable %}<a class="patient-inline-link" href="#subscription-discount-{{ payment_plan.pk }}" data-discount-payment="{{ row.key }}" data-discount-date="{{ row.due_on|date:'Y-m-d' }}">Discount<span class="sr-only"> payment due {{ row.due_on|date:'j M Y' }}</span></a>{% endif %}</td></tr>{% empty %}<tr><td colspan="7">No payment schedule is available.</td></tr>{% endfor %}</tbody>
+    </table></div>
+    {% if payment_plan.status != 'cancelled' %}
+    <section class="subscription-discount-editor" id="subscription-discount-{{ payment_plan.pk }}" aria-labelledby="discount-heading-{{ payment_plan.pk }}">
+      <h3 id="discount-heading-{{ payment_plan.pk }}">Apply a discount</h3>
+      <p class="patient-small">Choose one unpaid payment or all unpaid payments from an effective date. This replaces any earlier discount for those payments. Enter 0 to restore the original amount.</p>
+      <form class="console-form" method="post" action="{% url 'portal:subscription-payments' payment_plan.pk %}" data-subscription-discount-form>
+        {% csrf_token %}<input type="hidden" name="workflow_context" value="{{ discount_token }}"><input type="hidden" name="return_to" value="{{ payment_return }}">{{ discount_form.non_field_errors }}
+        <div class="subscription-discount-fields">{% for field in discount_form %}<div class="console-form__field"{% if field.name == 'payment' %} data-discount-payment-field{% endif %}>{{ field.label_tag }}{{ field }}{{ field.errors }}{% if field.help_text %}<p class="helptext">{{ field.help_text }}</p>{% endif %}</div>{% endfor %}</div>
+        <button class="console-button console-button--primary" type="submit">Save discount</button>
+      </form>
+    </section>{% endif %}
+    {% if payment_schedule.rules %}<details class="subscription-discount-history"><summary>Discount history</summary><ul>{% for rule in payment_schedule.rules %}<li>{% if rule.kind == 'percent' %}{{ rule.value|floatformat:'-2' }}%{% else %}R{{ rule.value|floatformat:2 }}{% endif %} off · {% if rule.payment_on %}payment due {{ rule.payment_on|date:'j M Y' }}{% else %}unpaid payments from {{ rule.effective_on|date:'j M Y' }}{% endif %}<small>Effective {{ rule.effective_on|date:'j M Y' }} · {{ rule.created_by }} · {{ rule.created_at|date:'j M Y, H:i' }}{% if rule.reason %} · {{ rule.reason }}{% endif %}</small></li>{% endfor %}</ul></details>{% endif %}
+    <div class="app-dialog__actions"><a class="console-button console-button--secondary" href="{{ payment_return }}" data-dialog-close>Close</a></div>
+  </div>
+</dialog>

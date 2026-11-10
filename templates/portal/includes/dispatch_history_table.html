@@ -1,0 +1,15 @@
+{% load tz %}
+    <div class="ops-table-wrap"><table class="ops-table">
+      <thead><tr><th scope="col">Patient</th><th scope="col">Doctor</th><th scope="col">Delivered to</th><th scope="col">Parcel</th><th scope="col">Dispatched</th><th scope="col">Status</th><th scope="col">Note</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead>
+      <tbody>{% for shipment in shipments %}<tr>
+        <td data-label="Patient"><div>{{ shipment.dispatch_snapshot.patient_name|default:shipment.patient }}{% if not shipment.dispatch_snapshot %}<small>Legacy record; no saved dispatch snapshot</small>{% endif %}</div></td>
+        <td data-label="Doctor">{{ shipment.doctor.titled_name|default:'—' }}</td>
+        <td data-label="Delivered to">{% if shipment.history_delivery.lines %}<div>{{ shipment.history_delivery.lines|join:', ' }}{% if shipment.history_delivery.phone or shipment.history_delivery.recipient %}<small>{{ shipment.history_delivery.phone }}{% if shipment.history_delivery.phone and shipment.history_delivery.recipient %} · {% endif %}{{ shipment.history_delivery.recipient }}</small>{% endif %}</div>{% else %}—{% endif %}</td>
+        {# What went out, as saved at dispatch. #}
+        <td data-label="Parcel">{% if shipment.dispatch_snapshot.items %}{% for item in shipment.dispatch_snapshot.items %}<div>{{ item.product }} × {{ item.quantity }}<small>{{ item.dose }}</small></div>{% endfor %}{% else %}{% for item in shipment.items.all %}<div>{{ item.product }} × {{ item.quantity }}<small>{{ item.dose }}</small></div>{% empty %}—{% endfor %}{% endif %}</td>
+        <td data-label="Dispatched">{% if shipment.dispatched_at %}{{ shipment.dispatched_at|timezone:'Africa/Johannesburg'|date:'j M Y, H:i' }}{% else %}—{% endif %}</td>
+        <td data-label="Status"><span class="console-status console-status--{{ shipment.status }}">{{ shipment.get_status_display }}</span>{% if shipment.courier_status_label %}<small>The Courier Guy: {{ shipment.courier_status_label }}</small>{% endif %}</td>
+        <td data-label="Note">{% if shipment.note %}<span class="ops-note">{{ shipment.note }}</span>{% else %}—{% endif %}</td>
+        <td data-label="Actions">{% if shipment.history_record_url %}<a class="console-button console-button--secondary" href="{{ shipment.history_record_url }}">Open record</a>{% else %}<span class="record-small">Read-only</span>{% endif %}</td>
+      </tr>{% empty %}<tr><td class="ops-empty" colspan="8">No dispatch history matches these filters.</td></tr>{% endfor %}</tbody>
+    </table></div>

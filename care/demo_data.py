@@ -30,6 +30,8 @@ ROOT_MODELS = (Patient, MedicationProduct, Supplier, PurchaseOrder)
 # Financial records, emails, uploaded files, messages and unknown future features
 # are deliberately absent. They must never be cascaded away by this tool.
 SAFE_LABELS = {
+    # Uncollected discount instructions are owned by the synthetic subscription; payments and cycles stay protected.
+    'care.subscriptiondiscount',
     'practices.patient', 'care.medicationproduct', 'care.supplier', 'care.purchaseorder',
     'care.medicationdose', 'care.treatmentauthorization', 'care.patientsubscription',
     'care.shipment', 'care.shipmentitem', 'care.stockmovement', 'care.purchaseorderitem',

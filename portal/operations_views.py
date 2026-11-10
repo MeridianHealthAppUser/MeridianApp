@@ -34,6 +34,7 @@ from care.services import record_audit
 from care.shipment_intake import create_manual_shipment
 from practices.models import Company, CompanyMembership
 
+from .dispatch_history import dispatch_delivery, shipment_doctor
 from .filter_menus import fields_section, list_tools, ticked_sections, without_all
 from .operations_forms import (
     SHIPPING_FILTER_FIELDS, BasketQuantityForm, CatalogueFilterForm, ConfirmForm, DeliveryAddressForm, DoseForm,
@@ -304,12 +305,6 @@ def week_navigation(url_name, week, *, home=None, **query):
                 prev_week_url=link(week - timedelta(days=7)), next_week_url=link(week + timedelta(days=7)),
                 this_week_url=link(home) if week != home else None,
                 this_week_label='This week' if home == this_week() else 'Next week')
-
-
-def shipment_doctor(shipment):
-    """Who prescribed what's in the parcel, or else the patient's prescribing doctor."""
-    authorization = shipment.authorization
-    return authorization.prescribed_by if authorization and authorization.prescribed_by_id else shipment.patient.assigned_doctor
 
 
 SHIPPING_STAGES = ('pending', 'confirmed', 'tracking')
@@ -1106,18 +1101,12 @@ class DispatchHistoryView(OperationsView):
     http_method_names = ('get', 'head', 'options')
 
     def get(self, request):
-        from care.models import DeliveryAddress
         from .pagination import numbered_pagination
+        from .dispatch_history import history_queryset, prepare_history_shipments
 
-        form, queryset = _history_filter(request, self.shipments().filter(
-            status__in=('dispatched', 'delivered')).order_by('-dispatched_at', '-pk'))
+        form, queryset = _history_filter(request, history_queryset(self.shipments()))
         context = self.context(filter_form=form, **_paginate(request, queryset, per_page=25))
-        context['shipments'] = list(context['page_obj'].object_list)
-        addresses = {address.patient_id: address for address in DeliveryAddress.objects.filter(
-            company=self.company, patient_id__in=[shipment.patient_id for shipment in context['shipments']])}
-        for shipment in context['shipments']:
-            shipment.doctor = shipment_doctor(shipment)
-            shipment.history_delivery = dispatch_delivery(shipment, addresses.get(shipment.patient_id))
+        context['shipments'] = prepare_history_shipments(context['page_obj'].object_list, self.company)
         count = context['page_obj'].paginator.count
         dated = int(bool(form['start_month'].value() or form['end_month'].value()))
         tools = _list_tools(request, form, url_name='portal:ops-history', label='Filter dispatches',
@@ -1168,21 +1157,6 @@ class DispatchHistoryExportView(OperationsView):
         except Exception:
             output.close()
             raise
-
-
-def dispatch_delivery(shipment, address=None):
-    """The saved dispatch address, then the booked address, then a legacy record's current address."""
-    from care.courier import booked_delivery
-
-    snapshot = shipment.dispatch_snapshot or {}
-    delivery = snapshot.get('delivery_address') or {}
-    if not delivery.get('lines'):
-        delivery = booked_delivery(shipment)
-    if delivery.get('lines'):
-        return delivery
-    if address is not None:
-        return {'lines': address.lines(), 'phone': address.phone, 'recipient': address.recipient}
-    return {}
 
 
 def history_export_rows(queryset, company):

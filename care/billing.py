@@ -270,19 +270,22 @@ def _open_cycle(subscription, mandate):
     """The subscription's next cycle, from its next debit date. Moves the next debit date on by the interval."""
     starts = subscription.next_debit_on
     weeks = billing_weeks(subscription, starts)
-    amount = price_on(subscription, starts)
+    base = price_on(subscription, starts)
+    from .subscription_discounts import discounted_price
+    amount, discount = discounted_price(subscription, starts, base)
     number = (subscription.cycles.order_by('-cycle_number').values_list('cycle_number', flat=True).first() or 0) + 1
     cycle = SubscriptionCycle(
         company_id=subscription.company_id, patient_id=subscription.patient_id, subscription=subscription,
         cycle_number=number, starts_on=starts, ends_on=starts + timedelta(weeks=weeks, days=-1), due_on=starts,
-        amount=amount if amount is not None else Decimal('0'), mandate=mandate,
+        amount=amount if amount is not None else Decimal('0'), base_amount=base,
+        discount_amount=base - amount if base is not None else Decimal('0'), discount=discount, mandate=mandate,
         idempotency_key=f'subscription-{subscription.pk}-cycle-{number}',
     )
     cycle.full_clean()
     cycle.save()
     invoice = Invoice(company_id=subscription.company_id, patient_id=subscription.patient_id, subscription_cycle=cycle,
                       invoice_number=f'SUB-{subscription.pk:05d}-{number:03d}', issued_on=starts, due_on=starts,
-                      subtotal=cycle.amount, total=cycle.amount, status=Invoice.Status.ISSUED,
+                      subtotal=cycle.base_amount if cycle.base_amount is not None else cycle.amount, total=cycle.amount, status=Invoice.Status.ISSUED,
                       billed_to=billed_to(subscription.patient))
     invoice.full_clean()
     invoice.save()
@@ -354,8 +357,12 @@ def collect_cycle(cycle, *, today=None, actor=None, request=None):
     cycle = SubscriptionCycle.objects.select_for_update(of=('self',)).select_related('subscription', 'patient').get(pk=cycle.pk)
     if cycle.status in (SubscriptionCycle.Status.PAID, SubscriptionCycle.Status.CANCELLED):
         return None
-    if Payment.objects.filter(subscription_cycle=cycle, status=Payment.Status.PENDING, checkout=False).exists():
+    if Payment.objects.filter(subscription_cycle=cycle, status=Payment.Status.PENDING).exists():
         return None  # A debit already sent is waiting for the provider's answer (a DebiCheck collection takes days).
+    from .subscription_discounts import refresh_cycle_price, waive_cycle
+    refresh_cycle_price(cycle)
+    if cycle.amount == 0 and cycle.discount_amount > 0:
+        return waive_cycle(cycle, actor)
     subscription = cycle.subscription
     mandate = DebitMandate.objects.filter(subscription=subscription, status__in=LIVE_MANDATES).order_by('-approved_at', '-pk').first()
     if mandate is None:
@@ -668,11 +675,18 @@ def start_order_payment(*, order, actor, request=None):
 @block_demo_billing('cycle')
 def start_cycle_payment(*, cycle, actor, request=None):
     """The patient pays a failed or retrying debit now, by card, instead of waiting for the next retry."""
-    provider = require_provider()
     cycle = SubscriptionCycle.objects.select_for_update(of=('self',)).select_related('patient', 'subscription').get(pk=cycle.pk)
     _require_patient(cycle.patient, actor)
     if cycle.status in (SubscriptionCycle.Status.PAID, SubscriptionCycle.Status.CANCELLED):
         raise ValidationError('This payment is already settled.')
+    if cycle.payments.filter(status=Payment.Status.PENDING).exists():
+        raise ValidationError('A payment is already being processed. Wait for its result before starting another.')
+    from .subscription_discounts import refresh_cycle_price, waive_cycle
+    refresh_cycle_price(cycle)
+    if cycle.amount == 0 and cycle.discount_amount > 0:
+        from django.urls import reverse
+        return waive_cycle(cycle, actor), reverse('portal:patient-billing')
+    provider = require_provider()
     payment = Payment.objects.create(
         company_id=cycle.company_id, patient=cycle.patient, subscription=cycle.subscription, subscription_cycle=cycle,
         kind=Payment.Kind.SUBSCRIPTION, method=Payment.Method.CARD, provider=provider.name, attempt=cycle.attempts + 1,

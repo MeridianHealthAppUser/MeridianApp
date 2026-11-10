@@ -54,12 +54,14 @@ def _subscriptions(request, company):
                    plan.next_shipment.scheduled_for if plan.next_shipment else None,
                    plan.next_shipment.get_status_display() if plan.next_shipment else 'None scheduled',
                    plan.starts_on, plan.review_due_on, amount,
-                   dose.billing_text if amount is not None else 'Not in the catalogue')
+                   dose.billing_text if amount is not None else 'Not in the catalogue',
+                   plan.payment_progress['paid_count'], plan.payment_progress['total_count'], plan.payment_progress['paid_total'])
 
     return ExportTable('Subscriptions',
         ('Patient', 'Plan', 'Status', 'Supply progress', 'Next shipment', 'Next shipment status',
-         'Started', 'Review due', 'Reference amount', 'Reference billing interval'), rows(),
-        widths=(30, 42, 18, 36, 20, 25, 18, 18, 22, 28))
+         'Started', 'Review due', 'Reference amount', 'Reference billing interval',
+         'Payments settled', 'Scheduled payments', 'Paid to date'), rows(),
+        widths=(30, 42, 18, 36, 20, 25, 18, 18, 22, 28, 20, 20, 22))
 
 
 def _billing(request, company):

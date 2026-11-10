@@ -37,6 +37,22 @@ class DemoDataTests(PurchaseOrderFixture):
                   Invoice, EmailDelivery)
         return {model._meta.label: list(model.objects.order_by('pk').values()) for model in models}
 
+    def test_demo_pricing_discounts_can_be_cleared_without_creating_or_deleting_payments(self):
+        from .models import PatientSubscription, SubscriptionDiscount
+        from .subscription_discounts import apply_discount, payment_schedule
+
+        dataset = self.create_demo()
+        plan = PatientSubscription.objects.filter(patient__demo_data_set=dataset).first()
+        before = self.protected_snapshot()
+        first = next(row for row in payment_schedule(plan)['rows'] if row['editable'])
+        rule, _ = apply_discount(subscription=plan, actor=self.super_admin, kind='amount', value=Decimal('100'),
+                                 effective_on=first['due_on'])
+        self.assertTrue(SubscriptionDiscount.objects.filter(pk=rule.pk).exists())
+        self.assertEqual(self.protected_snapshot(), before)
+        self.clear_demo(dataset)
+        self.assertFalse(SubscriptionDiscount.objects.filter(pk=rule.pk).exists())
+        self.assertEqual(self.protected_snapshot(), before)
+
     def test_bounded_production_dataset_has_owned_scenarios_and_reconciling_consumption(self):
         before = self.protected_snapshot()
         with override_settings(DEBUG=False, EMAIL_ENABLED=True, PAYMENT_PROVIDER='production'), \

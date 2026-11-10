@@ -310,7 +310,12 @@ def workspace_tab_context(request, company, membership, patient, tab, **override
         context.update(paginated(request, patient, tab, authorizations, TreatmentAuthorization.Status.choices))
         context['other_treatments_offered'] = other_treatments(company).exists()
     elif tab == 'deliveries':
-        context.update(paginated(request, patient, tab, scoped(Shipment, company, patient).defer('dispatch_snapshot', 'hold_reason').order_by('-scheduled_for', '-pk'), Shipment.Status.choices))
+        from .dispatch_history import DISPATCHED_STATUSES, history_queryset, prepare_history_shipments
+
+        queryset = history_queryset(scoped(Shipment, company, patient))
+        context.update(paginated(request, patient, tab, queryset,
+            [(value, label) for value, label in Shipment.Status.choices if value in DISPATCHED_STATUSES]))
+        context['rows'] = prepare_history_shipments(context['rows'], company, workspace=True, can_open=membership.is_admin)
     elif tab == 'history':
         # Administrative users get typed audit labels, never arbitrary clinical
         # events, metadata, IP addresses, note text, reports, or private profiles.

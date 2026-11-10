@@ -1,0 +1,23 @@
+.subscription-payments.app-dialog { max-width: min(72rem, calc(100vw - 2rem)); }
+.subscription-payment-summary { display: flex; flex-wrap: wrap; gap: .5rem 1.5rem; justify-content: space-between; margin: 1rem 0; color: var(--console-ink); }
+.subscription-payment-table small, .subscription-discount-history small, .subscription-payment-progress small { color: var(--console-muted); display: block; font-size: .78rem; line-height: 1.5; margin-top: .2rem; }
+.subscription-payment-reference { align-items: center; display: flex; flex-wrap: wrap; gap: .5rem; }
+.subscription-payment-reference .console-button { border-radius: 999px; min-height: 2.5rem; padding: .4rem .7rem; }
+.subscription-discount-label { color: var(--console-teal-dark); font-weight: 650; }
+.subscription-discount-editor { border-top: 1px solid var(--console-soft-line); margin-top: 1.25rem; padding-top: 1rem; }
+.subscription-discount-editor h3 { color: var(--console-ink); font-size: 1.05rem; margin: 0; }
+.subscription-discount-fields { display: grid; gap: 1rem; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.subscription-discount-fields > div { min-width: 0; }
+.subscription-discount-fields [hidden] { display: none; }
+.subscription-discount-editor .console-form__field :is(input, select) { box-sizing: border-box; max-width: 100%; width: 100%; }
+.subscription-discount-editor .helptext { color: var(--console-muted); font-size: .78rem; margin: .3rem 0 0; }
+.subscription-discount-history { border-top: 1px solid var(--console-soft-line); margin-top: 1.25rem; padding-top: 1rem; }
+.subscription-discount-history summary { cursor: pointer; min-height: 2.75rem; }
+.subscription-discount-history li { padding-block: .5rem; overflow-wrap: anywhere; }
+@media (max-width: 38rem) { .subscription-discount-fields { grid-template-columns: minmax(0, 1fr); } }
+
+.subscription-payment-reference small { display: block; font-size: .75rem; margin-top: .2rem; }
+
+.subscription-payments .patient-small { color: var(--console-muted); font-size: .82rem; line-height: 1.55; }
+.subscription-payment-table { font-variant-numeric: tabular-nums; }
+.subscription-payment-table .patient-inline-link { color: var(--console-teal-dark); display: inline-flex; align-items: center; min-height: 2.75rem; }

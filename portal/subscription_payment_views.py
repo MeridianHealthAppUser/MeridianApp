@@ -1,0 +1,104 @@
+"""Practice subscription payment schedules and auditable discounts."""
+from decimal import Decimal
+from django import forms
+from django.contrib import messages
+from django.contrib.auth.mixins import LoginRequiredMixin
+from django.core.exceptions import ValidationError
+from django.db import transaction
+from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
+from urllib.parse import urlsplit, parse_qsl, urlencode, urlunsplit
+from django.utils import timezone
+from django.views import View
+from care.billing import require_staff
+from care.models import PatientSubscription, SubscriptionDiscount
+from care.subscription_discounts import apply_discount, payment_schedule
+from .views import StaffCompanyRequiredMixin
+from .workflow_context import make_workflow_context, validate_workflow_context
+
+
+class SubscriptionDiscountForm(forms.Form):
+    scope = forms.ChoiceField(label='Apply to', choices=(('one', 'One unpaid payment'), ('future', 'All unpaid payments from this date')))
+    payment = forms.ChoiceField(label='Payment', required=False)
+    effective_on = forms.DateField(label='Effective date', initial=timezone.localdate,
+        widget=forms.DateInput(attrs={'type': 'date'}), help_text='Applies to payment due dates on or after this date.')
+    kind = forms.ChoiceField(label='Discount type', choices=SubscriptionDiscount.Kind.choices)
+    value = forms.DecimalField(label='Discount', min_value=Decimal('0'), max_digits=10, decimal_places=2)
+    reason = forms.CharField(label='Reason (optional)', required=False, max_length=300)
+
+    def __init__(self, *args, plan, schedule, **kwargs):
+        kwargs.setdefault('auto_id', f'discount_{plan.pk}_%s')
+        super().__init__(*args, **kwargs)
+        self.rows = {row['key']: row for row in schedule['rows'] if row['editable']}
+        self.fields['payment'].choices = [('', 'Choose a payment'), *[
+            (key, f"{row['due_on']:%d %b %Y} · R{row['amount']:.2f}") for key, row in self.rows.items()]]
+
+    def clean(self):
+        data = super().clean()
+        if data.get('kind') == 'percent' and data.get('value') is not None and data['value'] > 100:
+            self.add_error('value', 'Enter a percentage from 0 to 100.')
+        if data.get('scope') == 'one':
+            row = self.rows.get(data.get('payment'))
+            if row is None:
+                self.add_error('payment', 'Choose an editable unpaid payment.')
+            elif data.get('effective_on') and data['effective_on'] > row['due_on']:
+                self.add_error('effective_on', 'The effective date must be on or before this payment’s due date.')
+        return data
+
+
+def payment_popup(request, company, plan, *, form=None, schedule=None):
+    schedule = schedule or payment_schedule(plan)
+    base = reverse('portal:treatment-subscriptions')
+    candidate = (request.get_full_path() if request.resolver_match.url_name == 'treatment-subscriptions'
+                 else request.POST.get('return_to') or request.GET.get('return_to') or base)
+    parts = urlsplit(candidate)
+    query = [(key, value) for key, value in parse_qsl(parts.query) if key != 'payments']
+    return_url = urlunsplit(('', '', base, urlencode(query), '')) if not parts.scheme and not parts.netloc and parts.path == base else base
+    return dict(payment_plan=plan, payment_schedule=schedule,
+        discount_form=form if form is not None else SubscriptionDiscountForm(plan=plan, schedule=schedule),
+        discount_token=make_workflow_context(request, company, 'subscription-discount', plan), payment_return=return_url)
+
+
+class SubscriptionPaymentsView(LoginRequiredMixin, StaffCompanyRequiredMixin, View):
+    admin_only = True
+    http_method_names = ('get', 'post')
+
+    def plan(self, pk):
+        return get_object_or_404(PatientSubscription.objects.filter(company=self.company, patient__company=self.company), pk=pk)
+
+    def display(self, request, plan, *, form=None, schedule=None, status=200):
+        return render(request, 'portal/subscription_payments.html', dict(company=self.company,
+            active_membership=self.membership, nav_section='subscriptions', payment_open=True,
+            **payment_popup(request, self.company, plan, form=form, schedule=schedule)), status=status)
+
+    def get(self, request, pk):
+        require_staff(self.company, request.user)
+        return self.display(request, self.plan(pk))
+
+    @transaction.atomic
+    def post(self, request, pk):
+        require_staff(self.company, request.user)
+        plan = self.plan(pk)
+        plan = PatientSubscription.objects.select_for_update(of=('self',)).get(pk=plan.pk)
+        schedule = payment_schedule(plan)
+        form = SubscriptionDiscountForm(request.POST, plan=plan, schedule=schedule)
+        try:
+            validate_workflow_context(request, self.company, 'subscription-discount', plan)
+            if form.is_valid():
+                data = form.cleaned_data
+                row = form.rows[data['payment']] if data['scope'] == 'one' else None
+                rule, skipped = apply_discount(subscription=plan, actor=request.user, kind=data['kind'], value=data['value'],
+                    effective_on=data['effective_on'], payment_on=row['due_on'] if row else None,
+                    target_cycle=row['cycle'] if row else None, reason=data['reason'], request=request)
+                messages.success(request, 'Discount saved. Future collections will use the updated amounts.' +
+                    (f' {skipped} payment(s) already processing were left unchanged.' if skipped else ''))
+                target = request.POST.get('return_to', '')
+                parts = urlsplit(target)
+                if parts.scheme or parts.netloc or parts.path != reverse('portal:treatment-subscriptions'):
+                    return redirect('portal:subscription-payments', pk=plan.pk)
+                query = [(key, value) for key, value in parse_qsl(parts.query) if key != 'payments']
+                query.append(('payments', str(plan.pk)))
+                return redirect(urlunsplit(('', '', parts.path, urlencode(query), f'subscription-payments-{plan.pk}')))
+        except ValidationError as error:
+            form.add_error(None, error)
+        return self.display(request, plan, form=form, schedule=schedule, status=400)

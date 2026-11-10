@@ -198,11 +198,17 @@ class SubscriptionListView(LoginRequiredMixin, StaffCompanyRequiredMixin, View):
         form, plans = subscription_listing(request.GET, self.company)
         page = Paginator(plans, 20).get_page(request.GET.get('page'))
         page.object_list = list(prepare_subscription_rows(page.object_list, self.company))
+        from .subscription_payment_views import payment_popup
+        payment_popups = []
+        for plan in page.object_list:
+            popup = payment_popup(request, self.company, plan, schedule=plan.payment_progress)
+            popup['payment_open'] = request.GET.get('payments') == str(plan.pk)
+            payment_popups.append(popup)
         query = request.GET.copy()
         query.pop('page', None)
         count = page.paginator.count
         return render(request, 'portal/treatment_subscriptions.html', dict(
-            company=self.company, active_membership=self.membership, nav_section='subscriptions',
+            company=self.company, active_membership=self.membership, nav_section='subscriptions', payment_popups=payment_popups,
             can_read_clinical=self.membership.has_clinical_access, filter_form=form, page_obj=page,
             is_paginated=page.has_other_pages(), pagination_query=query.urlencode(),
             count_label=f'{count} care plan{"" if count == 1 else "s"}',
@@ -240,6 +246,8 @@ def prepare_subscription_rows(plans, company):
 
     for plan in plans:
         plan.dose = dose_in_effect(plan)
+        from care.subscription_discounts import payment_schedule
+        plan.payment_progress = payment_schedule(plan)
         plan.supply_dispatched = plan.supply_remaining = 0
         plan.next_shipment = None
         if plan.authorization_id:

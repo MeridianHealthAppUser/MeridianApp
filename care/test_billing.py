@@ -299,7 +299,7 @@ class CourierTests(BillingFixture):
                                            authorization=self.auth, scheduled_for=self.today)
         ShipmentItem.objects.create(company=self.company, shipment=shipment, product=self.dose.pen, dose=self.auth.max_dose, quantity=1)
         prepare_shipment(shipment=shipment, actor=self.admin)
-        self.week = self.today - timedelta(days=self.today.weekday())
+        self.week = self.today - timedelta(days=(self.today.weekday() - 1) % 7)
         lock_week(company=self.company, actor=self.admin, week_start=self.week)
         self.shipment = shipment
 

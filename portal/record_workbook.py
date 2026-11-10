@@ -132,7 +132,8 @@ def workbook_sheets(request, company, patient, timeline):
     payments = scoped(Payment, company, patient).only('due_on', 'amount', 'status', 'paid_at').order_by('-due_on', '-pk')
     treatment = scoped(TreatmentAuthorization, company, patient).filter(product__company=company).select_related(
         'product', 'prescribed_by').order_by('-created_at', '-pk')
-    deliveries = scoped(Shipment, company, patient).defer('dispatch_snapshot', 'hold_reason').order_by('-scheduled_for', '-pk')
+    from .dispatch_history import history_queryset, prepare_history_shipments
+    deliveries = prepare_history_shipments(history_queryset(scoped(Shipment, company, patient)), company)
 
     def sender(message):
         if message.sender_id and message.sender_id == patient.user_id:
@@ -166,9 +167,15 @@ def workbook_sheets(request, company, patient, timeline):
         ('Treatment', _sheet(('Medication', 'Dose', 'Doctor', 'Valid from', 'Valid to', 'Status'), (
             (row.product.name, row.max_dose, _person(row.prescribed_by), _day(row.starts_on), _day(row.expires_on), row.get_status_display())
             for row in treatment)), (26, 18, 24, 14, 14, 14), True),
-        ('Dispatch history', _sheet(('Scheduled', 'Parcel', 'Status', 'Tracking', 'Dispatched'), (
-            (_day(row.scheduled_for), row.cycle_number, row.get_status_display(), row.tracking_number or 'Not dispatched', _when(row.dispatched_at))
-            for row in deliveries)), (14, 8, 16, 24, 20), True),
+        ('Dispatch history', _sheet(('Patient', 'Doctor', 'Delivered to', 'Parcel', 'Dispatched', 'Status', 'Note'), (
+            ((row.dispatch_snapshot or {}).get('patient_name') or str(row.patient), _person(row.doctor),
+             ', '.join(row.history_delivery.get('lines', [])),
+             '\n'.join(f"{item['product']} × {item['quantity']} · {item.get('dose', '')}" for item in
+                 ((row.dispatch_snapshot or {}).get('items') or [
+                     {'product': str(item.product), 'quantity': item.quantity, 'dose': item.dose} for item in row.items.all()])),
+             _when(row.dispatched_at), row.get_status_display() +
+                 (f' · The Courier Guy: {row.courier_status_label}' if row.courier_status_label else ''), row.note)
+            for row in deliveries)), (24, 24, 50, 50, 22, 28, 50), True),
         ('Export details', _sheet(('Field', 'Value'), (
             ('Patient', str(patient)), ('Record number', patient.medical_record_number or 'Not recorded'),
             ('Practice', company.name), ('Exported by', request.user.full_name),
