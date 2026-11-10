@@ -1,6 +1,6 @@
 {% extends 'portal/operations_base.html' %}
 {% load static workspace_ui %}
-{% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/dialogs.css' %}?v=20261108a"><script src="{% static 'js/dialogs.js' %}?v=20261102a" defer></script><script src="{% static 'js/shipping_workflow.js' %}?v=20261105a" defer></script><script src="{% static 'js/shipping_notes.js' %}?v=20261102a" defer></script><script src="{% static 'js/shipping_help.js' %}?v=20261102b" defer></script>{% endblock %}
+{% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/dialogs.css' %}?v=20261108a"><script src="{% static 'js/shipping_workflow.js' %}?v=20261105a" defer></script><script src="{% static 'js/shipping_notes.js' %}?v=20261102a" defer></script><script src="{% static 'js/shipping_help.js' %}?v=20261102b" defer></script>{% endblock %}
 {% block title %}Weekly shipping | Meridian{% endblock %}
 {% block breadcrumbs %}{% breadcrumbs 'Shipping' %}{% endblock %}
 {% block page_heading %}<header class="staff-page-header"><div><h1>Shipping</h1><p>{{ company.name }} · Confirm the week’s parcels, arrange the courier and follow their delivery.</p></div><div class="ops-actions">{% if can_edit %}<a class="console-button console-button--primary" href="?{{ list_query }}&amp;create=1" data-modal-open="create-shipment" aria-haspopup="dialog">Create shipment</a>{% endif %}</div></header>{% page_tabs %}{% endblock %}
@@ -75,8 +75,8 @@
 </section>
 <div data-search-region="pages">{% include 'portal/operations_pagination.html' with pagination_label='Shipping list' %}</div>
 
-{# Confirm & lock asks first (static/js/shipping_workflow.js names the parcel or the count); its Confirm & lock sends
-   the form whose button opened it. Without scripts those buttons send their form at once. #}
+{% comment %} Confirm & lock asks first (static/js/shipping_workflow.js names the parcel or the count); its Confirm & lock sends
+   the form whose button opened it. Without scripts those buttons send their form at once. {% endcomment %}
 <dialog class="app-dialog app-dialog--alert" id="shipping-confirm-dialog" aria-labelledby="shipping-confirm-title" aria-describedby="shipping-confirm-text">
   <div class="app-dialog__body">
     <h2 id="shipping-confirm-title" data-confirm-title>Confirm &amp; lock parcels?</h2>
@@ -99,6 +99,7 @@
   </div>
 </dialog>
 
+{% include 'portal/includes/shipment_waybill_dialog.html' %}
 {% if create_form %}
   {# Create shipment above opens this for an ad-hoc parcel; without scripts its link reopens this page with it open. #}
   <dialog class="app-dialog" id="create-shipment" aria-labelledby="create-shipment-title"{% if create_open %} open{% endif %}>
@@ -117,7 +118,7 @@
   <dialog class="app-dialog" id="record-collection" aria-labelledby="record-collection-title"{% if collect_open %} open{% endif %}>
     <div class="app-dialog__body">
       <h2 id="record-collection-title">{% if collect_demo_mode %}Record demo collection{% else %}Record collection{% endif %}</h2>
-      <p class="app-dialog__sub">{% if collect_demo_mode %}Record {{ collect_count }} demo parcel{{ collect_count|pluralize }} as collected and deduct their demo stock. Existing parcels and stock are unchanged.{% else %}{{ collect_count }} parcel{{ collect_count|pluralize }} with a waybill {{ collect_count|pluralize:"is,are" }} recorded as dispatched, each with its waybill as the tracking reference. Note each medicine’s batch and expiry for tracing a recall.{% endif %}</p>
+      <p class="app-dialog__sub">{% if collect_demo_mode %}Record {{ collect_count }} demo parcel{{ collect_count|pluralize }} as collected and deduct their demo stock. Existing parcels and stock are unchanged.{% else %}{{ collect_count }} parcel{{ collect_count|pluralize }} with a waybill {{ collect_count|pluralize:"is,are" }} recorded as dispatched, each with its waybill as the waybill. Note each medicine’s batch and expiry for tracing a recall.{% endif %}</p>
       <form class="ops-form" method="post" action="{% url 'portal:ops-shipping-collect' %}">{% csrf_token %}<input type="hidden" name="workflow_context" value="{{ collect_context }}"><input type="hidden" name="list_query" value="{{ list_query }}"><input type="hidden" name="week" value="{{ week_start|date:'Y-m-d' }}">
         {% if collect_demo_mode %}<input type="hidden" name="demo_only" value="1">{% endif %}
         {% for product in collect_products %}<div class="ops-form-field"><label for="batch-{{ product.pk }}">Batch and expiry: {{ product }} (optional)</label><input id="batch-{{ product.pk }}" name="batch_{{ product.pk }}" maxlength="120" placeholder="SG-2604, expiry 04/2027"></div>{% endfor %}

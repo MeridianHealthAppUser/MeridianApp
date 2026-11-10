@@ -92,3 +92,29 @@
 .treatment-cancel-reasons legend { color: var(--patient-text, var(--c-1c3947)); font-size: .86rem; font-weight: 700; margin-bottom: .2rem; padding: 0; }
 .treatment-cancel-reasons .patient-small { margin: 0 0 .2rem; }
 .treatment-cancel-reasons .errorlist { color: var(--console-red, var(--c-a33131)); font-size: .78rem; list-style: none; margin: 0; padding: 0; }
+
+/* Keep the prescription readable; optional views and account changes follow it. */
+.patient-treatment :is(#treatment-plan, #treatment-tasks, #previous-prescriptions, #once-off-items) { scroll-margin-top: 6rem; }
+.patient-treatment__cards .patient-plan { margin: 0; }
+.patient-plan__timeline { align-items: center; border-top: 1px solid var(--console-soft-line); display: flex; flex-wrap: wrap; gap: .9rem 1.5rem; justify-content: space-between; margin-top: 1.4rem; padding-block: 1.1rem; }
+.patient-plan__timeline > div { flex: 1 1 15rem; min-width: 0; }
+.patient-plan__timeline h3 { color: var(--console-ink); font-size: .95rem; font-weight: 600; margin: 0; }
+.patient-plan__timeline p, .patient-plan__support p { color: var(--patient-text); font-size: .84rem; line-height: 1.55; margin: .35rem 0 0; }
+.patient-plan__timeline-link { align-items: center; background: var(--console-canvas); border: 1px solid var(--console-line); border-radius: 999px; color: var(--console-teal-dark); display: inline-flex; flex: 0 1 auto; font-size: .82rem; font-weight: 600; gap: .7rem; line-height: 1.5; min-height: 2.75rem; padding: .55rem 1rem; text-decoration: none; }
+.patient-plan__timeline-link:hover { background: var(--console-teal-soft); }
+.patient-plan__timeline-link:active { opacity: .75; }
+.patient-plan__timeline-link:focus-visible, .patient-plan__settings > summary:focus-visible { outline: 2px solid var(--console-teal-dark); outline-offset: 4px; }
+.patient-plan__support { align-items: baseline; display: flex; flex-wrap: wrap; gap: .45rem 1rem; padding-block: 1rem; }
+.patient-plan__support p { margin: 0; }
+.patient-plan__settings { border-top: 1px solid var(--console-soft-line); padding-top: 0; }
+.treatment-workspace .patient-plan__settings > summary { color: var(--console-ink); font-size: .95rem; min-height: 2.75rem; padding: 1rem 0; }
+.patient-plan__settings > summary span { color: var(--console-muted); font-size: .8rem; font-weight: 400; margin-left: .7rem; }
+.patient-plan__settings-body { padding-block: 0 .5rem; }
+.patient-plan__settings-body > p { margin-top: 0; }
+@media (max-width: 38rem) {
+  .patient-plan__timeline { align-items: flex-start; flex-direction: column; }
+  .patient-plan__timeline > div { flex-basis: auto; }
+  .patient-plan__timeline-link { max-width: 100%; white-space: normal; }
+  .patient-plan__settings > summary span { display: block; margin: .25rem 0 0 1rem; }
+}
+@media (prefers-contrast: more) { .patient-plan__timeline-link, .patient-plan__settings { border-color: currentColor; } }

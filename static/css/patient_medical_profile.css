@@ -1,0 +1,30 @@
+/* Readable medical content, using the patient portal's shared surfaces and controls. */
+.patient-medical__layout { display: grid; gap: 1.25rem; min-width: 0; }
+.patient-medical__layout .console-card { margin: 0; min-width: 0; }
+.patient-medical__section-head { align-items: center; display: flex; flex-wrap: wrap; gap: .75rem; justify-content: space-between; margin-bottom: 1.4rem; }
+.patient-medical__layout h2 { color: var(--console-ink); font-size: 1.15rem; font-weight: 600; letter-spacing: -.015em; line-height: 1.35; margin: 0; }
+.patient-medical__section-head .patient-eyebrow { margin: 0 0 .35rem; }
+.patient-medical__metrics { display: grid; gap: 1rem; grid-template-columns: repeat(3, minmax(0, 1fr)); margin: 0; }
+.patient-medical__metrics > div { background: var(--console-canvas); border: 1px solid var(--console-soft-line); border-radius: 1rem; min-width: 0; padding: 1.15rem; }
+.patient-medical__metrics dt { color: var(--console-muted); font-size: .8rem; line-height: 1.5; }
+.patient-medical__metrics dd { color: var(--console-ink); font-size: clamp(1.05rem, 1.6vw, 1.35rem); font-variant-numeric: tabular-nums; font-weight: 600; letter-spacing: -.02em; line-height: 1.5; margin: .4rem 0 0; overflow-wrap: anywhere; }
+.patient-medical__sections { align-items: stretch; display: grid; gap: 1.25rem; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.patient-medical__facts { margin: 1.1rem 0 0; }
+.patient-medical__facts > div { border-top: 1px solid var(--console-soft-line); padding-block: 1rem; }
+.patient-medical__facts > div:last-child { padding-bottom: 0; }
+.patient-medical__facts dt { color: var(--console-muted); font-size: .8rem; line-height: 1.5; }
+.patient-medical__facts dd { color: var(--console-ink); font-size: .95rem; line-height: 1.65; margin: .4rem 0 0; overflow-wrap: anywhere; }
+.patient-medical__layout dd.patient-kv__quiet { color: var(--console-muted); font-size: .85rem; font-weight: 400; letter-spacing: normal; }
+.patient-medical__caption { color: var(--console-muted); font-size: .78rem; line-height: 1.6; margin: .85rem 0 0; }
+.patient-medical__layout > .patient-medical__caption { margin: -.4rem .1rem 0; }
+.patient-medical__update > .console-card__body { align-items: center; display: flex; flex-wrap: wrap; gap: 1.25rem 2rem; justify-content: space-between; }
+.patient-medical__update .console-card__body > div { flex: 1 1 20rem; min-width: 0; }
+.patient-medical__update p { color: var(--patient-text); font-size: .9rem; line-height: 1.6; margin: .5rem 0 0; }
+.patient-medical__update .console-button { border-radius: 999px; flex: 0 1 auto; text-align: center; white-space: normal; }
+@media (max-width: 48rem) { .patient-medical__sections { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 38rem) {
+  .patient-medical__metrics { grid-template-columns: minmax(0, 1fr); gap: .65rem; }
+  .patient-medical__metrics > div { padding: .9rem 1rem; }
+  .patient-medical__update .console-button { width: 100%; }
+}
+@media (prefers-contrast: more) { .patient-medical__metrics > div, .patient-medical__facts > div { border-color: currentColor; } }

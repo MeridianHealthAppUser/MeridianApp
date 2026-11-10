@@ -1,0 +1,6 @@
+{% if timeline %}
+<div class="patient-plan__timeline">
+  <div><h3>Your treatment over time</h3><p>See your prescribed doses, shipments and payments together.</p></div>
+  <a class="patient-plan__timeline-link" href="{% url 'portal:patient-treatment' %}?timeline=1" data-modal-open="treatment-timeline" aria-haspopup="dialog">See your week-by-week timeline <span aria-hidden="true">›</span></a>
+</div>
+{% endif %}

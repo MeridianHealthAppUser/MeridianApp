@@ -226,7 +226,7 @@ class ShipmentActionForm(forms.Form):
                                        ('hold', 'Hold'), ('cancel', 'Cancel before dispatch'),
                                        ('dispatch', 'Record actual dispatch'), ('deliver', 'Record actual delivery')))
     reason = forms.CharField(required=False, max_length=500, widget=forms.Textarea(attrs={'rows': 3}))
-    tracking_number = forms.CharField(required=False, max_length=120)
+    tracking_number = forms.CharField(label='Waybill', required=False, max_length=120, widget=forms.HiddenInput)
 
     def __init__(self, *args, shipment, items=(), **kwargs):
         super().__init__(*args, **kwargs)

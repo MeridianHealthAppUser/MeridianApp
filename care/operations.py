@@ -500,7 +500,7 @@ def dispatch_shipment(*, shipment, actor, tracking_number, confirm=False, batch_
     if confirm is not True or shipment.status != Shipment.Status.READY or not shipment.locked_at:
         raise ValidationError('Prepare and lock the shipment, then explicitly confirm dispatch.')
     if not tracking_number.strip() or len(tracking_number) > 120:
-        raise ValidationError('Enter the actual tracking reference, up to 120 characters.')
+        raise ValidationError('Add a waybill before recording dispatch (up to 120 characters).')
     batch_notes = batch_notes or {}
     if any(not isinstance(note, str) or len(note.strip()) > 120 for note in batch_notes.values()):
         raise ValidationError('Keep each batch note to 120 characters or fewer.')

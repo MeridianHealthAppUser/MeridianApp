@@ -327,6 +327,3 @@
   .ops-shipping-table td[data-label="Deliver to"] { min-width:13rem; }
   .ops-shipping-table td[data-label="Due date"] { min-width:6rem; }
 }
-
-.shipping-waybill-form { display: flex; align-items: center; gap: .4rem; }
-.shipping-waybill-form input { width: 10rem; min-width: 7rem; padding: .6rem; border: 1px solid var(--console-border, #d4e3e6); border-radius: .65rem; background: white; color: inherit; font: inherit; }

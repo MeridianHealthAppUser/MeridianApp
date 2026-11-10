@@ -39,10 +39,11 @@
 .patient-home__note { color: var(--console-muted); font-size: .74rem; line-height: 1.55; margin: .35rem 0 0; }
 
 .patient-weight-log { border-top: 1px solid var(--console-soft-line); margin-top: 1rem; padding-top: .85rem; }
-.patient-weight-log > summary { color: var(--console-ink); cursor: pointer; font-size: .88rem; font-weight: 500; list-style: none; }
+.patient-weight-log > summary { align-items: center; cursor: pointer; display: inline-flex; gap: .85rem; justify-content: space-between; list-style: none; max-width: 100%; min-height: 2.75rem; white-space: normal; width: fit-content; }
 .patient-weight-log > summary::-webkit-details-marker { display: none; }
-.patient-weight-log > summary::after { color: var(--console-teal-dark); content: '+'; float: right; }
-.patient-weight-log[open] > summary::after { content: '–'; }
+.patient-weight-log__indicator { flex: 0 0 auto; font-size: 1.1rem; line-height: 1; }
+.patient-weight-log__indicator::before { content: '+'; }
+.patient-weight-log[open] .patient-weight-log__indicator::before { content: '–'; }
 .patient-weight-log > summary:focus-visible { outline: 3px solid var(--console-teal); outline-offset: 3px; }
 .patient-weight-log form { margin-top: .75rem; }
 .patient-weight-log__footer { align-items: center; display: flex; flex-wrap: wrap; gap: .75rem; }

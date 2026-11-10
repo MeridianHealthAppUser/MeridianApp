@@ -2,7 +2,7 @@
 {% load static workspace_ui %}
 
 {% block title %}Home | Meridian{% endblock %}
-{% block patient_extra_css %}<link rel="stylesheet" href="{% static 'css/patient_care.css' %}?v=20261029"><link rel="stylesheet" href="{% static 'css/patient_dashboard.css' %}?v=20261029">{% endblock %}
+{% block patient_extra_css %}<link rel="stylesheet" href="{% static 'css/patient_care.css' %}?v=20261029"><link rel="stylesheet" href="{% static 'css/patient_dashboard.css' %}?v=20261110c">{% endblock %}
 {% block patient_content_class %}patient-home{% endblock %}
 
 {% block patient_content %}
@@ -54,7 +54,7 @@
         {% endif %}
 
         <details class="patient-weight-log" id="weight-log"{% if failed_form == 'weight_form' or not latest_weight %} open{% endif %}>
-          <summary>Log today’s weight</summary>
+          <summary class="console-button console-button--secondary patient-weight-log__toggle"><span>Log today’s weight</span><span class="patient-weight-log__indicator" aria-hidden="true"></span></summary>
           <form class="console-form" method="post" action="{% url 'portal:patient-weight-add' %}">
             {% csrf_token %}
             <input type="hidden" name="patient_context" value="{{ patient_context }}">

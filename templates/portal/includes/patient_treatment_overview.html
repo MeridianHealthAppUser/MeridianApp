@@ -6,7 +6,6 @@
 <div class="patient-plan__note">
   <h3 class="patient-eyebrow">How your dose works</h3>
   <p>Your dose is <strong>{{ treatment.amount }} {{ treatment.how_often }}</strong>, as your doctor prescribed. You receive <strong>{{ treatment.supply }}</strong>.{% if treatment.next_step %} From week {{ treatment.next_step.week }} ({{ treatment.next_step.week_starts_on|date:"j M" }}) your dose changes to {{ treatment.next_step.dose }}, with the pens for it.{% endif %}</p>
-  {% if timeline %}<div class="patient-card-actions"><a class="console-button console-button--secondary" href="{% url 'portal:patient-treatment' %}?timeline=1" data-modal-open="treatment-timeline" aria-haspopup="dialog">See your week-by-week timeline</a></div>{% endif %}
 </div>
 <dl class="patient-kv">
   {% if treatment.on_its_way %}<div><dt>On its way</dt><dd>Sent {{ treatment.on_its_way.date|date:"j M" }}{% if treatment.on_its_way.tracking %} · {{ treatment.on_its_way.tracking }}{% endif %}</dd></div>{% endif %}

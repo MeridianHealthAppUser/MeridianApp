@@ -31,9 +31,9 @@
       <div class="shipping-help-popover" id="shipping-help-confirmed" role="tooltip" popover="auto">
         <strong>Confirmed &amp; Locked</strong>
         <p>These parcels have passed the checks and their stock is reserved. Courier booking is still needed.</p>
-        <p>Once a waybill or tracking reference is recorded, the parcel moves to Tracking. The Waybill column shows its tracking reference, and Shipping status shows its latest courier update.</p>
+        <p>Once a waybill is recorded, the parcel moves to Tracking. The Waybill column shows its waybill, and Shipping status shows its latest courier update.</p>
         {% if to_book_demo %}<p>Simulate demo courier assigns test waybills to the {{ to_book_demo }} demo parcel{{ to_book_demo|pluralize }} only. It does not contact a courier.</p>{% endif %}
-        {% if courier_enabled %}{% if courier_problem %}<p>{{ courier_problem }}</p>{% endif %}{% else %}<p>Courier booking is not connected. If booked externally, open the parcel to record its tracking reference when dispatching it.</p>{% endif %}
+        {% if courier_enabled %}{% if courier_problem %}<p>{{ courier_problem }}</p>{% endif %}{% else %}<p>Courier booking is not connected. If booked externally, choose Add waybill on the parcel to enter the waybill from your courier booking.</p>{% endif %}
       </div>
     </div>
   </section>

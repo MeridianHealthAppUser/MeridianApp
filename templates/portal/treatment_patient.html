@@ -2,46 +2,16 @@
 {% load static workspace_ui %}
 
 {% block title %}My Treatment | Meridian{% endblock %}
-{% block patient_extra_css %}<link rel="stylesheet" href="{% static 'css/treatment.css' %}?v=20261104a"><link rel="stylesheet" href="{% static 'css/patient_billing.css' %}?v=20261104a"><link rel="stylesheet" href="{% static 'css/patient_medications.css' %}?v=20261108a"><link rel="stylesheet" href="{% static 'css/dialogs.css' %}?v=20261108a"><script src="{% static 'js/dialogs.js' %}?v=20261022a" defer></script><script src="{% static 'js/basket_quantity.js' %}?v=20261108a" defer></script><script src="{% static 'js/appointment_video.js' %}?v=20261108a" defer></script>{% endblock %}
+{% block patient_extra_css %}<link rel="stylesheet" href="{% static 'css/treatment.css' %}?v=20261110a"><link rel="stylesheet" href="{% static 'css/patient_billing.css' %}?v=20261104a"><link rel="stylesheet" href="{% static 'css/patient_medications.css' %}?v=20261108a"><link rel="stylesheet" href="{% static 'css/dialogs.css' %}?v=20261108a"><script src="{% static 'js/dialogs.js' %}?v=20261022a" defer></script><script src="{% static 'js/basket_quantity.js' %}?v=20261108a" defer></script><script src="{% static 'js/appointment_video.js' %}?v=20261108a" defer></script>{% endblock %}
 {% block patient_content_class %}patient-treatment{% endblock %}
 {% block patient_breadcrumbs %}{% breadcrumbs 'My Treatment' %}{% endblock %}
-{% block patient_heading %}<header class="patient-page-heading"><div><h1>My Treatment</h1></div></header>{% endblock %}
+{% block patient_heading %}<header class="patient-page-heading"><div><h1>My Treatment</h1><p>Your prescription, deliveries and next steps.</p></div></header>{% endblock %}
 
 {% block patient_content %}
 <div class="treatment-workspace patient-treatment__body">
   {% include 'portal/includes/patient_next_consult.html' with consult=next_consult %}
 
-  <section class="patient-treatment__tasks" aria-labelledby="treatment-tasks-heading">
-    <div class="patient-section-head">
-      <div class="patient-section-head__copy">
-        <h2 class="patient-eyebrow" id="treatment-tasks-heading">My Tasks</h2>
-        <p>Raised from your record. Each one updates as it’s done, then clears itself.</p>
-      </div>
-      {% if open_task_count %}<span class="patient-pill patient-pill--amber">{{ open_task_count }} open</span>{% else %}<span class="patient-pill patient-pill--teal">All clear</span>{% endif %}
-    </div>
-    <div class="patient-stack">
-      {% for task in tasks %}
-        <article class="patient-bar patient-bar--task{% if task.urgent %} patient-bar--urgent{% endif %}">
-          <span class="patient-pill {% if task.pill == 'Reviewed' %}patient-pill--teal{% elif task.urgent %}patient-pill--amber{% else %}patient-pill--blue{% endif %}">{% if task.pill %}{{ task.pill }}{% elif task.urgent %}Action needed{% else %}To do{% endif %}</span>
-          <div class="patient-bar__copy">
-            <h3 class="patient-bar__title">{{ task.title }}</h3>
-            <p class="patient-bar__body">{{ task.body }}</p>
-          </div>
-          {% if task.actions %}<div class="patient-bar__actions">
-            {% for action in task.actions %}{% if action.post %}<form method="post" action="{{ action.url }}">{% csrf_token %}{% for name, value in action.post.items %}<input type="hidden" name="{{ name }}" value="{{ value }}">{% endfor %}<button class="console-button {% if action.primary %}console-button--primary{% else %}console-button--secondary{% endif %}" type="submit">{{ action.label }}</button></form>{% else %}<a class="console-button {% if action.primary %}console-button--primary{% else %}console-button--secondary{% endif %}" href="{{ action.url }}">{{ action.label }}</a>{% endif %}{% endfor %}
-          </div>{% endif %}
-        </article>
-      {% empty %}
-        <div class="patient-bar patient-bar--done">
-          <span class="patient-pill patient-pill--teal">All done</span>
-          <div class="patient-bar__copy">
-            <p class="patient-bar__title">Nothing needs doing right now</p>
-            <p class="patient-bar__body">New tasks appear here when something in your record needs your attention.</p>
-          </div>
-        </div>
-      {% endfor %}
-    </div>
-  </section>
+  {% if open_task_count %}{% include 'portal/includes/patient_treatment_tasks.html' %}{% endif %}
 
   <div class="patient-treatment__cards">
     <section class="console-card patient-plan" id="treatment-plan" aria-labelledby="treatment-plan-heading">
@@ -53,7 +23,6 @@
             <p class="patient-plan__product">{% if treatment %}<strong>{{ treatment.medicine }} {{ treatment.dose }}</strong>{% elif plan_authorization %}<strong>{{ plan_authorization.product.name }} {{ plan_authorization.max_dose }}</strong> <span>· {{ plan_authorization.quantity_per_cycle }} per cycle</span>{% else %}<strong>{{ current_plan.plan_name }}</strong>{% endif %}</p>
             {% if plan_dose.price is not None %}<p class="patient-plan__amount">R{{ plan_dose.price|floatformat:"-2" }}<span>{{ plan_dose.billing_text }}</span></p>{% endif %}
           </div>
-          <p class="patient-small patient-plan__billing">{% if plan_billing %}{{ plan_billing.text }}. {% endif %}<a class="patient-inline-link" href="{% url 'portal:patient-billing' %}">Billing and payments</a></p>
           {% if treatment %}{% include 'portal/includes/patient_treatment_overview.html' %}{% endif %}
           <dl class="patient-kv">
             <div><dt>Plan</dt><dd>{{ current_plan.plan_name }}</dd></div>
@@ -69,8 +38,13 @@
           {% if plan_hold_reason %}<p class="patient-plan__hold">Deliveries are on hold. {{ plan_hold_reason }}</p>{% endif %}
           {% if plan_authorization.instructions %}<div class="patient-plan__note"><h3 class="patient-eyebrow">Your doctor’s instructions</h3><p class="treatment-instructions">{{ plan_authorization.instructions|linebreaksbr }}</p></div>{% endif %}
 
-          <div class="patient-plan__manage">
-            <h3 class="patient-eyebrow">Pause or cancel</h3>
+          {% include 'portal/includes/patient_timeline_link.html' %}
+          <p class="patient-small patient-plan__billing">{% if plan_billing %}{{ plan_billing.text }}. {% endif %}<a class="patient-inline-link" href="{% url 'portal:patient-billing' %}">Billing and payments</a></p>
+
+          {% if action_plan %}<div class="patient-plan__support"><p>Questions or concerns about your treatment?</p><a class="patient-inline-link" href="?help=1#treatment-help" data-modal-open="treatment-help" aria-haspopup="dialog">Something is wrong, help me</a></div>{% endif %}
+          <details class="patient-plan__manage patient-plan__settings"{% if action_form.errors or action_plan.status == 'paused' %} open{% endif %}>
+            <summary>Manage subscription <span>Pause, resume or cancel</span></summary>
+            <div class="patient-plan__settings-body">
             <p class="patient-small">If something isn’t working, such as side effects, cost or results, tell us before you cancel. Most of it can be sorted out at a follow-up consult. Pausing or cancelling holds parcels that have not been dispatched.</p>
             {% if action_plan %}
               <form method="post" action="{% url 'portal:patient-subscription-status' action_plan.pk %}" class="console-form">
@@ -81,13 +55,13 @@
                 {{ action_form.confirm.errors }}
                 <div class="patient-card-actions patient-card-actions--split">
                   {# Something is wrong and Cancel each open a dialog below; without scripts their links open it on this page. #}
-                  <a class="console-button console-button--secondary patient-card-actions__wide" href="?help=1#treatment-help" data-modal-open="treatment-help" aria-haspopup="dialog">Something is wrong, help me</a>
                   {% if action_plan.status == 'paused' %}<button type="submit" name="action" value="resume" class="console-button console-button--primary">Resume my subscription</button>{% elif action_plan.status != 'cancelled' %}<button type="submit" name="action" value="pause" class="console-button console-button--secondary">Pause my subscription</button>{% endif %}
                   {% if action_plan.status != 'cancelled' %}<a class="console-button console-button--secondary patient-button--rose" href="?cancel=1#cancel-subscription" data-modal-open="cancel-subscription" aria-haspopup="dialog">Cancel my subscription</a>{% endif %}
                 </div>
               </form>
             {% endif %}
-          </div>
+            </div>
+          </details>
         {% elif current_authorization %}
           {{ action_form.non_field_errors }}
           <h2 class="patient-eyebrow" id="treatment-plan-heading">My treatment</h2>
@@ -103,6 +77,7 @@
             <div><dt>Prescribing doctor</dt><dd>{{ current_authorization.prescribed_by.full_name }}</dd></div>
           </dl>{% endif %}
           {% if current_authorization.instructions %}<div class="patient-plan__note"><h3 class="patient-eyebrow">Your doctor’s instructions</h3><p class="treatment-instructions">{{ current_authorization.instructions|linebreaksbr }}</p></div>{% endif %}
+          {% include 'portal/includes/patient_timeline_link.html' %}
           {% if can_enroll or enrollment_form.errors %}
             <div class="patient-plan__manage" id="start-subscription">
               <h3 class="patient-eyebrow">Start your subscription</h3>
@@ -143,6 +118,7 @@
       </div>
     </section>
   </div>
+  {% if not open_task_count %}{% include 'portal/includes/patient_treatment_tasks.html' %}{% endif %}
   {% if previous_prescriptions %}{% include 'portal/includes/patient_previous_prescriptions.html' %}{% endif %}
   {% if shop_products or basket_count or has_orders %}{% include 'portal/includes/patient_once_off_items.html' %}{% endif %}
 </div>

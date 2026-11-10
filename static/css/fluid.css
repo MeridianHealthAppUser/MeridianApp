@@ -123,7 +123,7 @@
   list-style: none;
   max-width: 100%;
   overflow-x: auto;
-  padding: .28rem;
+  padding: .24rem;
   position: relative;
   scrollbar-width: none;
   width: fit-content;
@@ -145,8 +145,8 @@
   height: auto;
   justify-content: center;
   margin: 0;
-  min-height: 2.5rem;
-  padding: .45rem 1.05rem;
+  min-height: 2.35rem;
+  padding: .35rem 1.05rem;
   position: relative;
   text-decoration: none;
   transition: color .2s ease, background-color .2s ease, transform var(--fluid-bouncy) var(--fluid-spring-bouncy);
@@ -168,6 +168,10 @@
 .workspace-page .meridian-console .fluid-tabs[data-fluid-more~="start"]::before, .workspace-page .meridian-console .fluid-tabs[data-fluid-more~="end"]::after { opacity: 1; }
 .meridian-console .fluid-tabs.is-dragging { cursor: grabbing; }
 .meridian-console .fluid-tabs.is-dragging a { pointer-events: none; }
+/* Keep the slimmer visual rhythm without reducing touch hit areas. */
+@media (any-pointer: coarse) {
+  .workspace-page .meridian-console :is(.patient-workspace-tabs, .patient-order-subtabs, .records-tabs, .ops-steps, .staff-view-toggle, .record-chips) a { min-height: 2.75rem; }
+}
 /* A page's own tabs float under the header. */
 .workspace-page .meridian-console :is(.patient-workspace-tabs, .inventory-subtabs, .purchasing-subtabs) { margin: 0 0 1.25rem; position: sticky; top: .75rem; z-index: 30; }
 @media (min-width: 52.001rem) { .workspace-page .meridian-console :is(.patient-workspace-tabs, .inventory-subtabs, .purchasing-subtabs) { top: 4.75rem; } }

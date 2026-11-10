@@ -200,7 +200,11 @@ class DoseSupplyAndPriceTests(DoseTestData, TestCase):
                      # Before week 1 it is next; from then on, the patient is there.
                      'You are here' if week_one <= self.today else 'Up next'):
             self.assertContains(page, text, html=False)
-        # The timeline opens in a dialog from How your dose works, at where the patient is.
+        # Read the prescription and next shipment before opening the optional timeline.
+        content = page.content.decode()
+        self.assertLess(content.index('Next shipment'), content.index('class="patient-plan__timeline-link"'))
+        self.assertLess(content.index('Prescribing doctor'), content.index('class="patient-plan__timeline-link"'))
+        # The timeline opens in a dialog after the prescription summary, at where the patient is.
         self.assertContains(page, f'href="{reverse("portal:patient-treatment")}?timeline=1" data-modal-open="treatment-timeline"', html=False)
         self.assertContains(page, '<dialog class="app-dialog app-dialog--wide patient-timeline" id="treatment-timeline" aria-labelledby="treatment-timeline-heading">', html=False)
         self.assertContains(page, 'aria-current="step" data-dialog-scroll' if week_one <= self.today else ' data-dialog-scroll>', html=False)

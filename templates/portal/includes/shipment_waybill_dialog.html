@@ -1,0 +1,13 @@
+<dialog class="app-dialog" id="shipment-waybill-dialog" aria-labelledby="shipment-waybill-title" aria-describedby="shipment-waybill-patient"{% if waybill_open %} open{% endif %}>
+  <div class="app-dialog__body">
+    <h2 id="shipment-waybill-title">Add waybill</h2>
+    <p class="app-dialog__sub" id="shipment-waybill-patient">{{ waybill_shipment.patient }}</p>
+    <p class="app-dialog__sub">Enter the waybill from your courier booking. Saving moves this parcel to Tracking.</p>
+    {% if waybill_errors %}<ul class="errorlist" role="alert">{% for error in waybill_errors %}<li>{{ error }}</li>{% endfor %}</ul>{% endif %}
+    <form method="post" class="ops-form"{% if waybill_shipment %} action="{% url 'portal:ops-shipment-waybill' waybill_shipment.pk %}"{% endif %}>
+      {% csrf_token %}<input type="hidden" name="workflow_context" value="{{ waybill_token }}"><input type="hidden" name="next" value="{{ waybill_next }}">
+      <div class="ops-form-field"><label for="shipment-waybill-value">Waybill</label><input id="shipment-waybill-value" type="text" name="waybill" value="{{ waybill_value }}" maxlength="60" required autocomplete="off" placeholder="Enter waybill"></div>
+      <div class="app-dialog__actions"><a class="console-button console-button--secondary" href="{{ waybill_next|default:request.path }}" data-dialog-close>Cancel</a><button class="console-button console-button--primary" type="submit">Save waybill</button></div>
+    </form>
+  </div>
+</dialog>

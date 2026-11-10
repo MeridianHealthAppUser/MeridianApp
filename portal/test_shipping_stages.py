@@ -340,7 +340,7 @@ class ShippingStageTests(OperationsPortalFixture):
                 self.assertIn(reason, names[0]['text'])
 
 
-class InlineWaybillTests(OperationsPortalFixture):
+class WaybillPopupTests(OperationsPortalFixture):
     def test_waybill_moves_locked_parcel_to_tracking_without_dispatch(self):
         parcel = self.locked(self.shipment(quantity=1))
         week = parcel.scheduled_for - timedelta(days=(parcel.scheduled_for.weekday() - 1) % 7)
@@ -367,3 +367,37 @@ class InlineWaybillTests(OperationsPortalFixture):
         tracking = self.page('ops-shipping', week=week, shipping_step='tracking')
         self.assertNotIn(parcel.pk, [row.pk for row in tracking.context['shipments']])
         self.assertIn(parcel.pk, [row.pk for row in self.page('ops-history').context['shipments']])
+
+
+    def test_waybill_popup_and_fallback_preserve_errors_without_inline_entry_or_comment_leak(self):
+        parcel = self.locked(self.shipment(quantity=1))
+        week = parcel.scheduled_for - timedelta(days=(parcel.scheduled_for.weekday() - 1) % 7)
+        for mode in ('customers', 'medication'):
+            page = self.page('ops-shipping', week=week, shipping_step='confirmed', view=mode)
+            self.assertContains(page, 'id="shipment-waybill-dialog"', count=1)
+            self.assertContains(page, 'data-shipment-waybill')
+            self.assertNotContains(page, 'shipping-waybill-form')
+            self.assertNotContains(page, '{#')
+            self.assertNotContains(page, 'static/js/shipping_workflow.js names the parcel')
+        detail = self.page('ops-shipment-detail', [parcel.pk])
+        self.assertContains(detail, '<dt>Waybill</dt>', html=True)
+        self.assertNotContains(detail, 'Tracking number')
+        self.assertTrue(detail.context['form'].fields['tracking_number'].widget.is_hidden)
+        url = reverse('portal:ops-shipment-waybill', args=[parcel.pk])
+        fallback = self.client.get(url, {'next': reverse('portal:ops-shipment-detail', args=[parcel.pk])})
+        self.assertEqual(fallback.status_code, 200)
+        self.assertTrue(fallback.context['waybill_open'])
+        invalid = self.client.post(url, {'workflow_context': fallback.context['waybill_token'], 'waybill': 'X' * 61})
+        self.assertEqual(invalid.status_code, 400)
+        self.assertEqual(invalid.context['waybill_value'], 'X' * 61)
+        self.assertContains(invalid, 'role="alert"', status_code=400)
+        parcel.refresh_from_db()
+        self.assertEqual(parcel.waybill, '')
+
+        destination = reverse('portal:ops-shipment-detail', args=[parcel.pk])
+        saved = self.client.post(url, {'workflow_context': invalid.context['waybill_token'],
+                                       'waybill': 'POPUP-456', 'next': destination})
+        self.assertRedirects(saved, destination, fetch_redirect_response=False)
+        self.assertContains(self.client.get(destination), 'POPUP-456')
+        search = self.page('ops-shipping', week=week, shipping_step='tracking', q='POPUP-456')
+        self.assertIn(parcel.pk, [row.pk for row in search.context['shipments']])

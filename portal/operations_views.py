@@ -76,7 +76,7 @@ def _search(queryset, query, *fields):
 
 
 def _shipment_search(queryset, query):
-    return _search(queryset, query, 'patient__first_name', 'patient__last_name', 'tracking_number')
+    return _search(queryset, query, 'patient__first_name', 'patient__last_name', 'tracking_number', 'waybill')
 
 
 def _errors(request, form, error):
@@ -480,7 +480,7 @@ class ShippingListView(OperationsView):
                        note_read_only=note_record is not None and not bool(getattr(note_record, 'note_context', None)))
         tools = _list_tools(request, form, url_name='portal:ops-shipping', label='Filter shipments',
                             sections=ticked_sections(form, request.GET, SHIPPING_FILTER_FIELDS,
-                                                     icons={'product': 'tag', 'doctor': 'person'}), placeholder='Patient or tracking',
+                                                     icons={'product': 'tag', 'doctor': 'person'}), placeholder='Patient or waybill',
                             count=context['page_obj'].paginator.count, noun='shipment')
         # The search and the Filters keep the week; clearing either stays on it.
         kept = {'week': week.isoformat(), 'view': context['shipping_view']}
@@ -590,7 +590,21 @@ class ShipmentNoteView(OperationsView):
 
 class ShipmentWaybillView(OperationsView):
     shipping = True
-    http_method_names = ('post',)
+    nav_section, page_title = 'shipping', 'Add waybill'
+    http_method_names = ('get', 'post')
+
+    def display(self, request, shipment, *, errors=(), status=200):
+        return render(request, 'portal/operations_waybill.html', self.context(
+            waybill_shipment=shipment, waybill_open=True, waybill_errors=errors,
+            waybill_value=request.POST.get('waybill', ''),
+            waybill_token=make_workflow_context(request, self.company, 'shipment-waybill', shipment),
+            waybill_next=_safe_next(request, reverse('portal:ops-shipping'))), status=status)
+
+    def get(self, request, pk):
+        require_operations_actor(self.company, request.user, shipping=True)
+        shipment = get_object_or_404(self.shipments(), pk=pk, status=Shipment.Status.READY,
+                                     locked_at__isnull=False, waybill='', tracking_number='')
+        return self.display(request, shipment)
 
     @transaction.atomic
     def post(self, request, pk):
@@ -615,8 +629,8 @@ class ShipmentWaybillView(OperationsView):
                          metadata={'waybill': reference})
             messages.success(request, 'Waybill saved. Parcel moved to Tracking.')
         except ValidationError as error:
-            messages.error(request, ' '.join(error.messages))
-        return redirect(_shipping_list_url(request.POST.get('list_query')))
+            return self.display(request, shipment, errors=error.messages, status=400)
+        return redirect(_safe_next(request, _shipping_list_url(request.POST.get('list_query'))))
 
 
 class DispatchStockView(OperationsView):
@@ -756,6 +770,8 @@ class ShipmentDetailView(OperationsView):
         from .export_support import export_url
 
         items = list(shipment.items.select_related('product'))
+        if self.can_edit and shipment.status == Shipment.Status.READY and shipment.locked_at and not (shipment.waybill or shipment.tracking_number):
+            shipment.waybill_context = make_workflow_context(request, self.company, 'shipment-waybill', shipment)
         # Each form keeps the token it was sent with after a mistake; the other gets a current one.
         changing = change_form is not None
         context = self.context(shipment=shipment, items=items, change_form=None,
@@ -807,7 +823,7 @@ class ShipmentDetailView(OperationsView):
                 elif action in ('hold', 'cancel'):
                     hold_or_cancel_shipment(shipment=shipment, actor=request.user, cancel=action == 'cancel', reason=form.cleaned_data['reason'], request=request)
                 elif action == 'dispatch':
-                    dispatch_shipment(shipment=shipment, actor=request.user, tracking_number=form.cleaned_data['tracking_number'],
+                    dispatch_shipment(shipment=shipment, actor=request.user, tracking_number=form.cleaned_data['tracking_number'] or shipment.waybill or shipment.tracking_number,
                                       confirm=True, batch_notes=form.batch_notes(), stock_override=form.cleaned_data['stock_override'],
                                       stock_override_reason=form.cleaned_data['stock_override_reason'], request=request)
                 elif action == 'deliver':
@@ -1107,7 +1123,7 @@ class DispatchHistoryView(OperationsView):
         tools = _list_tools(request, form, url_name='portal:ops-history', label='Filter dispatches',
                             sections=[fields_section('dispatched', 'Dispatch month',
                                 [form['start_month'], form['end_month']], count=dated)],
-                            placeholder='Patient or tracking', count=count, noun='shipment')
+                            placeholder='Patient or waybill', count=count, noun='shipment')
         filters = {name: request.GET[name] for name in ('start_month', 'end_month', 'q') if request.GET.get(name)}
         query = urlencode(filters)
         context.update(tools, export_query=query, pagination_query=query,

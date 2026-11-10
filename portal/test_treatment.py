@@ -245,3 +245,25 @@ class TreatmentPageTests(TestCase):
         row = list(response.context['page_obj'])[0]
         self.assertEqual(row.next_shipment.scheduled_for, today)
         self.assertEqual(row.next_shipment.status, Shipment.Status.HELD)
+
+
+    def test_subscription_controls_open_for_validation_errors_and_a_paused_plan(self):
+        auth = self.authorization()
+        plan = enroll_local_subscription(company=self.company, patient=self.patient, actor=self.patient_user,
+                                         authorization=auth, confirm=True)
+        self.login(self.patient_user)
+        url = reverse('portal:patient-treatment')
+        closed = '<details class="patient-plan__manage patient-plan__settings">'
+        opened = '<details class="patient-plan__manage patient-plan__settings" open>'
+        self.assertContains(self.client.get(url), closed)
+        response = self.client.post(reverse('portal:patient-subscription-status', args=[plan.pk]),
+                                    {'treatment_context': self.token('subscription-status', plan), 'action': 'pause'})
+        self.assertEqual(response.status_code, 400)
+        self.assertContains(response, opened, status_code=400)
+        plan.refresh_from_db()
+        self.assertEqual(plan.status, 'active')
+        plan.status = 'paused'
+        plan.save(update_fields=['status'])
+        page = self.client.get(url)
+        self.assertContains(page, opened)
+        self.assertContains(page, 'Resume my subscription')

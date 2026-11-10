@@ -461,6 +461,12 @@ class PatientCareTests(TestCase):
         page = self.client.get(self.url('patient-medical-profile'))
         self.assertContains(page, '<div><dt>Allergies</dt><dd>Bees</dd></div>', html=True)
         self.assertContains(page, 'Tell my doctor something has changed')
+        # Grouping the record must preserve every medical field exactly once.
+        displayed_rows = page.context['medical_measurements'] + [
+            row for section in page.context['medical_sections'] for row in section['rows']]
+        self.assertEqual(displayed_rows, page.context['medical_rows'])
+        self.assertContains(page, 'id="medical-information-heading"')
+
         for removed in ('Save now, come back later', 'Your health and daily life', 'Save my profile', 'name="clinical_context"'):
             self.assertNotContains(page, removed)
         # Nothing the patient posts changes it.

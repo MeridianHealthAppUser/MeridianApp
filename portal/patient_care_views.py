@@ -128,6 +128,15 @@ class PatientMedicalProfileView(PatientCarePage):
             ),
             medical_change_url=f"{reverse('portal:patient-messages')}?{medical_change_query}#patient-conversation",
         )
+        rows = context['medical_rows']
+        context['medical_measurements'] = [(label, value) for label, value in rows if label in ('Height', 'Weight', 'BMI')]
+        context['medical_sections'] = [
+            {'id': 'medication-allergies', 'title': 'Medication and allergies',
+             'rows': [(label, value) for label, value in rows
+                      if label in ('Current medication', 'Medication and allergies', 'Allergies')]},
+            {'id': 'medical-history', 'title': 'Your medical history',
+             'rows': [(label, value) for label, value in rows if label in ('Medical history', 'Previous operations')]},
+        ]
         return render(request, 'portal/patient_care_medical_profile.html', context)
 
 

@@ -166,7 +166,7 @@ class OperationsPortalTests(OperationsPortalFixture):
         shipment = self.shipment()
         url = reverse('portal:ops-shipment-detail', args=[shipment.pk])
         token = self.token('ops-shipment-detail', [shipment.pk])
-        response = self.client.post(url, {'workflow_context': token, 'action': 'hold', 'reason': 'Check'})
+        response = self.client.post(url, {'workflow_context': token, 'action': 'not-an-action', 'reason': 'Check'})
         self.assertEqual(response.status_code, 400)
         response = self.client.post(url, {'workflow_context': token, 'action': 'hold', 'reason': 'Check', 'confirm': 'on'})
         self.assertEqual(response.status_code, 302)
@@ -215,7 +215,7 @@ class OperationsPortalTests(OperationsPortalFixture):
         self.assertEqual(shipment.status, Shipment.Status.READY)
         self.assertIsNotNone(shipment.locked_at)
         token = self.token('ops-shipment-detail', [shipment.pk])
-        self.assertEqual(self.client.post(url, {'workflow_context': token, 'action': 'dispatch', 'tracking_number': 'TRACK-1'}).status_code, 400)
+        self.assertEqual(self.client.post(url, {'workflow_context': token, 'action': 'dispatch'}).status_code, 400)
         # The parcel's batch and expiry are noted with the dispatch.
         self.assertContains(self.page('ops-shipment-detail', [shipment.pk]), f'name="batch_{item.pk}"')
         self.assertEqual(post_action('dispatch', tracking_number='TRACK-1', **{f'batch_{item.pk}': 'SG-2604, expiry 04/2027'}).status_code, 302)
@@ -241,7 +241,7 @@ class OperationsPortalTests(OperationsPortalFixture):
         self.assertFalse(Payment.objects.exists())
 
     def test_the_list_confirms_and_locks_selected_pending_parcels(self):
-        week = self.today - timedelta(days=self.today.weekday())
+        week = self.today - timedelta(days=(self.today.weekday() - 1) % 7)
         draft = self.shipment(quantity=2, scheduled_for=week)
         page = self.page('ops-shipping', week=week, shipping_step='pending')
         self.assertContains(page, f'{self.product.name} <span class="ops-dose">{self.auth.max_dose}</span>', html=False)
@@ -261,8 +261,8 @@ class OperationsPortalTests(OperationsPortalFixture):
 
         PracticeSettings.objects.update_or_create(company=self.company, defaults={'shipping_weekday': 1})  # Tuesday
         # Sunday 25 Oct 2026: the next shipping day is Tuesday 27 Oct, in next week. Tuesday itself is still its week.
-        for today, monday, label in ((date(2026, 10, 25), date(2026, 10, 26), 'Next week'),
-                                     (date(2026, 10, 27), date(2026, 10, 26), 'This week')):
+        for today, monday, label in ((date(2026, 10, 25), date(2026, 10, 27), 'Next week'),
+                                     (date(2026, 10, 27), date(2026, 10, 27), 'This week')):
             with self.subTest(today=today), patch('django.utils.timezone.localdate', return_value=today):
                 page = self.page('ops-shipping')
                 self.assertEqual(page.context['week_start'], monday)
@@ -272,7 +272,7 @@ class OperationsPortalTests(OperationsPortalFixture):
                                  (True, label))
 
     def test_shipping_list_searches_and_filters_by_several_statuses_from_the_filters_menu(self):
-        week = self.today - timedelta(days=self.today.weekday())
+        week = self.today - timedelta(days=(self.today.weekday() - 1) % 7)
         draft = self.shipment(quantity=1, scheduled_for=week)
         ready = self.ready(self.shipment(quantity=1, scheduled_for=week, tracking_number='TRACK-123'))
         page = self.page('ops-shipping', week=week)
@@ -291,7 +291,7 @@ class OperationsPortalTests(OperationsPortalFixture):
         self.assertEqual(listed(status='all'), {draft.pk, ready.pk})
 
     def test_each_pending_line_has_its_own_bound_confirm_and_lock_control(self):
-        week = self.today - timedelta(days=self.today.weekday())
+        week = self.today - timedelta(days=(self.today.weekday() - 1) % 7)
         draft = self.shipment(quantity=1, scheduled_for=week)
         failing = self.shipment(quantity=1, scheduled_for=week)
         failing.items.update(dose='Not the authorised dose')
@@ -347,7 +347,7 @@ class OperationsPortalTests(OperationsPortalFixture):
         self.assertNotContains(self.page('ops-shipment-detail', [shipment.pk]), 'Change this parcel')
 
     def test_the_weeks_pens_to_order_are_listed_and_exported_privately_and_formula_safe(self):
-        week = self.today - timedelta(days=self.today.weekday())
+        week = self.today - timedelta(days=(self.today.weekday() - 1) % 7)
         MedicationProduct.objects.filter(pk=self.product.pk).update(name='=1+1')
         self.ready(self.shipment(quantity=3, scheduled_for=week))
         self.shipment(quantity=1, scheduled_for=week)
@@ -395,7 +395,7 @@ class OperationsPortalTests(OperationsPortalFixture):
         self.assertEqual(self.client.get(reverse('portal:ops-history-export'), {'start_month': 'bad'}).status_code, 400)
 
     def test_invalid_filters_are_validated_and_shipping_pagination_reaches_page_two(self):
-        week = self.today - timedelta(days=self.today.weekday())
+        week = self.today - timedelta(days=(self.today.weekday() - 1) % 7)
         # A week shows 100 parcels a page.
         for _ in range(101):
             self.shipment(quantity=1, scheduled_for=week)
@@ -500,7 +500,7 @@ class PatientShopPortalTests(OperationsPortalFixture):
         self.assertContains(self.page('patient-treatment'), 'My orders')
         # The practice sees it on that week's shipping list.
         self.login()
-        week = parcel.scheduled_for - timedelta(days=parcel.scheduled_for.weekday())
+        week = parcel.scheduled_for - timedelta(days=(parcel.scheduled_for.weekday() - 1) % 7)
         shipping = self.page('ops-shipping', week=week, shipping_step='all')
         self.assertIn(parcel, shipping.context['shipments'])
 
