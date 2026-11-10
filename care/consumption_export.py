@@ -64,7 +64,7 @@ def consumption_dispatch_data(company, queryset):
         yield dict(item=item, shipment=parcel, product=item.product,
                    patient=snapshot.get('patient_name') or str(parcel.patient),
                    doctor=doctor.titled_name if doctor else '', quantity=item.quantity,
-                   dispatched_at=dispatched, week=day - timedelta(days=day.weekday()),
+                   dispatched_at=dispatched, week=day - timedelta(days=(day.weekday() - 1) % 7),
                    waybill=parcel.waybill or snapshot.get('waybill', ''), tracking=parcel.tracking_number)
 
 
@@ -173,7 +173,7 @@ def consumption_workbook(company, report):
     selected = f"{report['period_start']:%d %b %Y} – {report['period_end']:%d %b %Y}"
     _sheet(workbook, 'Weekly consumption', title=f'{company.name} · Weekly consumption',
            subtitle=f'{selected} · Units dispatched',
-           notes=('Monday–Sunday weeks, using actual dispatch dates in South African time.',
+           notes=('Tuesday–Monday weeks, using actual dispatch dates in South African time.',
                   'Receipts, reservations, cancelled parcels and starting AWC values are excluded.',
                   'Dispatch detail contains the parcel lines behind the selected weeks. Current weeks are partial.'),
            headings=('Product', 'Strength', 'Category', 'Period total',
@@ -209,7 +209,7 @@ def consumption_detail_workbook(company, product, week, *, as_of=None):
     """Export all source lines for one product-week, including those beyond the modal's current page."""
     if product.company_id != company.pk:
         raise ValidationError('Choose a product from this practice.')
-    start = week - timedelta(days=week.weekday())
+    start = week - timedelta(days=(week.weekday() - 1) % 7)
     end = start + timedelta(days=6)
     workbook = Workbook(write_only=True, iso_dates=True)
     _sheet(workbook, 'Dispatch detail', title=f'{product.name} · {product.strength}'.rstrip(' ·'),

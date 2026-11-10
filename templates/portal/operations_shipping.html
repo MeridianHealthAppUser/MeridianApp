@@ -2,8 +2,8 @@
 {% load static workspace_ui %}
 {% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/dialogs.css' %}?v=20261108a"><script src="{% static 'js/dialogs.js' %}?v=20261102a" defer></script><script src="{% static 'js/shipping_workflow.js' %}?v=20261105a" defer></script><script src="{% static 'js/shipping_notes.js' %}?v=20261102a" defer></script><script src="{% static 'js/shipping_help.js' %}?v=20261102b" defer></script>{% endblock %}
 {% block title %}Weekly shipping | Meridian{% endblock %}
-{% block breadcrumbs %}{% breadcrumbs 'Operations' %}{% endblock %}
-{% block page_heading %}<header class="staff-page-header"><div><h1>Operations</h1><p>{{ company.name }} · Confirm the week’s parcels, arrange the courier and follow their delivery.</p></div><div class="ops-actions">{% if can_edit %}<a class="console-button console-button--primary" href="?{{ list_query }}&amp;create=1" data-modal-open="create-shipment" aria-haspopup="dialog">Create shipment</a>{% endif %}</div></header>{% page_tabs %}{% endblock %}
+{% block breadcrumbs %}{% breadcrumbs 'Shipping' %}{% endblock %}
+{% block page_heading %}<header class="staff-page-header"><div><h1>Shipping</h1><p>{{ company.name }} · Confirm the week’s parcels, arrange the courier and follow their delivery.</p></div><div class="ops-actions">{% if can_edit %}<a class="console-button console-button--primary" href="?{{ list_query }}&amp;create=1" data-modal-open="create-shipment" aria-haspopup="dialog">Create shipment</a>{% endif %}</div></header>{% page_tabs %}{% endblock %}
 {% block operations_content %}<section class="staff-page-card ops-shipping-card" data-shipping-workflow aria-labelledby="shipping-week-heading">
   {# A shipping week at a time, as Calendar & Bookings' Week view; the search and Filters keep the week. #}
   <header class="shipping-primary-toolbar">
@@ -23,7 +23,7 @@
   {% endif %}
     <div class="ops-week-nav">
       <a class="ops-week-step" href="{{ prev_week_url }}" aria-label="Previous week">&lsaquo;</a>
-      <h2 id="shipping-week-heading">Week {{ week_number }} &middot; <span class="ops-week-range">{{ week_start|date:"j M Y" }} &ndash; {{ week_end|date:"j M Y" }}</span></h2>
+      <h2 id="shipping-week-heading">Week of <span class="ops-week-range">{% if week_start|date:"Ym" == week_end|date:"Ym" %}{{ week_start|date:"j" }}–{{ week_end|date:"j M Y" }}{% else %}{{ week_start|date:"j M Y" }} – {{ week_end|date:"j M Y" }}{% endif %}</span></h2>
       <a class="ops-week-step" href="{{ next_week_url }}" aria-label="Next week">&rsaquo;</a>
       {% if this_week_url %}<a class="ops-week-today" href="{{ this_week_url }}">{{ this_week_label|default:"This week" }}</a>{% endif %}
     </div>

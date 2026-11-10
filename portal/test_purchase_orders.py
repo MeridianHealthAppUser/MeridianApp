@@ -252,25 +252,18 @@ class PurchaseOrderPortalTests(OperationsPortalFixture):
         self.assertEqual(StockMovement.objects.filter(purchase_order_item=item).count(), 2)
         self.assertEqual(AuditEvent.objects.filter(action='purchase_order.received').count(), 2)
 
-    def test_receipt_positive_lines_require_batch_and_expiry_but_zero_and_blank_lines_are_skipped(self):
+    def test_receipt_batch_and_expiry_are_optional_and_blank_lines_are_skipped(self):
         order = self.order(items=[(self.product, 5), (self.open_product, 3)])
         first, second = list(order.items.order_by('pk'))
         data = self.receipt_data(order, quantities={first.pk: 1})
         data['receipt-0-batch'], data['receipt-0-expires_on'] = '', ''
-        invalid = self.receive(order, data)
-        self.assertEqual(invalid.status_code, 400)
-        self.assertEqual(invalid.context['receive_order'].pk, order.pk)
-        self.assertTrue(invalid.context['receive_formset'].forms[0].errors)
-        self.assertFalse(invalid.context['receive_formset'].forms[1].errors)
-        self.assertEqual(invalid.context['purchase_receive_context'], data['workflow_context'])
-        self.assertEqual(StockMovement.objects.count(), 2)
-        valid = self.receipt_data(order, quantities={first.pk: 1})
-        valid['receipt-1-quantity'] = ''
-        self.assertEqual(self.receive(order, valid).status_code, 302)
+        data['receipt-1-quantity'] = ''
+        self.assertEqual(self.receive(order, data).status_code, 302)
         first.refresh_from_db()
         second.refresh_from_db()
         self.assertEqual((first.quantity_received, second.quantity_received), (1, 0))
-        self.assertEqual(StockMovement.objects.filter(purchase_order_item__purchase_order=order).count(), 1)
+        movement = StockMovement.objects.get(purchase_order_item=first)
+        self.assertEqual((movement.batch, movement.expires_on), ('', None))
 
     def test_receipt_rejects_over_receipt_other_order_lines_empty_receipts_and_stale_context_without_stock_writes(self):
         order, other = self.order(), self.order()

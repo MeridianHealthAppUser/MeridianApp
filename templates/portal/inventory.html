@@ -19,7 +19,7 @@
 
 <dialog class="app-dialog inventory-receipt-dialog" id="receive-stock" aria-labelledby="receive-stock-title"{% if receipt_open %} open{% endif %}>
   <div class="app-dialog__body">
-    <header class="inventory-receipt-header"><div><h2 id="receive-stock-title">Add stock</h2><p class="app-dialog__sub">Add the medications received. Enter a quantity, batch and expiry date for each row.</p></div><a href="{{ inventory_return_url }}" class="console-button console-button--secondary" data-dialog-close aria-label="Close add stock">Close</a></header>
+    <header class="inventory-receipt-header"><div><h2 id="receive-stock-title">Add stock</h2><p class="app-dialog__sub">Add the medications received. Enter a quantity for each row. Batch and expiry are optional.</p></div><a href="{{ inventory_return_url }}" class="console-button console-button--secondary" data-dialog-close aria-label="Close add stock">Close</a></header>
     <form method="post" action="{% url 'portal:inventory' %}" class="ops-form" data-inventory-receipt>
       {% csrf_token %}<input type="hidden" name="workflow_context" value="{{ workflow_context }}"><input type="hidden" name="q" value="{{ search }}">
       {{ receipt_form.non_field_errors }}

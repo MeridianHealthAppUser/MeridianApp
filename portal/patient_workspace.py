@@ -195,9 +195,7 @@ def consultations(company, membership, patient, actor):
 
 
 def workspace_messages(request, company, membership, patient, **overrides):
-    """The Messages tab: conversations with the patient, then team conversations about them that include you."""
-    from care.team_messaging import team_threads
-
+    """The Messages tab: conversations with the patient."""
     from .record_messages import record_messages_context
 
     raw = request.GET.get('thread')
@@ -209,8 +207,6 @@ def workspace_messages(request, company, membership, patient, **overrides):
     context = record_messages_context(request, company, membership, patient, **overrides)
     if raw is not None and not overrides.get('reply_thread_id') and context['record_thread'] is None:
         raise Http404
-    team = team_threads(company, request.user).filter(patient=patient).prefetch_related(in_join_order('members')).order_by('-last_message_at', '-pk')[:10]
-    context['team_threads_about_patient'] = list(team)
     return context
 
 

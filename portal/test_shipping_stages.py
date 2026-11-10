@@ -68,7 +68,7 @@ class TableCells(HTMLParser):
 class ShippingStageTests(OperationsPortalFixture):
     def setUp(self):
         super().setUp()
-        self.week = self.today - timedelta(days=self.today.weekday())
+        self.week = self.today - timedelta(days=(self.today.weekday() - 1) % 7)
 
     def stage(self, step=None, **params):
         if step is not None:
@@ -92,7 +92,7 @@ class ShippingStageTests(OperationsPortalFixture):
         cancelled = self.shipment(quantity=1, status=Shipment.Status.CANCELLED)
         self.shipment(quantity=1, scheduled_for=self.week + timedelta(days=7))
         expected = {'pending': {draft.pk, held.pk, ready.pk}, 'confirmed': {locked.pk},
-                    'tracking': {waybill.pk, external.pk, sent.pk, delivered.pk},
+                    'tracking': {waybill.pk, external.pk, sent.pk},
                     'all': {draft.pk, held.pk, ready.pk, locked.pk, waybill.pk, external.pk, sent.pk, delivered.pk, cancelled.pk}}
         snapshots = list(Shipment.objects.order_by('pk').values('pk', 'status', 'locked_at', 'dispatched_at', 'delivered_at'))
         movements = StockMovement.objects.count()
@@ -250,8 +250,8 @@ class ShippingStageTests(OperationsPortalFixture):
                 self.assertEqual(cells.labelled('Waybill')[0]['text'], 'STAGE-BOOKED')
                 self.assertIn('Out for delivery', cells.labelled('Shipping status')[0]['text'])
         parcel.refresh_from_db()
-        self.assertEqual(parcel.status, Shipment.Status.READY)
-        self.assertEqual(StockMovement.objects.count(), stock_before)
+        self.assertEqual(parcel.status, Shipment.Status.DISPATCHED)
+        self.assertEqual(StockMovement.objects.count(), stock_before + 1)
 
     def test_booked_reference_is_separate_from_actual_shipping_status_in_both_views(self):
         parcel = self.shipment(quantity=1, status=Shipment.Status.READY, locked_at=timezone.now(),
@@ -274,8 +274,7 @@ class ShippingStageTests(OperationsPortalFixture):
                                dispatched_at=timezone.now(), waybill='SHIPPING-LIVE-STATUS', courier_shipment_id='502')
         for status, parcel_status, label in (
                 ('in-transit', Shipment.Status.DISPATCHED, 'In transit'),
-                ('out-for-delivery', Shipment.Status.DISPATCHED, 'Out for delivery'),
-                ('delivered', Shipment.Status.DELIVERED, 'Delivered')):
+                ('out-for-delivery', Shipment.Status.DISPATCHED, 'Out for delivery')):
             Shipment.objects.filter(pk=parcel.pk).update(courier_status=status, status=parcel_status)
             for mode in ('customers', 'medication'):
                 with self.subTest(status=status, mode=mode):
@@ -339,3 +338,32 @@ class ShippingStageTests(OperationsPortalFixture):
                 names = self.name_cells(self.stage('confirmed', view=mode))
                 self.assertEqual(len(self.warnings(names[0])), 1)
                 self.assertIn(reason, names[0]['text'])
+
+
+class InlineWaybillTests(OperationsPortalFixture):
+    def test_waybill_moves_locked_parcel_to_tracking_without_dispatch(self):
+        parcel = self.locked(self.shipment(quantity=1))
+        week = parcel.scheduled_for - timedelta(days=(parcel.scheduled_for.weekday() - 1) % 7)
+        response = self.page('ops-shipping', week=week, shipping_step='confirmed')
+        row = next(row for row in response.context['shipments'] if row.pk == parcel.pk)
+        before = StockMovement.objects.count()
+        result = self.client.post(reverse('portal:ops-shipment-waybill', args=[parcel.pk]), {
+            'workflow_context': row.waybill_context, 'waybill': ' MANUAL-123 ',
+            'list_query': urlencode({'week': week, 'shipping_step': 'confirmed'})})
+        self.assertEqual(result.status_code, 302)
+        parcel.refresh_from_db()
+        self.assertEqual((parcel.waybill, parcel.status, parcel.dispatched_at), ('MANUAL-123', Shipment.Status.READY, None))
+        self.assertEqual(StockMovement.objects.count(), before)
+        tracking = self.page('ops-shipping', week=week, shipping_step='tracking')
+        self.assertIn(parcel.pk, [row.pk for row in tracking.context['shipments']])
+        confirmed = self.page('ops-shipping', week=week, shipping_step='confirmed')
+        self.assertNotIn(parcel.pk, [row.pk for row in confirmed.context['shipments']])
+
+        for _ in range(2):
+            courier.apply_tracking({'short_tracking_reference': 'MANUAL-123', 'status': 'delivered'})
+        parcel.refresh_from_db()
+        self.assertEqual(parcel.status, Shipment.Status.DELIVERED)
+        self.assertEqual(StockMovement.objects.filter(shipment=parcel).count(), 1)
+        tracking = self.page('ops-shipping', week=week, shipping_step='tracking')
+        self.assertNotIn(parcel.pk, [row.pk for row in tracking.context['shipments']])
+        self.assertIn(parcel.pk, [row.pk for row in self.page('ops-history').context['shipments']])

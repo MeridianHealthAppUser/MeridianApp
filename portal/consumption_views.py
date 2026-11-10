@@ -30,9 +30,9 @@ class ConsumptionFilterForm(forms.Form):
     def clean_end_week(self):
         value = self.cleaned_data['end_week']
         if value:
-            value -= timedelta(days=value.weekday())
+            value -= timedelta(days=(value.weekday() - 1) % 7)
             today = timezone.localdate()
-            if value > today - timedelta(days=today.weekday()):
+            if value > today - timedelta(days=(today.weekday() - 1) % 7):
                 raise forms.ValidationError('Choose this week or an earlier week.')
             if value < date(1900, 4, 1):
                 raise forms.ValidationError('Choose a week after March 1900.')

@@ -1,7 +1,7 @@
 {% extends 'portal/staff_page_base.html' %}{% load static workspace_ui %}
 {% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/backoffice.css' %}?v=20261104a"><link rel="stylesheet" href="{% static 'css/filter_menu.css' %}?v=20261104a"><script src="{% static 'js/filter_menu.js' %}?v=20261008b" defer></script><link rel="stylesheet" href="{% static 'css/conversation_search.css' %}?v=20261104a"><script src="{% static 'js/conversation_search.js' %}?v=20261005" defer></script><link rel="stylesheet" href="{% static 'css/dialogs.css' %}?v=20261108a"><script src="{% static 'js/dialogs.js' %}?v=20261022a" defer></script>{% endblock %}
-{% block breadcrumbs %}{% breadcrumbs 'Administration' %}{% endblock %}
-{% block page_heading %}<header class="staff-page-header"><div><h1>Administration</h1><p>Patients who need help or have cancelled. Treatment and payments are not restarted here.</p></div></header>{% page_tabs %}{% endblock %}
+{% block breadcrumbs %}{% breadcrumbs 'Leads and dropouts' %}{% endblock %}
+{% block page_heading %}<header class="staff-page-header"><div><h1>Leads and dropouts</h1><p>Patients who need help or have cancelled. Treatment and payments are not restarted here.</p></div></header>{% page_tabs %}{% endblock %}
 {% block page_content %}<div class="backoffice dropouts">
   <section class="staff-page-card staff-page-card--list" aria-labelledby="dropout-list-heading">
     {# Patients who pressed "Something is wrong, help me", until Confirm resolved; one who cancels moves to the list below. #}

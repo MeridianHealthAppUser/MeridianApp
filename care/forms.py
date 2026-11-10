@@ -107,7 +107,7 @@ class ClinicalTaskForm(TagFieldsMixin, PatientBoundModelForm):
         return data
 
 
-BOOKING_DURATIONS = (15, 30, 45, 60)
+BOOKING_DURATIONS = (15, 30)
 
 
 class AppointmentForm(PatientBoundModelForm):
@@ -143,6 +143,9 @@ class AppointmentForm(PatientBoundModelForm):
         self.fields['patient'].empty_label = 'Choose a patient'
         self.fields['starts_at'].required = False
         self.fields['starts_at'].widget = forms.HiddenInput()
+        if not self.instance.pk:
+            kind = self.initial.get('appointment_type', Appointment.Type.FOLLOW_UP)
+            self.initial.setdefault('duration_minutes', 30 if kind == Appointment.Type.INITIAL else 15)
         starts_at = self.initial.get('starts_at') or self.instance.starts_at
         if starts_at:
             local = timezone.localtime(starts_at) if timezone.is_aware(starts_at) else starts_at

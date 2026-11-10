@@ -43,7 +43,7 @@ SETTINGS_TABS = (
     ('policies', 'Policy versions', 'portal:policy-list'),
     ('practice_settings', 'Practice settings', 'portal:practice-settings'),
 )
-TAB_GROUPS = {'operations': ('Operations', OPERATIONS_TABS), 'administration': ('Administration', ADMINISTRATION_TABS),
+TAB_GROUPS = {'operations': ('Shipping', OPERATIONS_TABS), 'administration': ('Leads and dropouts', ADMINISTRATION_TABS),
               'insights': ('Insights', INSIGHTS_TABS), 'settings': ('Settings', SETTINGS_TABS)}
 # The Operations tabs a doctor has when the practice lets doctors ship (Practice settings).
 PATIENT_ORDER_TABS = (('subscriptions', 'Subscriptions', 'portal:treatment-subscriptions'),
@@ -158,9 +158,7 @@ def build_flat_menu(membership, *, nav_section='', unread=0, data_requests=0):
     if membership.is_admin:
         items += [_item('purchasing', 'Purchasing', 'portal:purchasing', short_label='Purchase'),
                   _inventory_item(),
-                  _group_item('operations', 'Operations'), _group_item('administration', 'Admin')]
-    elif membership.role == 'doctor' and can_ship(membership.company, membership):
-        items.append(_item('operations', 'Weekly shipping', 'portal:ops-shipping', also=SHIPPING_TABS, short_label='Shipping'))
+                  _group_item('operations', 'Shipping'), _group_item('administration', 'Leads and dropouts')]
     for item in items:
         item['current'] = _current(item, nav_section)
     _set_badges(items, unread=unread, data_requests=data_requests)
@@ -196,8 +194,8 @@ def build_staff_menu(membership, *, multi_practice=False, nav_section='', unread
             *([_item('suppliers', 'Suppliers', 'portal:supplier-list')] if super_admin else []),
         ] if admin else []),
         ('inventory', 'Inventory', 'Inventory', [_item(*tab) for tab in INVENTORY_TABS] if admin else []),
-        ('operations', 'Operations', 'Operations', _tab_items('operations') if admin else []),
-        ('administration', 'Administration', 'Admin', _tab_items('administration') if admin else []),
+        ('operations', 'Shipping', 'Shipping', _tab_items('operations') if admin else []),
+        ('administration', 'Leads and dropouts', 'Leads and dropouts', _tab_items('administration') if admin else []),
         # Insights and Settings are for Super Admins only.
         ('insights', 'Insights', 'Insights', _tab_items('insights') if super_admin else []),
         # Practices, only when the app runs more than one, is in the menu but not among the Settings tabs.

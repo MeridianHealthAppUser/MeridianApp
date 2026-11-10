@@ -13,7 +13,7 @@ from .test_operations import OperationsFixture
 
 
 class ToOrderTests(OperationsFixture):
-    week = date(2026, 11, 2)
+    week = date(2026, 11, 3)
 
     def setUp(self):
         StockMovement.objects.filter(company=self.company).update(quantity=0)

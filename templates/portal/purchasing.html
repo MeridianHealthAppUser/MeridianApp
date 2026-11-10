@@ -4,7 +4,7 @@
 {% block breadcrumbs %}{% breadcrumbs 'Purchasing' %}{% endblock %}
 {% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/purchasing.css' %}?v=20261104a"><link rel="stylesheet" href="{% static 'css/purchase_orders.css' %}?v=20261104a"><link rel="stylesheet" href="{% static 'css/dialogs.css' %}?v=20261108a"><script src="{% static 'js/dialogs.js' %}?v=20261102a" defer></script><script src="{% static 'js/shipping_help.js' %}?v=20261102b" defer></script><script src="{% static 'js/purchasing_selection.js' %}?v=20261103c" defer></script><script src="{% static 'js/purchase_order_receiving.js' %}?v=20261103a" defer></script>{% endblock %}
 {% block page_heading %}
-  <header class="staff-page-header"><div><h1>Purchasing</h1><p>Medication purchasing at {{ company.name }}.</p></div></header>
+  <header class="staff-page-header"><div><h1>Purchasing</h1></div></header>
 {% endblock %}
 {% block operations_content %}
   {% include 'portal/includes/purchasing_tabs.html' %}

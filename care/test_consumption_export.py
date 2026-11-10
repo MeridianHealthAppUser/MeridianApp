@@ -20,7 +20,7 @@ from .test_operations import OperationsFixture
 
 class ConsumptionWorkbookTests(OperationsFixture):
     as_of = date(2026, 11, 3)
-    last_week = date(2026, 10, 26)
+    last_week = date(2026, 10, 27)
 
     def supplied(self, quantity, day=None, **extra):
         day = day or self.last_week
@@ -134,14 +134,14 @@ class ConsumptionWorkbookTests(OperationsFixture):
         self.assertFalse(any(cell.data_type == 'f' for sheet in workbook for row in sheet for cell in row))
 
     def test_detail_uses_sast_week_and_preserves_numeric_quantities(self):
-        # 22:30 UTC Sunday belongs to Monday in South Africa.
-        timestamp = datetime(2026, 10, 25, 22, 30, tzinfo=ZoneInfo('UTC'))
+        # 22:30 UTC Monday belongs to Tuesday in South Africa.
+        timestamp = datetime(2026, 10, 26, 22, 30, tzinfo=ZoneInfo('UTC'))
         self.supplied(3, dispatched_at=timestamp)
         workbook = self.read(consumption_detail_workbook(self.company, self.product, self.last_week,
                                                         as_of=self.as_of))
         row = tuple(cell.value for cell in workbook.active[8])
         self.assertEqual(row[0], self.last_week)
-        self.assertEqual(row[1], datetime(2026, 10, 26, 0, 30))
+        self.assertEqual(row[1], datetime(2026, 10, 27, 0, 30))
         self.assertEqual(row[5], 3)
         self.assertEqual(workbook.active['F8'].data_type, 'n')
 

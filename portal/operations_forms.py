@@ -227,7 +227,6 @@ class ShipmentActionForm(forms.Form):
                                        ('dispatch', 'Record actual dispatch'), ('deliver', 'Record actual delivery')))
     reason = forms.CharField(required=False, max_length=500, widget=forms.Textarea(attrs={'rows': 3}))
     tracking_number = forms.CharField(required=False, max_length=120)
-    confirm = forms.BooleanField(label='I confirm this action and have checked the shipment')
 
     def __init__(self, *args, shipment, items=(), **kwargs):
         super().__init__(*args, **kwargs)

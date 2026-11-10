@@ -247,16 +247,16 @@ class TeamMessagingTests(TestCase):
         self.assertEqual(team_threads(self.company, self.admin).get().unread_count, 1)
         self.assertEqual(self.client.get(reverse('portal:staff-inbox')).context['team_unread_total'], 1)
 
-    def test_patient_link_shows_on_the_record_for_members_only_and_never_to_the_patient(self):
+    def test_patient_record_omits_team_conversations_and_patient_cannot_access_them(self):
         thread = self.start()
         record = reverse('portal:patient-detail', args=[self.patient.pk])
         self.login(self.doctor)
-        self.assertEqual([t.pk for t in self.client.get(record, {'tab': 'messages'}).context['team_threads_about_patient']], [thread.pk])
+        self.assertNotContains(self.client.get(record, {'tab': 'messages'}), 'Team conversations about this patient')
         # A Super Admin reads every patient conversation, but a team conversation only once they're in it.
         super_admin = get_user_model().objects.create_user(email='super@team.test', first_name='Sue', last_name='Super')
         CompanyMembership.objects.create(company=self.company, user=super_admin, role='super_admin')
         self.login(super_admin)
-        self.assertEqual(self.client.get(record, {'tab': 'messages'}).context['team_threads_about_patient'], [])
+        self.assertNotContains(self.client.get(record, {'tab': 'messages'}), 'Team conversations about this patient')
         # The dietitian saw Pat before, so can open the record, but not its Messages tab: Pat isn't theirs.
         ClinicianAssignment.objects.create(company=self.company, patient=self.patient, clinician=self.dietitian,
                                            ended_at=timezone.now())

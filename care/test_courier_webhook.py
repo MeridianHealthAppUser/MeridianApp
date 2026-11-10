@@ -151,15 +151,15 @@ class CourierWebhookTests(OperationsFixture):
                 self.assertEqual(parcel.courier_status, '')
                 self.assertEqual(parcel.status, Shipment.Status.DISPATCHED)
 
-    def test_delivered_before_staff_dispatch_reconciles_on_equal_timestamp_retry(self):
+    def test_delivered_before_staff_dispatch_records_dispatch_once(self):
         parcel = self.locked(self.shipment(quantity=1))
         Shipment.objects.filter(pk=parcel.pk).update(waybill='TCG-101', courier_shipment_id='101')
         event = self.event('delivered', shipment_delivered_date=self.event_time.isoformat())
         self.assertEqual(self.post(event).content, b'1')
         parcel.refresh_from_db()
         self.assertEqual((parcel.status, parcel.courier_status, parcel.courier_status_updated_at),
-                         (Shipment.Status.READY, 'delivered', self.event_time))
-        self.assertIsNone(parcel.delivered_at)
+                         (Shipment.Status.DELIVERED, 'delivered', self.event_time))
+        self.assertEqual(parcel.delivered_at, self.event_time)
         dispatch_shipment(shipment=parcel, actor=self.admin, tracking_number='TCG-101', confirm=True)
         movements_after_dispatch = StockMovement.objects.count()
         for _ in range(2):
@@ -186,7 +186,7 @@ class CourierWebhookTests(OperationsFixture):
             collection_phone='021 555 0100')
         parcel = self.locked(self.shipment(quantity=1))
         Shipment.objects.filter(pk=parcel.pk).update(waybill='TCG-101', courier_shipment_id='101')
-        self.post(self.event())
+        self.post(self.event('submitted'))
         with patch.object(courier, '_call', return_value={}):
             hold_or_cancel_shipment(shipment=parcel, actor=self.admin, reason='Reschedule collection')
         parcel.refresh_from_db()

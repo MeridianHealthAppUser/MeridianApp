@@ -1,7 +1,1 @@
 {% include 'portal/includes/record_messages.html' %}
-<section class="patient-workspace-panel patient-workspace-team" aria-labelledby="team-about-patient-heading"><div class="patient-workspace-panel__body">
-  <h2 id="team-about-patient-heading">Team conversations about this patient</h2>
-  <p class="patient-workspace-team__note">Only you and the colleagues in each conversation can see these. The patient never does.</p>
-  <ul class="patient-workspace-threads">{% for thread in team_threads_about_patient %}<li><a href="{% url 'portal:team-inbox' %}?thread={{ thread.pk }}">{{ thread.subject }}<small> · {% for member in thread.members.all %}{% if member.pk == user.pk %}you{% else %}{{ member.full_name }}{% endif %}{% if not forloop.last %}, {% endif %}{% endfor %}{% if thread.unread_count %} · {{ thread.unread_count }} unread{% endif %}</small></a></li>{% empty %}<li class="patient-workspace-empty">No team conversations about this patient that include you.</li>{% endfor %}</ul>
-  <a class="console-button console-button--secondary" href="{% url 'portal:team-inbox' %}?compose=1&amp;patient={{ patient.pk }}">Message a colleague about this patient</a>
-</div></section>

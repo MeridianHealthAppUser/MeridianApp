@@ -240,7 +240,7 @@ def _shipping_filter(request, queryset, default_week=None, *, company):
     data = _form_data(request)
     try:
         day = date.fromisoformat(request.GET['week'][:10]) if request.GET.get('week') else (default_week or this_week())
-        data['week'] = (day - timedelta(days=day.weekday())).isoformat()
+        data['week'] = (day - timedelta(days=(day.weekday() - 1) % 7)).isoformat()
     except ValueError:
         pass
     form = ShippingFilterForm(without_all(data, *SHIPPING_FILTER_FIELDS), company=company)
@@ -274,16 +274,16 @@ def _shipping_filter(request, queryset, default_week=None, *, company):
 
 def this_week():
     today = timezone.localdate()
-    return today - timedelta(days=today.weekday())
+    return today - timedelta(days=(today.weekday() - 1) % 7)
 
 
 def chosen_week(request, default=None):
-    """The Monday of the week in ?week=, or of the default week (this week unless given)."""
+    """The Tuesday of the week in ?week=, or of the default week (this week unless given)."""
     try:
         day = date.fromisoformat(request.GET.get('week', '')[:10])
     except ValueError:
         return default or this_week()
-    return day - timedelta(days=day.weekday())
+    return day - timedelta(days=(day.weekday() - 1) % 7)
 
 
 def shipping_week(company):
@@ -292,7 +292,7 @@ def shipping_week(company):
     from care.parcels import shipping_day_from, shipping_weekday
 
     day = shipping_day_from(timezone.localdate(), shipping_weekday(company))
-    return day - timedelta(days=day.weekday())
+    return day - timedelta(days=(day.weekday() - 1) % 7)
 
 
 def week_navigation(url_name, week, *, home=None, **query):
@@ -331,7 +331,7 @@ def shipping_stage_parcels(queryset, stage):
     if stage == 'confirmed':
         return queryset.filter(status=Shipment.Status.READY, locked_at__isnull=False, waybill='', tracking_number='')
     if stage == 'tracking':
-        return queryset.filter(Q(status__in=(Shipment.Status.DISPATCHED, Shipment.Status.DELIVERED)) |
+        return queryset.filter(Q(status=Shipment.Status.DISPATCHED) |
             (Q(status=Shipment.Status.READY, locked_at__isnull=False) & (~Q(waybill='') | ~Q(tracking_number=''))))
     return queryset
 
@@ -432,7 +432,9 @@ class ShippingListView(OperationsView):
             if self.can_edit and (shipment.status == Shipment.Status.HELD or
                     (shipment.status in (Shipment.Status.DRAFT, Shipment.Status.READY) and not shipment.locked_at)):
                 shipment.confirm_context = make_workflow_context(request, self.company, 'shipping-confirm', shipment)
-                shipment.confirm_week = shipment.scheduled_for - timedelta(days=shipment.scheduled_for.weekday())
+                shipment.confirm_week = shipment.scheduled_for - timedelta(days=(shipment.scheduled_for.weekday() - 1) % 7)
+            if self.can_edit and shipment.status == Shipment.Status.READY and shipment.locked_at and not (shipment.waybill or shipment.tracking_number):
+                shipment.waybill_context = make_workflow_context(request, self.company, 'shipment-waybill', shipment)
             shipment.shipping_status_label = ('Pending' if shipment.status == Shipment.Status.DRAFT or
                 (shipment.status == Shipment.Status.READY and not shipment.locked_at) else
                 ('Confirmed & Locked' if shipment.status == Shipment.Status.READY else shipment.get_status_display()))
@@ -586,6 +588,37 @@ class ShipmentNoteView(OperationsView):
         return redirect(_shipping_list_url(request.POST.get('list_query')))
 
 
+class ShipmentWaybillView(OperationsView):
+    shipping = True
+    http_method_names = ('post',)
+
+    @transaction.atomic
+    def post(self, request, pk):
+        self.company = Company.objects.select_for_update().get(pk=self.company.pk)
+        require_operations_actor(self.company, request.user, shipping=True)
+        shipment = get_object_or_404(self.shipments().select_for_update(of=('self',)), pk=pk)
+        try:
+            validate_workflow_context(request, self.company, 'shipment-waybill', shipment)
+            reference = request.POST.get('waybill', '').strip()
+            if not reference or len(reference) > 60:
+                raise ValidationError('Enter a waybill of up to 60 characters.')
+            if shipment.status != Shipment.Status.READY or not shipment.locked_at or shipment.waybill or shipment.tracking_number:
+                raise ValidationError('This parcel has changed. Refresh the shipping list.')
+            if Shipment.objects.filter(Q(waybill=reference) | Q(tracking_number=reference)).exclude(pk=pk).exists():
+                raise ValidationError('This waybill is already assigned to another parcel.')
+            shipment.waybill = reference
+            shipment.waybill_created_at = timezone.now()
+            shipment.save(update_fields=('waybill', 'waybill_created_at', 'updated_at'))
+            from care.services import record_audit
+            record_audit(company=self.company, actor=request.user, patient=shipment.patient,
+                         action='shipment.waybill_recorded', target=shipment, request=request,
+                         metadata={'waybill': reference})
+            messages.success(request, 'Waybill saved. Parcel moved to Tracking.')
+        except ValidationError as error:
+            messages.error(request, ' '.join(error.messages))
+        return redirect(_shipping_list_url(request.POST.get('list_query')))
+
+
 class DispatchStockView(OperationsView):
     """The former stock screen now lives in Inventory."""
     shipping = False
@@ -624,7 +657,7 @@ class ShippingConfirmView(OperationsView):
             if not form.is_valid():
                 raise ValidationError('Choose a valid shipping week.')
             week = form.cleaned_data['week']
-            week -= timedelta(days=week.weekday())
+            week -= timedelta(days=(week.weekday() - 1) % 7)
             confirmed = confirm_shipments(company=self.company, actor=request.user, week_start=week,
                                           shipment_ids=selected, request=request)
             message = f'{len(confirmed)} parcel{pluralize(len(confirmed))} confirmed and locked. Stock reserved.'
@@ -707,7 +740,7 @@ class ShipmentCreateView(ShippingListView):
                 shipment = create_manual_shipment(company=self.company, actor=request.user, submission_key=intent['key'], request=request, **data)
                 day = shipment.scheduled_for
                 messages.success(request, f'Draft parcel added for {shipment.patient} on {day:%-d %b %Y}. Confirm & lock it when it is ready for shipping.')
-                return redirect(f'{reverse("portal:ops-shipping")}?{urlencode({"week": (day - timedelta(days=day.weekday())).isoformat()})}')
+                return redirect(f'{reverse("portal:ops-shipping")}?{urlencode({"week": (day - timedelta(days=(day.weekday() - 1) % 7)).isoformat()})}')
         except ValidationError as error:
             for message in error.messages:
                 form.add_error(None, message)
@@ -768,7 +801,7 @@ class ShipmentDetailView(OperationsView):
                 if action == 'confirm':
                     from care.operations import confirm_shipments
 
-                    week = shipment.scheduled_for - timedelta(days=shipment.scheduled_for.weekday())
+                    week = shipment.scheduled_for - timedelta(days=(shipment.scheduled_for.weekday() - 1) % 7)
                     confirm_shipments(company=self.company, actor=request.user, week_start=week,
                                       shipment_ids=[shipment.pk], request=request)
                 elif action in ('hold', 'cancel'):
@@ -950,7 +983,7 @@ class ShipmentLabelView(OperationsView):
             return redirect(label_url(shipment))
         except ValidationError as error:
             messages.error(request, ' '.join(error.messages))
-            monday = shipment.scheduled_for - timedelta(days=shipment.scheduled_for.weekday())
+            monday = shipment.scheduled_for - timedelta(days=(shipment.scheduled_for.weekday() - 1) % 7)
             return redirect(f'{reverse("portal:ops-shipping")}?{urlencode({"week": monday.isoformat()})}')
 
 

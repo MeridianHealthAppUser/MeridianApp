@@ -512,6 +512,15 @@ def dispatch_shipment(*, shipment, actor, tracking_number, confirm=False, batch_
     for reason in (delivery_problem(shipment), parcel_payment_reason(shipment)):
         if reason:
             raise ValidationError(f'Cannot dispatch: {reason}')
+    return _record_actual_dispatch(shipment, actor, tracking_number, batch_notes=batch_notes,
+                                   stock_override=stock_override, stock_override_reason=stock_override_reason, request=request)
+
+
+def _record_actual_dispatch(shipment, actor, tracking_number, *, batch_notes=None, stock_override=False,
+                            stock_override_reason='', request=None):
+    """Persist actual collection after staff validation or an authenticated courier event, inside a transaction."""
+    company = shipment.company
+    batch_notes = batch_notes or {}
     items = list(shipment.items.select_related('product'))
     for item in items:
         if item.pk in batch_notes:

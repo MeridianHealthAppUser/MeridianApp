@@ -127,7 +127,7 @@ def receive_purchase_order(*, company, actor, order, items, submission_key, expe
     received = {}
     for values in items:
         if not isinstance(values, Mapping):
-            raise ValidationError('Choose a purchase order line, quantity, batch and expiry for every receipt.')
+            raise ValidationError('Choose a purchase order line and quantity for every receipt.')
         item, quantity = values.get('item'), values.get('quantity')
         if (not isinstance(item, PurchaseOrderItem) or item.pk not in by_id or item._state.adding
                 or item.company_id != company.pk or item.purchase_order_id != order.pk):
@@ -136,14 +136,14 @@ def receive_purchase_order(*, company, actor, order, items, submission_key, expe
             raise ValidationError('Receive each purchase order line only once in this receipt.')
         if type(quantity) is not int or not 1 <= quantity <= MAX_ORDER_QUANTITY:
             raise ValidationError(f'Enter a whole received quantity from 1 to {MAX_ORDER_QUANTITY}.')
-        batch, expiry = values.get('batch'), values.get('expires_on')
-        if not isinstance(batch, str) or not batch.strip() or len(batch.strip()) > 120:
-            raise ValidationError('Enter a batch reference of up to 120 characters for every received product.')
-        if not isinstance(expiry, date) or isinstance(expiry, datetime):
-            raise ValidationError('Choose an expiry date for every received product.')
+        batch, expiry = values.get('batch', ''), values.get('expires_on')
+        if not isinstance(batch, str) or len(batch.strip()) > 120:
+            raise ValidationError('Keep batch references to 120 characters or fewer.')
+        if expiry is not None and (not isinstance(expiry, date) or isinstance(expiry, datetime)):
+            raise ValidationError('Enter a valid expiry date or leave it blank.')
         received[item.pk] = dict(quantity=quantity, batch=batch.strip(), expires_on=expiry)
     payload = [dict(item_id=pk, quantity=values['quantity'], batch=values['batch'],
-                    expires_on=values['expires_on'].isoformat()) for pk, values in sorted(received.items())]
+                    expires_on=values['expires_on'].isoformat() if values['expires_on'] else None) for pk, values in sorted(received.items())]
     previous = AuditEvent.objects.filter(company=company, action='purchase_order.received',
                                          metadata__submission_key=str(key)).first()
     if previous is not None:
@@ -203,9 +203,9 @@ def to_order_rows(company, *, week_start=None, on_order=None):
 
     if week_start is None:
         today = timezone.localdate()
-        week_start = today - timedelta(days=today.weekday())
-    if (not isinstance(week_start, date) or isinstance(week_start, datetime) or week_start.weekday() != 0):
-        raise ValidationError('Choose a consumption week starting on Monday.')
+        week_start = today - timedelta(days=(today.weekday() - 1) % 7)
+    if (not isinstance(week_start, date) or isinstance(week_start, datetime) or week_start.weekday() != 1):
+        raise ValidationError('Choose a consumption week starting on Tuesday.')
     if on_order is None:
         incoming = outstanding_order_quantities(company)
     else:

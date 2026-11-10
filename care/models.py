@@ -2070,7 +2070,7 @@ class StockMovement(CompanyScopedModel):
     purchase_order_item = models.ForeignKey('PurchaseOrderItem', null=True, blank=True, on_delete=models.PROTECT,
                                            related_name='stock_movements')
     quantity = models.IntegerField()
-    actor = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT)
+    actor = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.PROTECT)
     batch = models.CharField(max_length=120, blank=True)
     expires_on = models.DateField(null=True, blank=True)
     reason = models.CharField(max_length=500, blank=True)

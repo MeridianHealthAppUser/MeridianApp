@@ -12,6 +12,7 @@ from .supplier_views import SuppliersView, SupplierCreateView, SupplierEditView,
 from .demo_views import DemoDataView, DemoDataActionView
 
 urlpatterns = [
+    path('shipping/<int:pk>/waybill/', views.ShipmentWaybillView.as_view(), name='ops-shipment-waybill'),
     path('demo-data/', DemoDataView.as_view(), name='demo-data'),
     path('demo-data/create/', DemoDataActionView.as_view(action='create'), name='demo-data-create'),
     path('demo-data/clear/', DemoDataActionView.as_view(action='clear'), name='demo-data-clear'),

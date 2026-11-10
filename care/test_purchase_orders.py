@@ -301,8 +301,8 @@ class PurchaseOrderReceiptTests(PurchaseOrderFixture):
                                       items=[{'product': self.beta_product, 'quantity': 2}])
         invalid = [self.receipt(item, quantity) for quantity in (0, -1, 1.5, True, '2', 2147483648)]
         invalid += [self.receipt(item, 1, **extra) for extra in (
-            {'batch': ''}, {'batch': ' '*3}, {'batch': 'B'*121}, {'batch': None},
-            {'expires_on': None}, {'expires_on': '2027-01-01'}, {'expires_on': datetime.now()})]
+            {'batch': 'B'*121}, {'batch': None},
+            {'expires_on': '2027-01-01'}, {'expires_on': datetime.now()})]
         invalid += [self.receipt(other, 1), self.receipt(beta_order.items.get(), 1)]
         before = StockMovement.objects.count()
         for values in invalid:

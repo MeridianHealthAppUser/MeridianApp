@@ -30,8 +30,8 @@ def stock_movements(company):
 class ReceiptItemForm(forms.Form):
     product = forms.ModelChoiceField(label='Medication', queryset=MedicationProduct.objects.none())
     quantity = forms.IntegerField(min_value=1)
-    batch = forms.CharField(max_length=120)
-    expires_on = forms.DateField(widget=forms.DateInput(attrs={'type': 'date'}))
+    batch = forms.CharField(label="Batch (optional)", required=False, max_length=120)
+    expires_on = forms.DateField(label='Expiry (optional)', required=False, widget=forms.DateInput(attrs={'type': 'date'}))
 
     def __init__(self, *args, company, **kwargs):
         super().__init__(*args, **kwargs)

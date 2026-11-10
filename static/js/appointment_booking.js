@@ -127,6 +127,10 @@
       }
     }
 
+    if (appointmentType && duration) listen(appointmentType, 'change', () => {
+      duration.value = appointmentType.value === 'initial' ? '30' : '15';
+      refresh();
+    });
     listen(time, 'change', () => { chosen = time.value; });
     listen(fields, 'change', ready);
     listen(fields, 'input', ready);

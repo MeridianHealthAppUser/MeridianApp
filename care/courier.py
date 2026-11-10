@@ -303,7 +303,7 @@ def _tracking_matches(parcel, shipment_id, waybill):
 def apply_tracking(payload):
     """Apply a tracking event to one unambiguous parcel. Replays and older updates do not regress tracking.
 
-    Delivery changes an already dispatched parcel only. Webhooks never dispatch stock or end subscriptions.
+    Authenticated collection and delivery events record actual dispatch once; delivery closes the parcel.
     """
     from .models import PatientEvent
 
@@ -316,11 +316,15 @@ def apply_tracking(payload):
     candidates = list(Shipment.objects.filter(matches).values_list('pk', flat=True)[:2])
     if len(candidates) != 1:
         return None
+    from practices.models import Company
+    company_id = Shipment.objects.values_list('company_id', flat=True).get(pk=candidates[0])
+    Company.objects.select_for_update().get(pk=company_id)
     parcel = Shipment.objects.select_for_update(of=('self',)).select_related('company', 'patient').get(pk=candidates[0])
     if is_demo_record(parcel) or not _tracking_matches(parcel, shipment_id, waybill):
         return None
     latest = parcel.courier_status_updated_at
-    completing_delivery = status == 'delivered' and parcel.status == Shipment.Status.DISPATCHED
+    completing_delivery = status == 'delivered' and (parcel.status == Shipment.Status.DISPATCHED or
+        (parcel.status == Shipment.Status.READY and parcel.locked_at is not None))
     if latest and modified_at:
         if modified_at < latest or (modified_at == latest and not completing_delivery):
             return parcel
@@ -330,6 +334,13 @@ def apply_tracking(payload):
             return parcel
     if parcel.status == Shipment.Status.DELIVERED and status != 'delivered' and not modified_at:
         return parcel
+    if (parcel.status == Shipment.Status.READY and parcel.locked_at
+            and status in ('collected', 'in-transit', 'out-for-delivery', 'delivered')):
+        from .operations import _record_actual_dispatch
+        # Collection is an observed fact, even if the stock count needs reconciliation.
+        parcel = _record_actual_dispatch(parcel, None, parcel.waybill or parcel.tracking_number,
+            stock_override=True, stock_override_reason='Actual collection confirmed by courier webhook')
+        completing_delivery = status == 'delivered'
     previous = parcel.courier_status
     fields = []
     if previous != status:

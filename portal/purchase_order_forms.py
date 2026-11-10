@@ -50,15 +50,6 @@ class PurchaseOrderReceiptLineForm(forms.Form):
         self.fields['item'].queryset = PurchaseOrderItem.objects.filter(company=company,
             purchase_order=order, purchase_order__company=company, product__company=company)
 
-    def clean(self):
-        data = super().clean()
-        quantity, item = data.get('quantity'), data.get('item')
-        if quantity:
-            if not data.get('batch'):
-                self.add_error('batch', 'Enter the batch received.')
-            if not data.get('expires_on'):
-                self.add_error('expires_on', 'Enter the expiry date.')
-        return data
 
 
 class PurchaseOrderReceiptFormSet(forms.BaseFormSet):

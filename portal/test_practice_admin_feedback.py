@@ -42,7 +42,7 @@ class PracticeAdminMenuTests(SessionMixin, OperationsFixture):
         page = self.client.get(reverse('portal:staff-inbox'))
         labels = re.findall(r'<span class="console-nav__text">([^<]+)</span>', self.sidebar(page))
         self.assertEqual(labels, ['Overview', 'My tasks', 'Messages', 'Calendar &amp; Bookings',
-                                  'Purchasing', 'Inventory', 'Operations', 'Administration'])
+                                  'Purchasing', 'Inventory', 'Shipping', 'Leads and dropouts'])
         self.assertContains(page, '<h1>Messages</h1>', html=True)
         self.assertNotContains(page, '>All patients<')
         self.assertNotContains(page, 'My access history')

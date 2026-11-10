@@ -13,8 +13,8 @@ from .test_operations import OperationsFixture
 
 
 class ConsumptionReportTests(OperationsFixture):
-    as_of = date(2026, 11, 3)
-    monday = date(2026, 11, 2)
+    as_of = date(2026, 11, 4)
+    monday = date(2026, 11, 3)
 
     def at(self, day, clock=time(12)):
         return timezone.make_aware(datetime.combine(day, clock), timezone.get_current_timezone())
@@ -80,9 +80,9 @@ class ConsumptionReportTests(OperationsFixture):
 
     def test_average_periods_are_current_and_do_not_change_with_selected_grid(self):
         self.dispatched(date(2026, 1, 2), 7)
-        self.dispatched(date(2026, 10, 27), 8)
+        self.dispatched(date(2026, 10, 28), 8)
         current = self.row(self.report())
-        historical = self.row(self.report(end_week=date(2026, 1, 5), weeks=4))
+        historical = self.row(self.report(end_week=date(2026, 1, 6), weeks=4))
 
         self.assertEqual(current['total'], 8)
         self.assertEqual(historical['total'], 7)
@@ -93,15 +93,15 @@ class ConsumptionReportTests(OperationsFixture):
         self.dispatched(date(2026, 1, 1), 7)
         self.dispatched(date(2026, 1, 4), 1)
         self.dispatched(date(2025, 12, 31), 40)
-        self.dispatched(date(2026, 1, 5), 50)
+        self.dispatched(date(2026, 1, 6), 50)
 
-        report = consumption_report(self.company, as_of=date(2026, 1, 6))
+        report = consumption_report(self.company, as_of=date(2026, 1, 7))
         row = self.row(report)
 
         self.assertEqual(row['units_year'], 8)
-        self.assertEqual(row['weeks_year'], Decimal(4) / Decimal(7))
-        self.assertAlmostEqual(row['avg_year'], Decimal('14'))
-        self.assertEqual(report['average_end'], date(2026, 1, 4))
+        self.assertEqual(row['weeks_year'], Decimal(5) / Decimal(7))
+        self.assertAlmostEqual(row['avg_year'], Decimal('11.2'))
+        self.assertEqual(report['average_end'], date(2026, 1, 5))
 
     def test_all_time_starts_with_product_first_dispatch_week_and_counts_quiet_weeks(self):
         first = self.monday - timedelta(weeks=5)
@@ -126,17 +126,17 @@ class ConsumptionReportTests(OperationsFixture):
         first_days = consumption_report(self.company, as_of=date(2026, 1, 2))
         self.assertIsNone(self.row(first_days)['avg_year'])
 
-    def test_timezone_boundary_is_local_monday_not_utc_monday(self):
-        # Sunday 22:30 UTC is Monday 00:30 in Johannesburg.
-        local_monday = datetime(2026, 10, 25, 22, 30, tzinfo=datetime_timezone.utc)
-        local_sunday = datetime(2026, 10, 25, 21, 59, tzinfo=datetime_timezone.utc)
-        self.dispatched(date(2026, 10, 26), 9, dispatched_at=local_monday)
-        self.dispatched(date(2026, 10, 25), 4, dispatched_at=local_sunday)
+    def test_timezone_boundary_is_local_tuesday_not_utc_monday(self):
+        # Monday 22:30 UTC is Tuesday 00:30 in Johannesburg.
+        local_tuesday = datetime(2026, 10, 26, 22, 30, tzinfo=datetime_timezone.utc)
+        local_monday = datetime(2026, 10, 26, 21, 59, tzinfo=datetime_timezone.utc)
+        self.dispatched(date(2026, 10, 27), 9, dispatched_at=local_tuesday)
+        self.dispatched(date(2026, 10, 26), 4, dispatched_at=local_monday)
 
         report = self.report()
         row = self.row(report)
         self.assertEqual([cell['quantity'] for cell in row['cells'][-2:]], [4, 9])
-        lines = weekly_items(self.company, self.product, date(2026, 10, 26), as_of=self.as_of)
+        lines = weekly_items(self.company, self.product, date(2026, 10, 27), as_of=self.as_of)
         self.assertEqual(lines.aggregate(total=Sum('quantity'))['total'], 9)
 
     def test_current_week_is_partial_and_never_counts_future_timestamps(self):

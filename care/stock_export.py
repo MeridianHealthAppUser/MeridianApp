@@ -48,7 +48,7 @@ def stock_history_workbook(movements):
         values = (
             timezone.localtime(movement.created_at, SAST).replace(tzinfo=None),
             str(movement.product), movement.product.get_category_display(), movement.quantity, movement.batch, movement.expires_on,
-            movement.reason, movement.shipment_id, str(movement.actor), movement.is_override,
+            movement.reason, movement.shipment_id, str(movement.actor) if movement.actor_id else 'Courier webhook', movement.is_override,
         )
         sheet.append([cell(value) for value in values])
         row_count += 1

@@ -15,8 +15,7 @@
       rows.forEach(row => {
         const input = row.querySelector('[data-receive-quantity]');
         const quantity = input.value === '' ? 0 : input.valueAsNumber;
-        const receive = Number.isSafeInteger(quantity) && quantity > 0;
-        row.querySelectorAll('input[name$="-batch"], input[name$="-expires_on"]').forEach(field => { field.required = receive; });
+        row.querySelectorAll('input[name$="-batch"], input[name$="-expires_on"]').forEach(field => { field.required = false; });
         if (!Number.isSafeInteger(quantity) || quantity < 0 || quantity > Number(row.dataset.remaining)) valid = false;
         else total += quantity;
       });

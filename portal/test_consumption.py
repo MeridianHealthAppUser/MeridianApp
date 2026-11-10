@@ -15,13 +15,13 @@ from .test_operations import OperationsPortalFixture
 
 
 class ConsumptionPortalTests(OperationsPortalFixture):
-    today = date(2026, 11, 3)
-    current_week = date(2026, 11, 2)
-    previous_week = date(2026, 10, 26)
+    today = date(2026, 11, 4)
+    current_week = date(2026, 11, 3)
+    previous_week = date(2026, 10, 27)
 
     def setUp(self):
         super().setUp()
-        self.clock = patch('django.utils.timezone.now', return_value=self.at(date(2026, 11, 3)))
+        self.clock = patch('django.utils.timezone.now', return_value=self.at(date(2026, 11, 4)))
         self.clock.start()
         self.addCleanup(self.clock.stop)
 

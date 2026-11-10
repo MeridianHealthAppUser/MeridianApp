@@ -9,7 +9,7 @@ from datetime import date, datetime, time, timedelta
 from decimal import Decimal
 
 from django.core.exceptions import ValidationError
-from django.db.models import Min, Q, Sum
+from django.db.models import Min, Q, Sum, F, Value, DurationField, DateTimeField, ExpressionWrapper
 from django.db.models.functions import TruncWeek
 from django.utils import timezone
 
@@ -40,7 +40,7 @@ def week_start(day):
         day = timezone.localtime(day).date() if timezone.is_aware(day) else day.date()
     if not isinstance(day, date):
         raise ValidationError('Choose a valid week.')
-    return day - timedelta(days=day.weekday())
+    return day - timedelta(days=(day.weekday() - 1) % 7)
 
 
 def consumption_items(company, *, as_of=None):
@@ -120,9 +120,13 @@ def consumption_report(company, *, end_week=None, weeks=8, query='', categories=
             shipment__dispatched_at__gte=_midnight(selected_start),
             shipment__dispatched_at__lt=_midnight(selected_last + timedelta(days=1)),
         ).order_by().annotate(
-            dispatch_week=TruncWeek('shipment__dispatched_at', tzinfo=timezone.get_current_timezone()),
+            # Shift Tuesday back to Monday for the database's calendar-week truncation.
+            dispatch_week=TruncWeek(
+                ExpressionWrapper(F('shipment__dispatched_at') - Value(timedelta(days=1), output_field=DurationField()),
+                                  output_field=DateTimeField()),
+                tzinfo=timezone.get_current_timezone()),
         ).values('product_id', 'dispatch_week').annotate(units=Sum('quantity'))
-        grid = {(value['product_id'], value['dispatch_week'].date()): value['units'] for value in weekly}
+        grid = {(value['product_id'], value['dispatch_week'].date() + timedelta(days=1)): value['units'] for value in weekly}
 
         completed = items.filter(shipment__dispatched_at__lt=_midnight(current_week))
         aggregates = {value['product_id']: value for value in completed.order_by().values('product_id').annotate(
