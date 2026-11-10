@@ -1,0 +1,5 @@
+<div class="subscription-discount-fields{% if line_editor %} subscription-discount-fields--line{% endif %}">
+  <div class="console-form__field">{{ line_form.kind.label_tag }}{{ line_form.kind }}{{ line_form.kind.errors }}</div>
+  <div class="console-form__field">{{ line_form.value.label_tag }}{{ line_form.value }}{{ line_form.value.errors }}</div>
+  <div class="console-form__field subscription-discount-reason">{{ line_form.reason.label_tag }}{{ line_form.reason }}{{ line_form.reason.errors }}</div>
+</div>

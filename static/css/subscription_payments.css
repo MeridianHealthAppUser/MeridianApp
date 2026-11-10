@@ -1,23 +1,38 @@
 .subscription-payments.app-dialog { max-width: min(72rem, calc(100vw - 2rem)); }
-.subscription-payment-summary { display: flex; flex-wrap: wrap; gap: .5rem 1.5rem; justify-content: space-between; margin: 1rem 0; color: var(--console-ink); }
-.subscription-payment-table small, .subscription-discount-history small, .subscription-payment-progress small { color: var(--console-muted); display: block; font-size: .78rem; line-height: 1.5; margin-top: .2rem; }
-.subscription-payment-reference { align-items: center; display: flex; flex-wrap: wrap; gap: .5rem; }
-.subscription-payment-reference .console-button { border-radius: 999px; min-height: 2.5rem; padding: .4rem .7rem; }
-.subscription-discount-label { color: var(--console-teal-dark); font-weight: 650; }
-.subscription-discount-editor { border-top: 1px solid var(--console-soft-line); margin-top: 1.25rem; padding-top: 1rem; }
-.subscription-discount-editor h3 { color: var(--console-ink); font-size: 1.05rem; margin: 0; }
-.subscription-discount-fields { display: grid; gap: 1rem; grid-template-columns: repeat(2, minmax(0, 1fr)); }
-.subscription-discount-fields > div { min-width: 0; }
-.subscription-discount-fields [hidden] { display: none; }
-.subscription-discount-editor .console-form__field :is(input, select) { box-sizing: border-box; max-width: 100%; width: 100%; }
-.subscription-discount-editor .helptext { color: var(--console-muted); font-size: .78rem; margin: .3rem 0 0; }
-.subscription-discount-history { border-top: 1px solid var(--console-soft-line); margin-top: 1.25rem; padding-top: 1rem; }
-.subscription-discount-history summary { cursor: pointer; min-height: 2.75rem; }
-.subscription-discount-history li { padding-block: .5rem; overflow-wrap: anywhere; }
-@media (max-width: 38rem) { .subscription-discount-fields { grid-template-columns: minmax(0, 1fr); } }
-
-.subscription-payment-reference small { display: block; font-size: .75rem; margin-top: .2rem; }
-
-.subscription-payments .patient-small { color: var(--console-muted); font-size: .82rem; line-height: 1.55; }
+.subscription-payment-summary { color: var(--console-ink); display: flex; flex-wrap: wrap; gap: .5rem 1.5rem; justify-content: space-between; margin: 1rem 0; }
 .subscription-payment-table { font-variant-numeric: tabular-nums; }
-.subscription-payment-table .patient-inline-link { color: var(--console-teal-dark); display: inline-flex; align-items: center; min-height: 2.75rem; }
+.subscription-payment-table small, .subscription-discount-history small, .subscription-payment-progress small { color: var(--console-muted); display: block; font-size: .78rem; line-height: 1.5; margin-top: .2rem; }
+.subscription-discount-label { color: var(--console-teal-dark); font-weight: 650; }
+.subscription-payment-reference small { display: block; font-size: .75rem; margin-top: .2rem; }
+.subscription-payments .patient-small { color: var(--console-muted); font-size: .82rem; line-height: 1.55; }
+.subscription-payment-progress-link { align-items: center; color: var(--console-ink); display: inline-flex; gap: .65rem; min-height: 2.75rem; text-decoration: none; }
+.subscription-payment-progress-link:hover > span:first-child { text-decoration: underline; text-underline-offset: .2rem; }
+.subscription-payments-icon { align-items: center; background: var(--console-teal-soft); border: 1px solid var(--console-teal-line, var(--console-line)); border-radius: 50%; box-sizing: border-box; color: var(--console-teal-dark); display: inline-flex; flex: 0 0 auto; height: 2.75rem; justify-content: center; position: relative; width: 2.75rem; }
+.subscription-payments-icon svg { height: 1.5rem; width: 1.5rem; stroke: currentColor; stroke-width: 1.9; }
+.subscription-payments-icon::after { background: var(--console-ink); border-radius: .4rem; bottom: calc(100% + .3rem); color: var(--console-card); content: 'Payments'; font-size: .75rem; left: 50%; opacity: 0; padding: .3rem .5rem; pointer-events: none; position: absolute; transform: translateX(-50%); white-space: nowrap; z-index: 10; }
+.subscription-payment-progress-link:is(:hover, :focus-visible) .subscription-payments-icon::after { opacity: 1; }
+.subscription-payment-progress-link:hover .subscription-payments-icon { border-color: var(--console-teal-dark); }
+.subscription-payment-progress-link:focus-visible, .subscription-line-discount-toggle:focus-visible { outline: 2px solid var(--console-teal-dark); outline-offset: 3px; border-radius: .4rem; }
+.subscription-line-discount-toggle { color: var(--console-teal-dark); display: inline-flex; align-items: center; font-size: .82rem; font-weight: 600; min-height: 2.75rem; text-underline-offset: .2rem; white-space: nowrap; }
+.subscription-payment-table .subscription-line-editor[hidden] { display: none; }
+.subscription-payment-table .subscription-line-editor > td { background: var(--console-canvas); padding: 1rem 1.25rem 1.25rem; }
+.subscription-line-editor__heading { align-items: baseline; display: flex; flex-wrap: wrap; gap: .5rem 1.5rem; margin-bottom: .85rem; }
+.subscription-line-editor__heading > span { color: var(--console-muted); font-size: .82rem; }
+.subscription-discount-form { gap: .85rem; max-width: 52rem; }
+.subscription-discount-fields { align-items: start; display: grid; gap: .85rem; grid-template-columns: minmax(10rem, 1fr) minmax(7rem, .65fr) minmax(12rem, 1.3fr); }
+.subscription-discount-form .console-form__field { display: grid; gap: .35rem; min-width: 0; }
+.subscription-discount-form .console-form__field label { color: var(--console-ink); font-size: .8rem; font-weight: 600; margin: 0; }
+.subscription-discount-form .console-form__field :is(input, select) { box-sizing: border-box; font-size: .85rem; height: 2.75rem; min-height: 2.75rem; margin: 0; max-width: 100%; padding: .5rem .65rem; width: 100%; }
+.subscription-discount-form .console-form__field small { color: var(--console-muted); font-size: .76rem; line-height: 1.4; }
+.subscription-discount-actions { align-items: center; display: flex; flex-wrap: wrap; gap: .6rem; }
+.subscription-discount-actions output { color: var(--console-ink); flex: 1 1 12rem; font-size: .85rem; font-variant-numeric: tabular-nums; font-weight: 600; }
+.subscription-discount-actions .console-button { flex: 0 0 auto; font-size: .82rem; min-height: 2.75rem; width: auto; }
+.subscription-discount-editor, .subscription-discount-history { border-top: 1px solid var(--console-soft-line); margin-top: 1.25rem; padding-top: 1rem; }
+.subscription-discount-editor > summary, .subscription-discount-history > summary { color: var(--console-ink); cursor: pointer; font-size: .9rem; font-weight: 600; min-height: 2.75rem; }
+.subscription-discount-editor > summary > span { color: var(--console-muted); font-size: .78rem; font-weight: 400; margin-left: .7rem; }
+.subscription-bulk-targets { align-items: start; display: grid; gap: .85rem; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.subscription-discount-form [hidden] { display: none; }
+.subscription-discount-history li { padding-block: .5rem; overflow-wrap: anywhere; }
+.subscription-payment-table input[type='checkbox'] { accent-color: var(--console-teal-dark); cursor: pointer; height: 1.1rem; width: 1.1rem; }
+@media (max-width: 42rem) { .subscription-discount-fields, .subscription-bulk-targets { grid-template-columns: minmax(0, 1fr); } .subscription-discount-actions output { flex-basis: 100%; } }
+@media (prefers-contrast: more) { .subscription-payment-table .subscription-line-editor > td { border: 1px solid currentColor; } }

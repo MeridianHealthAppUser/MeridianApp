@@ -70,7 +70,7 @@ def payment_schedule(subscription):
             amount=cycle.amount, discount_amount=cycle.discount_amount, discount=cycle.discount,
             key=f'cycle:{cycle.pk}', status=('Covered by discount' if cycle.status == cycle.Status.PAID and cycle.amount == 0 else
                     'Processing' if in_flight else cycle.get_status_display()),
-            editable=cycle.status in OPEN and not in_flight and not any(payment.status == Payment.Status.PAID for payment in payments), paid_at=cycle.paid_at, projected=False))
+            editable=subscription.status != PatientSubscription.Status.CANCELLED and cycle.status in OPEN and not in_flight and not any(payment.status == Payment.Status.PAID for payment in payments), paid_at=cycle.paid_at, projected=False))
     auth = subscription.authorization
     end = auth.expires_on if auth else subscription.review_due_on
     if auth and auth.plan_key:
