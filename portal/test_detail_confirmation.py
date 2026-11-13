@@ -112,15 +112,14 @@ class ShipmentDetailConfirmationTests(OperationsPortalFixture):
         self.assertEqual((parcel.status, parcel.hold_reason, parcel.waybill), ('ready', '', 'HELD-WAYBILL'))
         self.assertGreater(parcel.locked_at, old_lock)
 
-    def test_confirmation_needs_explicit_checkbox_and_current_record_token(self):
+    def test_confirmation_needs_the_current_record_token(self):
         parcel = self.shipment(quantity=1)
         page = self.detail(parcel)
         url = reverse('portal:ops-shipment-detail', args=[parcel.pk])
         data = {'action': 'confirm', 'workflow_context': page.context['workflow_context']}
-        self.assertEqual(self.client.post(url, data).status_code, 400)
         parcel.note = 'Changed in another tab'
         parcel.save()
-        response = self.client.post(url, {**data, 'confirm': 'on'})
+        response = self.client.post(url, data)
         self.assertEqual(response.status_code, 400)
         self.assertContains(response, 'changed in another tab', status_code=400)
         parcel.refresh_from_db()

@@ -71,7 +71,7 @@ class DemoDataPortalTests(OperationsPortalFixture):
 
     def test_demo_shipping_controls_never_book_or_dispatch_other_parcels_in_same_week(self):
         dataset = self.create()
-        week = self.today - timedelta(days=self.today.weekday())
+        week = self.today - timedelta(days=(self.today.weekday() - 1) % 7)
         live_waiting = self.shipment(status='ready', locked_at=timezone.now())
         live_booked = self.shipment(status='ready', locked_at=timezone.now(), waybill='LIVE-COLLECTION')
         original_shipments = list(Shipment.objects.filter(pk__in=[live_waiting.pk, live_booked.pk]).order_by('pk').values())

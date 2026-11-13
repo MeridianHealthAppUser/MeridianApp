@@ -49,7 +49,7 @@ class PurchasingMarkup(HTMLParser):
 class ToOrderPageTests(OperationsPortalFixture):
     def setUp(self):
         super().setUp()
-        self.week = self.today - timedelta(days=self.today.weekday())
+        self.week = self.today - timedelta(days=(self.today.weekday() - 1) % 7)
 
     def purchasing(self, **params):
         response = self.client.get(reverse('portal:purchasing'), params)

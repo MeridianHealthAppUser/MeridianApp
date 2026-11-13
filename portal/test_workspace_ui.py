@@ -119,12 +119,13 @@ class WorkspacePresentationTests(TestCase):
         for group in ('Care', 'Purchasing'):
             self.assertContains(response, f'data-navigation-group="{group.lower()}"')
             self.assertContains(response, f'</svg>{group}</span>')
-        # Inventory, Operations, Administration, Insights and Settings are one page each: the row opens it in one
+        # Inventory, Shipping, Leads and dropouts, Insights and Settings are one page each: the row opens it in one
         # click, and its tabs are listed for the menu to open beside it on hover.
-        for group, page in (('Inventory', 'inventory'), ('Operations', 'treatment-subscriptions'), ('Administration', 'staff-leads'),
-                            ('Insights', 'metrics'), ('Settings', 'treatment-review-rules')):
-            self.assertNotContains(response, f'data-navigation-group="{group.lower()}"')
-            self.assertContains(response, f'href="{reverse(f"portal:{page}")}" data-navigation-link="{group.lower()}">')
+        for group, key, page in (('Inventory', 'inventory', 'inventory'), ('Shipping', 'operations', 'treatment-subscriptions'),
+                                 ('Leads and dropouts', 'administration', 'staff-leads'),
+                                 ('Insights', 'insights', 'metrics'), ('Settings', 'settings', 'treatment-review-rules')):
+            self.assertNotContains(response, f'data-navigation-group="{key}"')
+            self.assertContains(response, f'href="{reverse(f"portal:{page}")}" data-navigation-link="{key}">')
             self.assertContains(response, f'</svg><span class="console-nav__text">{group}</span>')
         for name in ('inventory-consumption', 'ops-catalogue', 'ops-shipping', 'ops-history', 'ops-billing', 'dropouts', 'email-log'):
             self.assertContains(response, f'href="{reverse(f"portal:{name}")}"')

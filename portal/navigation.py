@@ -159,6 +159,9 @@ def build_flat_menu(membership, *, nav_section='', unread=0, data_requests=0):
         items += [_item('purchasing', 'Purchasing', 'portal:purchasing', short_label='Purchase'),
                   _inventory_item(),
                   _group_item('operations', 'Shipping'), _group_item('administration', 'Leads and dropouts')]
+    elif membership.role == 'doctor' and can_ship(membership.company, membership):
+        # Only when Practice settings lets doctors ship; off by default.
+        items.append(_item('operations', 'Weekly shipping', 'portal:ops-shipping', also=SHIPPING_TABS, short_label='Shipping'))
     for item in items:
         item['current'] = _current(item, nav_section)
     _set_badges(items, unread=unread, data_requests=data_requests)

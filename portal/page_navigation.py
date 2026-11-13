@@ -109,6 +109,7 @@ HTML_PAGE_ROUTES = frozenset(STAFF_PAGES) | frozenset(PATIENT_PAGES) | frozenset
     'ops-starting-plan-create', 'ops-starting-plan-detail',
     'ops-shipping-create', 'ops-shipment-detail', 'ops-order-detail', 'ops-stock',
     'ops-billing', 'ops-billing-detail', 'ops-delivery-address', 'ops-parcel-payment',
+    'ops-shipment-waybill', 'subscription-payments',
     'patient-appointment-detail', 'patient-book-appointment',
     'patient-data-request-create', 'patient-data-request-detail',
     'patient-lab-detail', 'patient-subscription',

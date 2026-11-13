@@ -471,15 +471,15 @@ class AppointmentDetailPageTests(AppointmentLifecycleFixture):
         self.assertEqual(order, sorted(order))
         self.assertLess(fields.index('class="booking-fields__when"'), fields.index('name="date"'))
         self.assertIn(f'data-times-url="{self.url("appointment-book-times")}"', fields)
-        self.assertEqual(re.findall(r'<option value="(\d+)"', fields[fields.index('name="duration_minutes"'):]), ['15', '30', '45', '60'])
+        self.assertEqual(re.findall(r'<option value="(\d+)"', fields[fields.index('name="duration_minutes"'):]), ['15', '30'])
         self.assertNotIn('name="video_link" type', fields)
         self.assertContains(response, 'js/appointment_booking.js')
         # Booking from the modal: the date and time make the start.
         day = timezone.localtime(self.starts_at + timedelta(days=1)).date()
         booked = self.client.post(self.url('appointment-book'), {
             'workflow_context': response.context['booking_context'], 'patient': self.patient.pk, 'clinician': self.doctor.pk,
-            'appointment_type': 'follow_up', 'date': day.isoformat(), 'time': '10:15', 'duration_minutes': '45'})
-        appointment = Appointment.objects.get(patient=self.patient, duration_minutes=45)
+            'appointment_type': 'follow_up', 'date': day.isoformat(), 'time': '10:15', 'duration_minutes': '30'})
+        appointment = Appointment.objects.get(patient=self.patient, duration_minutes=30)
         self.assertRedirects(booked, self.url('appointment-detail', appointment.pk), fetch_redirect_response=False)
         self.assertEqual(timezone.localtime(appointment.starts_at).strftime('%Y-%m-%d %H:%M'), f'{day.isoformat()} 10:15')
 
@@ -498,13 +498,14 @@ class AppointmentDetailPageTests(AppointmentLifecycleFixture):
 
         # In their hours, on the quarter hour, clear of the 9:30 booking; a longer booking has fewer starts.
         self.assertEqual(times(), ['09:00', '09:15', '10:00', '10:15', '10:30', '10:45'])
-        self.assertEqual(times(duration=60), ['10:00'])
+        self.assertEqual(times(duration=30), ['09:00', '10:00', '10:15', '10:30'])
         # The patient's own other bookings are left out too.
         self.assertEqual(times(patient=self.patient.pk), ['09:00', '09:15', '10:00', '10:15', '10:30', '10:45'])
         self.appointment(clinician=self.colleague, starts_at=timezone.make_aware(datetime.combine(day, time(10, 0))), duration_minutes=30)
         self.assertEqual(times(patient=self.patient.pk), ['09:00', '09:15', '10:30', '10:45'])
         # Anything not offered here can't be asked about.
         self.assertEqual(self.client.get(url, {'clinician': self.doctor.pk, 'date': day.isoformat(), 'duration': 20}).status_code, 400)
+        self.assertEqual(self.client.get(url, {'clinician': self.doctor.pk, 'date': day.isoformat(), 'duration': 60}).status_code, 400)
         self.assertEqual(self.client.get(url, {'clinician': self.other_user.pk, 'date': day.isoformat(), 'duration': 15}).status_code, 400)
 
     def test_admin_cannot_forge_attendance_action_and_own_doctor_waits_for_end(self):

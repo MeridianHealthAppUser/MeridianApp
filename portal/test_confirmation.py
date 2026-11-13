@@ -12,7 +12,7 @@ from .test_operations import OperationsPortalFixture
 class ShippingConfirmationTests(OperationsPortalFixture):
     def setUp(self):
         super().setUp()
-        self.week = self.today - timedelta(days=self.today.weekday())
+        self.week = self.today - timedelta(days=(self.today.weekday() - 1) % 7)
         self.url = reverse('portal:ops-shipping-confirm')
 
     def pending(self, **params):

@@ -187,14 +187,14 @@ class StaffMenuTests(TestCase):
         self.assertIn('<span class="message-unread-dot" data-live-unread="total" aria-hidden="true">2</span>', mobile[:mobile.index('</nav>')])
         inbox = self.client.get(reverse('portal:staff-inbox'))
         self.assertContains(inbox, '<h1>Patient Records &amp; Messages</h1>', html=True)
-        # Practice admins get a flat menu too, with Messages (no patient list), then Purchasing, Inventory, Operations and Administration.
+        # Practice admins get a flat menu too, with Messages (no patient list), then Purchasing, Inventory, Shipping and Leads and dropouts.
         # They sent the team message, so nothing is unread for them.
         self.login('practice_admin')
         page = self.client.get(reverse('portal:desktop-dashboard')).content.decode()
         sidebar = page[page.index('class="console-nav'):]
         sidebar = sidebar[:sidebar.index('</nav>')]
         self.assertNotIn('<details', sidebar)
-        labels = ['Overview', 'My tasks', 'Messages', 'Calendar &amp; Bookings', 'Purchasing', 'Inventory', 'Operations', 'Administration']
+        labels = ['Overview', 'My tasks', 'Messages', 'Calendar &amp; Bookings', 'Purchasing', 'Inventory', 'Shipping', 'Leads and dropouts']
         self.assertEqual(re.findall(r'<span class="console-nav__text">([^<]+)</span>', sidebar), labels)
         self.assertNotIn('Insights', sidebar)
         self.assertIn('data-live-unread="total" hidden', sidebar)
@@ -203,11 +203,11 @@ class StaffMenuTests(TestCase):
     def test_practice_admins_open_operations_and_administration_as_pages_of_tabs_without_insights(self):
         self.login('practice_admin')
         tabs = {
-            'Operations': [('treatment-subscriptions', 'Subscriptions'), ('ops-orders', 'Non-prescription requests'),
+            'Shipping': [('treatment-subscriptions', 'Subscriptions'), ('ops-orders', 'Non-prescription requests'),
                            ('ops-shipping', 'Weekly shipping'), ('ops-history', 'Dispatch history'),
                            ('ops-billing', 'Billing')],
             # Data requests is a Super Admin's tab only (Dr Czech, 4 Nov 2026).
-            'Administration': [('staff-leads', 'Leads'), ('dropouts', 'Dropouts'), ('email-log', 'Emails')],
+            'Leads and dropouts': [('staff-leads', 'Leads'), ('dropouts', 'Dropouts'), ('email-log', 'Emails')],
         }
         for group, pages in tabs.items():
             for name, label in pages:
@@ -217,7 +217,7 @@ class StaffMenuTests(TestCase):
                     html = response.content.decode()
                     nav = html[html.index('class="patient-workspace-tabs"'):]
                     nav = nav[:nav.index('</nav>')]
-                    expected_tabs = ['Patient orders', 'Weekly shipping', 'Dispatch history', 'Billing'] if group == 'Operations' else [tab for _, tab in pages]
+                    expected_tabs = ['Patient orders', 'Weekly shipping', 'Dispatch history', 'Billing'] if group == 'Shipping' else [tab for _, tab in pages]
                     self.assertEqual(re.findall(r'<a href="[^"]+"[^>]*>([^<]+)', nav), expected_tabs)
                     if name in ('treatment-subscriptions', 'ops-orders'):
                         self.assertIn(f'<a href="{reverse("portal:treatment-subscriptions")}" class="is-active" aria-current="page">Patient orders', nav)

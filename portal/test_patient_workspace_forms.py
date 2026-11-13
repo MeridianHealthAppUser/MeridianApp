@@ -252,13 +252,16 @@ class SharedPatientActionTests(TestCase):
 
     def test_deliveries_tab_lists_rows_for_admins_and_sends_doctors_to_the_overview(self):
         record = reverse('portal:patient-detail', args=[self.patient.pk])
-        link = reverse('portal:ops-shipment-detail', args=[self.shipment.pk])
+        # The tab is the patient's dispatch history: dispatched parcels only, not the draft in the fixture.
+        sent = Shipment.objects.create(company=self.company, patient=self.patient, scheduled_for=timezone.localdate(),
+                                       status=Shipment.Status.DISPATCHED, dispatched_at=timezone.now())
+        link = reverse('portal:ops-shipment-detail', args=[sent.pk])
         # Doctors (the Clinician role) don't see Deliveries; a Super Admin lists them and opens the Operations page.
         self.login()
         self.assertRedirects(self.client.get(record, {'tab': 'deliveries'}), f'{record}?tab=overview', fetch_redirect_response=False)
         self.login(self.super_admin)
         page = self.client.get(record, {'tab': 'deliveries'})
-        self.assertEqual([row.pk for row in page.context['rows']], [self.shipment.pk])
+        self.assertEqual([row.pk for row in page.context['rows']], [sent.pk])
         self.assertContains(page, link)
 
     def test_compounding_followup_remains_in_treatment_context(self):
