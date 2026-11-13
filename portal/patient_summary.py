@@ -18,6 +18,7 @@ from care.models import (
     Appointment, LabRequest, Lead, PatientMedicalProfile, PatientSubscription,
     ScreeningQuestionnaire, Shipment, TreatmentAuthorization, WeightEntry,
 )
+from care.dose_prices import price_for
 from care.treatment import current_authorizations
 from video.access import attach_video_join
 
@@ -271,7 +272,7 @@ def treatment_timeline(company, patient, authorization, today=None):
         if prescription.dose_id and prescription.dose.price is not None:
             own = [week for week in weeks if week['segment'] is segment]
             for week in own[::prescription.dose.billing_weeks]:
-                week['payments'].append(prescription.dose.price)
+                week['payments'].append(price_for(prescription.dose, week['date']))  # A scheduled new price from its day.
 
     for parcel in Shipment.objects.for_company(company).filter(
         patient=patient, scheduled_for__range=(course['started_on'], course['ends_on']),

@@ -1,6 +1,6 @@
 {% extends 'portal/staff_page_base.html' %}{% load static workspace_ui %}
 {% block title %}Email journeys | Meridian{% endblock %}
-{% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/operations.css' %}?v=20261104a">{% endblock %}
+{% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/operations.css' %}?v=20261113e">{% endblock %}
 {% block breadcrumbs %}{% breadcrumbs 'Settings' %}{% endblock %}
 {% block page_heading %}<header class="staff-page-header"><div><h1>Settings</h1><p>{{ company.name }} · Emails that follow each person through their care. Someone moves from one track to the next as their care changes, so a track’s emails stop once it no longer applies. {{ active_count }} email{{ active_count|pluralize }} switched on.</p></div></header>{% page_tabs %}{% endblock %}
 {% block page_content %}<div class="ops-workspace">

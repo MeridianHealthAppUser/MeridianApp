@@ -24,4 +24,22 @@
       </dl>
     {% endif %}
   </section>
+  {# Prices set from a later date (care.dose_prices), and the changes that have taken effect. #}
+  {% if scheduled_prices or price_history %}
+  <section class="staff-page-card ops-panel" aria-labelledby="price-changes-heading">
+    <h2 id="price-changes-heading">Price changes</h2>
+    {% if scheduled_prices %}
+      <p>Now R{{ dose.price }} {{ dose.billing_text }}. Billing periods that start on or after each date below use its price, and on that day patients on this dose are asked to approve their debit order for it.</p>
+      <ul class="dose-price-changes">{% for change in scheduled_prices %}
+        <li><div>{% include 'portal/includes/price_change_tag.html' %}<small>Scheduled by {{ change.created_by.get_full_name|default:change.created_by.email }} on {{ change.created_at|date:'j M Y' }}</small></div>{% if can_edit %}<form method="post" action="{{ request.path }}">{% csrf_token %}<input type="hidden" name="workflow_context" value="{{ workflow_context }}"><button class="console-button console-button--secondary" type="submit" name="cancel_price_change" value="{{ change.pk }}">Cancel change<span class="sr-only"> to R{{ change.price }} from {{ change.effective_on|date:'j M Y' }}</span></button></form>{% endif %}</li>
+      {% endfor %}</ul>
+    {% endif %}
+    {% if price_history %}
+      <h3>Earlier changes</h3>
+      <ul class="dose-price-changes dose-price-changes--past">{% for change in price_history %}
+        <li><div><strong>{% if change.previous_price is not None %}R{{ change.previous_price }} → {% endif %}R{{ change.price }} from {{ change.effective_on|date:'j M Y' }}</strong><small>Set by {{ change.created_by.get_full_name|default:change.created_by.email }} on {{ change.created_at|date:'j M Y' }}</small></div></li>
+      {% endfor %}</ul>
+    {% endif %}
+  </section>
+  {% endif %}
 {% endblock %}

@@ -1,6 +1,6 @@
 {% extends 'portal/staff_page_base.html' %}{% load static workspace_ui %}
 {% block title %}{% if journey %}{{ journey.name }}{% else %}New journey email{% endif %} | Meridian{% endblock %}
-{% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/operations.css' %}?v=20261104a">{% endblock %}
+{% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/operations.css' %}?v=20261113e">{% endblock %}
 {% block breadcrumbs %}{% breadcrumbs 'Email journeys' 'portal:email-journeys' journey.name|default:'New email' %}{% endblock %}
 {% block page_heading %}<header class="staff-page-header"><div><h1>{% if journey %}{{ journey.name }}{% else %}New journey email{% endif %}</h1><p>{{ company.name }}{% if journey %} · {{ journey.get_track_display }}{% endif %}</p></div></header>{% endblock %}
 {% block page_content %}<div class="ops-grid">

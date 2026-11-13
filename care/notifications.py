@@ -468,12 +468,15 @@ def _payment_failed_email(cycle, user, actor_id):
 
 
 def _debit_order_update_email(mandate, user, actor_id):
-    from .billing import mandate_amount, money
+    from .billing import billing_weeks, mandate_amount, money
 
     needed = mandate_amount(mandate.subscription) if mandate.subscription_id else None
+    # How often the prescription is billed now (every 5 weeks for Tirzepatide 7.5 mg), as the new debit order will be;
+    # the old debit order's interval is the one before the change.
+    weeks = billing_weeks(mandate.subscription) if mandate.subscription_id else mandate.interval_weeks
     return build_email(to=user.email, subject='Please approve your new debit order', template='debit_order_update', context={
         'greeting': mandate.patient.first_name, 'amount': money(needed) if needed else '',
-        'weeks': mandate.interval_weeks, 'url': site_link('portal:patient-billing'),
+        'weeks': weeks, 'url': site_link('portal:patient-billing'),
     })
 
 

@@ -33,6 +33,21 @@
 .ops-workspace .errorlist { color: var(--c-a33131); margin: .4rem 0; padding-left: 1.2rem; }
 .ops-filter { align-items: end; display: grid; gap: 1rem; grid-template-columns: repeat(2, minmax(10rem, 1fr)) auto; }
 .ops-filter > .errorlist { grid-column: 1 / -1; }
+/* A dose's price changes (operations_dose_form.html): scheduled ones with Cancel, then earlier ones. */
+.dose-price-changes { display: grid; list-style: none; margin: 0; padding: 0; }
+.dose-price-changes li { align-items: center; border-bottom: 1px solid var(--c-edf3f5); display: flex; flex-wrap: wrap; gap: .6rem 1.2rem; justify-content: space-between; padding: .8rem 0; }
+.dose-price-changes li > div { display: grid; gap: .2rem; }
+.dose-price-changes strong { font-size: .9rem; }
+.dose-price-changes small { color: var(--c-607c87); font-size: .8rem; }
+.dose-price-changes form { margin: 0; }
+.dose-price-changes--past strong { font-weight: 600; }
+/* A dose's next scheduled price, as a chip: under its current price in the catalogue, and in its Price changes list. */
+/* No fill: dark text and outline in light mode, light ones in dark mode (the token turns light in dark mode). */
+.console-status--scheduled { background: transparent; border: 1px solid currentColor; color: var(--c-1a4457); padding: calc(.42rem - 1px) calc(.55rem - 1px); }
+.ops-table td .console-status--scheduled { margin-top: .4rem; }
+.console-status--scheduled { align-items: center; gap: .25rem; }
+.console-status--scheduled svg { fill: none; flex: 0 0 auto; height: .75rem; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 2.6; width: .75rem; }
+.dose-price-changes .console-status--scheduled { justify-self: start; }
 .ops-facts { display: grid; margin: 0; }
 .ops-facts > div { border-bottom: 1px solid var(--c-edf3f5); display: flex; gap: 1.2rem; justify-content: space-between; padding: .8rem 0; }
 .ops-facts dt { color: var(--c-607c87); font-size: .85rem; }

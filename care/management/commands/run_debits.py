@@ -1,15 +1,22 @@
 from django.core.management.base import BaseCommand
 
 from care.billing import run_debits
+from care.dose_prices import apply_due_price_changes
 from care.payment_providers import current_provider
 from practices.tenancy import enabled_companies
 
 
 class Command(BaseCommand):
     help = ('Collect the subscription debits that have come round, and retry failed ones on their retry days '
-            '(care/billing.py). Run once a day, in the morning.')
+            '(care/billing.py), after making any scheduled dose price whose day has come the dose\'s price '
+            '(care/dose_prices.py). Run once a day, in the morning.')
 
     def handle(self, *args, **options):
+        # A dose's scheduled new price takes effect on its day, with or without a payment provider.
+        for company in enabled_companies():
+            changed = apply_due_price_changes(company)
+            if changed:
+                self.stdout.write(f'{company.name}: {changed} dose price{"" if changed == 1 else "s"} changed today.')
         if current_provider() is None:
             self.stdout.write('No payment provider is connected, so no debits were collected.')
             return

@@ -140,8 +140,17 @@ class CatalogueView(OperationsView):
         context['can_edit'] = self.membership.role == CompanyMembership.Role.SUPER_ADMIN
         context['products'] = list(context['page_obj'].object_list)
         # What doctors prescribe: each dose, its pen, how often it is sent and what it costs.
-        context['doses'] = list(MedicationDose.objects.for_company(self.company).select_related('pen').order_by(
-            'pen__name', 'amount_mg', 'frequency', 'pk'))
+        from django.db.models import Prefetch
+        from care.models import DosePriceChange
+
+        context['doses'] = list(MedicationDose.objects.for_company(self.company).select_related('pen').prefetch_related(
+            Prefetch('price_changes', to_attr='scheduled_prices', queryset=DosePriceChange.objects.filter(
+                applied_at__isnull=True, cancelled_at__isnull=True).order_by('effective_on', 'pk')),
+        ).order_by('pen__name', 'amount_mg', 'frequency', 'pk'))
+        from care.dose_prices import mark_directions
+
+        for dose in context['doses']:
+            mark_directions(dose, dose.scheduled_prices)  # An up or down arrow on each scheduled price.
         # The standard ways to start a main medicine, offered by Initiate prescription on the patient record.
         from care.models import StartingPlan
         from care.starting_plans import plan_summary
@@ -199,6 +208,12 @@ class DoseEditorView(OperationsView):
         context['can_edit'] = self.membership.role == CompanyMembership.Role.SUPER_ADMIN
         context['in_use'] = bool(dose and (dose.authorizations.exists() or dose.starting_plan_steps.exists()
                                            or dose.starting_plans_ending.exists()))
+        # Its scheduled prices, soonest first, and the changes that have taken effect, latest first.
+        changes = list(dose.price_changes.select_related('created_by').exclude(cancelled_at__isnull=False)) if dose else []
+        from care.dose_prices import mark_directions
+
+        context['scheduled_prices'] = mark_directions(dose, [change for change in changes if change.applied_at is None])
+        context['price_history'] = [change for change in reversed(changes) if change.applied_at is not None]
         return render(request, 'portal/operations_dose_form.html', context, status=status)
 
     def dose(self, pk):
@@ -215,25 +230,52 @@ class DoseEditorView(OperationsView):
         self.company = Company.objects.select_for_update().get(pk=self.company.pk)
         require_operations_actor(self.company, request.user, catalogue=True)
         dose = self.dose(pk)
+        if dose and request.POST.get('cancel_price_change'):
+            return self.cancel_price_change(request, dose)
         form = DoseForm(request.POST, company=self.company, instance=dose)
         try:
             validate_workflow_context(request, self.company, 'catalogue-dose', dose)
             if form.is_valid():
+                change = form.price_change
                 saved = form.save()
                 record_audit(company=self.company, actor=request.user,
                              action='catalogue.dose_updated' if pk else 'catalogue.dose_created',
                              target=saved, request=request, metadata={'changed_fields': form.changed_data})
+                from care.dose_prices import change_price
+
+                if change:
+                    price, effective_on = change
+                    change_price(dose=saved, price=price, effective_on=effective_on, actor=request.user, request=request)
                 # A new price can put a patient's collection over their debit order: they're asked to approve it.
                 from care.billing import review_mandates
 
                 review_mandates(self.company)
-                messages.success(request, 'Dose saved. Prescriptions already written keep their own dose and dates.')
+                if change and change[1] > timezone.localdate():
+                    messages.success(request, f'Dose saved. Its price changes to R{change[0]:.2f} on '
+                                              f'{change[1]:%-d %b %Y}; until then it stays R{form.current_price:.2f}.')
+                else:
+                    messages.success(request, 'Dose saved. Prescriptions already written keep their own dose and dates.')
                 return redirect('portal:ops-dose-detail', pk=saved.pk)
         except ValidationError as error:
             if not form.is_bound or not hasattr(form, 'cleaned_data'):
                 form.is_valid()
             _errors(request, form, error)
         return self.display(request, dose, form, status=400)
+
+    def cancel_price_change(self, request, dose):
+        from care.dose_prices import cancel_price_change
+        from care.models import DosePriceChange
+
+        change = get_object_or_404(DosePriceChange.objects.filter(company=self.company, dose=dose),
+                                   pk=request.POST.get('cancel_price_change'))
+        try:
+            validate_workflow_context(request, self.company, 'catalogue-dose', dose)
+            cancel_price_change(change=change, actor=request.user, request=request)
+        except ValidationError as error:
+            messages.error(request, ' '.join(error.messages))
+        else:
+            messages.success(request, f'The change to R{change.price:.2f} on {change.effective_on:%-d %b %Y} is cancelled.')
+        return redirect('portal:ops-dose-detail', pk=dose.pk)
 
 
 def _shipping_filter(request, queryset, default_week=None, *, company):

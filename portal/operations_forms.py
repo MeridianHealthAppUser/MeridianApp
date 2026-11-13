@@ -59,6 +59,14 @@ class DoseForm(forms.ModelForm):
 
     LOCKED = ('pen', 'amount_mg', 'frequency', 'pens_per_dispatch', 'dispatch_weeks')
 
+    # A dose that has a price changes it from a date (care.dose_prices): today, or later to keep the current price
+    # until then.
+    price_from = forms.DateField(
+        label='New price applies from', required=False, widget=forms.DateInput(attrs={'type': 'date'}),
+        help_text='Today changes the price now. A later date keeps the current price until then: billing periods that '
+                  'start on or after it use the new price, and on that day patients on this dose are asked to approve '
+                  'their debit order for the new amount.')
+
     class Meta:
         model = MedicationDose
         fields = ('pen', 'amount_mg', 'frequency', 'pens_per_dispatch', 'dispatch_weeks', 'price', 'billing_weeks',
@@ -78,6 +86,14 @@ class DoseForm(forms.ModelForm):
     def __init__(self, *args, company, **kwargs):
         super().__init__(*args, **kwargs)
         self.instance.company = company
+        # The price before this form: a change to it is scheduled (price_change), not saved with the dose.
+        self.current_price = self.instance.price if self.instance.pk else None
+        if self.current_price is None:
+            del self.fields['price_from']  # A dose's first price applies straight away.
+        else:
+            self.initial.setdefault('price_from', timezone.localdate())
+            self.order_fields(['pen', 'amount_mg', 'frequency', 'pens_per_dispatch', 'dispatch_weeks', 'price',
+                               'price_from', 'billing_weeks', 'tier', 'is_active'])
         pens = MedicationProduct.objects.for_company(company).filter(requires_authorisation=True, is_active=True)
         if self.instance.pen_id:
             pens = pens | MedicationProduct.objects.filter(pk=self.instance.pen_id)
@@ -101,6 +117,25 @@ class DoseForm(forms.ModelForm):
         if value is not None and value < 0:
             raise ValidationError('The price cannot be negative.')
         return value
+
+    def clean_price_from(self):
+        value = self.cleaned_data.get('price_from')
+        if value and value < timezone.localdate():
+            raise ValidationError('Choose today or a later date.')
+        return value
+
+    @property
+    def price_change(self):
+        """(new price, the day it applies from) when the dose's price is changed, which the view hands to
+        care.dose_prices.change_price; None otherwise. Clearing the price takes it away now."""
+        if self.current_price is None or 'price' not in self.changed_data or self.cleaned_data.get('price') is None:
+            return None
+        return self.cleaned_data['price'], self.cleaned_data.get('price_from') or timezone.localdate()
+
+    def save(self, commit=True):
+        if self.price_change:
+            self.instance.price = self.current_price  # Changed from its day by care.dose_prices.change_price.
+        return super().save(commit)
 
     def clean(self):
         data = super().clean()

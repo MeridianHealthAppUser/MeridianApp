@@ -78,11 +78,14 @@ def billing_weeks(subscription, on_date=None):
 
 
 def price_on(subscription, on_date):
-    """What the cycle starting on_date costs: the price of the dose in effect that day, or the product's price for
-    a prescription that isn't for a catalogue dose."""
+    """What the cycle starting on_date costs: the price of the dose in effect that day (a scheduled new price from
+    its day, care.dose_prices), or the product's price for a prescription that isn't for a catalogue dose."""
+    from .dose_prices import price_for
+
     dose = dose_in_effect(subscription, on_date)
-    if dose is not None and dose.price is not None:
-        return dose.price
+    price = price_for(dose, on_date) if dose is not None else None
+    if price is not None:
+        return price
     authorization = step_in_effect(subscription.authorization, on_date) if subscription.authorization_id else None
     return authorization.product.price if authorization is not None else None
 
@@ -111,7 +114,15 @@ def prescription_amount(authorization):
 
 
 def mandate_amount(subscription):
-    return prescription_amount(subscription.authorization) if subscription.authorization_id else None
+    """What a debit order for this subscription must cover: the highest price left in its prescription, and any
+    billing period still waiting to be collected (one opened early at a scheduled new price, or a failed one), so a
+    new debit order can collect it."""
+    amount = prescription_amount(subscription.authorization) if subscription.authorization_id else None
+    waiting = subscription.cycles.filter(status__in=(SubscriptionCycle.Status.PENDING, SubscriptionCycle.Status.FAILED)).order_by(
+        '-amount').values_list('amount', flat=True).first()
+    if amount is not None and waiting is not None and waiting > amount:
+        return waiting
+    return amount
 
 
 def current_mandate(subscription):
@@ -515,7 +526,10 @@ def check_unanswered(company):
 
 def run_debits(company, *, today=None):
     """The daily debit run for a practice. Returns how many debits were tried, paid and failed."""
+    from .dose_prices import apply_due_price_changes
+
     today = today or timezone.localdate()
+    apply_due_price_changes(company, today)  # A dose's scheduled new price, from its day.
     check_unanswered(company)
     counts = {'subscriptions': 0, 'tried': 0, 'paid': 0, 'failed': 0}
     due = PatientSubscription.objects.filter(company=company, status__in=BILLABLE, patient__is_active=True, patient__demo_data_set__isnull=True).filter(

@@ -33,7 +33,7 @@ SAFE_LABELS = {
     # Uncollected discount instructions are owned by the synthetic subscription; payments and cycles stay protected.
     'care.subscriptiondiscount',
     'practices.patient', 'care.medicationproduct', 'care.supplier', 'care.purchaseorder',
-    'care.medicationdose', 'care.treatmentauthorization', 'care.patientsubscription',
+    'care.medicationdose', 'care.dosepricechange', 'care.treatmentauthorization', 'care.patientsubscription',
     'care.shipment', 'care.shipmentitem', 'care.stockmovement', 'care.purchaseorderitem',
     'care.supplierproduct', 'care.patientclinicalsummary', 'care.patientsummaryedit',
     'care.weightentry', 'care.deliveryaddress', 'care.patientevent',

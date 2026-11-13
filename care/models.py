@@ -351,6 +351,39 @@ def weeks_phrase(weeks):
     return 'every week' if weeks == 1 else f'every {weeks} weeks'
 
 
+class DosePriceChange(CompanyScopedModel):
+    """A dose's new price from a date, set on its catalogue page (care.dose_prices). Until that day the dose keeps its
+    price; billing periods that start on or after it are billed at the new one. On the day, the daily debit run makes
+    it the dose's price (applied_at) and asks patients on the dose to approve their debit order for the new amount."""
+
+    dose = models.ForeignKey(MedicationDose, on_delete=models.CASCADE, related_name='price_changes')
+    price = models.DecimalField(max_digits=10, decimal_places=2, validators=[MinValueValidator(Decimal('0'))])
+    effective_on = models.DateField()
+    # The price it replaced, kept when it takes effect.
+    previous_price = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='+')
+    applied_at = models.DateTimeField(null=True, blank=True)
+    cancelled_at = models.DateTimeField(null=True, blank=True)
+    cancelled_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.PROTECT, related_name='+')
+
+    class Meta:
+        ordering = ('effective_on', 'pk')
+        indexes = [models.Index(fields=('dose', 'effective_on'))]
+        constraints = [models.CheckConstraint(condition=models.Q(price__gte=0), name='dose_price_change_nonnegative')]
+
+    def __str__(self):
+        return f'{self.dose} R{self.price} from {self.effective_on:%-d %b %Y}'
+
+    @property
+    def is_scheduled(self):
+        return self.applied_at is None and self.cancelled_at is None
+
+    def clean(self):
+        super().clean()
+        if self.dose_id and self.company_id and self.dose.company_id != self.company_id:
+            raise ValidationError({'dose': 'The dose must belong to the same company as its price change.'})
+
+
 class TreatmentAuthorization(PatientCompanyScopedModel):
     class Status(models.TextChoices):
         ACTIVE = 'active', 'Active'
