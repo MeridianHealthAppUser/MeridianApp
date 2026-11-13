@@ -77,7 +77,7 @@ def payment_popup(request, company, plan, *, form=None, schedule=None):
                          'value': row['discount'].value if row['discount'] else None},
                 auto_id=f'line_discount_{plan.pk}_{index}_%s')
     return dict(payment_plan=plan, payment_schedule=schedule, discount_form=discount_form,
-        bulk_discount_form=bulk_form, bulk_open=form is not None and not single_error,
+        bulk_discount_form=bulk_form, bulk_open=(form is not None and not single_error) or (form is None and request.GET.get('bulk') == '1'),
         payment_errors=form.errors if single_error and not any(row['edit_open'] for row in schedule['rows']) else None,
         discount_token=make_workflow_context(request, company, 'subscription-discount', plan), payment_return=return_url)
 

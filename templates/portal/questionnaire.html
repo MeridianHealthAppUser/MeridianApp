@@ -2,7 +2,8 @@
 {% load static %}
 
 {% block title %}Start your questionnaire | Meridian Health{% endblock %}
-{% block extra_css %}<link rel="stylesheet" href="{% static 'css/questionnaire.css' %}?v=20261104a">{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{% static 'css/questionnaire.css' %}?v=20261104a"><link rel="stylesheet" href="{% static 'css/theme_switch.css' %}?v=20261113b">{% endblock %}
+{% block public_header_actions %}<div class="header-actions">{% include 'includes/theme_switch.html' %}</div>{% endblock %}
 
 {% block content %}
   <section class="questionnaire-layout" aria-labelledby="questionnaire-title">

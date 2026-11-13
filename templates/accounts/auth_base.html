@@ -1,7 +1,7 @@
 {% extends 'base.html' %}
 {% load static %}
 {% comment %}Sign-in and password reset pages: the Meridian logo centred above one form card.{% endcomment %}
-{% block extra_css %}<link rel="stylesheet" href="{% static 'css/auth.css' %}?v=20261104a">{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{% static 'css/auth.css' %}?v=20261113a"><link rel="stylesheet" href="{% static 'css/theme_switch.css' %}?v=20261113b">{% endblock %}
 
 {# The logo sits above the card instead of in a header bar. #}
 {% block site_header %}{% endblock %}
@@ -26,6 +26,7 @@
       <div class="login-card">
 {% block card %}{% endblock %}
       </div>
+      <div class="login-theme-switch">{% include 'includes/theme_switch.html' %}</div>
     </div>
   </section>
 {% endblock %}

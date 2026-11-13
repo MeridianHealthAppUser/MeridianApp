@@ -5,7 +5,7 @@ from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 
-from care.demo import seed_demo_care
+from care.demo import seed_demo_care, seed_demo_catalogue
 from care.notifications import paused as notifications_paused
 from practices.models import Company, CompanyMembership, Patient
 from practices.tenancy import multi_practice_enabled
@@ -27,11 +27,17 @@ class Command(BaseCommand):
 
     def add_arguments(self, parser):
         parser.add_argument('--reset-passwords', action='store_true', help='Explicitly reset existing local demo accounts to the documented demo password.')
+        parser.add_argument('--catalogue-only', action='store_true',
+                            help='Only add or update the Pharmacy catalogue (pens, doses and starting plans) of the demo '
+                                 'practices that already exist. Accounts, patients and their records are left alone, so '
+                                 'this suits a database already in use.')
 
     @transaction.atomic
     def handle(self, *args, **options):
         if not settings.DEBUG:
             raise CommandError('Demo seeding is disabled outside development. It resets known local passwords and must never run against production data.')
+        if options.get('catalogue_only'):
+            return self.seed_catalogue()
         meridian, _ = Company.objects.update_or_create(
             slug='meridian-health',
             defaults={'name': 'Meridian Health', 'is_active': True},
@@ -148,4 +154,20 @@ class Command(BaseCommand):
             f'Demo data is ready: {2 if orion else 1} practices, {len(people)} accounts, '
             f'{5 if orion else 3} staff memberships, patient portals, and clinical demo records. '
             f'New demo accounts use: {DEMO_PASSWORD}. Existing passwords are preserved unless --reset-passwords is supplied.'
+        ))
+
+    def seed_catalogue(self):
+        """The demo catalogue alone, for the demo practices already in this database."""
+        if not multi_practice_enabled() and settings.SINGLE_PRACTICE_SLUG != 'meridian-health':
+            raise CommandError('The demo command is only for Meridian Health. No records were changed.')
+        slugs = ['meridian-health', 'orion-mens-health'] if multi_practice_enabled() else ['meridian-health']
+        companies = list(Company.objects.filter(slug__in=slugs, is_active=True).order_by('pk'))
+        if not companies:
+            raise CommandError('There is no Meridian Health practice in this database yet. Run seed_demo without '
+                               '--catalogue-only first.')
+        for company in companies:
+            seed_demo_catalogue(company)
+        self.stdout.write(self.style.SUCCESS(
+            f'Catalogue updated for {", ".join(company.name for company in companies)}: Semaglutide and Tirzepatide '
+            f'pens, doses and starting plans. Nothing else was changed.'
         ))

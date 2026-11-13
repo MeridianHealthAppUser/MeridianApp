@@ -6,7 +6,7 @@
       <div class="login-eyebrow-row"><a class="page-breadcrumbs__back page-breadcrumbs__back--large" href="{% url 'landing' %}" aria-label="Back to home" title="Back to home"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M19 12H5"/><path d="m11 6-6 6 6 6"/></svg></a><p class="eyebrow">Secure sign in</p></div>
       <h1 id="login-title">Welcome back</h1>
 
-      <form style="border-top: 1px solid #e5eef2;" class="login-form" method="post" novalidate>
+      <form class="login-form login-form--divided" method="post" novalidate>
         {% csrf_token %}
         {% if form.non_field_errors %}
           <ul class="login-errors" role="alert">

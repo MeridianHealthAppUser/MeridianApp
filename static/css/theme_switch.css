@@ -1,0 +1,18 @@
+/* Device, Light or Dark on the sign-in and questionnaire pages (templates/includes/theme_switch.html): "Appearance" in
+   grey, then buttons the size of the account menu's Appearance buttons (account_menu.css). On the sign-in pages it
+   sits under the card; on the questionnaire, top right. */
+.theme-switch { align-items: center; display: inline-flex; gap: .6rem; }
+.theme-switch[hidden] { display: none; }
+.theme-switch__label { color: var(--c-5c707a); font-size: .8rem; font-weight: 600; }
+.theme-switch__choices { background: var(--c-f3faf7); border: 1px solid var(--c-dce7ec); border-radius: .55rem; display: inline-flex; padding: .15rem; }
+.theme-switch button { align-items: center; background: transparent; border: 0; border-radius: .4rem; color: var(--c-335464); cursor: pointer; display: inline-flex; font: inherit; font-size: .7rem; font-weight: 700; gap: .3rem; padding: .3rem .5rem; }
+.theme-switch button:hover { color: var(--c-184153); }
+.theme-switch button[aria-pressed="true"] { background: var(--c-ffffff); box-shadow: 0 1px 3px var(--c-173949-141); color: var(--c-184153); }
+.theme-switch button:focus-visible { outline: 2px solid var(--c-215065-350); outline-offset: 2px; }
+.theme-switch svg { fill: none; flex: 0 0 auto; height: .8rem; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 2; width: .8rem; }
+.login-theme-switch { display: flex; justify-content: center; margin-top: 1.5rem; }
+/* On a phone the header keeps the icons; the words stay for screen readers. */
+@media (max-width: 30rem) {
+  .site-header .theme-switch__label { display: none; }
+  .site-header .theme-switch span { clip-path: inset(50%); height: 1px; overflow: hidden; position: absolute; white-space: nowrap; width: 1px; }
+}

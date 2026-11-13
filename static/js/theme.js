@@ -1,5 +1,6 @@
-// Appearance in the account menu: Device follows the phone's or computer's setting; Light and Dark stay as chosen in
-// this browser. base.html applies the saved choice before the page is drawn; this keeps the buttons in step.
+// Appearance in the account menu, and on the sign-in and questionnaire pages (includes/theme_switch.html, shown only
+// once this script runs): Device follows the phone's or computer's setting; Light and Dark stay as chosen in this
+// browser. base.html applies the saved choice before the page is drawn; this keeps the buttons in step.
 (function () {
   var KEY = 'meridian-theme';
 
@@ -19,6 +20,7 @@
   }
 
   document.addEventListener('DOMContentLoaded', function () {
+    document.querySelectorAll('[data-theme-switch]').forEach(function (group) { group.hidden = false; });
     apply(saved());
     document.addEventListener('click', function (event) {
       var button = event.target.closest('[data-theme-choice]');

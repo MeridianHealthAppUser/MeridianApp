@@ -19,7 +19,8 @@
     {% if page_navigation_config %}<link rel="stylesheet" href="{% static 'css/page_navigation.css' %}?v=20261104a"><script src="{% static 'js/page_lifecycle.js' %}" defer></script>{% endif %}
     {% block extra_css %}{% endblock %}
     {% if is_workspace_page %}<link rel="stylesheet" href="{% static 'css/workspace_polish.css' %}?v=20261106a"><script src="{% static 'js/workspace_polish.js' %}?v=20261105a" defer></script>{% endif %}
-    {% if user.is_authenticated %}<link rel="stylesheet" href="{% static 'css/account_menu.css' %}?v=20261104a"><script src="{% static 'js/account_menu.js' %}" defer></script><script src="{% static 'js/theme.js' %}?v=20261024a" defer></script>{% endif %}
+    {% if user.is_authenticated %}<link rel="stylesheet" href="{% static 'css/account_menu.css' %}?v=20261104a"><script src="{% static 'js/account_menu.js' %}" defer></script>{% endif %}
+    <script src="{% static 'js/theme.js' %}?v=20261113a" defer></script>
     {% if active_membership.role == 'super_admin' and not is_patient_portal %}<link rel="stylesheet" href="{% static 'css/demo_data.css' %}?v=20261104a"><script src="{% static 'js/demo_data.js' %}?v=20261103a" defer></script>{% endif %}
     {% if can_switch_practice_role %}<link rel="stylesheet" href="{% static 'css/practice_role_switcher.css' %}?v=20261104a">{% endif %}
     {% if video_notifications_enabled %}<link rel="stylesheet" href="{% static 'css/call_notifications.css' %}?v=20261104a"><script src="{% static 'js/call_notifications.js' %}" defer></script>{% endif %}
@@ -75,6 +76,7 @@
           {% if active_membership.role == 'super_admin' and not is_patient_portal %}<a href="{% url 'portal:demo-data' %}?next={{ request.get_full_path|urlencode }}" class="demo-data-trigger" data-demo-data-open data-native-navigation aria-haspopup="dialog"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M9 3h6M10 3v6L4.7 18a2 2 0 0 0 1.7 3h11.2a2 2 0 0 0 1.7-3L14 9V3M8 13h8M10 17h.01M14 18h.01"/></svg><span>Demo data</span></a>{% endif %}
           {% include 'includes/account_menu.html' %}
         </div>
+      {% else %}{% block public_header_actions %}{% endblock %}
       {% endif %}
     </header>
     {% endblock %}

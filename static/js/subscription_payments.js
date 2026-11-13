@@ -12,30 +12,35 @@
     });
     const boxes = [...dialog.querySelectorAll('[data-payment-select]')];
     const all = dialog.querySelector('[data-payment-select-all]');
-    const bulk = dialog.querySelector('[data-bulk-discount]');
-    const bulkForm = dialog.querySelector('[data-bulk-discount-form]');
+    // The Bulk discount dialog sits beside this one; its form owns the table's checkboxes.
+    const bulk = document.getElementById(dialog.id.replace('subscription-payments-', 'bulk-discount-dialog-'));
+    const bulkForm = bulk?.querySelector('[data-bulk-discount-form]');
     const refreshSelection = () => {
       const count = boxes.filter(box => box.checked).length;
       all.checked = count > 0 && count === boxes.length;
       all.indeterminate = count > 0 && count < boxes.length;
       all.disabled = !boxes.length;
-      const label = dialog.querySelector('[data-payment-selected-count]');
-      if (label) label.textContent = bulkForm?.elements.scope.value === 'future' ? 'From an effective date' : `${count} selected`;
-      if (bulkForm) {
-        bulkForm.querySelector('[data-bulk-effective-date]').hidden = bulkForm.elements.scope.value !== 'future';
-        bulkForm.querySelector('button[type="submit"]').disabled = bulkForm.elements.scope.value === 'selected' && !count;
-      }
+      if (!bulkForm) return;
+      const scope = bulkForm.elements.scope.value;
+      const label = bulkForm.querySelector('[data-payment-selected-count]');
+      label.hidden = scope !== 'selected';
+      label.textContent = count ? `${count} payment${count === 1 ? '' : 's'} selected in the table.` : 'Tick the payments to discount in the table first.';
+      bulkForm.querySelector('[data-bulk-effective-date]').hidden = scope !== 'future';
+      bulkForm.querySelector('button[type="submit"]').disabled = scope === 'selected' && !count;
     };
     boxes.forEach(box => listen(box, 'change', () => {
-      if (box.checked && bulk) { bulk.open = true; bulkForm.elements.scope.value = 'selected'; }
+      if (box.checked && bulkForm) bulkForm.elements.scope.value = 'selected';
       refreshSelection();
     }));
     listen(all, 'change', () => {
       boxes.forEach(box => { box.checked = all.checked; });
-      if (all.checked && bulk) { bulk.open = true; bulkForm.elements.scope.value = 'selected'; }
+      if (all.checked && bulkForm) bulkForm.elements.scope.value = 'selected';
       refreshSelection();
     });
-    if (bulkForm) listen(bulkForm.elements.scope, 'change', refreshSelection);
+    if (bulkForm) {
+      listen(bulkForm.elements.scope, 'change', refreshSelection);
+      listen(bulk, 'dialog:open', refreshSelection);
+    }
     refreshSelection();
   });
   document.querySelectorAll('[data-line-discount-form]').forEach(form => {

@@ -65,39 +65,47 @@ def _message(*, thread, sender, body):
         post_patient_message(thread=thread, sender=sender, body=body)
 
 
-# (medicine, pen) the dispensary sends, and what the patient pharmacy lists each at.
-# (medicine, pen, its reference price, description). A Semaglutide pen is named by its dose and holds four of them.
+# (medicine, pen, its reference price, description): the pens the dispensary sends, named, as in the practice's
+# catalogue, by how much medicine each holds. A Semaglutide pen holds four weekly doses (the 4.0 mg pen, four of 1 mg).
 DEMO_PENS = (
-    ('Semaglutide', '0.25 mg', '1995.00', 'Four weekly doses of 0.25 mg.'),
-    ('Semaglutide', '0.5 mg', '1995.00', 'Semagard. Four weekly doses of 0.5 mg.'),
-    ('Semaglutide', '1.0 mg', '3295.00', 'Four weekly doses of 1 mg.'),
-    ('Semaglutide', '1.7 mg', '4295.00', 'Four weekly doses of 1.7 mg.'),
-    ('Semaglutide', '2.4 mg', '4685.00', 'Four weekly doses of 2.4 mg.'),
-    ('Tirzepatide', '5 mg', '2995.00', ''), ('Tirzepatide', '10 mg', '0.00', ''), ('Tirzepatide', '15 mg', '0.00', ''),
+    ('Semaglutide', '1.0 mg', '1995.00', 'Four weekly doses of 0.25 mg.'),
+    ('Semaglutide', '2.0 mg', '1995.00', 'Semagard. Four weekly doses of 0.5 mg.'),
+    ('Semaglutide', '4.0 mg', '3295.00', 'Four weekly doses of 1 mg.'),
+    ('Semaglutide', '6.8 mg', '4295.00', 'Four weekly doses of 1.7 mg.'),
+    ('Semaglutide', '9.6 mg', '4685.00', 'Four weekly doses of 2.4 mg.'),
+    ('Tirzepatide', '5 mg', '3295.00', 'For the 2.5 mg start (a pen lasts two weeks) and 5 mg weekly (a pen a week).'),
+    ('Tirzepatide', '10 mg', '3295.00', 'For 7.5 mg and 10 mg weekly.'),
+    ('Tirzepatide', '15 mg', '3295.00', 'For 12.5 mg and 15 mg weekly, the highest dose.'),
 )
-# (medicine, pen, weekly mg, pens per parcel, sent every N weeks, price, billed every N weeks, tier). Each Semaglutide
-# dose has its own pen, one sent and billed every 4 weeks. Prices the practice hasn't confirmed are blank, so those
-# doses can't be prescribed yet.
+# (medicine, pen, weekly mg, pens per parcel, sent every N weeks, price, billed every N weeks, tier).
+# Semaglutide: one pen, sent and billed every 4 weeks.
+# Tirzepatide (Dr Czech, Nov 2026): 2.5 mg for the first 4 weeks (2 × 5 mg pens), then 5 mg (4 × 5 mg pens every
+# 4 weeks). On a plateau the doctor steps up, to at most 15 mg. 7.5 and 12.5 mg come as 4 pens every 5 weeks and are
+# billed every 5 weeks; 4 × 15 mg every 5 weeks is 60 mg for 62.5 mg of 12.5 mg doses, as Dr Czech chose. Every
+# Tirzepatide dose is R3295 for now, until the practice sets its prices.
 DEMO_DOSES = (
-    ('Semaglutide', '0.25 mg', '0.25', 1, 4, '1995.00', 4, 'standard'),
-    ('Semaglutide', '0.5 mg', '0.5', 1, 4, '1995.00', 4, 'standard'),
-    ('Semaglutide', '1.0 mg', '1', 1, 4, '3295.00', 4, 'standard'),
-    ('Semaglutide', '1.7 mg', '1.7', 1, 4, '4295.00', 4, 'if_necessary'),
-    ('Semaglutide', '2.4 mg', '2.4', 1, 4, '4685.00', 4, 'if_necessary'),
-    ('Tirzepatide', '5 mg', '2.5', 1, 2, '2995.00', 2, 'standard'),
-    ('Tirzepatide', '5 mg', '5', 1, 1, '2995.00', 4, 'standard'),
-    ('Tirzepatide', '10 mg', '7.5', 1, 5, None, 5, 'step_up'),
-    ('Tirzepatide', '10 mg', '10', 1, 4, None, 4, 'step_up'),
-    ('Tirzepatide', '15 mg', '12.5', 1, 5, None, 5, 'step_up'),
-    ('Tirzepatide', '15 mg', '15', 1, 4, None, 4, 'step_up'),
+    ('Semaglutide', '1.0 mg', '0.25', 1, 4, '1995.00', 4, 'standard'),
+    ('Semaglutide', '2.0 mg', '0.5', 1, 4, '1995.00', 4, 'standard'),
+    ('Semaglutide', '4.0 mg', '1', 1, 4, '3295.00', 4, 'standard'),
+    ('Semaglutide', '6.8 mg', '1.7', 1, 4, '4295.00', 4, 'if_necessary'),
+    ('Semaglutide', '9.6 mg', '2.4', 1, 4, '4685.00', 4, 'if_necessary'),
+    ('Tirzepatide', '5 mg', '2.5', 2, 4, '3295.00', 4, 'standard'),
+    ('Tirzepatide', '5 mg', '5', 4, 4, '3295.00', 4, 'standard'),
+    ('Tirzepatide', '10 mg', '7.5', 4, 5, '3295.00', 5, 'step_up'),
+    ('Tirzepatide', '10 mg', '10', 4, 4, '3295.00', 4, 'step_up'),
+    ('Tirzepatide', '15 mg', '12.5', 4, 5, '3295.00', 5, 'step_up'),
+    ('Tirzepatide', '15 mg', '15', 4, 4, '3295.00', 4, 'step_up'),
 )
 # (medicine, [(weekly mg, weeks)], then weekly mg): Semaglutide's 24-week cycle and Tirzepatide's start.
 DEMO_PLANS = (
     ('Semaglutide', [('0.25', 4), ('0.5', 4)], '1'),
-    ('Tirzepatide', [('2.5', 2)], '5'),
+    ('Tirzepatide', [('2.5', 4)], '5'),
 )
-# Products earlier demos made that aren't pens: hidden, with their doses.
-OLD_DEMO_PRODUCTS = (('Semaglutide', '1 mg'), ('Semaglutide', '2 mg'), ('Semaglutide', '4 mg'), ('Tirzepatide', '2.5 mg'))
+# Products earlier demos made that aren't pens, and the Semaglutide pens an earlier seed named by their weekly dose:
+# hidden, with their doses.
+OLD_DEMO_PRODUCTS = (('Semaglutide', '1 mg'), ('Semaglutide', '2 mg'), ('Semaglutide', '4 mg'), ('Tirzepatide', '2.5 mg'),
+                     ('Semaglutide', '0.25 mg'), ('Semaglutide', '0.5 mg'), ('Semaglutide', '1.7 mg'),
+                     ('Semaglutide', '2.4 mg'))
 
 
 def seed_demo_catalogue(company):
@@ -121,10 +129,14 @@ def seed_demo_catalogue(company):
             defaults={'pens_per_dispatch': pens_per_dispatch, 'dispatch_weeks': dispatch_weeks,
                       'price': Decimal(price) if price else None, 'billing_weeks': billing_weeks, 'tier': tier,
                       'is_active': True})
+    # A dose an earlier seed put on one of these pens (the 1.0 mg pen once sent 1 mg weekly) is no longer offered.
+    seeded = [dose.pk for dose in doses.values()]
+    MedicationDose.objects.filter(company=company, pen__in=pens.values()).exclude(pk__in=seeded).update(is_active=False)
     for medicine, steps, then in DEMO_PLANS:
         plan = StartingPlan.objects.filter(company=company, medicine=medicine).order_by('pk').first() or StartingPlan(
             company=company, medicine=medicine)
-        plan.name, plan.then_dose, plan.default_weeks, plan.is_active = 'Standard start', doses[medicine, Decimal(then)], 24, True
+        # A plan the practice already named keeps its name.
+        plan.name, plan.then_dose, plan.default_weeks, plan.is_active = plan.name or 'Standard start', doses[medicine, Decimal(then)], 24, True
         plan.save()
         plan.steps.all().delete()
         for position, (mg, weeks) in enumerate(steps, start=1):
@@ -176,7 +188,7 @@ def seed_demo_care(*, meridian, orion, users, nadia):
         )
         # Dr Czech's catalogue: the pens the dispensary sends, the doses doctors prescribe and the standard starts.
         pens, doses = seed_demo_catalogue(company)
-        product, dose = pens['Semaglutide', '0.25 mg'], doses['Semaglutide', Decimal('0.25')]
+        product, dose = pens['Semaglutide', '1.0 mg'], doses['Semaglutide', Decimal('0.25')]
         ReviewRule.objects.update_or_create(
             company=company,
             name='Six-month GLP-1 review',
@@ -235,22 +247,25 @@ def seed_demo_care(*, meridian, orion, users, nadia):
                 },
             )
 
-        authorization, _ = TreatmentAuthorization.objects.update_or_create(
-            company=company,
-            patient=patient,
-            product=product,
-            defaults={
-                'dose': dose,
-                'prescribed_by': sam,
-                'max_dose': '0.25 mg weekly',
-                'quantity_per_cycle': 1,
-                'starts_on': today - timedelta(days=28),
-                'expires_on': today + timedelta(days=150),
-                'review_interval_days': 180,
-                'status': TreatmentAuthorization.Status.ACTIVE,
-                'instructions': 'Demo prescription instructions.',
-            },
-        )
+        # The prescription this seed wrote for Nadia (its instructions say so), even if an earlier seed put it on
+        # another pen, so running the seed again never gives her a second one.
+        authorization = TreatmentAuthorization.objects.filter(
+            company=company, patient=patient, instructions='Demo prescription instructions.',
+        ).order_by('-pk').first() or TreatmentAuthorization(company=company, patient=patient)
+        for field, value in {
+            'product': product,
+            'dose': dose,
+            'prescribed_by': sam,
+            'max_dose': '0.25 mg weekly',
+            'quantity_per_cycle': 1,
+            'starts_on': today - timedelta(days=28),
+            'expires_on': today + timedelta(days=150),
+            'review_interval_days': 180,
+            'status': TreatmentAuthorization.Status.ACTIVE,
+            'instructions': 'Demo prescription instructions.',
+        }.items():
+            setattr(authorization, field, value)
+        authorization.save()
         subscription, _ = PatientSubscription.objects.update_or_create(
             company=company,
             patient=patient,
@@ -385,6 +400,7 @@ def seed_demo_care(*, meridian, orion, users, nadia):
             product=product,
             defaults={'dose': '0.25 mg weekly', 'quantity': 1},
         )
+        ShipmentItem.objects.filter(shipment=shipment).exclude(product=product).delete()  # An earlier seed's pen.
         # The rest of Nadia's prescription, drafted on the Weekly shipping list after this parcel.
         schedule_parcels(authorization)
         EmailDelivery.objects.get_or_create(

@@ -24,6 +24,8 @@
 .login-card h1 { color: var(--c-1a3440); font-family: inherit; font-size: 2.1rem; font-weight: 500; letter-spacing: -.02em; margin: .4rem 0 .65rem; }
 .login-card > p { color: var(--c-5c707a); line-height: 1.55; margin: 0 0 1.75rem; }
 .login-form p { margin: 1.5rem 0 1.1rem; }
+/* Sign-in page: the line between "Welcome back" and the fields. */
+.login-form--divided { border-top: 1px solid var(--c-e5edf1); }
 .login-form label { color: var(--c-284553); display: block; font-size: .875rem; font-weight: 700; margin-bottom: .45rem; }
 .login-form input[type='email'], .login-form input[type='password'] { background: var(--c-ffffff); border: 1px solid var(--c-bfcdd3); border-radius: .65rem; color: var(--c-1c343f); font: inherit; min-height: 3rem; padding: .7rem .85rem; width: 100%; }
 .login-form input:focus { border-color: var(--c-215065); box-shadow: 0 0 0 3px var(--c-215065-160); outline: none; }

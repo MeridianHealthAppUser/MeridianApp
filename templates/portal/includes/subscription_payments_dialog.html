@@ -4,7 +4,10 @@
     <h2 id="subscription-payments-title-{{ payment_plan.pk }}">Subscription payments</h2>
     <p class="app-dialog__sub">{{ payment_plan.patient }} · {{ payment_plan.plan_name }}</p>
     <div class="subscription-payment-summary"><strong>{{ payment_schedule.paid_count }} of {{ payment_schedule.total_count }} payments settled</strong><span>R{{ payment_schedule.paid_total|floatformat:2 }} paid to date</span></div>
-    <p class="patient-small">Discount a payment on its row, or select several to update together. Paid and processing payments stay unchanged.</p>
+    <div class="subscription-payments-toolbar">
+      <p class="patient-small">Discount a payment on its row, or select several to update together. Paid and processing payments stay unchanged.</p>
+      {% if payment_plan.status != 'cancelled' %}<a class="console-button console-button--primary" href="{% url 'portal:subscription-payments' payment_plan.pk %}?bulk=1" data-modal-open="bulk-discount-dialog-{{ payment_plan.pk }}" aria-haspopup="dialog">Bulk discount</a>{% endif %}
+    </div>
     {% if payment_errors %}<div class="errorlist" role="alert">{{ payment_errors }}</div>{% endif %}
     <div class="treatment-table-wrap"><table class="treatment-table subscription-payment-table">
       <thead><tr><th scope="col"><input type="checkbox" data-payment-select-all aria-label="Select all editable payments"></th><th scope="col">Due</th><th scope="col">Original</th><th scope="col">Discount</th><th scope="col">Amount</th><th scope="col">Status</th><th scope="col">Paid on</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead>
@@ -30,19 +33,21 @@
         </td></tr>{% endif %}
       {% empty %}<tr><td colspan="8">No payment schedule is available.</td></tr>{% endfor %}</tbody>
     </table></div>
-    {% if payment_plan.status != 'cancelled' %}
-    <details class="subscription-discount-editor" data-bulk-discount{% if bulk_open %} open{% endif %}>
-      <summary>Discount multiple payments <span data-payment-selected-count>0 selected</span></summary>
-      <p class="patient-small">Apply to checked payments, or all unpaid payments from an effective date. This replaces earlier discounts. Enter 0 to restore original amounts.</p>
-      <form class="console-form subscription-discount-form" id="bulk-discount-{{ payment_plan.pk }}" method="post" action="{% url 'portal:subscription-payments' payment_plan.pk %}" data-bulk-discount-form>
-        {% csrf_token %}<input type="hidden" name="workflow_context" value="{{ discount_token }}"><input type="hidden" name="return_to" value="{{ payment_return }}">{{ bulk_discount_form.non_field_errors }}{{ bulk_discount_form.payments.errors }}
-        <div class="subscription-bulk-targets"><div class="console-form__field">{{ bulk_discount_form.scope.label_tag }}{{ bulk_discount_form.scope }}{{ bulk_discount_form.scope.errors }}</div><div class="console-form__field" data-bulk-effective-date>{{ bulk_discount_form.effective_on.label_tag }}{{ bulk_discount_form.effective_on }}{{ bulk_discount_form.effective_on.errors }}<small>Payment due dates on or after this date.</small></div></div>
-        {% include 'portal/includes/subscription_discount_fields.html' with line_form=bulk_discount_form %}
-        <div class="subscription-discount-actions"><button class="console-button console-button--primary" type="submit">Apply discount to payments</button></div>
-      </form>
-    </details>{% endif %}
     {% if payment_schedule.projected_through %}<p class="patient-small">Planned payments are estimates through {{ payment_schedule.projected_through|date:'j M Y' }}.</p>{% endif %}
     {% if payment_schedule.rules %}<details class="subscription-discount-history"><summary>Discount history</summary><ul>{% for rule in payment_schedule.rules %}<li>{% if rule.kind == 'percent' %}{{ rule.value|floatformat:'-2' }}%{% else %}R{{ rule.value|floatformat:2 }}{% endif %} off · {% if rule.payment_on %}payment due {{ rule.payment_on|date:'j M Y' }}{% else %}unpaid payments from {{ rule.effective_on|date:'j M Y' }}{% endif %}<small>Effective {{ rule.effective_on|date:'j M Y' }} · {{ rule.created_by }} · {{ rule.created_at|date:'j M Y, H:i' }}{% if rule.reason %} · {{ rule.reason }}{% endif %}</small></li>{% endfor %}</ul></details>{% endif %}
     <div class="app-dialog__actions"><a class="console-button console-button--secondary" href="{{ payment_return }}" data-dialog-close>Close</a></div>
   </div>
 </dialog>
+{% if payment_plan.status != 'cancelled' %}{# A sibling, not nested: dialogs.js binds every [data-dialog-close] inside a dialog, so a nested Cancel would also close the payments dialog. The table's checkboxes join this form through form="bulk-discount-…". #}
+<dialog class="app-dialog subscription-bulk-dialog" id="bulk-discount-dialog-{{ payment_plan.pk }}" aria-labelledby="bulk-discount-title-{{ payment_plan.pk }}"{% if bulk_open %} open{% endif %}>
+  <div class="app-dialog__body">
+    <h2 id="bulk-discount-title-{{ payment_plan.pk }}">Bulk discount</h2>
+    <p class="app-dialog__sub">Apply to checked payments, or all unpaid payments from an effective date. This replaces earlier discounts. Enter 0 to restore original amounts.</p>
+    <form class="console-form subscription-discount-form" id="bulk-discount-{{ payment_plan.pk }}" method="post" action="{% url 'portal:subscription-payments' payment_plan.pk %}" data-bulk-discount-form>
+      {% csrf_token %}<input type="hidden" name="workflow_context" value="{{ discount_token }}"><input type="hidden" name="return_to" value="{{ payment_return }}">{{ bulk_discount_form.non_field_errors }}{{ bulk_discount_form.payments.errors }}
+      <div class="subscription-bulk-targets"><div class="console-form__field">{{ bulk_discount_form.scope.label_tag }}{{ bulk_discount_form.scope }}<small data-payment-selected-count aria-live="polite">Tick the payments to discount in the table.</small>{{ bulk_discount_form.scope.errors }}</div><div class="console-form__field" data-bulk-effective-date>{{ bulk_discount_form.effective_on.label_tag }}{{ bulk_discount_form.effective_on }}{{ bulk_discount_form.effective_on.errors }}<small>Payment due dates on or after this date.</small></div></div>
+      {% include 'portal/includes/subscription_discount_fields.html' with line_form=bulk_discount_form %}
+      <div class="app-dialog__actions"><button class="console-button console-button--secondary" type="button" data-dialog-close>Cancel</button><button class="console-button console-button--primary" type="submit">Apply</button></div>
+    </form>
+  </div>
+</dialog>{% endif %}

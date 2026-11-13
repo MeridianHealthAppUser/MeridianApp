@@ -107,6 +107,23 @@ class SubscriptionPaymentPopupTests(BillingPageFixture):
             listing = self.client.get(reverse('portal:treatment-subscriptions'), {'payments': self.plan.pk})
             Path(os.environ['MERIDIAN_PAYMENTS_PREVIEW']).write_bytes(listing.content)
 
+    def test_bulk_discount_button_opens_its_own_dialog_with_cancel_and_apply(self):
+        self.login(self.admin)
+        page = self.client.get(self.url())
+        pk = self.plan.pk
+        self.assertContains(page, f'data-modal-open="bulk-discount-dialog-{pk}"')
+        self.assertContains(page, f'<dialog class="app-dialog subscription-bulk-dialog" id="bulk-discount-dialog-{pk}"')
+        self.assertContains(page, '<button class="console-button console-button--secondary" type="button" data-dialog-close>Cancel</button>', html=True)
+        self.assertContains(page, '<button class="console-button console-button--primary" type="submit">Apply</button>', html=True)
+        self.assertNotContains(page, 'Discount multiple payments')
+        self.assertFalse(page.context['bulk_open'])
+        self.assertTrue(self.client.get(self.url(), {'bulk': '1'}).context['bulk_open'])
+        invalid = self.client.post(self.url(), {'workflow_context': page.context['discount_token'], 'scope': 'selected',
+            'kind': 'amount', 'value': '100'})
+        self.assertEqual(invalid.status_code, 400)
+        self.assertTrue(invalid.context['bulk_open'])
+        self.assertContains(invalid, 'Select at least one unpaid payment in the table.', status_code=400)
+
     def test_multi_select_is_atomic_if_a_later_payment_changes(self):
         from unittest.mock import patch
         from django.core.exceptions import ValidationError
