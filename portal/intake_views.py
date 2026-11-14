@@ -172,7 +172,7 @@ class QuestionnaireResultView(PrivateIntakeView):
 
 
 class CallbackForm(forms.Form):
-    phone = forms.CharField(label='Your phone number', max_length=32)
+    phone = forms.CharField(label='Your phone number', max_length=32, widget=forms.TextInput(attrs={'type': 'tel', 'autocomplete': 'tel'}))
     note = forms.CharField(label='What would you like to know? (optional)', max_length=1000, required=False,
                            widget=forms.Textarea(attrs={'rows': 3}))
 

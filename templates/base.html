@@ -29,6 +29,8 @@
     <link rel="stylesheet" href="{% static 'css/branding.css' %}?v=20260913-logo">
     {# The practice's brand palette and type for patients; loaded last so it can finish shared styles. #}
     {% if is_patient_portal %}<link rel="stylesheet" href="{% static 'css/patient_theme.css' %}?v=20261108a">{% endif %}
+    {# Most patients use a phone: the portal's phone layout (bottom sheets, list then conversation), after everything it adjusts. #}
+    {% if is_patient_portal %}<link rel="stylesheet" href="{% static 'css/patient_mobile.css' %}?v=20261114a">{% endif %}
     {% if page_navigation_config %}<script src="{% static 'js/app_navigation.js' %}" defer></script>{% endif %}
   </head>
   <body{% if is_workspace_page or is_patient_portal %} class="{% if is_workspace_page %}workspace-page{% endif %}{% if is_patient_portal %}{% if is_workspace_page %} {% endif %}patient-app{% endif %}"{% endif %}>

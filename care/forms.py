@@ -228,7 +228,7 @@ class WeightEntryForm(CompanyBoundModelForm):
         max_value=400,
         max_digits=5,
         decimal_places=2,
-        widget=forms.NumberInput(attrs={'step': '0.1', 'min': '20', 'max': '400'}),
+        widget=forms.NumberInput(attrs={'step': '0.1', 'min': '20', 'max': '400', 'inputmode': 'decimal'}),
     )
 
     class Meta:
@@ -236,7 +236,7 @@ class WeightEntryForm(CompanyBoundModelForm):
         fields = ('recorded_on', 'weight_kg', 'note')
         widgets = {
             'recorded_on': forms.DateInput(attrs={'type': 'date'}),
-            'weight_kg': forms.NumberInput(attrs={'step': '0.1', 'min': '20', 'max': '400'}),
+            'weight_kg': forms.NumberInput(attrs={'step': '0.1', 'min': '20', 'max': '400', 'inputmode': 'decimal'}),
             'note': forms.TextInput(attrs={'placeholder': 'Optional note'}),
         }
 
@@ -311,14 +311,19 @@ class EligibilityQuestionnaireForm(forms.Form):
     practice = forms.ModelChoiceField(queryset=Company.objects.none(), label='Practice', empty_label='Choose a practice')
     submission_token = forms.CharField(widget=forms.HiddenInput, max_length=8000)
     # Printed on blood-test request forms. Optional, so it never stops someone enquiring.
-    title = forms.ChoiceField(label='Title', required=False, choices=[('', 'Choose a title'), *Patient.Title.choices])
-    first_name = forms.CharField(max_length=150, label='First name')
-    last_name = forms.CharField(max_length=150, label='Last name')
-    email = forms.EmailField(label='Email address')
-    phone = forms.CharField(max_length=32, label='Mobile number')
-    id_number = forms.CharField(max_length=32, label='South African ID or passport number')
-    height_cm = forms.DecimalField(label='Height (cm)', min_value=80, max_value=260, decimal_places=1, max_digits=5)
-    weight_kg = forms.DecimalField(label='Weight (kg)', min_value=25, max_value=400, decimal_places=1, max_digits=6)
+    # Autofill and the right phone keyboard for each answer: most people fill this in on a phone.
+    title = forms.ChoiceField(label='Title', required=False, choices=[('', 'Choose a title'), *Patient.Title.choices],
+                              widget=forms.Select(attrs={'autocomplete': 'honorific-prefix'}))
+    first_name = forms.CharField(max_length=150, label='First name', widget=forms.TextInput(attrs={'autocomplete': 'given-name'}))
+    last_name = forms.CharField(max_length=150, label='Last name', widget=forms.TextInput(attrs={'autocomplete': 'family-name'}))
+    email = forms.EmailField(label='Email address', widget=forms.EmailInput(attrs={'autocomplete': 'email'}))
+    phone = forms.CharField(max_length=32, label='Mobile number', widget=forms.TextInput(attrs={'type': 'tel', 'autocomplete': 'tel'}))
+    id_number = forms.CharField(max_length=32, label='South African ID or passport number',
+                                widget=forms.TextInput(attrs={'autocomplete': 'off', 'autocapitalize': 'characters', 'spellcheck': 'false'}))
+    height_cm = forms.DecimalField(label='Height (cm)', min_value=80, max_value=260, decimal_places=1, max_digits=5,
+                                   widget=forms.NumberInput(attrs={'inputmode': 'decimal'}))
+    weight_kg = forms.DecimalField(label='Weight (kg)', min_value=25, max_value=400, decimal_places=1, max_digits=6,
+                                   widget=forms.NumberInput(attrs={'inputmode': 'decimal'}))
     adult = forms.ChoiceField(label='Are you 18 or older?', choices=(('yes', 'Yes'), ('no', 'No')), widget=forms.RadioSelect)
     weight_related_condition = forms.ChoiceField(
         label='Do you have a weight-related condition?', choices=(('yes', 'Yes'), ('no', 'No')), widget=forms.RadioSelect,

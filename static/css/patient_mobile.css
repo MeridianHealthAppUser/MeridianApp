@@ -1,0 +1,98 @@
+/* The patient portal on a phone (Nov 2026: about 95% of patients use one). Loaded last on patient pages (base.html),
+   after the shared console, fluid and patient theme styles it adjusts. The look stays the web version's; only what a
+   small touch screen needs changes:
+   - the bottom bar fits every label on one line;
+   - My Messages shows the list, then one conversation with a way back, instead of both stacked;
+   - dialogs and the Filters menu rise from the bottom as sheets, their buttons always in reach;
+   - tables read as compact cards, with buttons big enough to tap. */
+
+/* Bottom bar. "Medical Information" is "Medical info" there, as "My" is already dropped; each item is as wide as its
+   label plus an equal share of what's left, so "Appointments" fits too. Very narrow screens scroll the bar. */
+.patient-navigation__short { display: none; }
+@media (max-width: 52rem) {
+  .patient-navigation__full { display: none; }
+  .patient-navigation__short { display: inline; }
+  .patient-app .meridian-console .patient-navigation a { flex: 1 1 auto; min-width: max-content; padding-inline: .2rem; }
+  .patient-app .meridian-console .patient-navigation__label { white-space: nowrap; }
+}
+
+/* My Messages: the list and a conversation take turns whenever they'd otherwise stack (patient_messages.css). */
+.patient-conversation__back { display: none; }
+@media (max-width: 68rem) {
+  .patient-inbox-thread-list { max-height: none; }
+  .patient-inbox:not(.patient-inbox--open) .patient-conversation { display: none; }
+  .patient-inbox:not(.patient-inbox--open) .patient-inbox-threads { border-bottom: 0; }
+  .patient-inbox--open .patient-inbox-threads, .patient-inbox-toolbar--open { display: none; }
+  .patient-conversation { min-height: 0; }
+  .patient-conversation__back { align-items: center; align-self: flex-start; border-radius: .5rem; color: var(--console-teal-dark); display: inline-flex; flex: 0 0 100%; font-size: .82rem; font-weight: 600; gap: .4rem; margin: -.35rem 0 .1rem -.35rem; min-height: 2.5rem; padding: 0 .35rem; text-decoration: none; }
+  .patient-conversation__back svg { fill: none; height: 1rem; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 2; width: 1rem; }
+  .patient-conversation__back:focus-visible { outline: 2px solid var(--console-teal); outline-offset: 2px; }
+}
+@media (max-width: 42rem) {
+  .patient-inbox-toolbar .conversation-search { flex: 1 1 100%; margin-left: 0; }
+  /* The conversation, its newest messages and the reply box with Send fit above the bottom bar together; the reply
+     box starts at two lines and grows as you type (patient_portal.js). */
+  .patient-conversation-messages { max-height: max(13rem, calc(100vh - 30rem)); max-height: max(13rem, calc(100dvh - 30rem)); overscroll-behavior: contain; }
+  .patient-conversation-reply textarea { height: 3.4rem; min-height: 3.4rem; }
+}
+
+@media (max-width: 42rem) {
+  /* Dialogs become sheets from the bottom of the screen; long ones scroll inside with their buttons kept in view. */
+  .patient-app .app-dialog { border-radius: 1.4rem 1.4rem 0 0; margin: auto 0 0; max-height: calc(100vh - 2.5rem); max-height: calc(100dvh - 2.5rem); max-width: 100%; overscroll-behavior: contain; width: 100%; }
+  .patient-app .app-dialog[open]:not(:modal) { inset: auto 0 0; margin: 0; }
+  .patient-app .app-dialog__actions { background: var(--console-card, var(--c-ffffff)); bottom: 0; margin: 0 -1.1rem -1.1rem; padding: .8rem 1.1rem calc(1.1rem + env(safe-area-inset-bottom)); position: sticky; z-index: 2; }
+  .patient-app .app-dialog__actions > :is(a, button) { flex: 1 1 auto; justify-content: center; }
+  .patient-app .app-dialog .slot-picker__slots { max-height: none; overflow: visible; }
+  .patient-app .app-dialog .schedule-slot { min-height: 2.75rem; }
+
+  /* Filters: a sheet from the bottom over a dimmed page; a tap on the page closes it (filter_menu.js). */
+  .patient-app .filter-menu[open]::before { background: var(--c-183643-350); content: ""; inset: 0; position: fixed; z-index: 70; }
+  .patient-app .meridian-console .filter-menu[open] > .filter-menu__panel { bottom: calc(.6rem + env(safe-area-inset-bottom)); left: .6rem; max-height: calc(100vh - 5rem); max-height: calc(100dvh - 5rem); overflow-y: auto; overscroll-behavior: contain; position: fixed; right: .6rem !important; top: auto; transform-origin: bottom center; width: auto; z-index: 71; }
+  .patient-app .filter-menu__actions .console-button { flex: 1 1 auto; justify-content: center; min-height: 2.75rem; }
+
+  /* My Appointments: Open meeting room across the card, Request a change and Cancel side by side under it, all
+     full-size for a thumb. */
+  .patient-appointment-table td.patient-table__fit:not(.patient-table__fit--none) { display: block; padding-top: .7rem; }
+  .patient-appointment-table td.patient-table__fit::before { content: none; }
+  .patient-appointment-table .patient-table__fit .patient-table__actions { flex-direction: row; flex-wrap: wrap; }
+  .patient-appointment-table .patient-table__actions > * { flex: 1 1 8rem; }
+  .patient-appointment-table .patient-table__actions > [data-appointment-video-join] { flex-basis: 100%; }
+  .patient-table__actions .patient-row-action.console-button { font-size: .8rem; min-height: 2.75rem; }
+
+  /* Weight history: each check-in on one line, date and weight, with its note under it when there is one. */
+  .patient-weight-table tr { align-items: baseline; display: grid; gap: .2rem 1rem; grid-template-columns: minmax(0, 1fr) auto; padding: .8rem 1rem; }
+  .patient-weight-table td { display: block; padding: 0; }
+  .patient-weight-table td::before { content: none; }
+  .patient-weight-table td[data-label="Note"], .patient-weight-table td.patient-table__empty { grid-column: 1 / -1; }
+  .patient-weight-table td[data-label="Note"] { color: var(--patient-text); font-size: .8rem; }
+  .patient-weight-table td.patient-table__blank { display: none; }
+
+  /* Billing: a status keeps its pill shape; an invoice's lines stay a two-column table with amounts on the right. */
+  .patient-table td > .billing-pill { justify-self: start; }
+  .patient-table.billing-invoice__lines { display: table; }
+  .billing-invoice__lines thead { clip: auto; clip-path: none; display: table-header-group; height: auto; overflow: visible; position: static; white-space: normal; width: auto; }
+  .billing-invoice__lines tbody { display: table-row-group; }
+  .billing-invoice__lines tfoot { display: table-footer-group; }
+  .patient-table.billing-invoice__lines tr { border: 0; display: table-row; padding: 0; }
+  .patient-table.billing-invoice__lines :is(td, th) { display: table-cell; padding: .75rem 0; }
+  .patient-table.billing-invoice__lines td { border-top: 1px solid var(--console-soft-line); }
+  .patient-table.billing-invoice__lines td::before { content: none; }
+  .billing-invoice__lines :is(td, th):last-child { text-align: right; }
+
+  /* Blood tests: a request's buttons get the card's full width, side by side. */
+  .patient-app .clinical-table td[data-label="Action"] { display: block; padding-top: .6rem; }
+  .patient-app .clinical-table td[data-label="Action"]::before { content: none; }
+  .patient-app .clinical-row-actions > .console-button { flex: 1 1 auto; justify-content: center; min-height: 2.75rem; }
+
+  /* My Treatment's How your dose works wraps over several lines here, so it gets the body text's spacing. */
+  .patient-plan__note p { line-height: 1.55; }
+
+  /* Weight history's date range: From and To side by side, then View range beside All dates. */
+  .patient-app .patient-care-filters .console-form__field { flex: 1 1 8rem; }
+  .patient-app .patient-care-filters button { flex: 1 1 auto; width: auto; }
+}
+
+@media (max-width: 42rem) and (prefers-reduced-motion: no-preference) {
+  .patient-app .meridian-console .filter-menu[open] > .filter-menu__panel { animation: patient-sheet-in .32s cubic-bezier(.2, .9, .3, 1) both; }
+}
+@keyframes patient-sheet-in { from { opacity: 0; transform: translateY(1.5rem); } }

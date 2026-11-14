@@ -18,7 +18,7 @@
 {% endblock %}
 
 {% block patient_content %}
-  <div class="patient-inbox-toolbar">
+  <div class="patient-inbox-toolbar{% if composing or selected_thread %} patient-inbox-toolbar--open{% endif %}">
     <a class="console-button console-button--primary" href="{% url 'portal:patient-messages' %}?compose=1#patient-conversation">Start a new message</a>
     <span data-search-region="count">{{ page_obj.paginator.count }} conversation{{ page_obj.paginator.count|pluralize }}{% if search %} matching “{{ search }}”{% endif %}{% if filter_form.status.value == 'open' %} · open only{% elif filter_form.status.value == 'closed' %} · closed only{% endif %}</span>
     {% if filter_form.errors or filter_form.status.value == 'open' or filter_form.status.value == 'closed' %}<a class="patient-inline-link" href="{% url 'portal:patient-messages' %}">Show all conversations</a>{% endif %}
@@ -26,7 +26,8 @@
     {% include 'portal/includes/conversation_search.html' with search_clear_url=search_action|add:'?status='|add:search_hidden.status %}
   </div>
 
-  <section class="patient-inbox" aria-label="Secure messages">
+  {# On a phone the list and the open conversation take turns (patient_mobile.css): one at a time, with a way back. #}
+  <section class="patient-inbox{% if composing or selected_thread %} patient-inbox--open{% endif %}" aria-label="Secure messages">
     <section class="patient-inbox-threads" aria-labelledby="patient-thread-list-heading" data-search-region="list">
       <h2 class="sr-only" id="patient-thread-list-heading">Conversations</h2>
       <ol class="patient-inbox-thread-list">
@@ -59,6 +60,7 @@
     <section class="patient-conversation" id="patient-conversation" aria-labelledby="patient-conversation-heading" tabindex="-1">
       {% if composing %}
         <header class="patient-conversation__header" data-live-region="header">
+          <a class="patient-conversation__back" href="{% url 'portal:patient-messages' %}?status={{ filter_form.status.value|default:'all'|urlencode }}{% if search %}&amp;q={{ search|urlencode }}{% endif %}&amp;page={{ page_obj.number }}"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M19 12H5"/><path d="m11 6-6 6 6 6"/></svg>All conversations</a>
           <div>
             <h2 id="patient-conversation-heading">New message</h2>
             <p>Only you and the person you choose can read this conversation · kept in your medical record</p>
@@ -97,6 +99,7 @@
         {% endif %}
       {% elif selected_thread %}
         <header class="patient-conversation__header" data-live-region="header">
+          <a class="patient-conversation__back" href="{% url 'portal:patient-messages' %}?status={{ filter_form.status.value|default:'all'|urlencode }}{% if search %}&amp;q={{ search|urlencode }}{% endif %}&amp;page={{ page_obj.number }}"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M19 12H5"/><path d="m11 6-6 6 6 6"/></svg>All conversations</a>
           <div>
             <h2 id="patient-conversation-heading">{{ selected_thread.subject|default:"Your care" }}</h2>
             <p>With {% for row in selected_thread.participant_rows %}{{ row.user.full_name }}{% if not forloop.last %}, {% endif %}{% empty %}{{ patient_company.name }}{% endfor %} · kept in your medical record</p>

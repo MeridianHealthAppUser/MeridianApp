@@ -297,8 +297,10 @@ class DeliveryAddressForm(forms.Form):
     suburb = forms.CharField(label='Suburb', max_length=120)
     city = forms.CharField(label='City or town', max_length=120)
     province = forms.ChoiceField(label='Province', choices=(('', 'Choose a province'), *PROVINCES))
-    postal_code = forms.CharField(label='Postal code', max_length=4, min_length=4)
-    phone = forms.CharField(label='Contact number', max_length=32, help_text='The courier calls this number.')
+    postal_code = forms.CharField(label='Postal code', max_length=4, min_length=4,
+                                  widget=forms.TextInput(attrs={'inputmode': 'numeric', 'pattern': '[0-9]*'}))
+    phone = forms.CharField(label='Contact number', max_length=32, help_text='The courier calls this number.',
+                            widget=forms.TextInput(attrs={'type': 'tel'}))
     instructions = forms.CharField(label='Delivery instructions', required=False, max_length=300,
                                    widget=forms.Textarea(attrs={'rows': 2}), help_text='Optional, such as a gate code.')
 
@@ -314,6 +316,12 @@ class DeliveryAddressForm(forms.Form):
         super().__init__(*args, **kwargs)
         if for_patient:
             self.fields['recipient'].help_text = 'Leave blank to use your own name.'
+            # The patient's own address, so their phone can fill it in (never on the practice's form for a patient).
+            for name, token in (('recipient', 'shipping name'), ('business', 'shipping organization'),
+                                ('street', 'shipping address-line1'), ('suburb', 'shipping address-level3'),
+                                ('city', 'shipping address-level2'), ('province', 'shipping address-level1'),
+                                ('postal_code', 'shipping postal-code'), ('phone', 'shipping tel')):
+                self.fields[name].widget.attrs['autocomplete'] = token
 
     def address(self):
         from care.addresses import FIELDS

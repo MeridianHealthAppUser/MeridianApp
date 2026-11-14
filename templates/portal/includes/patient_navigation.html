@@ -5,7 +5,7 @@
       <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="m3 10 9-7 9 7v10H3Z"/><path d="M9 20v-7h6v7"/></svg><span class="patient-navigation__label">Home</span>
     </a>
     <a href="{% url 'portal:patient-medical-profile' %}"{% if patient_nav == 'medical_info' %} class="is-active" aria-current="page"{% endif %}>
-      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M8 4H5v17h14V4h-3"/><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M8 11h8m-8 4h8"/></svg><span class="patient-navigation__label"><span class="patient-navigation__prefix">My </span>Medical Information</span>
+      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M8 4H5v17h14V4h-3"/><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M8 11h8m-8 4h8"/></svg><span class="patient-navigation__label"><span class="patient-navigation__prefix">My </span>Medical <span class="patient-navigation__full">Information</span><span class="patient-navigation__short">info</span></span>
     </a>
     <a href="{% url 'portal:patient-treatment' %}"{% if patient_nav == 'treatment' %} class="is-active" aria-current="{% if patient_section == 'treatment' %}page{% else %}true{% endif %}"{% endif %}>
       <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 21S3 15 3 9a5 5 0 0 1 9-3 5 5 0 0 1 9 3c0 6-9 12-9 12Z"/><path d="M8 11h8m-4-4v8"/></svg><span class="patient-navigation__label"><span class="patient-navigation__prefix">My </span>Treatment</span>

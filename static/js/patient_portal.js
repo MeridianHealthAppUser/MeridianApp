@@ -13,6 +13,15 @@
     return true;
   }
 
+  // The reply box in a conversation grows as you type, up to about eight lines; on a phone it starts at two
+  // (patient_mobile.css) so the newest messages and Send fit on the screen. Clearing it after sending shrinks it back.
+  listen(document, 'input', (event) => {
+    const box = event.target.closest?.('.patient-conversation-reply textarea');
+    if (!box) return;
+    box.style.height = '';
+    if (box.scrollHeight > box.clientHeight) box.style.height = `${Math.min(box.scrollHeight + box.offsetHeight - box.clientHeight, 192)}px`;
+  });
+
   listen(document, 'click', (event) => {
     const opener = event.target.closest('[data-weight-log-open]');
     if (opener && openWeightLog(true)) {

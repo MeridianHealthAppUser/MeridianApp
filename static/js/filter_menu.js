@@ -44,8 +44,10 @@
     });
   });
 
+  // A click on the menu itself rather than its button or panel is on the dimmed page behind a phone's sheet
+  // (patient_mobile.css), so it counts as elsewhere too.
   listen(document, 'click', (event) => {
-    menus.forEach((menu) => { if (menu.open && !menu.contains(event.target)) close(menu); });
+    menus.forEach((menu) => { if (menu.open && (!menu.contains(event.target) || event.target === menu)) close(menu); });
   });
   listen(window, 'resize', () => menus.forEach((menu) => { if (menu.open) place(menu); }));
   listen(document, 'keydown', (event) => {

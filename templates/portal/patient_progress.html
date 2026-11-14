@@ -80,14 +80,14 @@
     <section class="console-card" aria-labelledby="weight-history-heading">
       <header class="console-card__header"><div class="console-card__heading"><h2 id="weight-history-heading">Your weight history</h2><p>{{ page_obj.paginator.count }} check-in{{ page_obj.paginator.count|pluralize }} recorded at this practice.</p></div></header>
       <div class="patient-table-wrap">
-        <table class="patient-table" aria-labelledby="weight-history-heading">
+        <table class="patient-table patient-weight-table" aria-labelledby="weight-history-heading">
           <thead><tr><th scope="col">Date</th><th scope="col">Weight</th><th scope="col">Note</th></tr></thead>
           <tbody>
             {% for weight in weights %}
               <tr>
                 <td data-label="Date"><time datetime="{{ weight.recorded_on|date:'Y-m-d' }}">{{ weight.recorded_on|date:"j M Y" }}</time></td>
                 <td data-label="Weight"><strong>{{ weight.weight_kg|kg }} kg</strong></td>
-                <td data-label="Note"><span class="patient-table__note">{{ weight.note|default:"—"|linebreaksbr }}</span></td>
+                <td data-label="Note"{% if not weight.note %} class="patient-table__blank"{% endif %}><span class="patient-table__note">{{ weight.note|default:"—"|linebreaksbr }}</span></td>
               </tr>
             {% empty %}
               <tr><td class="patient-table__empty" colspan="3">Your check-ins will appear here once you save your first update.</td></tr>
