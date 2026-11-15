@@ -9,10 +9,19 @@
 (() => {
   function open(dialog) {
     if (dialog.open) dialog.close();
+    // A dialog opens on its title, not its first box: an iPhone opens the box's keyboard or list straight away when
+    // focus follows a tap, over the sheet as it appears (the Clinician list, Nov 2026). A screen reader starts at the
+    // title too, and Tab goes on to the first box. A control the dialog marks autofocus still takes it.
+    const error = dialog.querySelector('.errorlist');
+    const title = document.getElementById(dialog.getAttribute('aria-labelledby')) || dialog.querySelector('h2');
+    if (!error && title && dialog.contains(title) && !dialog.querySelector('[autofocus]')) {
+      title.tabIndex = -1;
+      title.setAttribute('autofocus', '');
+    }
     dialog.showModal();
     dialog.dispatchEvent(new CustomEvent('dialog:open'));
     // After an error, start at the first field.
-    const field = dialog.querySelector('.errorlist') ? dialog.querySelector('select, textarea, input:not([type="hidden"])') : null;
+    const field = error ? dialog.querySelector('select, textarea, input:not([type="hidden"])') : null;
     if (field) field.focus();
     const mark = dialog.querySelector('[data-dialog-scroll]');
     if (mark) mark.scrollIntoView({ block: 'center' });

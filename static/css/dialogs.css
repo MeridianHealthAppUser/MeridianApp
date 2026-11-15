@@ -14,3 +14,5 @@
 @media (max-width: 760px) { .app-dialog__body { padding: 1.1rem; } }
 /* A dialog's button that waits until its form has everything it needs, such as a booking's time. */
 .app-dialog .console-button:disabled, .app-dialog .console-button[disabled] { cursor: not-allowed; opacity: .5; }
+/* A dialog opens with focus on its title (dialogs.js), which is a heading, not a control, so it isn't ringed. */
+.app-dialog [tabindex="-1"]:is(h1, h2, h3):focus { outline: none; }
