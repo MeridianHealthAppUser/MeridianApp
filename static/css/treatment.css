@@ -74,17 +74,19 @@
 @media (max-width: 480px) {
   .patient-timeline__when { align-items: baseline; grid-auto-flow: column; justify-content: start; gap: .5rem; }
 }
-/* On a phone, the week sits above its three columns. */
+/* On a phone, the week sits above a two-by-two block in the key's order: Prescription and Shipment, then Dosage and
+   Payment (James, 15 Nov 2026). Each keeps its side every week; a week with no prescription change or shipment
+   drops that empty row, so a quiet week is one line with its dose on the left. Blocks side by side are as tall as
+   each other. */
 @media (max-width: 600px) {
-  .patient-timeline__week { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .patient-timeline__week { align-items: stretch; gap: .4rem; grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .patient-timeline__week .patient-timeline__when { grid-column: 1 / -1; }
-  .patient-timeline__week { gap: .45rem .4rem; }
-  .patient-timeline__week .patient-timeline__chip { font-size: .74rem; padding: .25rem .4rem; }
-  /* The key names each column, so the chips drop the words it repeats. */
+  .patient-timeline__cell--decision, .patient-timeline__cell--dose { grid-column: 1; }
+  .patient-timeline__cell--parcel, .patient-timeline__cell--payment { grid-column: 2; }
+  .patient-timeline__cell:empty { display: none; }
+  .patient-timeline__week .patient-timeline__chip { align-content: start; padding: .35rem .55rem; }
+  /* The key names each block, so the chips drop the words it repeats. */
   .patient-timeline__word { display: none; }
-  /* A decision spans the row above the three columns; a week without one doesn't leave a gap. */
-  .patient-timeline__cell--decision { grid-column: 1 / -1; }
-  .patient-timeline__cell--decision:empty { display: none; }
 }
 
 /* Cancel my subscription: the reasons, one tick each. */

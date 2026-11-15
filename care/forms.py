@@ -16,6 +16,21 @@ from .tag_forms import TagFieldsMixin
 from .widgets import QUARTER_HOUR_CHOICES, QuarterHourDateTimeField, quarter_hour_text
 
 
+class DecimalCommaField(forms.DecimalField):
+    """A measurement typed on a phone, such as a weight: 119,8 or 119.8.
+
+    A phone set to South Africa shows a comma as the keypad's decimal key, and Safari's number box (type=number)
+    won't take a comma, so this is a text box that brings up the same keypad (inputmode=decimal) and reads either mark
+    (James, 15 Nov 2026). The field's own limits are still checked here."""
+
+    widget = forms.TextInput(attrs={'inputmode': 'decimal'})
+
+    def to_python(self, value):
+        if isinstance(value, str):
+            value = value.strip().replace(' ', '').replace(',', '.')
+        return super().to_python(value)
+
+
 class CompanyBoundModelForm(forms.ModelForm):
     """A form that never lets a browser provide the tenancy boundary."""
 
@@ -222,21 +237,13 @@ class LogNoteForm(CompanyBoundModelForm):
 
 
 class WeightEntryForm(CompanyBoundModelForm):
-    weight_kg = forms.DecimalField(
-        label='Weight (kg)',
-        min_value=20,
-        max_value=400,
-        max_digits=5,
-        decimal_places=2,
-        widget=forms.NumberInput(attrs={'step': '0.1', 'min': '20', 'max': '400', 'inputmode': 'decimal'}),
-    )
+    weight_kg = DecimalCommaField(label='Weight (kg)', min_value=20, max_value=400, max_digits=5, decimal_places=2)
 
     class Meta:
         model = WeightEntry
         fields = ('recorded_on', 'weight_kg', 'note')
         widgets = {
             'recorded_on': forms.DateInput(attrs={'type': 'date'}),
-            'weight_kg': forms.NumberInput(attrs={'step': '0.1', 'min': '20', 'max': '400', 'inputmode': 'decimal'}),
             'note': forms.TextInput(attrs={'placeholder': 'Optional note'}),
         }
 
@@ -320,10 +327,8 @@ class EligibilityQuestionnaireForm(forms.Form):
     phone = forms.CharField(max_length=32, label='Mobile number', widget=forms.TextInput(attrs={'type': 'tel', 'autocomplete': 'tel'}))
     id_number = forms.CharField(max_length=32, label='South African ID or passport number',
                                 widget=forms.TextInput(attrs={'autocomplete': 'off', 'autocapitalize': 'characters', 'spellcheck': 'false'}))
-    height_cm = forms.DecimalField(label='Height (cm)', min_value=80, max_value=260, decimal_places=1, max_digits=5,
-                                   widget=forms.NumberInput(attrs={'inputmode': 'decimal'}))
-    weight_kg = forms.DecimalField(label='Weight (kg)', min_value=25, max_value=400, decimal_places=1, max_digits=6,
-                                   widget=forms.NumberInput(attrs={'inputmode': 'decimal'}))
+    height_cm = DecimalCommaField(label='Height (cm)', min_value=80, max_value=260, decimal_places=1, max_digits=5)
+    weight_kg = DecimalCommaField(label='Weight (kg)', min_value=25, max_value=400, decimal_places=1, max_digits=6)
     adult = forms.ChoiceField(label='Are you 18 or older?', choices=(('yes', 'Yes'), ('no', 'No')), widget=forms.RadioSelect)
     weight_related_condition = forms.ChoiceField(
         label='Do you have a weight-related condition?', choices=(('yes', 'Yes'), ('no', 'No')), widget=forms.RadioSelect,

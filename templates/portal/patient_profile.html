@@ -30,7 +30,7 @@
         </dl>
         <div class="patient-card-actions"><a class="console-button console-button--secondary patient-card-actions__wide" href="{% url 'portal:patient-profile' %}?change=1#request-details-change" data-modal-open="request-details-change" aria-haspopup="dialog">Request a change</a></div>
         <p class="patient-small">Our practice administrator will review requests in My Messages and update your personal details. You can change your delivery address yourself.</p>
-        <div class="patient-card-actions" role="group" aria-label="Account security">
+        <div class="patient-card-actions patient-card-actions--split" role="group" aria-label="Account security">
           <a class="console-button console-button--secondary" href="{% url 'accounts:password-change' %}">Change password</a>
           <form method="post" action="{% url 'accounts:logout' %}">{% csrf_token %}<button class="console-button patient-button--red" type="submit">Sign out</button></form>
         </div>

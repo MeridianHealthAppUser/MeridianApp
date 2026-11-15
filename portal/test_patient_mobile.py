@@ -3,8 +3,10 @@ My Messages as a list then one conversation, compact weight history, and forms t
 and autofill. The layout itself is static/css/patient_mobile.css."""
 
 from datetime import timedelta
+from decimal import Decimal
 
 from django.contrib.auth import get_user_model
+from django.core.exceptions import ValidationError
 from django.test import SimpleTestCase, TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
@@ -63,6 +65,21 @@ class PatientPhoneLayoutTests(TestCase):
                 self.assertContains(response, 'class="patient-conversation__back" href="/patient/messages/?status=all&amp;page=1"')
                 self.assertContains(response, 'All conversations</a>')
 
+    def test_profile_account_buttons_share_the_width(self):
+        self.assertContains(self.page('patient-profile'),
+                            'class="patient-card-actions patient-card-actions--split" role="group" aria-label="Account security"')
+
+    def test_weight_chart_shows_its_kg_scale_and_each_reading(self):
+        today = timezone.localdate()
+        for days, weight in ((14, '91.40'), (7, '90.60'), (0, '89.80')):
+            WeightEntry.objects.create(company=self.company, patient=self.patient, recorded_by=self.user,
+                                       recorded_on=today - timedelta(days=days), weight_kg=weight)
+        response = self.page('patient-progress')
+        self.assertContains(response, 'data-weight-chart tabindex="0"')
+        self.assertContains(response, 'data-weight-point data-date="' + f'{today:%-d %b %Y}' + '" data-weight="89.8"')
+        self.assertContains(response, '<div class="patient-weight-chart__ticks" aria-hidden="true"><span style="top: 12.800%">92</span><span style="top: 36.800%">91</span>')
+        self.assertContains(response, 'data-weight-chart-callout role="status" hidden')
+
     def test_weight_history_marks_check_ins_without_a_note(self):
         today = timezone.localdate()
         WeightEntry.objects.create(company=self.company, patient=self.patient, recorded_by=self.user, recorded_on=today,
@@ -89,6 +106,19 @@ class PhoneKeyboardAndAutofillTests(SimpleTestCase):
         self.assertEqual(attrs['weight_kg']['inputmode'], 'decimal')
         self.assertEqual(CallbackForm().fields['phone'].widget.input_type, 'tel')
         self.assertEqual(WeightEntryForm.base_fields['weight_kg'].widget.attrs['inputmode'], 'decimal')
+
+    def test_weights_and_heights_take_a_comma_or_a_point(self):
+        # A phone set to South Africa types 119,8; Safari's number box refuses the comma, so these are text boxes.
+        for field in (WeightEntryForm.base_fields['weight_kg'], EligibilityQuestionnaireForm.base_fields['weight_kg'],
+                      EligibilityQuestionnaireForm.base_fields['height_cm']):
+            with self.subTest(field=field.label):
+                self.assertEqual(field.widget.input_type, 'text')
+                self.assertEqual(field.clean('119,8'), Decimal('119.8'))
+                self.assertEqual(field.clean(' 119.8 '), Decimal('119.8'))
+        with self.assertRaises(ValidationError):
+            WeightEntryForm.base_fields['weight_kg'].clean('9,5')
+        with self.assertRaises(ValidationError):
+            EligibilityQuestionnaireForm.base_fields['weight_kg'].clean('119,85')
 
     def test_only_the_patients_own_address_form_offers_autofill(self):
         patient = Patient(phone='082 000 0000', city='Cape Town')

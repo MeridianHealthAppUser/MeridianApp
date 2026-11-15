@@ -1,22 +1,32 @@
 {% load workspace_ui %}
 <figure class="patient-weight-chart">
-  <svg viewBox="0 0 720 250" role="img" aria-labelledby="{{ chart_id }}-title {{ chart_id }}-description">
-    <title id="{{ chart_id }}-title">Recorded weight in kilograms{% if chart.reference.polygon %} with an illustrative reference{% endif %}</title><desc id="{{ chart_id }}-description">{{ chart.count }} check-in{{ chart.count|pluralize }} from {{ chart.start|date:"j M Y" }} to {{ chart.recorded_end|date:"j M Y" }}.{% if chart.reference.polygon %} The shaded band illustrates 500g to 1kg per week after a four-week starter period. It is not a prediction or a personal target. The solid line and dots show only your recorded measurements.{% elif chart.reference %} The illustrative reference falls outside the dates shown. The line and dots show your recorded measurements.{% else %} Each recorded point is labelled with its date and weight.{% endif %}</desc>
-    {% for tick in chart.ticks %}<line x1="62" x2="692" y1="{{ tick.y }}" y2="{{ tick.y }}" class="patient-weight-chart__grid"/><text x="10" y="{{ tick.y|add:'4' }}">{{ tick.label }}</text>{% endfor %}
-    {% if chart.reference.polygon %}
-      <polygon points="{{ chart.reference.polygon }}" class="patient-weight-chart__reference"/>
-      <polyline points="{{ chart.reference.upper_line }}" class="patient-weight-chart__reference-edge"/>
-      <polyline points="{{ chart.reference.lower_line }}" class="patient-weight-chart__reference-edge"/>
-    {% endif %}
-    {% if chart.reference.starter_x %}<line x1="{{ chart.reference.starter_x }}" x2="{{ chart.reference.starter_x }}" y1="32" y2="212" class="patient-weight-chart__starter"/>{% endif %}
-    <polyline points="{{ chart.polyline }}" class="patient-weight-chart__line"/>
-    {% for point in chart.points %}<circle cx="{{ point.x }}" cy="{{ point.y }}" r="3" class="patient-weight-chart__point"><title>{{ point.date|date:"j M Y" }}: {{ point.weight|kg }} kg</title></circle>{% endfor %}
-    <text x="62" y="240">{{ chart.start|date:"j M Y" }}</text><text x="692" y="240" text-anchor="end">{{ chart.end|date:"j M Y" }}</text>
-  </svg>
+  {# The kg scale is text beside the drawing, so it stays readable however small the chart is drawn on a phone. A tap, #}
+  {# drag or hover over the chart (or the arrow keys once it has focus) shows each check-in's date and weight #}
+  {# (patient_portal.js); without scripts each dot still names its own. #}
+  <div class="patient-weight-chart__plot" data-weight-chart tabindex="0" aria-describedby="{{ chart_id }}-hint">
+    <svg viewBox="0 0 720 250" role="img" aria-labelledby="{{ chart_id }}-title {{ chart_id }}-description">
+      <title id="{{ chart_id }}-title">Recorded weight in kilograms{% if chart.reference.polygon %} with an illustrative reference{% endif %}</title><desc id="{{ chart_id }}-description">{{ chart.count }} check-in{{ chart.count|pluralize }} from {{ chart.start|date:"j M Y" }} to {{ chart.recorded_end|date:"j M Y" }}.{% if chart.reference.polygon %} The shaded band illustrates 500g to 1kg per week after a four-week starter period, level at your starting weight until then. It is not a prediction or a personal target. The solid line and dots show only your recorded measurements.{% elif chart.reference %} The illustrative reference falls outside the dates shown. The line and dots show your recorded measurements.{% else %} Each recorded point is labelled with its date and weight.{% endif %}</desc>
+      {% for tick in chart.ticks %}<line x1="62" x2="692" y1="{{ tick.y }}" y2="{{ tick.y }}" class="patient-weight-chart__grid"/>{% endfor %}
+      {% if chart.reference.polygon %}
+        <polygon points="{{ chart.reference.polygon }}" class="patient-weight-chart__reference"/>
+        <polyline points="{{ chart.reference.upper_line }}" class="patient-weight-chart__reference-edge"/>
+        <polyline points="{{ chart.reference.lower_line }}" class="patient-weight-chart__reference-edge"/>
+        {% if chart.reference.level_line %}<polyline points="{{ chart.reference.level_line }}" class="patient-weight-chart__reference-edge"/>{% endif %}
+      {% endif %}
+      <line x1="0" x2="0" y1="32" y2="212" class="patient-weight-chart__guide" data-weight-chart-guide visibility="hidden"/>
+      <polyline points="{{ chart.polyline }}" class="patient-weight-chart__line"/>
+      {% for point in chart.points %}<circle cx="{{ point.x }}" cy="{{ point.y }}" r="3" class="patient-weight-chart__point" data-weight-point data-date="{{ point.date|date:'j M Y' }}" data-weight="{{ point.weight|kg }}"><title>{{ point.date|date:"j M Y" }}: {{ point.weight|kg }} kg</title></circle>{% endfor %}
+      <circle cx="0" cy="0" r="6" class="patient-weight-chart__selected" data-weight-chart-ring visibility="hidden"/>
+      <text x="62" y="240">{{ chart.start|date:"j M Y" }}</text><text x="692" y="240" text-anchor="end">{{ chart.end|date:"j M Y" }}</text>
+    </svg>
+    <div class="patient-weight-chart__ticks" aria-hidden="true">{% for tick in chart.ticks %}<span style="top: {{ tick.top }}%">{{ tick.label }}</span>{% endfor %}</div>
+    <p class="patient-weight-chart__callout" data-weight-chart-callout role="status" hidden></p>
+  </div>
+  <p class="sr-only" id="{{ chart_id }}-hint">Use the left and right arrow keys to read each check-in’s date and weight.</p>
   <div class="patient-weight-chart__range"><span>{{ chart.start|date:"j M Y" }} – {{ chart.end|date:"j M Y" }}</span><span>Recorded {{ chart.minimum|kg }}–{{ chart.maximum|kg }} kg</span></div>
   {% if chart.reference %}
     <figcaption>
-      <div class="patient-weight-chart__legend"><span><i class="patient-weight-chart__key patient-weight-chart__key--recorded" aria-hidden="true"></i>Your recorded weight</span>{% if chart.reference.polygon %}<span><i class="patient-weight-chart__key patient-weight-chart__key--reference" aria-hidden="true"></i>Illustrative reference · 500g–1kg/week</span>{% endif %}</div>
+      <div class="patient-weight-chart__legend"><span><i class="patient-weight-chart__key patient-weight-chart__key--recorded" aria-hidden="true"></i>Your recorded weight (kg)</span>{% if chart.reference.polygon %}<span><i class="patient-weight-chart__key patient-weight-chart__key--reference" aria-hidden="true"></i>Illustrative reference · 500g–1kg/week</span>{% endif %}</div>
       {% if not chart.reference.polygon %}<p>The illustrative 500g–1kg/week reference falls outside the dates shown.</p>{% endif %}
       <p>No weight loss is expected in the first four weeks. Thereafter, we aim for 500g to 1kg of weight loss per week (as shown in blue). Message your doctor if you are not in this range - a dose adjustment may be required.</p>
       {% if caption %}<p>{{ caption }}</p>{% endif %}

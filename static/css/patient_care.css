@@ -22,7 +22,17 @@
 .patient-weight-chart__point { stroke: var(--console-teal); stroke-width: 1.5; fill: var(--c-ffffff); }
 .patient-weight-chart__reference { fill: var(--patient-accent-soft, var(--console-teal-soft)); }
 .patient-weight-chart__reference-edge { fill: none; stroke: var(--patient-ink-2, var(--console-teal-dark)); stroke-dasharray: 5 4; stroke-width: 1.2; }
-.patient-weight-chart__starter { stroke: var(--console-muted); stroke-dasharray: 2 5; stroke-width: 1; }
+/* The kg scale: text beside the drawing (not in it), right-aligned in the drawing's left margin (62 of 720), so it
+   stays readable when a phone draws the chart at half size. */
+.patient-weight-chart__plot { border-radius: .5rem; position: relative; touch-action: pan-y; -webkit-tap-highlight-color: transparent; }
+.patient-weight-chart__plot:focus-visible { outline: 2px solid var(--console-teal); outline-offset: 4px; }
+.patient-weight-chart__ticks { inset: 0; pointer-events: none; position: absolute; }
+.patient-weight-chart__ticks span { color: var(--console-muted); font-size: .7rem; font-variant-numeric: tabular-nums; line-height: 1; position: absolute; right: calc(91.39% + .4rem); transform: translateY(-50%); white-space: nowrap; }
+/* A check-in's reading, above its dot (below it near the top), with a guide down to the axis. */
+.patient-weight-chart__callout { background: var(--console-ink); border-radius: .5rem; box-shadow: 0 4px 14px var(--c-183643-160); color: var(--console-card); font-size: .75rem; font-variant-numeric: tabular-nums; font-weight: 600; line-height: 1.3; margin: 0; padding: .3rem .55rem; pointer-events: none; position: absolute; transform: translate(-50%, calc(-100% - .65rem)); white-space: nowrap; z-index: 2; }
+.patient-weight-chart__callout.is-below { transform: translate(-50%, .65rem); }
+.patient-weight-chart__guide { stroke: var(--console-muted); stroke-dasharray: 2 4; stroke-width: 1; }
+.patient-weight-chart__selected { fill: var(--console-teal); pointer-events: none; stroke: var(--console-card); stroke-width: 2; }
 .patient-weight-chart figcaption { color: var(--console-muted); font-size: .8rem; line-height: 1.5; margin-top: .5rem; }
 .patient-weight-chart figcaption p { margin: .6rem 0 0; }
 .patient-weight-chart__legend { color: var(--patient-text); display: flex; flex-wrap: wrap; gap: .5rem 1rem; font-size: .78rem; }
@@ -34,7 +44,6 @@
 @media (max-width: 46rem) {
   .patient-care-filters .console-form__field { flex-basis: 100%; }
   .patient-care .patient-care-filters button { width: 100%; }
-  .patient-weight-chart svg { min-height: 8rem; }
   .patient-weight-chart svg text { display: none; }
   .patient-weight-chart__range { display: flex; flex-wrap: wrap; gap: .4rem 1rem; justify-content: space-between; color: var(--patient-text); font-size: .75rem; line-height: 1.5; }
 }

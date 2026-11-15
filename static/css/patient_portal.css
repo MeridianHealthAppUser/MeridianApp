@@ -99,6 +99,8 @@
 .patient-card-actions--split > * { justify-content: center; width: 100%; }
 .patient-card-actions__wide { justify-content: center; width: 100%; }
 .patient-card-actions--split > .patient-card-actions__wide { grid-column: 1 / -1; }
+.patient-card-actions--split > form { margin: 0; }
+.patient-card-actions--split > form > .console-button { justify-content: center; width: 100%; }
 .workspace-page .meridian-console .console-button.patient-button--rose { border-color: var(--patient-rose-line); color: var(--console-red); }
 /* A filled red button, such as Sign out. */
 .workspace-page .meridian-console .console-button.patient-button--red { background: var(--console-red); border-color: var(--console-red); color: var(--c-ffffff); }

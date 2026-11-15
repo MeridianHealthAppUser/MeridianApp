@@ -92,6 +92,14 @@
   .patient-app .patient-care-filters button { flex: 1 1 auto; width: auto; }
 }
 
+/* iPhone only (Safari on iOS): a date box draws its own control, wider than the form and with its date centred. Drawn
+   as a plain box like the others it fits the form, reads from the left and is as tall as the boxes around it; a tap
+   still opens the date wheel. */
+@supports (-webkit-touch-callout: none) {
+  .patient-app input[type="date"] { -webkit-appearance: none; appearance: none; display: block; min-height: 2.5625rem; }
+  .patient-app input[type="date"]::-webkit-date-and-time-value { margin: 0; text-align: left; }
+}
+
 @media (max-width: 42rem) and (prefers-reduced-motion: no-preference) {
   .patient-app .meridian-console .filter-menu[open] > .filter-menu__panel { animation: patient-sheet-in .32s cubic-bezier(.2, .9, .3, 1) both; }
 }

@@ -35,6 +35,23 @@ class PatientWeightChartTests(SimpleTestCase):
         self.assertEqual(chart['reference']['starter_x'], '377.00')
         self.assertLess(Decimal(chart['points'][1]['y']), Decimal(chart['points'][0]['y']))
 
+    def test_reference_is_level_at_the_starting_weight_until_the_band_begins(self):
+        chart = weight_chart([self.row(0, '100'), self.row(14, '103'), self.row(56, '94')], reference=self.reference())
+        level = chart['reference']['level_line'].split()
+        self.assertEqual([pair.split(',')[0] for pair in level], ['62.00', '377.00'])
+        self.assertEqual(level[0].split(',')[1], level[1].split(',')[1])
+        # A first check-in after the starter weeks has nothing to be level from.
+        late = self.row(70, '96')
+        self.assertNotIn('level_line', weight_chart([late], reference=self.reference(late))['reference'])
+
+    def test_gridlines_fall_on_round_weights(self):
+        chart = weight_chart([self.row(0, '123'), self.row(7, '122.6'), self.row(35, '119')])
+        self.assertEqual([tick['label'] for tick in chart['ticks']], ['124', '122', '120', '118'])
+        self.assertEqual([tick['y'] for tick in chart['ticks']], ['32.00', '92.00', '152.00', '212.00'])
+        self.assertEqual(chart['ticks'][0]['top'], '12.800')
+        small = weight_chart([self.row(0, '100')])
+        self.assertEqual([tick['label'] for tick in small['ticks']], ['100.5', '100.0', '99.5'])
+
     def test_single_check_in_keeps_a_real_dot_and_finite_reference_inside_course(self):
         row = self.row(0, '100')
         chart = weight_chart([row], reference=self.reference(row, end=42))

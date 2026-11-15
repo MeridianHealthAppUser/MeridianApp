@@ -43,6 +43,11 @@
 .patient-icon-link svg { height: 1rem; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.8; width: 1rem; }
 .patient-icon-link:hover { background: var(--console-teal-soft); }
 .patient-icon-link:focus-visible { outline: 2px solid var(--console-teal); outline-offset: 2px; }
+/* A card with no header starts with its body, so the body keeps the card's side inset above and below its content
+   rather than the console's thin padding (My Medical Information, My Treatment). A form or empty note that brings its
+   own padding is left as it is, and cards that set their own padding still win: this adds no specificity beyond
+   .console-card__body's own. */
+.console-card__body:where(.patient-page-content .console-card > :first-child:not(:has(> :is(.console-form, .patient-empty):first-child))) { padding-block: 1.1rem; }
 .patient-profile-details > .console-card__body { padding: 1.35rem 1.6rem 1.6rem; }
 .patient-empty { color: var(--patient-text); font-size: .85rem; line-height: 1.65; margin: 0; padding: 1.1rem 0; }
 .patient-empty p { margin: 0 0 .8rem; }

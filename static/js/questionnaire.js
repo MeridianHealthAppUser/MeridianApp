@@ -15,9 +15,11 @@
     const answered = questions.filter(question => question.querySelector('input:checked')).length;
     if (progress) progress.textContent = `${answered} of ${questions.length} answered`;
   }
+  // A phone set to South Africa types a comma as the decimal mark (119,8), which the form accepts too.
+  const measure = input => Number(String(input?.value ?? '').trim().replace(',', '.'));
   function updateBmi() {
-    const height = Number(heightInput?.value);
-    const weight = Number(weightInput?.value);
+    const height = measure(heightInput);
+    const weight = measure(weightInput);
     const bmi = weight / ((height / 100) ** 2);
     if (bmiValue) bmiValue.textContent = height > 0 && weight > 0 && Number.isFinite(bmi) && bmi < 1000 ? `BMI ${bmi.toFixed(1)}` : 'BMI —';
   }

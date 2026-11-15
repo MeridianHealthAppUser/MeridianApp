@@ -161,8 +161,11 @@
 .meridian-console .fluid-tabs a:active { transform: scale(.95); transition-duration: .1s, .1s, 90ms; transition-timing-function: ease-out; }
 .meridian-console .fluid-tab-thumb { left: 0; list-style: none; pointer-events: none; position: absolute; top: 0; will-change: transform, width; z-index: 0; }
 .meridian-console .fluid-tabs { -webkit-user-select: none; user-select: none; }
-/* Tabs too many for the width scroll inside the capsule; they fade under whichever edge has more (fluid.js marks it). */
-.workspace-page .meridian-console .fluid-tabs::before, .workspace-page .meridian-console .fluid-tabs::after { align-self: stretch; content: ""; flex: 0 0 2rem; opacity: 0; pointer-events: none; position: sticky; transition: opacity .2s ease; z-index: 2; }
+/* Tabs too many for the width scroll inside the capsule; they fade under whichever edge has more (fluid.js marks it).
+   The capsule is as wide as its tabs, up to the width available. Each fade overlaps the tabs (its negative margin), so
+   it takes no room; Safari sizes the capsule from the fade's width rather than its flex basis, so both are given, or
+   the capsule loses both fades' width and clips its first tab (My Appointments' Upcoming, Nov 2026). */
+.workspace-page .meridian-console .fluid-tabs::before, .workspace-page .meridian-console .fluid-tabs::after { align-self: stretch; content: ""; flex: 0 0 2rem; opacity: 0; pointer-events: none; position: sticky; transition: opacity .2s ease; width: 2rem; z-index: 2; }
 .workspace-page .meridian-console .fluid-tabs::before { background: linear-gradient(to right, var(--fluid-glass-thick) 25%, transparent); border-radius: 999px 0 0 999px; left: 0; margin-inline-end: -2rem; }
 .workspace-page .meridian-console .fluid-tabs::after { background: linear-gradient(to left, var(--fluid-glass-thick) 25%, transparent); border-radius: 0 999px 999px 0; margin-inline-start: -2rem; right: 0; }
 .workspace-page .meridian-console .fluid-tabs[data-fluid-more~="start"]::before, .workspace-page .meridian-console .fluid-tabs[data-fluid-more~="end"]::after { opacity: 1; }

@@ -1,7 +1,7 @@
 """Accessible recorded weights, optionally alongside a labelled illustrative reference."""
 
 from datetime import date, timedelta
-from decimal import Decimal
+from decimal import ROUND_CEILING, ROUND_FLOOR, Decimal
 from urllib.parse import urlencode
 
 from django import forms
@@ -72,7 +72,7 @@ def weight_chart(rows, *, reference=None):
     axis_values = values + [row[key] for row in reference_rows for key in ('lower', 'upper')]
     low, high = min(axis_values), max(axis_values)
     margin = max(Decimal('0.5'), (high - low) / Decimal('10'))
-    low, high = max(Decimal('0'), low - margin), high + margin
+    low, high, step = weight_axis(max(Decimal('0'), low - margin), high + margin)
     days = max(1, (end - start).days)
 
     def x(day):
@@ -93,10 +93,37 @@ def weight_chart(rows, *, reference=None):
                          upper_line=' '.join(upper), lower_line=' '.join(lower), rows=reference_rows)
         if start <= reference['starts_on'] <= end:
             reference['starter_x'] = f'{x(reference["starts_on"]):.2f}'
+        # The four weeks with no loss expected: level at the starting weight, from that check-in to where the band
+        # begins, so the band visibly starts from the starting weight rather than partway along (James, 15 Nov 2026).
+        level_from, level_to = max(start, reference['baseline_date']), min(end, reference['starts_on'])
+        if level_from < level_to:
+            level_y = f'{y(reference["baseline_weight"]):.2f}'
+            reference['level_line'] = f'{x(level_from):.2f},{level_y} {x(level_to):.2f},{level_y}'
+    ticks = []
+    tick = high
+    while tick >= low:
+        ticks.append({'y': f'{y(tick):.2f}', 'top': f'{y(tick) / 250 * 100:.3f}',
+                      'label': f'{tick:.1f}' if step < 1 else f'{tick:.0f}'})
+        tick -= step
     return dict(points=points, polyline=' '.join(f'{point["x"]},{point["y"]}' for point in points),
-                ticks=[{'y': 32, 'label': f'{high:.1f}'}, {'y': 122, 'label': f'{(high + low) / 2:.1f}'}, {'y': 212, 'label': f'{low:.1f}'}],
-                start=start, end=end, recorded_end=rows[-1].recorded_on, reference=reference,
+                ticks=ticks, start=start, end=end, recorded_end=rows[-1].recorded_on, reference=reference,
                 count=len(points), minimum=min(values), maximum=max(values))
+
+
+# Gridlines fall on round weights (0.5, 1, 2 or 5 kg apart, or tens of those), two to four steps covering the chart,
+# so the scale reads at a glance.
+AXIS_STEPS = [Decimal(base) * 10 ** power for power in range(4) for base in ('0.5', '1', '2', '5') if base != '0.5' or power == 0]
+
+
+def weight_axis(low, high):
+    for step in AXIS_STEPS:
+        bottom = (low / step).to_integral_value(rounding=ROUND_FLOOR) * step
+        top = (high / step).to_integral_value(rounding=ROUND_CEILING) * step
+        if top == bottom:
+            top += step
+        if (top - bottom) / step <= 4:
+            return bottom, top, step
+    return low, high, high - low
 
 
 def weight_history_context(request, weights):
