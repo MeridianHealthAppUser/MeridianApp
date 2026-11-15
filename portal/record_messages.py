@@ -75,6 +75,8 @@ def record_messages_context(request, company, membership, patient, *, selected_i
         'record_page_obj': page,
         'record_newer_url': page_url(page.previous_page_number()) if page.has_previous() else '',
         'record_older_url': page_url(page.next_page_number()) if page.has_next() else '',
+        # A phone shows the list or a conversation, and this is the way back to the list (staff_mobile.css).
+        'record_list_url': page_url(page.number),
         'record_has_threads': has_threads, 'record_read_state_fields': {'return_to': 'record', 'q': search},
         'search': search, 'search_hidden': {'tab': 'messages'},
         'search_action': reverse('portal:patient-detail', args=[patient.pk]),

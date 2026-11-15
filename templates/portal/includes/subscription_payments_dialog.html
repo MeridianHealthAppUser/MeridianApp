@@ -9,17 +9,17 @@
       {% if payment_plan.status != 'cancelled' %}<a class="console-button console-button--primary" href="{% url 'portal:subscription-payments' payment_plan.pk %}?bulk=1" data-modal-open="bulk-discount-dialog-{{ payment_plan.pk }}" aria-haspopup="dialog">Bulk discount</a>{% endif %}
     </div>
     {% if payment_errors %}<div class="errorlist" role="alert">{{ payment_errors }}</div>{% endif %}
-    <div class="treatment-table-wrap"><table class="treatment-table subscription-payment-table">
+    <div class="treatment-table-wrap"><table class="staff-phone-cards treatment-table subscription-payment-table">
       <thead><tr><th scope="col"><input type="checkbox" data-payment-select-all aria-label="Select all editable payments"></th><th scope="col">Due</th><th scope="col">Original</th><th scope="col">Discount</th><th scope="col">Amount</th><th scope="col">Status</th><th scope="col">Paid on</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead>
       <tbody>{% for row in payment_schedule.rows %}
         <tr data-payment-row>
           <td>{% if row.editable %}<input type="checkbox" name="payments" value="{{ row.key }}" form="bulk-discount-{{ payment_plan.pk }}" data-payment-select aria-label="Select payment due {{ row.due_on|date:'j M Y' }}"{% if row.key in bulk_discount_form.payments.value %} checked{% endif %}>{% else %}<span class="sr-only">Not editable</span>{% endif %}</td>
-          <td>{{ row.due_on|date:'j M Y' }}{% if row.projected %}<small>Planned</small>{% endif %}</td>
-          <td>{% if row.base is not None %}R{{ row.base|floatformat:2 }}{% else %}Not priced{% endif %}</td>
-          <td>{% if row.discount_amount %}<span class="subscription-discount-label">−R{{ row.discount_amount|floatformat:2 }}</span>{% if row.discount.kind == 'percent' %}<small>{{ row.discount.value|floatformat:'-2' }}% off</small>{% endif %}{% else %}—{% endif %}</td>
-          <td>{% if row.amount is not None %}<strong>R{{ row.amount|floatformat:2 }}</strong>{% else %}Not priced{% endif %}</td>
-          <td>{{ row.status }}</td><td>{{ row.paid_at|date:'j M Y'|default:'—' }}</td>
-          <td>{% if row.editable %}<a class="subscription-line-discount-toggle" href="{% url 'portal:subscription-payments' payment_plan.pk %}?edit={{ row.key|urlencode }}#{{ row.editor_id }}" data-line-discount-open="{{ row.editor_id }}" aria-controls="{{ row.editor_id }}" aria-expanded="{{ row.edit_open|yesno:'true,false' }}">{% if row.discount_amount %}Edit discount{% else %}Discount{% endif %}<span class="sr-only"> payment due {{ row.due_on|date:'j M Y' }}</span></a>{% endif %}</td>
+          <td data-label="Due">{{ row.due_on|date:'j M Y' }}{% if row.projected %}<small>Planned</small>{% endif %}</td>
+          <td data-label="Original">{% if row.base is not None %}R{{ row.base|floatformat:2 }}{% else %}Not priced{% endif %}</td>
+          <td data-label="Discount">{% if row.discount_amount %}<span class="subscription-discount-label">−R{{ row.discount_amount|floatformat:2 }}</span>{% if row.discount.kind == 'percent' %}<small>{{ row.discount.value|floatformat:'-2' }}% off</small>{% endif %}{% else %}—{% endif %}</td>
+          <td data-label="Amount">{% if row.amount is not None %}<strong>R{{ row.amount|floatformat:2 }}</strong>{% else %}Not priced{% endif %}</td>
+          <td data-label="Status">{{ row.status }}</td><td data-label="Paid on">{{ row.paid_at|date:'j M Y'|default:'—' }}</td>
+          <td data-label="Actions">{% if row.editable %}<a class="subscription-line-discount-toggle" href="{% url 'portal:subscription-payments' payment_plan.pk %}?edit={{ row.key|urlencode }}#{{ row.editor_id }}" data-line-discount-open="{{ row.editor_id }}" aria-controls="{{ row.editor_id }}" aria-expanded="{{ row.edit_open|yesno:'true,false' }}">{% if row.discount_amount %}Edit discount{% else %}Discount{% endif %}<span class="sr-only"> payment due {{ row.due_on|date:'j M Y' }}</span></a>{% endif %}</td>
         </tr>
         {% if row.discount_form %}
         <tr class="subscription-line-editor" id="{{ row.editor_id }}"{% if not row.edit_open %} hidden{% endif %}><td colspan="8">

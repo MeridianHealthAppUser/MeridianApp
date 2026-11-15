@@ -109,7 +109,7 @@
               <a class="console-button console-button--primary" href="{% url 'portal:patient-list' %}">View patients</a>
             </header>
             <div class="patient-table-wrap">
-              <table class="patient-table">
+              <table class="staff-phone-cards patient-table">
                 <thead>
                   <tr>
                     <th scope="col">Patient</th>
@@ -122,16 +122,16 @@
                 <tbody>
                   {% for listed_patient in patients %}
                     <tr>
-                      <td>
+                      <td data-label="Patient">
                         <div class="patient-table__person">
                           <span class="console-patient-avatar" aria-hidden="true">{{ listed_patient.first_name|slice:":1"|upper }}{{ listed_patient.last_name|slice:":1"|upper }}</span>
                           <span>{{ listed_patient }}<span class="patient-table__detail">{{ listed_patient.user.email|default:listed_patient.phone|default:"Contact details pending" }}</span></span>
                         </div>
                       </td>
-                      <td>{{ listed_patient.medical_record_number|default:"Record pending" }}</td>
-                      <td>{% if listed_patient.assigned_doctor %}{{ listed_patient.assigned_doctor.full_name }}{% else %}Unassigned{% endif %}</td>
-                      <td>{% if listed_patient.is_active %}<span class="console-status console-status--active">Active</span>{% else %}<span class="console-status">Inactive</span>{% endif %}</td>
-                      <td class="patient-table__action-cell"><a class="console-button console-button--secondary" href="{% url 'portal:patient-detail' listed_patient.pk %}">Open record<span class="sr-only"> for {{ listed_patient }}</span></a></td>
+                      <td data-label="Record">{{ listed_patient.medical_record_number|default:"Record pending" }}</td>
+                      <td data-label="Prescribing doctor">{% if listed_patient.assigned_doctor %}{{ listed_patient.assigned_doctor.full_name }}{% else %}Unassigned{% endif %}</td>
+                      <td data-label="Status">{% if listed_patient.is_active %}<span class="console-status console-status--active">Active</span>{% else %}<span class="console-status">Inactive</span>{% endif %}</td>
+                      <td data-label="Open patient" class="patient-table__action-cell"><a class="console-button console-button--secondary" href="{% url 'portal:patient-detail' listed_patient.pk %}">Open record<span class="sr-only"> for {{ listed_patient }}</span></a></td>
                     </tr>
                   {% empty %}
                     <tr>

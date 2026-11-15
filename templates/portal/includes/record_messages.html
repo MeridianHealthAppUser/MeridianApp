@@ -13,10 +13,11 @@
     </span>
   </header>
 
-  <div class="record-inbox{% if not record_has_threads %} record-inbox--single{% endif %}">
+  <div class="record-inbox{% if not record_has_threads %} record-inbox--single{% elif record_thread or record_starting %} record-inbox--open{% endif %}">
     {% if record_has_threads %}{% include 'portal/includes/record_conversation_list.html' %}{% endif %}
 
     <section class="record-messages__pane" aria-label="Conversation">
+      {% if record_has_threads and record_thread or record_has_threads and record_starting %}{% include 'portal/includes/inbox_back_link.html' with url=record_list_url %}{% endif %}
       {% if record_thread %}
         {% include 'portal/includes/patient_conversation.html' with thread=record_thread message_form=record_message_form new_url=record_new_url conversation_return_to='record' read_state_fields=record_read_state_fields %}
       {% elif record_starting %}

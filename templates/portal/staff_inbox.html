@@ -2,7 +2,7 @@
 {% load static workspace_ui %}
 
 {% block title %}{{ messages_title }} | {{ company.name }} | Meridian{% endblock %}
-{% block extra_css %}<link rel="stylesheet" href="{% static 'css/console.css' %}?v=20261108a"><link rel="stylesheet" href="{% static 'css/conversations.css' %}?v=20261104a"><link rel="stylesheet" href="{% static 'css/person_tags.css' %}?v=20261104a"><link rel="stylesheet" href="{% static 'css/message_tones.css' %}?v=20261008a"><link rel="stylesheet" href="{% static 'css/conversation_search.css' %}?v=20261104a"><script src="{% static 'js/conversations.js' %}?v=20261007b" defer></script><script src="{% static 'js/conversation_search.js' %}?v=20261005" defer></script><link rel="stylesheet" href="{% static 'css/dialogs.css' %}?v=20261115a"><script src="{% static 'js/dialogs.js' %}?v=20261115a" defer></script><script src="{% static 'js/conversation_management.js' %}?v=20261008b" defer></script><link rel="stylesheet" href="{% static 'css/filter_menu.css' %}?v=20261104a"><script src="{% static 'js/filter_menu.js' %}?v=20261114a" defer></script>{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{% static 'css/console.css' %}?v=20261108a"><link rel="stylesheet" href="{% static 'css/conversations.css' %}?v=20261104a"><link rel="stylesheet" href="{% static 'css/person_tags.css' %}?v=20261104a"><link rel="stylesheet" href="{% static 'css/message_tones.css' %}?v=20261008a"><link rel="stylesheet" href="{% static 'css/conversation_search.css' %}?v=20261104a"><script src="{% static 'js/conversations.js' %}?v=20261007b" defer></script><script src="{% static 'js/conversation_search.js' %}?v=20261005" defer></script><link rel="stylesheet" href="{% static 'css/dialogs.css' %}?v=20261115a"><script src="{% static 'js/dialogs.js' %}?v=20261115b" defer></script><script src="{% static 'js/conversation_management.js' %}?v=20261008b" defer></script><link rel="stylesheet" href="{% static 'css/filter_menu.css' %}?v=20261104a"><script src="{% static 'js/filter_menu.js' %}?v=20261114a" defer></script>{% endblock %}
 {% block content %}
   <div class="meridian-console console-desktop inbox-console">
     <div class="console-shell">
@@ -30,7 +30,7 @@
           {% include 'portal/includes/records_header.html' with records_tab='messages' action_url=inbox_url|add:'?compose=1' action_label='New patient message' %}
 
           {# Filters (Open or Closed, and which patients) to the left of the search on the right, as in Team messages. #}
-          <div class="inbox-toolbar inbox-toolbar--search-only">
+          <div class="inbox-toolbar inbox-toolbar--search-only{% if inbox_thread or inbox_composing %} inbox-toolbar--open{% endif %}">
             {% include 'portal/includes/filter_menu.html' with filter_menu_class='filter-menu--compact' %}
             {# Searches the conversations you are in: messages, subjects, the patient and the clinicians. #}
             {% url 'portal:staff-inbox' as search_action %}
@@ -38,7 +38,7 @@
           </div>
 
           {# The conversations on the left and the one being read on the right, as on the patient record. #}
-          <section class="record-inbox record-inbox--fill" aria-label="Patient conversations" data-record-messages>
+          <section class="record-inbox record-inbox--fill{% if inbox_thread or inbox_composing %} record-inbox--open{% endif %}" aria-label="Patient conversations" data-record-messages>
             <section class="record-inbox__threads" aria-labelledby="inbox-thread-list-heading" data-search-region="list">
               <h2 class="sr-only" id="inbox-thread-list-heading">Conversations</h2>
               <ol class="record-inbox__list">
@@ -55,6 +55,7 @@
             </section>
 
             <section class="record-messages__pane" aria-label="Conversation">
+              {% if inbox_thread or inbox_composing %}{% include 'portal/includes/inbox_back_link.html' with url=inbox_list_url %}{% endif %}
               {% if inbox_thread %}
                 {% include 'portal/includes/patient_conversation.html' with thread=inbox_thread patient=inbox_patient message_form=inbox_message_form new_url=inbox_new_url open_record_url=inbox_record_url conversation_return_to='patient_messages' read_state_fields=inbox_read_state_fields %}
               {% elif inbox_composing %}

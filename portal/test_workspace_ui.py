@@ -58,7 +58,7 @@ class WorkspacePresentationTests(TestCase):
             with self.subTest(closed=name):
                 self.assertContains(self.page(name), f'<div class="message-list__actions"><span class="record-inbox-pill">Closed</span><a class="console-button console-button--secondary" href="{record}?thread={thread.pk}')
         # On the desktop Overview the button sits against the right edge of the row.
-        self.assertContains(self.page('desktop-dashboard'), f'<td class="patient-table__action-cell"><a class="console-button console-button--secondary" href="{record}">Open record')
+        self.assertContains(self.page('desktop-dashboard'), f'<td data-label="Open patient" class="patient-table__action-cell"><a class="console-button console-button--secondary" href="{record}">Open record')
 
     def test_overview_has_spaced_metric_labels_and_compact_style_hook(self):
         self.login(self.super_admin)

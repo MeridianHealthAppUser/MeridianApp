@@ -170,6 +170,8 @@ def team_inbox_context(request, company, membership, *, selected_id=None, **over
                 choice_section('about', 'Patient', ABOUT_CHOICES, about, icon='person'),
             ]),
         team_search_clear_url=team_url(status=status, about=about),
+        # A phone shows the list or a conversation, and this is the way back to the list (staff_mobile.css).
+        team_list_url=team_url(status=status, page=page.number, search=search, about=about),
         team_previous_url=team_url(status=status, page=page.previous_page_number(), search=search, about=about) if page.has_previous() else '',
         team_next_url=team_url(status=status, page=page.next_page_number(), search=search, about=about) if page.has_next() else '',
         thread_form=TeamThreadForm(company=company, actor=request.user, membership=membership, initial=compose_initial(request)),

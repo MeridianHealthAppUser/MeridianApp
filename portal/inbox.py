@@ -205,6 +205,8 @@ def staff_inbox_context(request, company, membership, *, selected_id=None, **ove
                 choice_section('patients', 'Patient', [(person.pk, str(person)) for person in people], patients, icon='person'),
             ]),
         'inbox_search_clear_url': staff_inbox_url(status=status, patients=patients),
+        # A phone shows the list or a conversation, and this is the way back to the list (staff_mobile.css).
+        'inbox_list_url': staff_inbox_url(status=status, page=page.number, search=search, patients=patients),
         'inbox_previous_url': staff_inbox_url(status=status, page=page.previous_page_number(), search=search, patients=patients) if page.has_previous() else '',
         'inbox_next_url': staff_inbox_url(status=status, page=page.next_page_number(), search=search, patients=patients) if page.has_next() else '',
         'messages_title': messages_title(membership),

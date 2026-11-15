@@ -1,0 +1,81 @@
+/* Staff pages on a phone (doctors, practice administrators and super admins, Nov 2026). Loaded last on staff pages
+   (base.html), after the shared console, fluid and page styles it adjusts. Every rule applies only at or below 52rem,
+   where the bottom bar replaces the side menu; the web layout above that is unchanged (James, 15 Nov 2026). As on the
+   patient side (patient_mobile.css), only what a small touch screen needs changes:
+   - the bottom bar fits every label on one line;
+   - an inbox shows its list, then one conversation with a way back;
+   - dialogs and the Filters menu rise from the bottom as sheets, their buttons always in reach;
+   - tables that would scroll sideways read as compact cards, each value under its column's name. */
+
+/* The way back from a conversation to its inbox's list; phones only. */
+.record-inbox__back { display: none; }
+
+@media (max-width: 52rem) {
+  /* Bottom bar: each item is as wide as its label plus an equal share of what's left, so no label is cut short
+     ("Messages", "Inventory"); a very narrow screen scrolls the bar instead. */
+  .workspace-page .meridian-console .staff-mobile-nav { gap: .1rem; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none; }
+  .workspace-page .meridian-console .staff-mobile-nav::-webkit-scrollbar { display: none; }
+  .workspace-page .meridian-console .staff-mobile-nav a { flex: 1 0 auto; min-width: max-content; padding-inline: .15rem; }
+  .workspace-page .meridian-console .staff-mobile-nav a > span { overflow: visible; }
+
+  /* Inboxes (Patient messages, Team messages, a record's Messages): the list and a conversation take turns. */
+  .workspace-page .record-inbox { grid-template-columns: minmax(0, 1fr); }
+  .workspace-page .record-inbox:not(.record-inbox--open, .record-inbox--single) .record-messages__pane { display: none; }
+  .workspace-page .record-inbox:not(.record-inbox--open) .record-inbox__threads { border-bottom: 0; border-right: 0; }
+  .workspace-page .record-inbox:not(.record-inbox--open) .record-inbox__list { max-height: none; }
+  .workspace-page .record-inbox--open .record-inbox__threads, .workspace-page .inbox-toolbar--open { display: none; }
+  .record-inbox__back { align-items: center; align-self: flex-start; border-radius: .5rem; color: var(--console-teal-dark); display: inline-flex; font-size: .82rem; font-weight: 600; gap: .4rem; margin: -.35rem 0 .35rem -.35rem; min-height: 2.5rem; padding: 0 .35rem; text-decoration: none; }
+  .record-inbox__back svg { fill: none; height: 1rem; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 2; width: 1rem; }
+  .record-inbox__back:focus-visible { outline: 2px solid var(--console-teal); outline-offset: 2px; }
+
+  /* Tables that would scroll sideways (staff-phone-cards): one card per row, each value beside its column's name, as
+     the patient directory and task list already are. A cell without a name (an empty-list row) spans the card. */
+  .workspace-page :is(.patient-table-wrap, .privacy-table-wrap, .treatment-table-wrap, .backoffice-table-wrap, .management-table-wrap, .patient-workspace-table-wrap):has(> .staff-phone-cards) { overflow: visible; }
+  .workspace-page table.staff-phone-cards { border-collapse: separate; border-spacing: 0; min-width: 0; width: 100%; }
+  .workspace-page .staff-phone-cards :is(tbody, tr, td) { display: block; }
+  .workspace-page .staff-phone-cards thead { clip: rect(0 0 0 0); clip-path: inset(50%); height: 1px; overflow: hidden; position: absolute; white-space: nowrap; width: 1px; }
+  .workspace-page .meridian-console .staff-phone-cards tr { border-bottom: 1px solid var(--console-soft-line); padding: .75rem .9rem; }
+  .workspace-page .meridian-console .staff-phone-cards tr:last-child { border-bottom: 0; }
+  .workspace-page .meridian-console .staff-phone-cards td { align-items: start; border: 0; color: var(--console-ink); display: grid; font-size: .75rem; gap: .55rem; grid-template-columns: minmax(6.5rem, .82fr) minmax(0, 1.18fr); min-width: 0; padding: .34rem 0; text-align: left; white-space: normal; }
+  .workspace-page .meridian-console .staff-phone-cards td::before { color: var(--c-8d9ea7); content: attr(data-label); font-size: .61rem; font-weight: 800; letter-spacing: .07em; line-height: 1.35; text-transform: uppercase; }
+  .workspace-page .meridian-console .staff-phone-cards td:not([data-label]) { display: block; }
+  .workspace-page .meridian-console .staff-phone-cards td:not([data-label])::before { content: none; }
+  /* Everything in a cell sits under its value, beside the name, as a duration under an appointment's type does. */
+  .workspace-page .meridian-console .staff-phone-cards td[data-label] > * { grid-column: 2; min-width: 0; }
+
+  /* The round back arrow beside the breadcrumbs takes a fingertip's tap around it, looking the same. */
+  .page-breadcrumbs__back { position: relative; }
+  .page-breadcrumbs__back::after { content: ""; inset: -.5rem; position: absolute; }
+}
+
+@media (max-width: 42rem) {
+  /* The operations card tables (operations.css): a second line in a cell, such as the email under a recipient's name
+     on the Communications log, sits under the value rather than under the column's name. */
+  .workspace-page .ops-table td[data-label] > small { grid-column: 2; }
+
+  /* Dialogs become sheets from the bottom of the screen; long ones scroll inside with their buttons kept in view. */
+  .workspace-page .app-dialog { border-radius: 1.4rem 1.4rem 0 0; margin: auto 0 0; max-height: calc(100vh - 2.5rem); max-height: calc(100dvh - 2.5rem); max-width: 100%; overscroll-behavior: contain; width: 100%; }
+  .workspace-page .app-dialog[open]:not(:modal) { inset: auto 0 0; margin: 0; }
+  .workspace-page .app-dialog__actions { background: var(--console-card, var(--c-ffffff)); bottom: 0; margin: 0 -1.1rem -1.1rem; padding: .8rem 1.1rem calc(1.1rem + env(safe-area-inset-bottom)); position: sticky; z-index: 2; }
+  .workspace-page .app-dialog__actions > :is(a, button) { flex: 1 1 auto; justify-content: center; }
+
+  /* Filters: a sheet from the bottom over a dimmed page; a tap on the page closes it (filter_menu.js). */
+  .workspace-page .filter-menu[open]::before { background: var(--c-183643-350); content: ""; inset: 0; position: fixed; z-index: 70; }
+  .workspace-page .meridian-console .filter-menu[open] > .filter-menu__panel { bottom: calc(.6rem + env(safe-area-inset-bottom)); left: .6rem; max-height: calc(100vh - 5rem); max-height: calc(100dvh - 5rem); overflow-y: auto; overscroll-behavior: contain; position: fixed; right: .6rem !important; top: auto; transform-origin: bottom center; width: auto; z-index: 71; }
+  .workspace-page .filter-menu__actions .console-button { flex: 1 1 auto; justify-content: center; min-height: 2.75rem; }
+}
+
+/* iPhone only (Safari on iOS): a date box draws its own control, wider than the form and with its date centred. Drawn
+   as a plain box like the others it fits the form, reads from the left and is as tall as the boxes around it; a tap
+   still opens the date wheel. */
+@supports (-webkit-touch-callout: none) {
+  @media (max-width: 52rem) {
+    .workspace-page input[type="date"] { -webkit-appearance: none; appearance: none; display: block; min-height: 2.5625rem; }
+    .workspace-page input[type="date"]::-webkit-date-and-time-value { margin: 0; text-align: left; }
+  }
+}
+
+@media (max-width: 42rem) and (prefers-reduced-motion: no-preference) {
+  .workspace-page .meridian-console .filter-menu[open] > .filter-menu__panel { animation: staff-sheet-in .32s cubic-bezier(.2, .9, .3, 1) both; }
+}
+@keyframes staff-sheet-in { from { opacity: 0; transform: translateY(1.5rem); } }

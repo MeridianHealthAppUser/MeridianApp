@@ -1,11 +1,11 @@
 {# Staff Data requests: the table and its pages follow the search above as you type (data-search-region). #}
 <div data-search-region="list">
 {% if filter_form.errors %}<div class="staff-filter-error" role="alert">Correct the filters to view requests.</div>{% else %}
-  <div class="privacy-table-wrap" role="region" aria-label="Privacy requests" tabindex="0"><table class="privacy-table">
+  <div class="privacy-table-wrap" role="region" aria-label="Privacy requests" tabindex="0"><table class="staff-phone-cards privacy-table">
     <thead><tr>{% if privacy_staff %}<th scope="col">Patient</th>{% endif %}<th scope="col">Request</th><th scope="col">Submitted</th><th scope="col">Status</th><th scope="col">Action</th></tr></thead>
     <tbody>{% for item in page_obj %}<tr>
-      {% if privacy_staff %}<td>{{ item.patient }}</td>{% endif %}<td>{{ item.get_kind_display }}</td><td>{{ item.created_at|date:"j M Y, H:i" }}</td><td><span class="console-status">{{ item.get_status_display }}</span></td>
-      <td><a class="console-button console-button--secondary" href="{% if privacy_staff %}{% url 'portal:staff-data-request-detail' item.pk %}{% else %}{% url 'portal:patient-data-request-detail' item.pk %}{% endif %}">Open request</a></td>
+      {% if privacy_staff %}<td data-label="Patient">{{ item.patient }}</td>{% endif %}<td data-label="Request">{{ item.get_kind_display }}</td><td data-label="Submitted">{{ item.created_at|date:"j M Y, H:i" }}</td><td data-label="Status"><span class="console-status">{{ item.get_status_display }}</span></td>
+      <td data-label="Action"><a class="console-button console-button--secondary" href="{% if privacy_staff %}{% url 'portal:staff-data-request-detail' item.pk %}{% else %}{% url 'portal:patient-data-request-detail' item.pk %}{% endif %}">Open request</a></td>
     </tr>{% empty %}<tr><td colspan="{% if privacy_staff %}5{% else %}4{% endif %}">No requests match these filters.</td></tr>{% endfor %}</tbody>
   </table></div>
 {% endif %}

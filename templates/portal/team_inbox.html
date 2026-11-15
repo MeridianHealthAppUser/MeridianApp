@@ -2,7 +2,7 @@
 {% load static workspace_ui conversation_ui %}
 
 {% block title %}Team messages | {{ company.name }} | Meridian{% endblock %}
-{% block extra_css %}<link rel="stylesheet" href="{% static 'css/console.css' %}?v=20261108a"><link rel="stylesheet" href="{% static 'css/conversations.css' %}?v=20261104a"><link rel="stylesheet" href="{% static 'css/person_tags.css' %}?v=20261104a"><link rel="stylesheet" href="{% static 'css/message_tones.css' %}?v=20261008a"><link rel="stylesheet" href="{% static 'css/conversation_search.css' %}?v=20261104a"><script src="{% static 'js/conversations.js' %}?v=20261007b" defer></script><script src="{% static 'js/conversation_search.js' %}?v=20261005" defer></script><link rel="stylesheet" href="{% static 'css/dialogs.css' %}?v=20261115a"><script src="{% static 'js/dialogs.js' %}?v=20261115a" defer></script><script src="{% static 'js/conversation_management.js' %}?v=20261008b" defer></script><link rel="stylesheet" href="{% static 'css/filter_menu.css' %}?v=20261104a"><script src="{% static 'js/filter_menu.js' %}?v=20261114a" defer></script>{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{% static 'css/console.css' %}?v=20261108a"><link rel="stylesheet" href="{% static 'css/conversations.css' %}?v=20261104a"><link rel="stylesheet" href="{% static 'css/person_tags.css' %}?v=20261104a"><link rel="stylesheet" href="{% static 'css/message_tones.css' %}?v=20261008a"><link rel="stylesheet" href="{% static 'css/conversation_search.css' %}?v=20261104a"><script src="{% static 'js/conversations.js' %}?v=20261007b" defer></script><script src="{% static 'js/conversation_search.js' %}?v=20261005" defer></script><link rel="stylesheet" href="{% static 'css/dialogs.css' %}?v=20261115a"><script src="{% static 'js/dialogs.js' %}?v=20261115b" defer></script><script src="{% static 'js/conversation_management.js' %}?v=20261008b" defer></script><link rel="stylesheet" href="{% static 'css/filter_menu.css' %}?v=20261104a"><script src="{% static 'js/filter_menu.js' %}?v=20261114a" defer></script>{% endblock %}
 {% block content %}
   <div class="meridian-console console-desktop inbox-console">
     <div class="console-shell">
@@ -30,7 +30,7 @@
           {% include 'portal/includes/records_header.html' with records_tab='team' action_url=team_url|add:'?compose=1' action_label='New team message' %}
 
           {# Filters (Open or Closed, With patient or No patient) to the left of the search on the right. #}
-          <div class="inbox-toolbar inbox-toolbar--search-only">
+          <div class="inbox-toolbar inbox-toolbar--search-only{% if selected_thread or composing and threads %} inbox-toolbar--open{% endif %}">
             {% include 'portal/includes/filter_menu.html' with filter_menu_class='filter-menu--compact' %}
             {# Searches your team conversations: messages, subjects, colleagues and the patient they are about. #}
             {% url 'portal:team-inbox' as search_action %}
@@ -38,7 +38,7 @@
           </div>
 
           {# The conversations on the left and the one being read on the right, as on Patient messages. #}
-          <section class="record-inbox record-inbox--fill" aria-label="Team conversations" data-record-messages>
+          <section class="record-inbox record-inbox--fill{% if selected_thread or composing and threads %} record-inbox--open{% endif %}" aria-label="Team conversations" data-record-messages>
             <section class="record-inbox__threads" aria-labelledby="team-thread-list-heading" data-search-region="list">
               <h2 class="sr-only" id="team-thread-list-heading">Team conversations</h2>
               <ol class="record-inbox__list">
@@ -55,6 +55,7 @@
             </section>
 
             <section class="record-messages__pane" id="team-conversation" aria-label="Conversation">
+              {% if selected_thread or composing and threads %}{% include 'portal/includes/inbox_back_link.html' with url=team_list_url %}{% endif %}
               {% if composing %}
                 <h3 class="record-messages__pane-title">New team message</h3>
                 <p class="record-messages__people">Only the colleagues you choose can read it. The patient never does.</p>

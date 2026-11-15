@@ -376,8 +376,8 @@ class AppointmentDetailPageTests(AppointmentLifecycleFixture):
         CompanyMembership.objects.filter(company=self.company, user=self.doctor).update(role='super_admin')
         response = self.client.get(record, {'tab': 'appointments'})
         self.assertContains(response, '<th scope="col">Date and time</th><th scope="col">Appointment type</th><th scope="col">Join window</th><th scope="col">Doctor</th>')
-        self.assertContains(response, '<td>10:45–11:15</td>')
-        self.assertContains(response, '<td>&mdash;</td>', count=1)
+        self.assertContains(response, '<td data-label="Join window">10:45–11:15</td>')
+        self.assertContains(response, '<td data-label="Join window">&mdash;</td>', count=1)
         self.assertNotIn(cancelled.pk, [row.pk for row in response.context['rows'] if row.join_window])
         # The window has its own column, so the note behind the (i) leaves it out.
         self.assertNotContains(response, 'Join window:')

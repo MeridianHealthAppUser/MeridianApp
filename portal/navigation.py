@@ -158,7 +158,7 @@ def build_flat_menu(membership, *, nav_section='', unread=0, data_requests=0):
     if membership.is_admin:
         items += [_item('purchasing', 'Purchasing', 'portal:purchasing', short_label='Purchase'),
                   _inventory_item(),
-                  _group_item('operations', 'Shipping'), _group_item('administration', 'Leads and dropouts')]
+                  _group_item('operations', 'Shipping'), _group_item('administration', 'Leads')]
     elif membership.role == 'doctor' and can_ship(membership.company, membership):
         # Only when Practice settings lets doctors ship; off by default.
         items.append(_item('operations', 'Weekly shipping', 'portal:ops-shipping', also=SHIPPING_TABS, short_label='Shipping'))
@@ -198,7 +198,7 @@ def build_staff_menu(membership, *, multi_practice=False, nav_section='', unread
         ] if admin else []),
         ('inventory', 'Inventory', 'Inventory', [_item(*tab) for tab in INVENTORY_TABS] if admin else []),
         ('operations', 'Shipping', 'Shipping', _tab_items('operations') if admin else []),
-        ('administration', 'Leads and dropouts', 'Leads and dropouts', _tab_items('administration') if admin else []),
+        ('administration', 'Leads and dropouts', 'Leads', _tab_items('administration') if admin else []),
         # Insights and Settings are for Super Admins only.
         ('insights', 'Insights', 'Insights', _tab_items('insights') if super_admin else []),
         # Practices, only when the app runs more than one, is in the menu but not among the Settings tabs.

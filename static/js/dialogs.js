@@ -7,14 +7,16 @@
    scrolled to its [data-dialog-scroll] element, if it has one. Opening one fires "dialog:open" on it, so a form
    inside can wait until it's shown (static/js/appointment_booking.js). */
 (() => {
+  const touchScreen = window.matchMedia('(hover: none) and (pointer: coarse)');
   function open(dialog) {
     if (dialog.open) dialog.close();
-    // A dialog opens on its title, not its first box: an iPhone opens the box's keyboard or list straight away when
-    // focus follows a tap, over the sheet as it appears (the Clinician list, Nov 2026). A screen reader starts at the
-    // title too, and Tab goes on to the first box. A control the dialog marks autofocus still takes it.
+    // On a touch screen a dialog opens on its title, not its first box: a phone opens the box's keyboard or list
+    // straight away when focus follows a tap, over the sheet as it appears (the Clinician list, Nov 2026). Tab goes on
+    // to the first box. With a mouse it starts at the first box as it always has. A control marked autofocus still
+    // takes it.
     const error = dialog.querySelector('.errorlist');
     const title = document.getElementById(dialog.getAttribute('aria-labelledby')) || dialog.querySelector('h2');
-    if (!error && title && dialog.contains(title) && !dialog.querySelector('[autofocus]')) {
+    if (touchScreen.matches && !error && title && dialog.contains(title) && !dialog.querySelector('[autofocus]')) {
       title.tabIndex = -1;
       title.setAttribute('autofocus', '');
     }

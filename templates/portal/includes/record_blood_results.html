@@ -8,16 +8,16 @@
 <p class="patient-workspace-notice">Most blood results are read on the PathCare portal. When the blood was done at another lab, record the result here.</p>
 <section class="patient-workspace-panel" aria-labelledby="blood-results-heading">
   <h3 class="sr-only" id="blood-results-heading">Recorded results</h3>
-  <div class="patient-workspace-table-wrap"><table class="patient-workspace-table">
+  <div class="patient-workspace-table-wrap"><table class="staff-phone-cards patient-workspace-table">
     <caption class="sr-only">Blood results recorded for {{ patient }}</caption>
     <thead><tr><th scope="col">Date taken</th><th scope="col">Lab</th><th scope="col">Results</th><th scope="col">Recorded by</th><th scope="col">Report</th></tr></thead>
     <tbody>
       {% for result in blood_results %}<tr>
-        <td>{{ result.taken_on|date:'j M Y' }}<small>Recorded {{ result.created_at|date:'j M Y' }}</small></td>
-        <td>{{ result.lab_name }}</td>
-        <td class="blood-result__text">{{ result.results|linebreaksbr }}</td>
-        <td>{{ result.recorded_by.full_name|default:'Former staff member' }}</td>
-        <td>{% if result.file_id %}<a class="console-button console-button--quiet" href="{% url 'portal:patient-blood-result-report' patient.pk result.pk %}" target="_blank" rel="noopener" data-no-loader>View PDF</a>{% else %}&mdash;{% endif %}</td>
+        <td data-label="Date taken">{{ result.taken_on|date:'j M Y' }}<small>Recorded {{ result.created_at|date:'j M Y' }}</small></td>
+        <td data-label="Lab">{{ result.lab_name }}</td>
+        <td data-label="Results" class="blood-result__text">{{ result.results|linebreaksbr }}</td>
+        <td data-label="Recorded by">{{ result.recorded_by.full_name|default:'Former staff member' }}</td>
+        <td data-label="Report">{% if result.file_id %}<a class="console-button console-button--quiet" href="{% url 'portal:patient-blood-result-report' patient.pk result.pk %}" target="_blank" rel="noopener" data-no-loader>View PDF</a>{% else %}&mdash;{% endif %}</td>
       </tr>{% empty %}<tr><td colspan="5" class="patient-workspace-empty">No blood results recorded yet.</td></tr>{% endfor %}
     </tbody>
   </table></div>
@@ -28,11 +28,11 @@
   {% if can_request_bloods %}<a class="console-button console-button--secondary" href="{% url 'portal:patient-detail' patient.pk %}?tab=overview#record-bloods" data-dialog-open="record-bloods-start" aria-haspopup="dialog">Request blood tests</a>{% endif %}
 </div></div>
 <section class="patient-workspace-panel">
-  <div class="patient-workspace-table-wrap"><table class="patient-workspace-table">
+  <div class="patient-workspace-table-wrap"><table class="staff-phone-cards patient-workspace-table">
     <caption class="sr-only">Blood test requests for {{ patient }}</caption>
     <thead><tr><th scope="col">Requested</th><th scope="col">Panel</th><th scope="col">Doctor</th><th scope="col">Status</th><th scope="col">Action</th></tr></thead>
     <tbody>
-      {% for row in rows %}<tr><td>{{ row.requested_on|date:'j M Y' }}</td><td>{{ row.panel_name }}</td><td>{{ row.requested_by.full_name }}</td><td>{{ row.get_status_display }}</td><td><a class="console-button console-button--quiet" href="{% url 'portal:clinical-lab-detail' row.pk %}">Open request</a></td></tr>
+      {% for row in rows %}<tr><td data-label="Requested">{{ row.requested_on|date:'j M Y' }}</td><td data-label="Panel">{{ row.panel_name }}</td><td data-label="Doctor">{{ row.requested_by.full_name }}</td><td data-label="Status">{{ row.get_status_display }}</td><td data-label="Action"><a class="console-button console-button--quiet" href="{% url 'portal:clinical-lab-detail' row.pk %}">Open request</a></td></tr>
       {% empty %}<tr><td colspan="5" class="patient-workspace-empty">No blood test requests match.</td></tr>{% endfor %}
     </tbody>
   </table></div>

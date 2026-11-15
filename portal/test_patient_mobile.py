@@ -5,6 +5,7 @@ and autofill. The layout itself is static/css/patient_mobile.css."""
 from datetime import timedelta
 from decimal import Decimal
 
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.test import SimpleTestCase, TestCase, override_settings
@@ -66,8 +67,11 @@ class PatientPhoneLayoutTests(TestCase):
                 self.assertContains(response, 'All conversations</a>')
 
     def test_profile_account_buttons_share_the_width(self):
+        # Half each on a phone only; the web layout keeps the two buttons side by side at their own widths.
         self.assertContains(self.page('patient-profile'),
-                            'class="patient-card-actions patient-card-actions--split" role="group" aria-label="Account security"')
+                            'class="patient-card-actions patient-card-actions--phone-split" role="group" aria-label="Account security"')
+        css = (settings.BASE_DIR / 'static/css/patient_mobile.css').read_text()
+        self.assertIn('.patient-card-actions--phone-split {', css.split('@media (max-width: 42rem) {', 1)[1])
 
     def test_weight_chart_shows_its_kg_scale_and_each_reading(self):
         today = timezone.localdate()

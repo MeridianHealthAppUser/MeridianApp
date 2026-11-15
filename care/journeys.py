@@ -43,7 +43,7 @@ UNSUBSCRIBE_SALT = 'care.journeys.unsubscribe'
 SERVICE_TRACKS = (Track.PAYMENT_FAILED,)
 
 BUTTONS = {
-    EmailJourney.Button.QUESTIONNAIRE: lambda: site_link('questionnaire'),
+    EmailJourney.Button.QUESTIONNAIRE: lambda: site_link('portal:questionnaire'),
     EmailJourney.Button.BOOK: lambda: site_link('portal:patient-appointments', query='book=1'),
     EmailJourney.Button.SUBSCRIPTION: lambda: site_link('portal:patient-treatment', fragment='start-subscription'),
     EmailJourney.Button.WEIGHT: lambda: site_link('portal:patient-dashboard', fragment='weight-log'),

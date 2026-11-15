@@ -13,7 +13,7 @@ from django.utils import timezone
 from practices.models import CompanyMembership
 from practices.services import ACTIVE_COMPANY_SESSION_KEY, ACTIVE_PATIENT_COMPANY_SESSION_KEY
 
-from .journeys import CATCH_UP_DAYS, default_journeys, members, send_due, unsubscribe_token
+from .journeys import BUTTONS, CATCH_UP_DAYS, default_journeys, members, send_due, unsubscribe_token
 from .models import Appointment, EmailDelivery, EmailJourney, Lead, PatientCommunicationPreference, PatientSubscription, SubscriptionCycle
 from .test_billing import BillingFixture
 
@@ -130,6 +130,17 @@ class JourneyPageTests(BillingFixture):
         self.assertRedirects(response, reverse('portal:email-journeys'), fetch_redirect_response=False)
         journey.refresh_from_db()
         self.assertTrue(journey.is_active)
+
+    def test_every_journey_button_links_into_the_app(self):
+        # The questionnaire button once named a route that doesn't exist, so its journey's page and emails failed.
+        self.assertEqual(set(BUTTONS), set(EmailJourney.Button) - {EmailJourney.Button.NONE})
+        for button, link in BUTTONS.items():
+            with self.subTest(button=button):
+                self.assertTrue(link().startswith('http'))
+        self.login(self.super_admin)
+        for journey in EmailJourney.objects.filter(company=self.company):
+            with self.subTest(journey=journey.name):
+                self.assertEqual(self.client.get(reverse('portal:email-journey-edit', args=[journey.pk])).status_code, 200)
 
     def test_the_communications_log_and_the_patients_preference(self):
         EmailDelivery.objects.create(company=self.company, patient=self.patient, recipient_email='p@example.test',

@@ -1,6 +1,7 @@
 /* The patient portal on a phone (Nov 2026: about 95% of patients use one). Loaded last on patient pages (base.html),
-   after the shared console, fluid and patient theme styles it adjusts. The look stays the web version's; only what a
-   small touch screen needs changes:
+   after the shared console, fluid and patient theme styles it adjusts. Every rule here applies only at or below 52rem,
+   where the bottom bar replaces the side menu; the web layout above that is unchanged (James, 15 Nov 2026). Only what
+   a small touch screen needs changes:
    - the bottom bar fits every label on one line;
    - My Messages shows the list, then one conversation with a way back, instead of both stacked;
    - dialogs and the Filters menu rise from the bottom as sheets, their buttons always in reach;
@@ -10,15 +11,21 @@
    label plus an equal share of what's left, so "Appointments" fits too. Very narrow screens scroll the bar. */
 .patient-navigation__short { display: none; }
 @media (max-width: 52rem) {
+  /* The round back arrow beside the breadcrumbs takes a fingertip's tap around it, looking the same. */
+  .page-breadcrumbs__back { position: relative; }
+  .page-breadcrumbs__back::after { content: ""; inset: -.5rem; position: absolute; }
   .patient-navigation__full { display: none; }
   .patient-navigation__short { display: inline; }
   .patient-app .meridian-console .patient-navigation a { flex: 1 1 auto; min-width: max-content; padding-inline: .2rem; }
   .patient-app .meridian-console .patient-navigation__label { white-space: nowrap; }
+  /* An invoice keeps the card inset above and below its details on a phone (patient_pages.css leaves it out). */
+  .billing-invoice > .console-card__body { padding-block: 1.1rem; }
 }
 
-/* My Messages: the list and a conversation take turns whenever they'd otherwise stack (patient_messages.css). */
+/* My Messages: the list and a conversation take turns in the phone layout; wider screens keep them stacked or side by
+   side as before (patient_messages.css). */
 .patient-conversation__back { display: none; }
-@media (max-width: 68rem) {
+@media (max-width: 52rem) {
   .patient-inbox-thread-list { max-height: none; }
   .patient-inbox:not(.patient-inbox--open) .patient-conversation { display: none; }
   .patient-inbox:not(.patient-inbox--open) .patient-inbox-threads { border-bottom: 0; }
@@ -87,6 +94,11 @@
   /* My Treatment's How your dose works wraps over several lines here, so it gets the body text's spacing. */
   .patient-plan__note p { line-height: 1.55; }
 
+  /* Change password and Sign out share the card's width, half each. */
+  .patient-card-actions--phone-split { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .patient-card-actions--phone-split > form { margin: 0; }
+  .patient-card-actions--phone-split > :is(a, button), .patient-card-actions--phone-split > form > .console-button { justify-content: center; width: 100%; }
+
   /* Weight history's date range: From and To side by side, then View range beside All dates. */
   .patient-app .patient-care-filters .console-form__field { flex: 1 1 8rem; }
   .patient-app .patient-care-filters button { flex: 1 1 auto; width: auto; }
@@ -96,8 +108,10 @@
    as a plain box like the others it fits the form, reads from the left and is as tall as the boxes around it; a tap
    still opens the date wheel. */
 @supports (-webkit-touch-callout: none) {
-  .patient-app input[type="date"] { -webkit-appearance: none; appearance: none; display: block; min-height: 2.5625rem; }
-  .patient-app input[type="date"]::-webkit-date-and-time-value { margin: 0; text-align: left; }
+  @media (max-width: 52rem) {
+    .patient-app input[type="date"] { -webkit-appearance: none; appearance: none; display: block; min-height: 2.5625rem; }
+    .patient-app input[type="date"]::-webkit-date-and-time-value { margin: 0; text-align: left; }
+  }
 }
 
 @media (max-width: 42rem) and (prefers-reduced-motion: no-preference) {
