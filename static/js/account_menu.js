@@ -22,6 +22,8 @@
       const index = event.key === 'Home' ? 0 : event.key === 'End' ? links.length - 1 : current < 0 ? (event.key === 'ArrowUp' ? links.length - 1 : 0) : (current + (event.key === 'ArrowDown' ? 1 : -1) + links.length) % links.length;
       links[index].focus();
     });
+    // A link that opens in a new tab leaves this page behind: don't keep the menu open over it.
+    listen(menu, 'click', event => { if (event.target.closest('a[target="_blank"]')) close(false); });
     listen(window, 'pageshow', () => close(false));
   });
 })();

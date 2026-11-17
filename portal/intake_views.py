@@ -10,7 +10,7 @@ from django.contrib import messages
 from django.contrib.auth import login
 from django.core import signing
 from django.core.exceptions import ValidationError
-from django.http import Http404
+from django.http import Http404, HttpResponseRedirect
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
@@ -57,6 +57,23 @@ class PrivateIntakeView(View):
         return get_object_or_404(scope_queryset(Lead.objects.all()), pk=lead_id,
                                  company__is_active=True, submission_key__isnull=False)
 
+
+class OldQuestionnaireAddressView(View):
+    """The questionnaire moved from /questionnaire/ to /screening/, matching the practice website's Screening page.
+    Old links and bookmarks land on the same step with their query string, and a form sent from a page opened before
+    the move goes on with its answers (307 keeps it a POST)."""
+
+    def new_address(self, step):
+        query = self.request.META.get('QUERY_STRING', '')
+        return reverse('portal:questionnaire') + step + (f'?{query}' if query else '')
+
+    def get(self, request, step=''):
+        return HttpResponseRedirect(self.new_address(step))
+
+    def post(self, request, step=''):
+        response = HttpResponseRedirect(self.new_address(step))
+        response.status_code = 307
+        return response
 
 class QuestionnaireView(PrivateIntakeView):
     http_method_names = ('get', 'post', 'head', 'options')

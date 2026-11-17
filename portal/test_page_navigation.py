@@ -607,7 +607,7 @@ class NavigationRouteRegistryTests(SimpleTestCase):
 
         patterns = navigation_paths()
         excluded = (
-            '/', '/accounts/login/', '/admin/', '/health/', '/questionnaire/', '/privacy/',
+            '/', '/accounts/login/', '/admin/', '/health/', '/screening/', '/questionnaire/', '/privacy/',
             '/video/appointments/23/', '/blood-tests/23/report/', '/patient/blood-tests/23/report/',
             '/patient/blood-tests/23/form.pdf', '/patients/23/blood-results/24/report.pdf',
             '/patients/23/blood-tests/preview/', '/patients/23/blood-tests/24/form.pdf',

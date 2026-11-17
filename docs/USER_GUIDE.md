@@ -132,7 +132,7 @@ Home shows the authorisation and next consult, what is on its way, and the recor
 - Review subscription deliveries, and view or download issued/paid subscription and consultation invoices from Billing and payments.
 - Request personal-detail changes through an in-app message to practice administrators (or Super Admins if no practice administrator is available), edit the delivery address, change the shared-login password, and manage care-email preferences from My profile. The list of data requests is no longer shown there. Existing marketing opt-ins can be withdrawn; new opt-ins are not offered, and historical consent records remain intact.
 
-Submitting the anonymous `/questionnaire/` creates a **lead only**. A cleared demo lead can open the checkout, choose an initial consultation time and create a login. Card and EFT payments are not connected and no card details are collected. Only the checkout test code (`CHECKOUT_TEST_CODE`, `devtest` locally) brings the fee to R0 and converts the lead into a booked, signed-in patient with a paid invoice. The practice needs a consultation fee in **Practice settings** and at least one doctor with open times.
+Submitting the anonymous `/screening/` creates a **lead only**. A cleared demo lead can open the checkout, choose an initial consultation time and create a login. Card and EFT payments are not connected and no card details are collected. Only the checkout test code (`CHECKOUT_TEST_CODE`, `devtest` locally) brings the fee to R0 and converts the lead into a booked, signed-in patient with a paid invoice. The practice needs a consultation fee in **Practice settings** and at least one doctor with open times.
 
 ## Before real patient use
 

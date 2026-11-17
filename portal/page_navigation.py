@@ -136,7 +136,7 @@ NATIVE_GET_ROUTES = frozenset((
     'demo-data',
     'patient-appointment-video-status', 'staff-message-status', 'patient-message-status',
     'public-terms', 'public-privacy', 'public-contact',
-    'questionnaire', 'questionnaire-result', 'questionnaire-checkout',
+    'questionnaire', 'questionnaire-result', 'questionnaire-checkout', 'questionnaire-old-address',
     'appointment-book-times', 'patient-booking-times', 'appointment-calendar',
     'compounding-print', 'metrics-export', 'activity-statement-export',
     'staff-patient-record-export', 'staff-patient-record-history',

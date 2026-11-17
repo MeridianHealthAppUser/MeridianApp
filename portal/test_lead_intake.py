@@ -349,6 +349,24 @@ class PublicLeadIntakeTests(TestCase):
         self.assertEqual(ScreeningQuestionnaire.objects.get().answers['pancreatitis'], 'yes')
         self.assert_checkout_unavailable()
 
+    def test_the_questionnaire_lives_at_screening_and_old_addresses_still_land(self):
+        self.assertEqual(reverse('portal:questionnaire'), '/screening/')
+        for old, new in (
+            ('/questionnaire/', '/screening/'),
+            ('/questionnaire/result/', '/screening/result/'),
+            ('/questionnaire/checkout/?date=2026-11-18', '/screening/checkout/?date=2026-11-18'),
+            ('/questionnaire/?_gl=1*abc', '/screening/?_gl=1*abc'),
+        ):
+            with self.subTest(old):
+                self.assertRedirects(self.client.get(old), new, fetch_redirect_response=False)
+        self.assertEqual(self.client.get('/questionnaire/other/').status_code, 404)
+        # A form sent from a page opened before the move goes on with its answers.
+        data = self.intake_data()
+        moved = self.client.post('/questionnaire/', data)
+        self.assertEqual((moved.status_code, moved['Location']), (307, '/screening/'))
+        self.assert_successful_submission(self.client.post(moved['Location'], data))
+        self.assertEqual(Lead.objects.count(), 1)
+
     def test_anonymous_result_and_checkout_without_submission_return_not_found(self):
         for name in ('questionnaire-result', 'questionnaire-checkout'):
             with self.subTest(page=name):

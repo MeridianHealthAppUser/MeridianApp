@@ -46,6 +46,7 @@ class AccountMenuPresentationTests(TestCase):
             self.assertNotContains(response, 'class="account-name"')
             self.assertNotContains(response, 'class="header-signout"')
             self.assertIn(reverse('accounts:profile'), self.menu(response))
+            self.assertNotIn('Meridian Health site', self.menu(response))
             # Only Super Admins have an access history page; clinicians and practice administrators don't.
             if user != self.super_admin:
                 self.assertNotIn(reverse('portal:account-access-history'), self.menu(response))
@@ -78,11 +79,16 @@ class AccountMenuPresentationTests(TestCase):
         self.assertContains(response, 'Account menu for Nadia Mokoena, Patient')
         self.assertContains(response, 'id="patient-company-select"')
         self.assertNotContains(response, 'class="patient-console__account"')
-        # My profile, Billing and payments, and Sign out: the password, preferences, consents and data requests are
-        # on My profile.
+        # My profile, Billing and payments, the practice's website, and Sign out: the password, preferences, consents
+        # and data requests are on My profile.
         links = self.menu(response).split('aria-label="Your account">', 1)[1].split('</nav>', 1)[0]
-        self.assertEqual(re.findall(r'<a href="([^"]+)">([^<]+)</a>', links), [
-            (reverse('portal:patient-profile'), 'My profile'), (reverse('portal:patient-billing'), 'Billing and payments')])
+        self.assertEqual(re.findall(r'<a[^>]* href="([^"]+)"[^>]*>([^<]+)', links), [
+            (reverse('portal:patient-profile'), 'My profile'), (reverse('portal:patient-billing'), 'Billing and payments'),
+            ('https://www.meridianhealth.co.za/', 'Meridian Health site')])
+        # The website opens in a new tab, marked with an icon and told to screen readers.
+        self.assertIn('href="https://www.meridianhealth.co.za/" target="_blank" rel="noopener" '
+                      'aria-label="Meridian Health site (opens in a new tab)"', links)
+        self.assertIn('class="account-menu__external-icon" aria-hidden="true"', links)
         self.assertIn('<button type="submit">Sign out</button>', self.menu(response))
         for url in (reverse('accounts:profile'), reverse('accounts:password-change'), reverse('portal:account-access-history')):
             self.assertNotIn(f'href="{url}"', self.menu(response))

@@ -1,4 +1,4 @@
-from django.urls import include, path
+from django.urls import include, path, re_path
 
 from . import availability_views, blood_result_views, pathcare_views, patient_details_views, prescription_views, clinical_views, intake_views, lead_views, menu_views, message_management_views, patient_views, practice_settings_views, staff_views, task_views, team_views, views
 from .patient_workspace import PatientWorkspaceView, RecordConversationSearchView
@@ -26,10 +26,12 @@ urlpatterns = [
     path('', include('portal.operations_urls')),
     path('', include('portal.billing_urls')),
     path('', include('portal.journey_urls')),
-    path('questionnaire/', intake_views.QuestionnaireView.as_view(), name='questionnaire'),
-    path('questionnaire/result/', intake_views.QuestionnaireResultView.as_view(), name='questionnaire-result'),
-    path('questionnaire/call-me/', intake_views.QuestionnaireCallbackView.as_view(), name='questionnaire-call-me'),
-    path('questionnaire/checkout/', intake_views.QuestionnaireCheckoutView.as_view(), name='questionnaire-checkout'),
+    path('screening/', intake_views.QuestionnaireView.as_view(), name='questionnaire'),
+    path('screening/result/', intake_views.QuestionnaireResultView.as_view(), name='questionnaire-result'),
+    path('screening/call-me/', intake_views.QuestionnaireCallbackView.as_view(), name='questionnaire-call-me'),
+    path('screening/checkout/', intake_views.QuestionnaireCheckoutView.as_view(), name='questionnaire-checkout'),
+    re_path(r'^questionnaire/(?P<step>(?:result/|call-me/|checkout/)?)$', intake_views.OldQuestionnaireAddressView.as_view(),
+            name='questionnaire-old-address'),
     path('leads/', lead_views.LeadListView.as_view(), name='staff-leads'),
     path('leads/history/', lead_views.LeadListView.as_view(history=True), name='staff-lead-history'),
     path('leads/<int:pk>/', lead_views.LeadDetailView.as_view(), name='lead-detail'),
