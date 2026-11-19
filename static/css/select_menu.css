@@ -1,0 +1,55 @@
+/* Dropdown lists (static/js/select_menu.js): the list a select opens, in place of the browser's. It sits in the top
+   layer, so dialogs and cards don't clip it; it is placed beside its select by the script. The selectors are long on
+   purpose: the list sits inside forms whose own rules style every input in them. */
+.select-menu:popover-open { background: var(--c-ffffff); border: 1px solid var(--console-line, var(--c-deeaef)); border-radius: .8rem; box-shadow: 0 18px 44px var(--c-183643-160); box-sizing: border-box; color: var(--console-ink, var(--c-183643)); display: flex; flex-direction: column; font-family: inherit; font-size: .86rem; font-style: normal; font-weight: 500; gap: .3rem; inset: auto; letter-spacing: normal; line-height: 1.35; margin: 0; max-height: 22rem; overflow: hidden; padding: .35rem; position: fixed; text-align: left; text-transform: none; animation: select-menu-in .14s ease-out both; }
+@keyframes select-menu-in { from { opacity: 0; transform: translateY(-4px); } }
+
+.select-menu__search-row { flex: 0 0 auto; position: relative; }
+.select-menu__search-icon { color: var(--console-muted, var(--c-70838d)); left: .7rem; pointer-events: none; position: absolute; top: 50%; transform: translateY(-50%); }
+.select-menu[popover] input.select-menu__search[type="search"] { -webkit-appearance: none; appearance: none; background: var(--c-ffffff); border: 1px solid var(--console-line, var(--c-deeaef)); border-radius: .55rem; box-shadow: none; box-sizing: border-box; color: var(--console-ink, var(--c-183643)); font: inherit; font-size: .84rem; height: auto; margin: 0; max-width: none; min-height: 2.4rem; outline: none; padding: .45rem .65rem .45rem 2.1rem; width: 100%; }
+.select-menu[popover] input.select-menu__search[type="search"]:focus { border-color: var(--console-teal, var(--c-1d4a5f)); box-shadow: 0 0 0 3px var(--c-1d4a5f-120); }
+.select-menu[popover] input.select-menu__search[type="search"]::placeholder { color: var(--console-muted, var(--c-70838d)); opacity: 1; }
+
+.select-menu__list { flex: 1 1 auto; min-height: 0; outline: none; overflow-y: auto; overscroll-behavior: contain; }
+.select-menu__list[hidden] { display: none; }
+.select-menu__option { align-items: center; border-radius: .5rem; cursor: pointer; display: flex; gap: .6rem; justify-content: space-between; min-height: 2.3rem; padding: .45rem .6rem; user-select: none; -webkit-user-select: none; }
+.select-menu__option[hidden], .select-menu__group[hidden] { display: none; }
+.select-menu__option[data-active] { background: var(--select-menu-active); }
+.select-menu__option[aria-selected="true"] { color: var(--console-teal-dark, var(--c-153b4b)); font-weight: 700; }
+.select-menu__option[aria-disabled="true"] { color: var(--console-muted, var(--c-70838d)); cursor: not-allowed; opacity: .6; }
+.select-menu__text { min-width: 0; overflow-wrap: anywhere; }
+.select-menu__check { color: var(--console-teal, var(--c-1d4a5f)); flex: 0 0 auto; visibility: hidden; }
+.select-menu__option[aria-selected="true"] .select-menu__check { visibility: visible; }
+.select-menu__group + .select-menu__group, .select-menu__option + .select-menu__group { border-top: 1px solid var(--console-soft-line, var(--c-e5eef2)); margin-top: .25rem; padding-top: .25rem; }
+.select-menu__group-label { color: var(--console-muted, var(--c-70838d)); font-size: .74rem; font-weight: 700; padding: .45rem .6rem .25rem; }
+.select-menu__empty { color: var(--console-muted, var(--c-70838d)); font-size: .82rem; margin: 0; padding: .55rem .6rem .65rem; }
+.select-menu__empty[hidden] { display: none; }
+.select-menu__head { display: none; }
+
+/* The row under the pointer or arrow keys: pale blue, and a lighter wash in dark mode, where the pale blue is the
+   panel's own colour. */
+.select-menu { --select-menu-active: var(--c-ecf6fa); }
+:root[data-theme="dark"] .select-menu { --select-menu-active: var(--c-1d4a5f-160); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .select-menu { --select-menu-active: var(--c-1d4a5f-160); } }
+
+/* The select keeps its focus ring while its list is open. */
+select[aria-expanded="true"][aria-controls] { border-color: var(--console-teal, var(--c-1d4a5f)) !important; box-shadow: 0 0 0 3px var(--c-1d4a5f-120) !important; }
+
+/* On a phone the list rises from the bottom as a sheet over the dimmed page, like Filters, with the field's name and
+   a close button at the top. The script keeps it above the keyboard. */
+@media (max-width: 52rem) {
+  .select-menu--sheet:popover-open { border-radius: 1.1rem; bottom: calc(.6rem + env(safe-area-inset-bottom)); font-size: 1rem; gap: .45rem; left: .6rem; max-height: calc(100dvh - 4.5rem); padding: .6rem; right: .6rem; top: auto; width: auto; animation: select-menu-sheet-in .3s cubic-bezier(.2, .9, .3, 1) both; }
+  .select-menu--sheet::backdrop { background: var(--c-183643-350); }
+  .select-menu--sheet .select-menu__head { align-items: center; display: flex; gap: .6rem; justify-content: space-between; padding: 0 0 .15rem .45rem; }
+  .select-menu--sheet .select-menu__title { font-size: 1rem; font-weight: 750; margin: 0; min-width: 0; }
+  .select-menu--sheet button.select-menu__close { align-items: center; background: none; border: 0; border-radius: .6rem; color: var(--console-muted, var(--c-70838d)); cursor: pointer; display: inline-flex; flex: 0 0 auto; height: 2.75rem; justify-content: center; margin: 0; min-height: 0; padding: 0; width: 2.75rem; }
+  .select-menu--sheet button.select-menu__close:hover { background: var(--select-menu-active); }
+  .select-menu--sheet.select-menu[popover] input.select-menu__search[type="search"] { font-size: 1rem; min-height: 2.75rem; }
+  .select-menu--sheet .select-menu__option { min-height: 2.9rem; padding: .55rem .7rem; }
+  .select-menu--sheet .select-menu__empty { font-size: .9rem; }
+}
+@keyframes select-menu-sheet-in { from { opacity: 0; transform: translateY(1.5rem); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .select-menu:popover-open, .select-menu--sheet:popover-open { animation: none; }
+}
