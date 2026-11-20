@@ -18,7 +18,7 @@ python3 -m venv .venv
 .venv/bin/python manage.py runserver
 ```
 
-Open `/` for the public landing page. Sign in at `/accounts/login/`, then use `/desktop/` or `/mobile/` for staff and `/patient/` for your own care portal. Accounts with both staff and patient records can use the header to move between their workspace and care portal.
+The app has no home page: the practice's website (www.meridianhealth.co.za) is the front door, and `/` opens sign-in. Patients come in through the screening at `/screening/`. Sign in at `/accounts/login/`, then use `/desktop/` or `/mobile/` for staff and `/patient/` for your own care portal. Accounts with both staff and patient records can use the header to move between their workspace and care portal.
 
 The local demo creates Meridian Health only. Demo accounts share password `MeridianDemo!2026`:
 

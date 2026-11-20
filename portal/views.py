@@ -55,12 +55,6 @@ from .patient_context import validate_patient_context
 from .realtime_context import changed_scope_response, patient_scope, records_conversation_view, staff_scope
 
 
-class LandingPageView(TemplateView):
-    """The public, single-page Meridian Health landing page."""
-
-    template_name = 'portal/landing.html'
-
-
 class StaffCompanyRequiredMixin:
     """Resolve a staff-selected practice before any tenant query is made."""
 

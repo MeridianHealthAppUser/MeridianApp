@@ -52,7 +52,7 @@
       {% elif user.is_authenticated and active_patient %}
         <a class="brand" href="{% url 'portal:patient-dashboard' %}">{% include "includes/brand_logo.html" %}</a>
       {% else %}
-        <a class="brand" href="{% url 'landing' %}">{% include "includes/brand_logo.html" %}</a>
+        <a class="brand" href="{{ public_website_url }}">{% include "includes/brand_logo.html" %}</a>
       {% endif %}
       {% if user.is_authenticated %}
         <div class="header-actions">

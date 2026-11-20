@@ -156,9 +156,9 @@ class AccountLoginView(LoginView):
 
 
 class AccountLogoutView(LogoutView):
-    """End the session and return to the public Meridian site."""
+    """End the session and return to sign-in, whose back arrow leads to the practice's website."""
 
-    next_page = reverse_lazy('landing')
+    next_page = reverse_lazy('accounts:login')
 
 
 class PatientAccountPageMixin:

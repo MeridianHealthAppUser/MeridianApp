@@ -3,7 +3,7 @@
 {% block title %}Sign in | Meridian Health{% endblock %}
 
 {% block card %}
-      <div class="login-eyebrow-row"><a class="page-breadcrumbs__back page-breadcrumbs__back--large" href="{% url 'landing' %}" aria-label="Back to home" title="Back to home"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M19 12H5"/><path d="m11 6-6 6 6 6"/></svg></a><p class="eyebrow">Secure sign in</p></div>
+      <div class="login-eyebrow-row"><a class="page-breadcrumbs__back page-breadcrumbs__back--large" href="{{ public_website_url }}" aria-label="Back to the Meridian Health website" title="Back to the Meridian Health website"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M19 12H5"/><path d="m11 6-6 6 6 6"/></svg></a><p class="eyebrow">Secure sign in</p></div>
       <h1 id="login-title">Welcome back</h1>
 
       <form class="login-form login-form--divided" method="post" novalidate>

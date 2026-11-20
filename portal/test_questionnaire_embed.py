@@ -77,7 +77,7 @@ class QuestionnaireEmbedTests(TestCase):
                 self.assertEqual(response.status_code, 200)
                 self.assertFrameableByWordPress(response)
         self.assertFrameableByWordPress(self.client.post(reverse('portal:questionnaire-call-me'), {'phone': ''}))
-        for url in (reverse('accounts:login'), reverse('landing'), reverse('portal:patient-dashboard')):
+        for url in (reverse('accounts:login'), reverse('accounts:password-reset'), reverse('portal:patient-dashboard')):
             with self.subTest(url):
                 response = self.client.get(url, **IN_FRAME)
                 self.assertEqual(response['X-Frame-Options'], 'DENY')
@@ -96,13 +96,13 @@ class QuestionnaireEmbedTests(TestCase):
         self.assertContains(page, 'class="site-header')
         self.assertContains(page, 'data-theme-switch')
         self.assertContains(page, 'js/theme.js')
-        self.assertContains(page, 'aria-label="Back to home"')
+        self.assertContains(page, 'aria-label="Back to the Meridian Health website"')
         self.assertNotContains(page, 'questionnaire_embed')
 
     def test_every_step_inside_the_frame_drops_the_app_header(self):
         first = self.client.get(reverse('portal:questionnaire'), {'embed': '1'})
         self.assertEmbedded(first)
-        self.assertNotContains(first, 'aria-label="Back to home"')
+        self.assertNotContains(first, 'aria-label="Back to the Meridian Health website"')
         # Later steps don't carry ?embed=1: the browser's frame header keeps them embedded.
         self.submit_enquiry(**IN_FRAME)
         self.assertEmbedded(self.client.get(reverse('portal:questionnaire-result'), **IN_FRAME))

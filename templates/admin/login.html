@@ -13,5 +13,5 @@
     <button class="btn btn-primary md-login-submit" type="submit">Sign in to administration <i class="fas fa-arrow-right" aria-hidden="true"></i></button>
     <p class="md-login-note"><i class="fas fa-lock" aria-hidden="true"></i> Authorised practice staff only</p>
 </form>
-<a class="md-login-return" href="{% url 'landing' %}"><i class="fas fa-arrow-left" aria-hidden="true"></i> Back to Meridian Health</a>
+<a class="md-login-return" href="{{ public_website_url }}"><i class="fas fa-arrow-left" aria-hidden="true"></i> Back to Meridian Health</a>
 {% endblock %}

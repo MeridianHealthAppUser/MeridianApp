@@ -100,7 +100,6 @@ class WorkspacePresentationTests(TestCase):
         self.login(self.doctor)
         for name in ('public-terms', 'public-privacy', 'public-contact', 'questionnaire'):
             self.assertNotContains(self.page(name), 'workspace_polish.css')
-        self.assertNotContains(self.client.get(reverse('landing')), 'workspace_polish.css')
 
     def test_anonymous_pages_do_not_load_workspace_styles(self):
         for name in ('public-terms', 'public-privacy', 'public-contact', 'questionnaire'):

@@ -22,7 +22,7 @@
     {% endcomment %}
 
     <div class="login-column">
-      <a class="login-brand" href="{% url 'landing' %}">{% include "includes/brand_logo.html" %}</a>
+      <a class="login-brand" href="{{ public_website_url }}" aria-label="Meridian Health website">{% include "includes/brand_logo.html" %}</a>
       <div class="login-card">
 {% block card %}{% endblock %}
       </div>

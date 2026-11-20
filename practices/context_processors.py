@@ -1,3 +1,5 @@
+from django.conf import settings
+
 from .services import (
     active_membership_for,
     active_patient_for,
@@ -12,7 +14,7 @@ from .role_switching import can_switch_practice_role
 
 
 def active_company(request):
-    context = {'multi_practice_enabled': multi_practice_enabled()}
+    context = {'multi_practice_enabled': multi_practice_enabled(), 'public_website_url': settings.PUBLIC_WEBSITE_URL}
     if not request.user.is_authenticated:
         return context
     company = get_active_company(request)

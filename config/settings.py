@@ -279,6 +279,9 @@ EMAIL_TIMEOUT = 10
 DEFAULT_FROM_EMAIL = os.getenv('DJANGO_DEFAULT_FROM_EMAIL', 'Meridian Health <no-reply@meridianhealth.co.za>')
 # Replies to the from address aren't read; emails point here instead.
 SUPPORT_EMAIL = os.getenv('DJANGO_SUPPORT_EMAIL', 'support@meridianhealth.co.za')
+# The practice's website (WordPress) is the public front door: the app has no home page of its own. Back arrows and
+# logos on public pages go here; the app's own address (/) and signing out open sign-in.
+PUBLIC_WEBSITE_URL = os.getenv('DJANGO_PUBLIC_WEBSITE_URL', 'https://www.meridianhealth.co.za/')
 # The app's public address, for links and the logo in emails sent outside a request (notifications, reminders).
 # Without it, production uses the first allowed host over HTTPS.
 SITE_URL = (os.getenv('DJANGO_SITE_URL', '').strip()
@@ -303,7 +306,7 @@ CELERY_TASK_SERIALIZER = 'json'
 CELERY_ACCEPT_CONTENT = ['json']
 CELERY_TIMEZONE = 'Africa/Johannesburg'
 LOGIN_REDIRECT_URL = 'portal:desktop-dashboard'
-LOGOUT_REDIRECT_URL = 'landing'
+LOGOUT_REDIRECT_URL = 'accounts:login'
 
 # DigitalOcean terminates TLS before Daphne. Trust its forwarded scheme in both
 # modes: Daphne's WebSocket scope omits scheme, so exact-origin checks need this

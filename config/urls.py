@@ -16,13 +16,14 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import include, path
+from django.views.generic import RedirectView
 
-from portal.views import LandingPageView
 from .health import healthcheck
 
 urlpatterns = [
     path('health/', healthcheck, name='health'),
-    path('', LandingPageView.as_view(), name='landing'),
+    # No home page of its own: the website is the front door, so the app's address opens sign-in.
+    path('', RedirectView.as_view(pattern_name='accounts:login'), name='landing'),
     path('accounts/', include('accounts.urls')),
     path('video/', include('video.urls')),
     path('admin/', admin.site.urls),

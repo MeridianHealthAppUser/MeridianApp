@@ -27,6 +27,6 @@ To change how a colour looks in dark mode, add it to `DARK_OVERRIDES` in the scr
 
 ## Not themed
 
-Emails always stay light. The public landing page, the video room and Django admin have their own stylesheets
-(`landing.css`, `video_room.css`, `meridian_admin.css`) and aren't themed. The Insights charts' series colours are set
+Emails always stay light. The video room and Django admin have their own stylesheets (`video_room.css`,
+`meridian_admin.css`) and aren't themed. The Insights charts' series colours are set
 in `portal/reporting_presentation.py`, and read well on both.

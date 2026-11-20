@@ -10,7 +10,7 @@ Run it after adding colours to a stylesheet:  .venv/bin/python scripts/theme_tok
 It changes the stylesheets in place and rewrites theme.css; running it again changes nothing. portal/test_theme.py
 fails while any stylesheet still has a colour that isn't a token, so new styles follow the same rules.
 
-Not themed: the public landing page and the video room (pages of their own, not on base.html), Django admin, and
+Not themed: the video room (a page of its own, not on base.html), Django admin, and
 emails, which always stay light.
 """
 
@@ -22,7 +22,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 CSS = ROOT / 'static' / 'css'
 THEME = CSS / 'theme.css'
-SKIP = {'theme.css', 'fonts.css', 'landing.css', 'video_room.css', 'meridian_admin.css'}
+SKIP = {'theme.css', 'fonts.css', 'video_room.css', 'meridian_admin.css'}
 
 # Colours as they appear in a value: #rgb, #rrggbb, #rrggbbaa, rgb()/rgba(), and the white and black keywords.
 COLOUR = re.compile(r'#(?:[0-9a-fA-F]{8}|[0-9a-fA-F]{6}|[0-9a-fA-F]{3})\b|rgba?\(\s*[\d.]+\s*,\s*[\d.]+\s*,\s*[\d.]+\s*(?:,\s*[\d.]+%?\s*)?\)'
