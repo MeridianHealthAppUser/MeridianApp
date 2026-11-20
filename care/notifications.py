@@ -368,18 +368,19 @@ def _when(appointment):
     return f'{starts:%A} {starts.day} {starts:%B} at {starts:%H:%M}'
 
 
-def _appointment_email(appointment, user, *, moved=False, reminder=False, starting=False, actor_id=None):
+def _appointment_email(appointment, user, *, moved=False, changed=False, reminder=False, starting=False, actor_id=None):
     when = _when(appointment)
     if user.pk == appointment.patient.user_id:
         if reminder:
             subject = f'{"Starting soon" if starting else "Reminder"}: your appointment on {when}'
         else:
-            subject = f'Your appointment has moved to {when}' if moved else f'Appointment confirmed: {when}'
+            subject = (f'Your appointment has moved to {when}' if moved else f'Your appointment has changed: {when}' if changed
+                       else f'Appointment confirmed: {when}')
         # Everything is on My Appointments: patients have no page for one appointment (Dr Czech, Nov 2026).
         url = site_link('portal:patient-appointments')
         message = build_email(
             to=user.email, subject=subject, template='appointment_reminder' if reminder else 'appointment_confirmed',
-            context={'greeting': user.first_name, 'moved': moved, 'starting': starting,
+            context={'greeting': user.first_name, 'moved': moved, 'changed': changed, 'starting': starting,
                      'video_room_opens_minutes': settings.VIDEO_JOIN_EARLY_MINUTES,
                      'details': appointment_details(appointment, clinician=person_name(appointment.clinician)),
                      'url': url},
@@ -392,9 +393,10 @@ def _appointment_email(appointment, user, *, moved=False, reminder=False, starti
     if reminder:
         subject = f'{"Starting soon" if starting else "Reminder"}: {patient} on {when}'
     else:
-        subject = f'Appointment moved: {patient} on {when}' if moved else f'New booking: {patient} on {when}'
+        subject = (f'Appointment moved: {patient} on {when}' if moved else f'Appointment changed: {patient} on {when}' if changed
+                   else f'New appointment: {patient} on {when}')
     booked_by = ''
-    if actor_id and not moved and not reminder:
+    if actor_id and not moved and not changed and not reminder:
         actor = get_user_model().objects.filter(pk=actor_id).first()
         if actor is not None:
             booked_by = f'{patient}, the patient' if actor.pk == appointment.patient.user_id else person_name(actor)
@@ -402,7 +404,7 @@ def _appointment_email(appointment, user, *, moved=False, reminder=False, starti
     return build_email(
         to=user.email, subject=subject,
         template='staff_appointment_reminder' if reminder else 'staff_appointment_confirmed',
-        context={'greeting': greeting_name(user), 'moved': moved, 'booked_by': booked_by,
+        context={'greeting': greeting_name(user), 'moved': moved, 'changed': changed, 'booked_by': booked_by,
                  'details': appointment_details(appointment, patient=patient),
                  'url': site_link('portal:appointment-detail', appointment.pk) if reminder
                  else site_link('portal:staff-schedule', query=f'view=table&date={starts:%Y-%m-%d}')},
@@ -508,6 +510,9 @@ KINDS = {
                            lambda appointment, user, actor_id: _appointment_email(appointment, user, actor_id=actor_id)),
     'appointment_moved': (_appointment, _confirmation_recipients,
                           lambda appointment, user, actor_id: _appointment_email(appointment, user, moved=True)),
+    # Another type or length at the same time (Edit appointment, 19 Nov 2026).
+    'appointment_changed': (_appointment, _confirmation_recipients,
+                            lambda appointment, user, actor_id: _appointment_email(appointment, user, changed=True)),
     'appointment_cancelled': (_appointment, _cancellation_recipients, _cancellation_email),
     'appointment_reminder': (_appointment, lambda appointment, actor_id: _appointment_people(appointment, None),
                              lambda appointment, user, actor_id: _appointment_email(appointment, user, reminder=True)),

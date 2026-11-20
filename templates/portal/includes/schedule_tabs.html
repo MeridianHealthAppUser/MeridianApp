@@ -1,0 +1,9 @@
+{% comment %}Calendar's tabs (Calendar & Bookings until Nov 2026): Appointments, a list of every appointment in My
+  Appointments' format (staff_appointments.html), where Calendar opens from the menu and other links to it (James,
+  20 Nov 2026); then the Calendar itself and Working hours & availability (staff_schedule.html). The menu lists the same
+  three beside Calendar (portal/navigation.py SCHEDULE_TABS).{% endcomment %}
+<nav class="records-tabs schedule-tabs" aria-label="Calendar">
+  <a href="{{ appointments_tab_url }}"{% if schedule_section == 'appointments' %} class="is-active" aria-current="page"{% endif %}>Appointments</a>
+  <a href="{{ bookings_tab_url }}"{% if schedule_section == 'bookings' %} class="is-active" aria-current="page"{% endif %}>Calendar</a>
+  <a href="{{ availability_tab_url }}"{% if schedule_section == 'availability' %} class="is-active" aria-current="page"{% endif %}>Working hours &amp; availability</a>
+</nav>

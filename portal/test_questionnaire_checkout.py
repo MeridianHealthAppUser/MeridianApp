@@ -138,7 +138,7 @@ class QuestionnaireCheckoutTests(TestCase):
         confirmation = sent[(EMAIL, f'Appointment confirmed: {when}')]
         self.assertIn('Appointment: Initial consultation', confirmation.body)
         self.assertIn('With: Sam Doctor', confirmation.body)
-        doctor = sent[('doctor@checkout.test', f'New booking: Thandi Checkout on {when}')]
+        doctor = sent[('doctor@checkout.test', f'New appointment: Thandi Checkout on {when}')]
         self.assertIn('Booked by Thandi Checkout, the patient.', doctor.body)
         self.assertEqual(len(mail.outbox), 3)
 

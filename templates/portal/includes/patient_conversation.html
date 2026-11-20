@@ -58,7 +58,7 @@
   {% if not thread.is_member %}<p class="record-messages__note">You’re not in this conversation. Replying adds you to it.</p>{% endif %}
   <form class="record-reply" method="post" action="{% url 'portal:staff-message-create' thread.pk %}" data-record-reply data-live-reply>
     {% csrf_token %}
-    <input type="hidden" name="return_to" value="{{ conversation_return_to }}">{% if conversation_return_to == 'patient_messages' %}<input type="hidden" name="status" value="{{ read_state_fields.status }}"><input type="hidden" name="patients" value="{{ read_state_fields.patients }}"><input type="hidden" name="q" value="{{ read_state_fields.q }}">{% endif %}
+    <input type="hidden" name="return_to" value="{{ conversation_return_to }}">{% if conversation_return_to == 'patient_messages' %}<input type="hidden" name="status" value="{{ read_state_fields.status }}"><input type="hidden" name="patients" value="{{ read_state_fields.patients }}"><input type="hidden" name="q" value="{{ read_state_fields.q }}">{% if read_state_fields.scope %}<input type="hidden" name="scope" value="{{ read_state_fields.scope }}">{% endif %}{% endif %}
     {% if message_form.errors %}<p class="record-error" role="alert">{% for errors in message_form.errors.values %}{{ errors|join:' ' }} {% endfor %}</p>{% endif %}
     <label class="sr-only" for="record-reply-body">Reply to {{ patient.first_name }}</label>
     <textarea id="record-reply-body" name="body" rows="1" maxlength="5000" required placeholder="Reply to {{ patient.first_name }}…">{{ message_form.body.value|default:'' }}</textarea>

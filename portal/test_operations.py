@@ -48,8 +48,7 @@ class OperationsPortalFixture(OperationsFixture):
         return self.page('ops-shipping', client=client).context['create_context']
 
     def shipment_data(self, **extra):
-        return {'patient': self.patient.pk, 'product': self.product.pk, 'quantity': 2, 'scheduled_for': self.today,
-                'confirm': 'on', **extra}
+        return {'patient': self.patient.pk, 'product': self.product.pk, 'quantity': 2, 'scheduled_for': self.today, **extra}
 
     def product_data(self, **extra):
         return {'name': 'New catalogue product', 'strength': 'Product variant', 'category': 'other',
@@ -183,12 +182,15 @@ class OperationsPortalTests(OperationsPortalFixture):
         url = reverse('portal:ops-shipping-create')
         # Create shipment is a dialog on the Weekly shipping list; a mistake reopens it there.
         self.assertRedirects(self.client.get(url), f"{reverse('portal:ops-shipping')}?create=1", fetch_redirect_response=False)
-        mistake = self.client.post(url, data)
+        mistake = self.client.post(url, {**data, 'quantity': ''})
         self.assertEqual(mistake.status_code, 400)
         self.assertTemplateUsed(mistake, 'portal/operations_shipping.html')
         self.assertContains(mistake, '<dialog class="app-dialog" id="create-shipment" aria-labelledby="create-shipment-title" open>', status_code=400)
-        first = self.client.post(url, {**data, 'confirm': 'on'})
-        second = self.client.post(url, {**data, 'confirm': 'on'})
+        # No confirmation tick (Dr Czech, 19 Nov 2026): Add draft parcel waits for all four fields instead.
+        self.assertContains(mistake, 'data-submit-when-filled', status_code=400)
+        self.assertNotContains(mistake, 'nothing is dispatched automatically', status_code=400)
+        first = self.client.post(url, data)
+        second = self.client.post(url, data)
         self.assertEqual(first.status_code, 302)
         self.assertEqual(first.url, second.url)
         self.assertEqual(Shipment.objects.get().status, 'draft')
@@ -198,7 +200,7 @@ class OperationsPortalTests(OperationsPortalFixture):
     def test_manual_shipment_rejects_foreign_form_choices(self):
         response = self.client.post(reverse('portal:ops-shipping-create'), {
             'workflow_context': self.create_token(), 'patient': self.beta_patient.pk,
-            'product': self.beta_product.pk, 'quantity': 2, 'scheduled_for': self.today, 'confirm': 'on'})
+            'product': self.beta_product.pk, 'quantity': 2, 'scheduled_for': self.today})
         self.assertEqual(response.status_code, 400)
         self.assertFalse(Shipment.objects.exists())
 

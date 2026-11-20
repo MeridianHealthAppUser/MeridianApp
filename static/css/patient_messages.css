@@ -13,19 +13,27 @@
 .patient-inbox-thread:hover { background: var(--console-canvas); }
 .patient-inbox-thread:focus-visible { outline: 2px solid var(--console-teal); outline-offset: -3px; }
 .patient-inbox-thread.is-selected { background: var(--console-teal-soft); }
-.patient-inbox-thread > strong { font-size: .86rem; font-weight: 500; line-height: 1.4; overflow-wrap: anywhere; }
-.patient-inbox-thread.is-unread > strong { font-weight: 700; }
+/* The top line: who it's with (conversation_people.css), any unread count at its right, the tags cut short when they
+   need to make room. Then a gap, and the subject, with "Closed" at its right as before, close to the latest message,
+   which reads with it as one. With nobody in it yet, the subject is the top line and carries both. */
+.patient-inbox-thread__head { align-items: center; display: flex; gap: .5rem; min-width: 0; }
+.patient-inbox-thread__head > .person-tags { flex: 0 1 auto; min-width: 0; }
+.patient-inbox-thread__head--subject { align-items: flex-start; }
+.patient-inbox-thread__head--subject > .patient-inbox-thread__subject, .patient-inbox-thread__title > .patient-inbox-thread__subject { flex: 1 1 auto; min-width: 0; }
+.patient-inbox-thread__marks { align-items: center; display: inline-flex; flex: 0 0 auto; gap: .5rem; margin-left: auto; }
+.patient-inbox-thread__head--subject .patient-inbox-thread__marks { margin-top: .05rem; }
+.patient-inbox-thread__people { display: flex; gap: .3rem; margin: 0; min-width: 0; }
+.patient-inbox-thread__title { align-items: flex-start; display: flex; gap: .5rem; margin-top: .3rem; min-width: 0; }
+.patient-inbox-thread__title > .patient-inbox-pill { flex: 0 0 auto; margin-top: .15rem; }
+.patient-inbox-thread__subject { font-size: .86rem; font-weight: 500; line-height: 1.4; overflow-wrap: anywhere; }
+.patient-inbox-thread.is-unread .patient-inbox-thread__subject { font-weight: 700; }
 /* Unread count per conversation, matching the red badge on My Messages in the menu. */
-.patient-inbox-thread > strong { align-items: flex-start; display: flex; gap: .5rem; justify-content: space-between; }
-.patient-inbox-thread__badge { align-items: center; background: var(--patient-badge, var(--c-d92d20)); border-radius: 999px; color: var(--c-ffffff); display: inline-flex; flex: 0 0 auto; font-size: .68rem; font-variant-numeric: tabular-nums; font-weight: 700; height: 1.15rem; justify-content: center; line-height: 1; margin-top: .05rem; min-width: 1.15rem; padding: 0 .35rem; white-space: nowrap; }
-.patient-inbox-thread__with { color: var(--console-muted); font-size: .72rem; overflow-wrap: anywhere; }
+.patient-inbox-thread__badge { align-items: center; background: var(--patient-badge, var(--c-d92d20)); border-radius: 999px; color: var(--c-ffffff); display: inline-flex; flex: 0 0 auto; font-size: .68rem; font-variant-numeric: tabular-nums; font-weight: 700; height: 1.15rem; justify-content: center; line-height: 1; min-width: 1.15rem; padding: 0 .35rem; white-space: nowrap; }
 .patient-conversation__joined { color: var(--console-muted); font-size: .75rem; margin: .2rem 0 0; }
 /* The latest message with its time or date on the right, laid out like the practice console's conversation lists. */
-.patient-inbox-thread__last { align-items: baseline; display: flex; gap: .75rem; margin-top: .3rem; min-width: 0; }
+.patient-inbox-thread__last { align-items: baseline; display: flex; gap: .75rem; min-width: 0; }
 .patient-inbox-thread__preview { color: var(--patient-text); flex: 1 1 auto; font-size: .76rem; line-height: 1.45; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .patient-inbox-thread__last time { color: var(--console-muted); flex: 0 0 auto; font-size: .72rem; white-space: nowrap; }
-.patient-inbox-thread > strong > span:first-child { margin-right: auto; }
-.patient-inbox-thread > strong .patient-inbox-pill { flex: 0 0 auto; margin-top: .05rem; }
 .patient-inbox-pill { background: var(--console-canvas); border: 1px solid var(--console-line); border-radius: 99rem; color: var(--patient-text); display: inline-block; font-size: .64rem; font-weight: 500; line-height: 1.35; padding: .1rem .45rem; white-space: nowrap; }
 .patient-inbox-pagination { align-items: center; border-top: 1px solid var(--console-line); display: flex; flex-wrap: wrap; gap: .7rem; justify-content: space-between; padding: .85rem 1rem; }
 .patient-inbox-pagination a { color: var(--console-teal-dark); font-size: .76rem; font-weight: 500; text-underline-offset: .2em; }

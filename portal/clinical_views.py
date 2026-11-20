@@ -1,8 +1,13 @@
 """Standalone clinical pages; private reports never have public media URLs."""
 
+from datetime import date, datetime, time, timedelta
 from urllib.parse import urlencode
 
+from django import forms
+from django.core.validators import MaxValueValidator, MinValueValidator
+
 from django.contrib import messages
+from django.contrib.auth import get_user_model
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.core.paginator import Paginator
@@ -10,6 +15,7 @@ from django.db.models import Exists, OuterRef, Q
 from django.http import Http404, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
+from django.utils import timezone
 from django.utils.decorators import method_decorator
 from django.views import View
 from django.views.decorators.cache import never_cache
@@ -20,6 +26,8 @@ from care.patient_files import read_patient_file
 from care.services import record_audit
 from practices.models import CompanyMembership, Patient
 
+from .filter_menus import (TickedChoiceField, choice_section, fields_section, list_tools, ticked_ids, ticked_sections,
+                           without_all)
 from .clinical_forms import (
     ClinicalFilterForm, ConsultationForm, LabReviewForm, LabUploadForm,
     make_clinical_context, validate_clinical_context,
@@ -133,13 +141,75 @@ class ConsultationListView(StaffClinicalView):
     clinician_redirect_message = 'Consultation notes are on each patient’s record, under Consultations.'
 
     def get(self, request):
-        context = self.context(**_listing(request, self.company, self.consultations().order_by('-occurred_at', '-pk'),
-                                          ClinicalEncounter.Status.choices), can_create=self.is_clinician)
-        rows = list(context['page_obj'].object_list)
+        """The table with the standard tools at its top right (James, 20 Nov 2026): a search, as you type, for patient
+        or clinician, and Filters for Status, Patient, Clinician and the consultation's date (one day, or a range).
+        ?patient= still picks one."""
+        data = without_all(request.GET, 'status')
+        form = ConsultationFilterForm(data)
+        patients, clinicians = ticked_ids(request.GET.getlist('patient')), ticked_ids(request.GET.getlist('clinician'))
+        everyone = self.consultations().order_by('-occurred_at', '-pk')
+        records = everyone
+        if form.is_valid():
+            for term in form.cleaned_data['q'].split():
+                records = records.filter(Q(patient__first_name__icontains=term) | Q(patient__last_name__icontains=term)
+                                         | Q(clinician__first_name__icontains=term) | Q(clinician__last_name__icontains=term))
+            if form.cleaned_data['status']:
+                records = records.filter(status__in=form.cleaned_data['status'])
+            if patients:
+                records = records.filter(patient_id__in=patients)
+            if clinicians:
+                records = records.filter(clinician_id__in=clinicians)
+            first, last = form.cleaned_data['date_from'], form.cleaned_data['date_to']
+            if first or last:
+                # One date is that day; two are the days from one to the other, in the practice's time.
+                first, last = first or last, last or first
+                records = records.filter(occurred_at__gte=timezone.make_aware(datetime.combine(first, time.min)),
+                                         occurred_at__lt=timezone.make_aware(datetime.combine(last + timedelta(days=1), time.min)))
+        else:
+            records = records.none()
+        page = Paginator(records, 20).get_page(request.GET.get('page'))
+        query = request.GET.copy()
+        query.pop('page', None)
+        people = Patient.objects.for_company(self.company).filter(pk__in=everyone.values('patient')).order_by('last_name', 'first_name', 'pk')
+        staff = get_user_model().objects.filter(pk__in=everyone.values('clinician')).order_by('first_name', 'last_name', 'pk')
+        rows = list(page.object_list)
         for row in rows:
             row.detail_url = reverse('portal:clinical-consultation-detail', args=[row.pk])
-        context['consultations'] = rows
-        return render(request, 'portal/clinical_consultation_list.html', context)
+        count = page.paginator.count
+        return render(request, 'portal/clinical_consultation_list.html', self.context(
+            filter_form=form, page_obj=page, is_paginated=page.has_other_pages(), pagination_query=query.urlencode(),
+            consultations=rows, can_create=self.is_clinician,
+            # New consultation needs one patient, picked in Filters.
+            selected_patient=people.filter(pk=patients[0]).first() if len(patients) == 1 else None,
+            count_label=f'{count} record{"" if count == 1 else "s"}',
+            **list_tools(action=reverse('portal:clinical-consultations'), data=request.GET, form=form,
+                         label='Filter consultations', placeholder='Patient or clinician', sections=[
+                             *ticked_sections(form, data, ('status',)),
+                             choice_section('patient', 'Patient', [(person.pk, str(person)) for person in people], patients, icon='person'),
+                             choice_section('clinician', 'Clinician', [(person.pk, person.full_name) for person in staff], clinicians, icon='person'),
+                             fields_section('dates', 'Consultation date', [form['date_from'], form['date_to']],
+                                            count=int(bool(data.get('date_from') or data.get('date_to')))),
+                         ])))
+
+
+def _date_field(label, **kwargs):
+    return forms.DateField(label=label, required=False, widget=forms.DateInput(attrs={'type': 'date'}),
+                           validators=[MinValueValidator(date(1900, 1, 1)), MaxValueValidator(date(2100, 12, 31))], **kwargs)
+
+
+class ConsultationFilterForm(forms.Form):
+    """Consultations: the search, and Filters' Status and date (Patient and Clinician are ticked ids)."""
+
+    q = forms.CharField(label='Search consultations', required=False, max_length=100)
+    status = TickedChoiceField(label='Status', choices=ClinicalEncounter.Status.choices)
+    date_from = _date_field('From')
+    date_to = _date_field('To', help_text='Leave empty for just the one day.')
+
+    def clean(self):
+        data = super().clean()
+        if data.get('date_from') and data.get('date_to') and data['date_from'] > data['date_to']:
+            self.add_error('date_to', 'The end date must be on or after the start date.')
+        return data
 
 
 class ConsultationEditorView(StaffClinicalView):
@@ -211,13 +281,68 @@ class LabListView(StaffClinicalView):
     clinician_redirect_message = 'Blood tests are on each patient’s record, under Blood tests.'
 
     def get(self, request):
-        context = self.context(**_listing(request, self.company, self.labs().order_by('-requested_on', '-pk'),
-                                          LabRequest.Status.choices), can_create=self.is_doctor)
-        rows = list(context['page_obj'].object_list)
+        """The table with the standard tools at its top right (James, 20 Nov 2026): a search, as you type, for patient,
+        tests or doctor, and Filters for Status, Patient, Doctor and a Required by range. ?patient= still picks one."""
+        data = without_all(request.GET, 'status')
+        form = LabFilterForm(data)
+        patients, doctors = ticked_ids(request.GET.getlist('patient')), ticked_ids(request.GET.getlist('doctor'))
+        labs = self.labs().order_by('-requested_on', '-pk')
+        everyone = labs
+        if form.is_valid():
+            for term in form.cleaned_data['q'].split():
+                labs = labs.filter(Q(patient__first_name__icontains=term) | Q(patient__last_name__icontains=term)
+                                   | Q(panel_name__icontains=term) | Q(requested_by__first_name__icontains=term)
+                                   | Q(requested_by__last_name__icontains=term))
+            if form.cleaned_data['status']:
+                labs = labs.filter(status__in=form.cleaned_data['status'])
+            if patients:
+                labs = labs.filter(patient_id__in=patients)
+            if doctors:
+                labs = labs.filter(requested_by_id__in=doctors)
+            if form.cleaned_data['due_from']:
+                labs = labs.filter(due_on__gte=form.cleaned_data['due_from'])
+            if form.cleaned_data['due_to']:
+                labs = labs.filter(due_on__lte=form.cleaned_data['due_to'])
+        else:
+            labs = labs.none()
+        page = Paginator(labs, 20).get_page(request.GET.get('page'))
+        query = request.GET.copy()
+        query.pop('page', None)
+        people = Patient.objects.for_company(self.company).filter(pk__in=everyone.values('patient')).order_by('last_name', 'first_name', 'pk')
+        clinicians = get_user_model().objects.filter(pk__in=everyone.values('requested_by')).order_by('first_name', 'last_name', 'pk')
+        rows = list(page.object_list)
         for row in rows:
             row.detail_url = reverse('portal:clinical-lab-detail', args=[row.pk])
-        context['lab_requests'] = rows
-        return render(request, 'portal/clinical_lab_list.html', context)
+        count = page.paginator.count
+        dated = bool(data.get('due_from') or data.get('due_to'))
+        return render(request, 'portal/clinical_lab_list.html', self.context(
+            filter_form=form, page_obj=page, is_paginated=page.has_other_pages(), pagination_query=query.urlencode(),
+            lab_requests=rows, can_create=self.is_doctor,
+            # Request blood tests needs one patient, picked in Filters.
+            selected_patient=people.filter(pk=patients[0]).first() if len(patients) == 1 else None,
+            count_label=f'{count} request{"" if count == 1 else "s"}',
+            **list_tools(action=reverse('portal:clinical-labs'), data=request.GET, form=form, label='Filter blood tests',
+                         placeholder='Patient, test or doctor', sections=[
+                             *ticked_sections(form, data, ('status',)),
+                             choice_section('patient', 'Patient', [(person.pk, str(person)) for person in people], patients, icon='person'),
+                             choice_section('doctor', 'Doctor', [(person.pk, person.full_name) for person in clinicians], doctors, icon='person'),
+                             fields_section('required_by', 'Required by', [form['due_from'], form['due_to']], count=int(dated)),
+                         ])))
+
+
+class LabFilterForm(forms.Form):
+    """Blood tests: the search, and Filters' Status and Required by range (Patient and Doctor are ticked ids)."""
+
+    q = forms.CharField(label='Search blood tests', required=False, max_length=100)
+    status = TickedChoiceField(label='Status', choices=LabRequest.Status.choices)
+    due_from = _date_field('From')
+    due_to = _date_field('To')
+
+    def clean(self):
+        data = super().clean()
+        if data.get('due_from') and data.get('due_to') and data['due_from'] > data['due_to']:
+            self.add_error('due_to', 'The end date must be on or after the start date.')
+        return data
 
 
 class LabCreateView(StaffClinicalView):

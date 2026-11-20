@@ -3,5 +3,5 @@
         <p style="margin:0 0 16px;">An appointment with you has been cancelled.{% if cancelled_by %} Cancelled by {{ cancelled_by }}.{% endif %}</p>
         {% include 'emails/details.html' %}
         <p style="margin:0 0 16px;">The time is free again in your calendar.</p>
-        {% include 'emails/button.html' with label='Open Calendar &amp; Bookings' %}
+        {% include 'emails/button.html' with label='Open Calendar' %}
 {% endblock %}

@@ -613,7 +613,7 @@ class NavigationRouteRegistryTests(SimpleTestCase):
             '/patients/23/blood-tests/preview/', '/patients/23/blood-tests/24/form.pdf',
             '/patients/23/record/export/', '/patients/23/record/history/',
             '/patients/23/record/export.xlsx', '/patients/23/record/workbook.xlsx',
-            '/compounding/23/print/', '/metrics/export.csv', '/activity-statements/23/export.csv',
+            '/compounding/23/print/', '/metrics/export.xlsx', '/activity-statements/23/export.csv',
             '/shipping/manifest.csv', '/shipping/order.csv', '/dispatch-history/export.xlsx',
             '/messages/status/', '/patient/messages/status/', '/patient/appointments/video-status/',
             '/patient/appointments/book/times/', '/schedule/book/times/',

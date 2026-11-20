@@ -163,7 +163,7 @@ def complete_checkout(*, lead, user, password, clinician_id, starts_at, code, re
     lead = Lead.objects.select_for_update().get(pk=lead.pk)
     company = lead.company
     if not company.is_active or not company_is_enabled(company):
-        raise ValidationError('This practice is no longer accepting bookings.')
+        raise ValidationError('This practice is no longer accepting appointments.')
     questionnaire = ScreeningQuestionnaire.objects.for_company(company).filter(lead=lead, stage=1).first()
     if not can_check_out(lead, questionnaire):
         raise ValidationError('This enquiry can no longer be booked online. The practice will contact you.')

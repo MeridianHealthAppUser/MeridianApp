@@ -120,6 +120,61 @@ class AppointmentDetailPageTests(AppointmentLifecycleFixture):
         self.login(self.patient_user)
         self.assertNotContains(self.client.get(self.url('patient-appointments')), 'appointment-change-time')
 
+    @override_settings(EMAIL_ENABLED=True, EMAIL_BACKEND='django.core.mail.backends.locmem.EmailBackend')
+    def test_edit_appointment_changes_only_the_type_and_length_and_keeps_the_time(self):
+        reminded = timezone.now()
+        appointment = self.appointment(appointment_type='follow_up', duration_minutes=15, reminder_sent_at=reminded)
+        self.login(self.admin)
+        page = self.client.get(self.url('appointment-detail', appointment.pk))
+        self.assertContains(page, 'Edit appointment')
+        form = page.context['time_form']
+        # A practice administrator chooses an initial consultation or a follow-up, as when booking.
+        self.assertEqual([value for value, _ in form.fields['appointment_type'].choices], ['initial', 'follow_up'])
+        self.assertEqual((form.initial['appointment_type'], form.initial['duration_minutes']), ('follow_up', 15))
+        data = dict(self.time_data(page, self.starts_at), appointment_type='initial', duration_minutes='30')
+        before = len(mail.outbox)
+        with self.captureOnCommitCallbacks(execute=True):
+            response = self.client.post(self.url('appointment-change-time', appointment.pk), data)
+        self.assertRedirects(response, self.url('appointment-detail', appointment.pk), fetch_redirect_response=False)
+        appointment.refresh_from_db()
+        self.assertEqual((appointment.starts_at, appointment.appointment_type, appointment.duration_minutes),
+                         (self.starts_at, 'initial', 30))
+        self.assertEqual(appointment.reminder_sent_at, reminded)  # The same time, so no second reminder.
+        sent = {message.to[0]: message for message in mail.outbox[before:]}
+        self.assertEqual(set(sent), {self.patient_user.email, self.doctor.email})
+        patient = sent[self.patient_user.email]
+        self.assertTrue(patient.subject.startswith('Your appointment has changed:'))
+        self.assertIn('Your appointment has changed.', patient.body)
+        self.assertIn('Appointment: Initial consultation', patient.body)
+        self.assertIn('30 minutes', patient.body)
+        self.assertTrue(sent[self.doctor.email].subject.startswith('Appointment changed: Alpha Patient on'))
+        event = AuditEvent.objects.get(action='appointment.changed', target_id=str(appointment.pk))
+        self.assertEqual({key: event.metadata[key] for key in ('type_from', 'type_to', 'minutes_from', 'minutes_to')},
+                         {'type_from': 'follow_up', 'type_to': 'initial', 'minutes_from': 15, 'minutes_to': 30})
+
+    def test_edit_appointment_refuses_no_change_a_length_that_clashes_and_a_type_an_administrator_cannot_book(self):
+        appointment = self.appointment(appointment_type='follow_up', duration_minutes=15)
+        self.appointment(patient=self.other_patient, starts_at=self.starts_at + timedelta(minutes=15))  # The doctor's next.
+        self.login(self.admin)
+        page = self.client.get(self.url('appointment-detail', appointment.pk))
+        same = self.time_data(page, self.starts_at)
+        for change in ({}, {'duration_minutes': '30'}, {'appointment_type': 'review'}):
+            response = self.client.post(self.url('appointment-change-time', appointment.pk), dict(same, **change))
+            self.assertEqual(response.status_code, 400, change)
+        self.assertContains(self.client.post(self.url('appointment-change-time', appointment.pk), same),
+                            'Change the time, type or length first.', status_code=400)
+        appointment.refresh_from_db()
+        self.assertEqual((appointment.starts_at, appointment.appointment_type, appointment.duration_minutes),
+                         (self.starts_at, 'follow_up', 15))
+        # A six-month review keeps its type in an administrator's list; a doctor chooses from every type.
+        review = self.appointment(appointment_type='review', starts_at=self.starts_at + timedelta(days=1))
+        page = self.client.get(self.url('appointment-detail', review.pk))
+        self.assertEqual([value for value, _ in page.context['time_form'].fields['appointment_type'].choices],
+                         ['initial', 'follow_up', 'review'])
+        self.login(self.doctor)
+        page = self.client.get(self.url('appointment-detail', review.pk))
+        self.assertEqual(len(page.context['time_form'].fields['appointment_type'].choices), 4)
+
     def test_booking_is_standalone_and_requires_signed_context(self):
         self.login(self.admin)
         url = self.url('appointment-book')
@@ -290,10 +345,10 @@ class AppointmentDetailPageTests(AppointmentLifecycleFixture):
         # Practice administrators can only cancel, so the button says so and the status can't be changed.
         self.assertContains(response, 'href="?update=status" data-modal-open="appointment-status" aria-haspopup="dialog">Cancel appointment</a>')
         self.assertTrue(response.context['form'].fields['status'].disabled)
-        self.assertInHTML('<option value="cancelled" selected>Cancel booking</option>', html)
+        self.assertInHTML('<option value="cancelled" selected>Cancel appointment</option>', html)
         # Nobody ticks a confirmation (Nov 2026): the dialog shows the 24-hour policy and its button says what it does.
         self.assertNotContains(response, 'I confirm this appointment update')
-        self.assertContains(response, '<p class="app-dialog__policy">Please note that bookings missed or cancelled within 24 hours of the scheduled time will be billed for in full')
+        self.assertContains(response, '<p class="app-dialog__policy">Please note that appointments missed or cancelled within 24 hours of the scheduled time will be billed for in full')
         self.assertContains(response, 'type="submit">Confirm cancellation</button>')
         self.assertContains(response, '<dialog class="app-dialog" id="appointment-status" aria-labelledby="appointment-status-title">')
         self.assertContains(response, 'js/dialogs.js')
@@ -311,9 +366,9 @@ class AppointmentDetailPageTests(AppointmentLifecycleFixture):
         self.assertEqual(appointment.status, 'booked')
         self.login(self.super_admin)
         html = self.client.get(url).content.decode()
-        self.assertIn('aria-haspopup="dialog">Update booking status</a>', html)
+        self.assertIn('aria-haspopup="dialog">Update appointment status</a>', html)
         self.assertNotIn('I confirm this appointment update', html)
-        self.assertIn('Please note that bookings missed or cancelled within 24 hours of the scheduled time will be billed for in full', html)
+        self.assertIn('Please note that appointments missed or cancelled within 24 hours of the scheduled time will be billed for in full', html)
         self.assertIn('type="submit">Confirm cancellation</button>', html)
         self.assertLess(html.index('<h2>Appointment details</h2>'), html.index('>Video consultation</h2>'))
         self.assertLess(html.index('>Video consultation</h2>'), html.index('id="appointment-status"'))
@@ -321,7 +376,7 @@ class AppointmentDetailPageTests(AppointmentLifecycleFixture):
         ClinicianAssignment.objects.create(company=self.company, patient=self.patient, clinician=self.colleague, ended_at=timezone.now())
         self.login(self.colleague)
         response = self.client.get(url)
-        self.assertNotContains(response, 'Update booking status')
+        self.assertNotContains(response, 'Update appointment status')
         self.assertNotContains(response, 'Cancel appointment')
         self.assertNotContains(response, '<dialog')
         # A cancellation goes through without any tick.
@@ -366,7 +421,7 @@ class AppointmentDetailPageTests(AppointmentLifecycleFixture):
         self.assertNotContains(response, 'consultation note</a>')
         self.assertNotContains(response, 'id="consultation-note"')
 
-    def test_the_record_appointment_list_shows_the_join_window_and_the_video_room_note_behind_an_info_tip(self):
+    def test_the_record_appointment_list_greys_open_meeting_room_with_the_join_window_behind_an_info_tip(self):
         appointment = self.appointment(starts_at=timezone.make_aware(timezone.datetime(2030, 10, 16, 11, 0)), duration_minutes=15)
         cancelled = self.appointment(starts_at=timezone.make_aware(timezone.datetime(2030, 10, 17, 11, 0)), status='cancelled')
         record = self.url('patient-detail', self.patient.pk)
@@ -375,13 +430,20 @@ class AppointmentDetailPageTests(AppointmentLifecycleFixture):
         self.assertRedirects(self.client.get(record, {'tab': 'appointments'}), f'{record}?tab=overview', fetch_redirect_response=False)
         CompanyMembership.objects.filter(company=self.company, user=self.doctor).update(role='super_admin')
         response = self.client.get(record, {'tab': 'appointments'})
-        self.assertContains(response, '<th scope="col">Date and time</th><th scope="col">Appointment type</th><th scope="col">Join window</th><th scope="col">Doctor</th>')
-        self.assertContains(response, '<td data-label="Join window">10:45–11:15</td>')
-        self.assertContains(response, '<td data-label="Join window">&mdash;</td>', count=1)
-        self.assertNotIn(cancelled.pk, [row.pk for row in response.context['rows'] if row.join_window])
-        # The window has its own column, so the note behind the (i) leaves it out.
-        self.assertNotContains(response, 'Join window:')
-        self.assertContains(response, f'<span class="info-tip" data-info-tip><button class="info-tip__button" type="button" aria-label="When the video room opens" aria-describedby="video-join-{appointment.pk}">i</button><span class="info-tip__bubble" id="video-join-{appointment.pk}" role="tooltip">')
+        # My Appointments' columns (Nov 2026): no Join window column and, on a record, no Patient column.
+        self.assertContains(response, '<th scope="col">Date and time</th><th scope="col">Appointment</th><th scope="col">Clinician</th>'
+                                      '<th scope="col">Status</th><th class="patient-table__fit" scope="col">Actions</th>')
+        self.assertNotContains(response, '>Join window</th>')
+        self.assertNotContains(response, '<th scope="col">Patient</th>')
+        # Their own booking: Open meeting room, greyed out until the room opens, with when it opens behind the (i).
+        self.assertContains(response, 'role="link" data-appointment-video-join aria-disabled="true" '
+                                      f'aria-describedby="video-join-{appointment.pk}"><svg')
+        self.assertContains(response, '<span class="info-tip" data-info-tip><button class="info-tip__button" type="button" aria-label="When the '
+                                      f'video room opens" aria-describedby="video-join-{appointment.pk}">i</button><span class="info-tip__bubble" '
+                                      f'id="video-join-{appointment.pk}" role="tooltip">')
+        self.assertContains(response, 'Join window: 16 Oct, 10:45–11:15.</span>')
+        self.assertNotContains(response, f'video-join-{cancelled.pk}')
+        self.assertContains(response, 'Open meeting room</a>', count=1)
         self.assertContains(response, 'css/info_tips.css')
         self.assertContains(response, 'js/info_tips.js')
         # The appointment's own page keeps the note written out: the window first, why it's closed beneath it.
@@ -396,30 +458,32 @@ class AppointmentDetailPageTests(AppointmentLifecycleFixture):
         self.login(self.super_admin)
 
         def rows(**query):
-            return {row.pk for row in self.client.get(record, {'tab': 'appointments', **query}).context['rows']}
+            return {row.pk for row in self.client.get(record, {'tab': 'appointments', **query}).context['appointments']}
 
         response = self.client.get(record, {'tab': 'appointments'})
-        self.assertContains(response, '<details class="filter-menu" data-filter-menu>')
+        self.assertContains(response, '<details class="filter-menu filter-menu--compact" data-filter-menu>')
         self.assertContains(response, 'js/filter_menu.js')
         self.assertNotContains(response, 'patient-workspace-filter')
         self.assertNotContains(response, 'Clear all')
-        for label in ('Status', 'Appointment type', 'Doctor'):
-            self.assertContains(response, f'<span class="filter-menu__label">{label}</span>')
+        # My Appointments' Filters (Nov 2026), the record's tab kept in the form.
+        self.assertEqual([section['label'] for section in response.context['filter_menu']['sections']],
+                         ['Status', 'Date', 'Clinician', 'Appointment type'])
+        self.assertContains(response, '<input type="hidden" name="tab" value="appointments">')
         # Only people in this patient's appointments are offered.
-        self.assertContains(response, f'name="doctor" value="{self.doctor.pk}"')
-        self.assertContains(response, f'name="doctor" value="{self.colleague.pk}"')
-        self.assertNotContains(response, f'name="doctor" value="{self.admin.pk}"')
+        self.assertContains(response, f'name="clinician" value="{self.doctor.pk}"')
+        self.assertContains(response, f'name="clinician" value="{self.colleague.pk}"')
+        self.assertNotContains(response, f'name="clinician" value="{self.admin.pk}"')
         # Ticks within a section widen it; sections narrow each other.
-        self.assertEqual(rows(status=['booked', 'cancelled'], doctor=self.doctor.pk), {mine.pk, cancelled.pk})
+        self.assertEqual(rows(status=['booked', 'cancelled'], clinician=self.doctor.pk), {mine.pk, cancelled.pk})
         self.assertEqual(rows(type='follow_up'), {theirs.pk, cancelled.pk})
         self.assertEqual(rows(status='all'), {mine.pk, theirs.pk, cancelled.pk})
         response = self.client.get(record, {'tab': 'appointments', 'status': ['booked', 'cancelled'], 'type': 'follow_up'})
         self.assertContains(response, '<span class="filter-menu__badge">3<span class="sr-only"> applied</span></span>')
         self.assertContains(response, '<input type="checkbox" name="status" value="cancelled" checked>')
         self.assertContains(response, f'<a class="filter-menu__clear" href="{record}?tab=appointments">Clear all</a>')
-        # A choice that isn't offered shows nothing, rather than everything.
-        self.assertEqual(rows(doctor=self.super_admin.pk), set())
-        self.assertContains(self.client.get(record, {'tab': 'appointments', 'doctor': self.super_admin.pk}), 'filter-menu__error')
+        # A choice that isn't offered shows nothing, rather than everything, and opens Filters to say so.
+        self.assertEqual(rows(clinician=self.super_admin.pk), set())
+        self.assertContains(self.client.get(record, {'tab': 'appointments', 'clinician': self.super_admin.pk}), 'filter-menu__error')
         # Consultations filter by status and by who wrote them; the doctor is a Super Admin to have the Consultations tab.
         save_consultation(company=self.company, patient=self.patient, actor=self.doctor, summary='Final',
                           occurred_at=timezone.now() - timedelta(days=1), sign=True)
@@ -598,7 +662,7 @@ class AppointmentDetailPageTests(AppointmentLifecycleFixture):
         self.assertIn('>Request a change</h2>', far)
         self.assertIn(f'<p class="app-dialog__sub">{later.get_appointment_type_display()} with {self.doctor.titled_name} on {when}.</p>', far)
         # The cancellation policy, as before cancelling, then on to a message to a practice administrator, who moves it.
-        self.assertIn('<p class="app-dialog__policy">Please note that bookings missed or cancelled within 24 hours of the scheduled '
+        self.assertIn('<p class="app-dialog__policy">Please note that appointments missed or cancelled within 24 hours of the scheduled '
                       'time will be billed for in full', far)
         self.assertIn(f'<a class="console-button console-button--primary" href="{reverse("portal:patient-messages")}?'
                       f'{query.replace("&", "&amp;")}#patient-conversation"><svg aria-hidden="true"', far)
@@ -662,7 +726,7 @@ class AppointmentDetailPageTests(AppointmentLifecycleFixture):
         self.assertNotIn('Optional', dialog)
         self.assertNotIn(f'id="cancel_{booked.pk}_confirm"', dialog)
         self.assertIn(f'<form class="console-form" method="post" action="{self.url("patient-appointment-cancel", booked.pk)}">', dialog)
-        self.assertIn('<p class="app-dialog__policy">Please note that bookings missed or cancelled within 24 hours of the scheduled time will be billed for in full', dialog)
+        self.assertIn('<p class="app-dialog__policy">Please note that appointments missed or cancelled within 24 hours of the scheduled time will be billed for in full', dialog)
         # Keep appointment closes it, beside Confirm cancellation.
         self.assertIn('data-dialog-close>Keep appointment</button><button class="console-button console-button--primary" type="submit">Confirm cancellation</button>', dialog)
         # Three days away, so no warning about the fee.

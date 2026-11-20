@@ -114,7 +114,7 @@
           <a class="questionnaire-button questionnaire-button--secondary" href="{% url 'portal:questionnaire-result' %}">Back to my enquiry</a>
         </div>
         {% if not pay_enabled and quote %}<p class="questionnaire-note">{% if quote.total %}Pay now is unavailable until online payment is connected.{% elif not slots %}Choose a date with a free time to continue.{% else %}Sort out your login above to continue.{% endif %}</p>{% endif %}
-        <p class="questionnaire-legal">Your login, patient record, booking and invoice are created together when payment completes. A consultation does not guarantee a prescription.</p>
+        <p class="questionnaire-legal">Your login, patient record, appointment and invoice are created together when payment completes. A consultation does not guarantee a prescription.</p>
       </section>
     </form>
   </section>

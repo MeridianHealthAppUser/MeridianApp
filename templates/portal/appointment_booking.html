@@ -1,14 +1,14 @@
 {% extends 'portal/staff_page_base.html' %}{% load static workspace_ui %}
-{% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/backoffice.css' %}?v=20261104a"><link rel="stylesheet" href="{% static 'css/time_slots.css' %}?v=20261104a"><script src="{% static 'js/appointment_booking.js' %}?v=20261022d" defer></script>{% endblock %}
-{% block breadcrumbs %}{% breadcrumbs 'Calendar & Bookings' 'portal:staff-schedule' 'Book an appointment' %}{% endblock %}
-{% block page_heading %}<header class="staff-page-header"><div><h1>Book an appointment</h1><p>For an existing patient in {{ company.name }}. Working hours, time off and both participants’ other bookings are checked again when you save.</p></div><a class="console-button console-button--secondary" href="{% url 'portal:staff-schedule' %}">View schedule</a></header>{% endblock %}
+{% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/backoffice.css' %}?v=20261120c"><link rel="stylesheet" href="{% static 'css/time_slots.css' %}?v=20261119a"><script src="{% static 'js/appointment_booking.js' %}?v=20261119a" defer></script>{% endblock %}
+{% block breadcrumbs %}{% breadcrumbs 'Calendar' 'portal:schedule-appointments' 'Book an appointment' %}{% endblock %}
+{% block page_heading %}<header class="staff-page-header"><div><h1>Book an appointment</h1><p>For an existing patient in {{ company.name }}. Working hours, time off and both participants’ other appointments are checked again when you save.</p></div><a class="console-button console-button--secondary" href="{% url 'portal:schedule-appointments' %}">View schedule</a></header>{% endblock %}
 {% block page_content %}
   <div class="backoffice"><section class="staff-page-card backoffice-panel">
     <form class="console-form" method="post">
       {% csrf_token %}<input type="hidden" name="workflow_context" value="{{ workflow_context }}">
       {% include 'portal/includes/appointment_booking_fields.html' %}
       <p>The native video room opens 15 minutes before the appointment for its booked doctor and patient. No external meeting link is needed. The patient, if they have a login, and the doctor, if someone else books, are emailed a confirmation.</p>
-      <button class="console-button console-button--primary" type="submit">Confirm booking</button>
+      <button class="console-button console-button--primary" type="submit">Confirm appointment</button>
     </form>
   </section></div>
 {% endblock %}

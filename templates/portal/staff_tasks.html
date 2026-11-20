@@ -2,7 +2,7 @@
 {% load static workspace_ui %}
 
 {% block title %}{{ title|default:page_title }} | {{ company.name }} | Meridian{% endblock %}
-{% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/filter_menu.css' %}?v=20261104a"><script src="{% static 'js/filter_menu.js' %}?v=20261114a" defer></script><link rel="stylesheet" href="{% static 'css/task_list.css' %}?v=20261104a"><link rel="stylesheet" href="{% static 'css/person_tags.css' %}?v=20261104a">{% endblock %}
+{% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/filter_menu.css' %}?v=20261120a"><script src="{% static 'js/filter_menu.js' %}?v=20261114a" defer></script><link rel="stylesheet" href="{% static 'css/conversation_search.css' %}?v=20261104a"><script src="{% static 'js/conversation_search.js' %}?v=20261103a" defer></script><link rel="stylesheet" href="{% static 'css/task_list.css' %}?v=20261104a"><link rel="stylesheet" href="{% static 'css/person_tags.css' %}?v=20261104a">{% endblock %}
 
 
 {% block breadcrumbs %}{% breadcrumbs page_title %}{% endblock %}
@@ -12,7 +12,7 @@
       <h1>{{ page_title }}</h1>
       <p>{% if active_membership.role == 'doctor' %}Tasks assigned to you or created by you in {{ company.name }}.{% else %}Care tasks for {{ company.name }}.{% endif %}</p>
     </div>
-    <div class="staff-page-header__actions">{% include 'portal/includes/filter_menu.html' %}<a class="console-button console-button--primary" href="{% url 'portal:task-create' %}">Create task</a></div>
+    <div class="staff-page-header__actions"><a class="console-button console-button--primary" href="{% url 'portal:task-create' %}">Create task</a></div>
   </header>
 {% endblock %}
 
@@ -26,11 +26,12 @@
   {% endif %}
 
   <section class="staff-page-card staff-page-card--list" aria-labelledby="task-list-heading">
-    <header class="staff-page-card__header">
+    {# The search at the top right of the table, with Filters before it; the table follows the search as you type (James, 20 Nov 2026). #}
+    <header class="staff-page-card__header staff-list-header">
       <div><h2 id="task-list-heading">{{ page_title }}</h2><p>Workflow status and free-form tags are kept separate.</p></div>
-      <span class="staff-page-card__count">{{ page_obj.paginator.count }} task{{ page_obj.paginator.count|pluralize }}</span>
+      {% include 'portal/includes/list_tools.html' with search_label='Search tasks' %}
     </header>
-    {% if filter_form.errors %}
+    <div data-search-region="list">{% if filter_form.errors %}
       <div class="staff-filter-error" role="alert">Correct the filters to view tasks.</div>
     {% else %}
       <div class="staff-task-table-wrap">
@@ -96,19 +97,19 @@
                 </td>
               </tr>
             {% empty %}
-              <tr><td class="staff-task-table__empty" colspan="7"><div class="staff-empty-state"><p>No tasks match the selected filters.</p></div></td></tr>
+              <tr><td class="staff-task-table__empty" colspan="7"><div class="staff-empty-state"><p>No tasks match {% if search %}this search{% else %}the selected filters{% endif %}.</p></div></td></tr>
             {% endfor %}
           </tbody>
         </table>
       </div>
-    {% endif %}
+    {% endif %}</div>
   </section>
 
-  {% if is_paginated %}
+  <div data-search-region="pages">{% if is_paginated %}
     <nav class="staff-pagination" aria-label="Task pages">
       {% if page_obj.has_previous %}<a class="console-button console-button--quiet" href="?{{ pagination_query }}{% if pagination_query %}&amp;{% endif %}page={{ page_obj.previous_page_number }}">Previous</a>{% endif %}
       <span>Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
       {% if page_obj.has_next %}<a class="console-button console-button--quiet" href="?{{ pagination_query }}{% if pagination_query %}&amp;{% endif %}page={{ page_obj.next_page_number }}">Next</a>{% endif %}
     </nav>
-  {% endif %}
+  {% endif %}</div>
 {% endblock %}

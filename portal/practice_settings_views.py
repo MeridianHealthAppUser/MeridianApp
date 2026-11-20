@@ -61,6 +61,8 @@ EVENT_LOG_SECTIONS = (
         ('Policy versions published', False), ('Privacy preferences, requests and responses', False),
         ('Passwords changed or reset, other devices signed out, and profiles or staff details updated', False), ('Activity statements created, refreshed or approved', False),
         ('Follow-ups recorded and enquiries received', False),
+        ('Monthly activity reports sent and their settings changed', False),
+        ('Insights notes and historical data changed, and Insights exported', False),
     )),
 )
 

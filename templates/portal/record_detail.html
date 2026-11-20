@@ -2,7 +2,7 @@
 {% load static %}
 
 {% block title %}Clinical record | {{ company.name }} | Meridian{% endblock %}
-{% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/record_pages.css' %}?v=20261104a"><link rel="stylesheet" href="{% static 'css/filter_menu.css' %}?v=20261104a"><script src="{% static 'js/filter_menu.js' %}?v=20261114a" defer></script><script src="{% static 'js/record_timeline.js' %}" defer></script>{% endblock %}
+{% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/record_pages.css' %}?v=20261104a"><link rel="stylesheet" href="{% static 'css/filter_menu.css' %}?v=20261120a"><script src="{% static 'js/filter_menu.js' %}?v=20261114a" defer></script><script src="{% static 'js/record_timeline.js' %}" defer></script>{% endblock %}
 {% block patient_workspace_heading_actions %}
   {% if export_url %}<a class="console-button console-button--quiet" data-no-loader href="{{ export_url }}">Export clinical record</a>{% endif %}
 {% endblock %}
@@ -20,7 +20,7 @@
       <section class="staff-page-card record-timeline-card" aria-labelledby="record-timeline-heading" data-record-timeline data-next-url="{{ timeline_next_url }}">
         <header class="staff-page-card__header record-timeline-header">
           <div><h2 id="record-timeline-heading">Event log and audit trail</h2><p>Signed consultations and shared notes. Drafts and private notes stay outside this record.</p></div>
-          <div class="record-timeline-tools"><span class="staff-page-card__count">{{ page_obj.paginator.count }} entries</span>{% if timeline_download_url %}<a class="console-button console-button--quiet" data-no-loader href="{{ timeline_download_url }}" aria-describedby="record-excel-help">Download Excel</a>{% endif %}</div>
+          <div class="record-timeline-tools"><span class="staff-page-card__count">{{ page_obj.paginator.count }} entries</span>{% if timeline_download_url %}<a class="console-button console-button--quiet" data-no-loader href="{{ timeline_download_url }}" aria-describedby="record-excel-help">Download XLSX</a>{% endif %}</div>
         </header>
         <p class="record-scroll-help" id="record-scroll-help">Scroll within this panel to read older entries.</p>
         <div class="record-timeline-scroll" id="record-timeline-scroll" tabindex="0" role="region" aria-labelledby="record-timeline-heading" aria-describedby="record-scroll-help" data-timeline-scroll>
@@ -66,6 +66,6 @@
       </aside>
     </div>
     <p class="record-footnote">The export contains the permitted, filtered timeline and the current-practice summary. It excludes private notes, unsigned consultations, report attachment bytes and raw audit metadata. Store any downloaded record securely.</p>
-    {% if timeline_download_url %}<p class="record-footnote" id="record-excel-help">Excel downloads the event trail using these same filters and practice permissions, up to 10,000 entries. Narrow the date range for larger records.</p>{% endif %}
+    {% if timeline_download_url %}<p class="record-footnote" id="record-excel-help">Download XLSX gives the event trail with these same filters and practice permissions, up to 10,000 entries. Narrow the date range for larger records.</p>{% endif %}
   {% endif %}
 {% endblock %}

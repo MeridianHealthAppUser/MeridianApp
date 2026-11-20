@@ -2,7 +2,7 @@
 {% load static workspace_ui %}
 
 {% block title %}My Appointments | Meridian{% endblock %}
-{% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/info_tips.css' %}?v=20261104a"><script src="{% static 'js/info_tips.js' %}?v=20261008a" defer></script><link rel="stylesheet" href="{% static 'css/dialogs.css' %}?v=20261115a"><script src="{% static 'js/dialogs.js' %}?v=20261115b" defer></script><link rel="stylesheet" href="{% static 'css/time_slots.css' %}?v=20261104a"><script src="{% static 'js/appointment_booking.js' %}?v=20261022d" defer></script><script src="{% static 'js/appointment_video.js' %}?v=20261108a" defer></script><link rel="stylesheet" href="{% static 'css/filter_menu.css' %}?v=20261104a"><script src="{% static 'js/filter_menu.js' %}?v=20261114a" defer></script>{% endblock %}
+{% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/info_tips.css' %}?v=20261104a"><script src="{% static 'js/info_tips.js' %}?v=20261008a" defer></script><link rel="stylesheet" href="{% static 'css/dialogs.css' %}?v=20261115a"><script src="{% static 'js/dialogs.js' %}?v=20261115b" defer></script><link rel="stylesheet" href="{% static 'css/time_slots.css' %}?v=20261119a"><script src="{% static 'js/appointment_booking.js' %}?v=20261119a" defer></script><script src="{% static 'js/appointment_video.js' %}?v=20261108a" defer></script><link rel="stylesheet" href="{% static 'css/filter_menu.css' %}?v=20261120a"><script src="{% static 'js/filter_menu.js' %}?v=20261114a" defer></script>{% endblock %}
 {% block patient_content_class %}patient-appointments{% endblock %}
 
 {% block patient_breadcrumbs %}{% breadcrumbs 'My Appointments' %}{% endblock %}
@@ -49,7 +49,7 @@
               <td data-label="Clinician">{% if appointment.clinician %}{{ appointment.clinician.titled_name }}{% else %}Your care team{% endif %}</td>
               <td data-label="Status"><span class="console-status console-status--{{ appointment.status }}">{{ appointment.get_status_display }}</span></td>
               {% if appointment_tab == 'upcoming' %}<td class="patient-table__fit{% if appointment.status == 'cancelled' %} patient-table__fit--none{% endif %}" data-label="Actions">
-                {# Small buttons with short text, as on Calendar & Bookings (Dr Czech, Nov 2026: no appointment page, so no #}
+                {# Small buttons with short text, as on Calendar (Dr Czech, Nov 2026: no appointment page, so no #}
                 {# Details). Open meeting room, greyed out until the room opens and then blue; then, while the booking can #}
                 {# still be changed, Request a change and Cancel, plain buttons that don't invite either (not red), each #}
                 {# opening a dialog below with the cancellation policy. No calendar download: it's attached to the #}
@@ -119,7 +119,7 @@
           {% include 'portal/includes/form_field.html' with field=booking_form.time %}
         </div>
       </div>
-      <div class="app-dialog__actions"><button class="console-button console-button--secondary" type="button" data-dialog-close>Cancel</button><button class="console-button console-button--primary" type="submit">Confirm booking</button></div>
+      <div class="app-dialog__actions"><button class="console-button console-button--secondary" type="button" data-dialog-close>Cancel</button><button class="console-button console-button--primary" type="submit">Confirm appointment</button></div>
     </form>
   </div>
 </dialog>

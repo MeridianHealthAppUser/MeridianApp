@@ -371,38 +371,38 @@ class AccountProfileTests(TestCase):
         self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
         self.assertEqual(json.loads(result.stdout)['checked'], 9)
 
-    def test_month_to_date_is_provisional_with_a_total_at_the_latest_approved_rates(self):
+    def test_month_to_date_is_provisional_since_the_25th_at_the_practice_rates(self):
         from datetime import date
         from decimal import Decimal
 
-        from care.models import DoctorActivityStatement
+        from care.models import PracticeSettings
 
         self.client.force_login(self.doctor)
         session = self.client.session
         session[ACTIVE_COMPANY_SESSION_KEY] = self.alpha.pk
         session.save()
-        response = self.client.get(self.url)
+        counts = {'initial': 12, 'follow_up': 38, 'messages': 96, 'review': 7, 'initial_completed': 10, 'follow_up_completed': 30}
+        with patch('care.reporting.reporting_today', return_value=date(2026, 11, 19)), \
+                patch('care.reporting.doctor_activity', return_value=(counts, {})) as activity:
+            response = self.client.get(self.url)
+        # The monthly report's period so far: from 25 October, as the report on 25 November counts it.
+        self.assertEqual(activity.call_args.kwargs['start'], date(2026, 10, 25))
+        self.assertEqual(activity.call_args.kwargs['end'], date(2026, 11, 19))
         self.assertContains(response, '<span class="account-profile__role">Provisional</span>', html=True)
-        self.assertNotContains(response, 'So far this month')
-        self.assertContains(response, 'No rates on file yet')
+        self.assertContains(response, '<div><dt>Since</dt><dd>25 October</dd></div>', html=True)
+        self.assertContains(response, '<div><dt>Follow-up consults</dt><dd>38</dd></div>', html=True)
+        self.assertContains(response, '<div><dt>Blood results reviewed</dt><dd>7</dd></div>', html=True)
+        # The practice's default rates: 12 × 300 + 38 × 170 + 96 × 10 + 7 × 10
+        self.assertContains(response, '<dd>R11\u00a0090.00</dd>', html=True)
         # The practice isn't repeated as a tag beside the role.
         self.assertNotContains(response, '<span class="account-profile__role account-profile__role--plain">Profile Alpha</span>')
 
-        statement = dict(doctor=self.doctor, counts={}, source_ids={}, amount=Decimal('0'), prepared_by=self.admin)
-        rates = {'initial': '650.00', 'review': '200.00', 'follow_up': '150.00', 'messages': '25.00'}
-        DoctorActivityStatement.objects.create(company=self.alpha, period_start=date(2026, 8, 1), period_end=date(2026, 8, 31),
-                                               rates=rates, approved_at=timezone.now(), **statement)
-        # Neither a draft nor another practice's rates count.
-        DoctorActivityStatement.objects.create(company=self.alpha, period_start=date(2026, 9, 1), period_end=date(2026, 9, 30),
-                                               rates={**rates, 'initial': '9999.00'}, **statement)
-        DoctorActivityStatement.objects.create(company=self.beta, period_start=date(2026, 9, 1), period_end=date(2026, 9, 30),
-                                               rates={**rates, 'initial': '8888.00'}, approved_at=timezone.now(), **statement)
-        counts = {'initial': 12, 'review': 30, 'follow_up': 8, 'messages': 96}
+        PracticeSettings.objects.update_or_create(company=self.alpha, defaults={'activity_rate_initial': Decimal('650.00')})
+        PracticeSettings.objects.update_or_create(company=self.beta, defaults={'activity_rate_initial': Decimal('9999.00')})
         with patch('care.reporting.doctor_activity', return_value=(counts, {})):
             response = self.client.get(self.url)
-        self.assertEqual(response.context['month_to_date']['review'], 38)
-        # 12 × 650 + 30 × 200 + 8 × 150 + 96 × 25
-        self.assertContains(response, '<dd>R17 400.00</dd>', html=True)
+        # Only this practice's rates count: 12 × 650 + 38 × 170 + 96 × 10 + 7 × 10
+        self.assertContains(response, '<dd>R15\u00a0290.00</dd>', html=True)
         self.assertNotContains(response, 'No rates on file yet')
 
     def test_security_card_says_two_factor_is_not_set_up_yet(self):

@@ -67,7 +67,8 @@ def page_tabs(context):
 
 @register.inclusion_tag('includes/breadcrumbs.html', takes_context=True)
 def breadcrumbs(context, *trail):
-    """Overview (staff) or Home (patients), then label/link pairs, ending with this page's label.
+    """Overview (staff) or Home (patients), then (for a Super Admin's page in Care or Purchasing) its section, then
+    label/link pairs, ending with this page's label.
 
     A link is a URL name such as 'portal:staff-leads' or an already resolved path.
     The back arrow returns to the last linked crumb, one level up.
@@ -78,6 +79,13 @@ def breadcrumbs(context, *trail):
     is_patient = bool(context.get('is_patient_portal') or
                       (not context.get('active_company') and context.get('active_patient')))
     items = [('Home', reverse('portal:patient-dashboard')) if is_patient else ('Overview', reverse('portal:desktop-dashboard'))]
+    if not is_patient:
+        # A Super Admin's page in Care or Purchasing has its section next: Overview > Care > Blood tests.
+        from portal.navigation import breadcrumb_section
+
+        section = breadcrumb_section(context.get('active_membership'), context.get('nav_section') or '')
+        if section and section[0] != current and section[0] not in pairs[::2]:
+            items.append(section)
     for label, link in zip(pairs[::2], pairs[1::2]):
         items.append((label, link if str(link).startswith('/') else reverse(link)))
     return {'items': items, 'current': current, 'back': items[-1]}

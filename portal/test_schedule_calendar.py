@@ -248,7 +248,7 @@ class ScheduleCalendarTests(TestCase):
             label = f'{booking.patient}, {booking.get_status_display().lower()}'
             self.assertContains(response, f'class="schedule-month__chip schedule-month__chip--{booking.status}"')
             self.assertContains(response, label)
-        self.assertContains(response, 'aria-label="Booking colours"')
+        self.assertContains(response, 'aria-label="Appointment colours"')
         for status in Appointment.Status.values:
             self.assertContains(response, f'<i class="schedule-month__chip-swatch schedule-month__chip--{status}"></i>')
         # Days with nothing booked are left empty.
@@ -309,25 +309,79 @@ class ScheduleCalendarTests(TestCase):
 
     def test_doctor_sees_only_their_calendar_without_a_diary_picker_or_open_times(self):
         self.appointment()
+        for section in ('bookings', 'availability'):
+            with self.subTest(section=section):
+                response = self.page(section=section)
+                # The heading matches the menu item.
+                self.assertContains(response, '<h1>Calendar</h1>', html=True)
+                # Their own calendar only: no Clinician list and no Filters.
+                self.assertNotContains(response, 'class="schedule-clinician"')
+                self.assertNotContains(response, 'data-filter-menu')
+                self.assertIsNone(response.context.get('filter_menu'))
         response = self.page()
-        # The heading matches the menu item.
-        self.assertContains(response, '<h1>Calendar &amp; Bookings</h1>', html=True)
-        self.assertNotContains(response, 'class="schedule-clinician"')
         self.assertNotContains(response, 'id="availability-heading"')
         self.assertEqual(response.context['day_diaries'], [])
         self.assertNotContains(response, '<th scope="col">Clinician</th>', html=True)
         self.login(self.admin)
         response = self.page()
-        self.assertContains(response, '<h1>Calendar &amp; Bookings</h1>', html=True)
-        # One Clinician dropdown above the diary, which applies when changed; no date field or View schedule button.
-        self.assertContains(response, 'class="schedule-clinician"')
-        self.assertContains(response, '<label for="id_clinician">Clinician</label>', html=True)
-        self.assertContains(response, '<option value="" selected>All clinicians</option>', html=True)
-        self.assertContains(response, 'data-submit-on-change')
+        self.assertContains(response, '<h1>Calendar</h1>', html=True)
+        # Whose calendar is chosen in Filters in the calendar card's header (calendar_header_tools); there's no row
+        # above the card, date field or View schedule button.
+        self.assertNotContains(response, 'class="schedule-clinician"')
         self.assertNotContains(response, 'View schedule')
         self.assertNotContains(response, 'staff-filter-form--schedule')
         self.assertContains(response, 'id="availability-heading"')
         self.assertContains(response, '<th scope="col">Clinician</th>', html=True)
+        # Working hours & availability keeps its Clinician list above its cards, which applies when changed.
+        response = self.page(section='availability')
+        self.assertContains(response, 'class="schedule-clinician"')
+        self.assertContains(response, '<label for="id_clinician">Clinician</label>', html=True)
+        self.assertContains(response, '<option value="" selected>All clinicians</option>', html=True)
+        self.assertContains(response, 'data-submit-on-change')
+        self.assertNotContains(response, 'data-filter-menu')
+
+    def calendar_header_tools(self, response):
+        """The right-hand side of the calendar card's header: the count, Today, Filters, then Day / Week / Month."""
+        html = response.content.decode()
+        header = html[html.index('<header class="schedule-bookings__header">'):]
+        header = header[:header.index('</header>')]
+        return header[header.index('<div class="schedule-bookings__tools">'):]
+
+    def test_the_clinician_filter_sits_in_the_calendar_header_before_day_week_and_month(self):
+        self.appointment(clinician=self.colleague, day=self.day + timedelta(days=1))
+        self.login(self.admin)
+        for mode in ('table', 'week', 'calendar'):
+            with self.subTest(mode=mode):
+                response = self.page(view=mode)
+                tools = self.calendar_header_tools(response)
+                # The count, then Filters, then the view toggle, all in the card's header.
+                self.assertLess(tools.index('booked'), tools.index('data-filter-menu'))
+                self.assertLess(tools.index('data-filter-menu'), tools.index('schedule-view-toggle'))
+                self.assertIn('filter-menu--compact', tools)
+                # One clinician or all of them: All clinicians is picked and nothing counts as applied.
+                self.assertIn('<input type="radio" name="clinician" value="" checked>', tools)
+                self.assertIn(f'<input type="radio" name="clinician" value="{self.doctor.pk}">', tools)
+                self.assertIn(f'<input type="radio" name="clinician" value="{self.colleague.pk}">', tools)
+                self.assertNotIn('filter-menu__badge', tools)
+                # Applying keeps the view and the day.
+                self.assertIn(f'<input type="hidden" name="view" value="{mode}">', tools)
+                self.assertIn(f'<input type="hidden" name="date" value="{self.day.isoformat()}">', tools)
+                # No search: a calendar isn't a list.
+                self.assertNotContains(response, 'data-conversation-search')
+        # Choosing a clinician shows theirs, counts as one filter, and keeps them in every way around the calendar.
+        response = self.page(view='week', clinician=self.colleague.pk)
+        tools = self.calendar_header_tools(response)
+        self.assertIn(f'<input type="radio" name="clinician" value="{self.colleague.pk}" checked>', tools)
+        self.assertIn('<span class="filter-menu__badge">1<span class="sr-only"> applied</span></span>', tools)
+        menu = response.context['filter_menu']
+        self.assert_schedule_url(menu['clear_url'], view='week')
+        for name in ('table_view_url', 'week_view_url', 'calendar_view_url', 'prev_week_url', 'next_week_url', 'bookings_tab_url'):
+            self.assertEqual(parse_qs(urlsplit(response.context[name]).query)['clinician'], [str(self.colleague.pk)])
+        # The Appointments tab opens with the same clinician ticked in its own Clinician filter.
+        self.assertEqual(response.context['appointments_tab_url'], f"{reverse('portal:schedule-appointments')}?clinician={self.colleague.pk}")
+        appointments = self.client.get(response.context['appointments_tab_url'])
+        clinician = next(section for section in appointments.context['filter_menu']['sections'] if section['name'] == 'clinician')
+        self.assertEqual([option['value'] for option in clinician['options'] if option['checked']], [str(self.colleague.pk)])
 
     def test_today_highlight_and_today_link_use_sast(self):
         today = timezone.localdate()

@@ -1,5 +1,5 @@
-"""The staff inbox lists only the selected practice's conversations that the staff member takes part in, or for a
-Super Admin every one in the practice."""
+"""The staff inbox lists only the selected practice's conversations that the staff member takes part in. A Super Admin
+also reads the rest of the practice's, under Other messages (?scope=other); My messages, the default, lists theirs."""
 
 from django.test import override_settings
 from datetime import timedelta
@@ -144,9 +144,11 @@ class StaffInboxTests(TestCase):
         self.assertEqual(self.client.post(reverse('portal:staff-message-create', args=[self.recent_thread.pk]),
                                           {'body': 'Not my conversation', 'return_to': 'inbox'}).status_code, 404)
         self.assertFalse(PatientMessage.objects.filter(body='Not my conversation').exists())
-        # A Super Admin lists every conversation with this practice's active patients, without being in them.
+        # A Super Admin's Other messages lists the conversations with this practice's active patients that they
+        # aren't in; My messages, the default, only the ones they're in.
         self.login(self.super_admin)
-        response = self.client.get(self.inbox_url())
+        self.assertEqual(list(self.client.get(self.inbox_url()).context['threads']), [])
+        response = self.client.get(self.inbox_url(), {'scope': 'other'})
         self.assertEqual({thread.pk for thread in response.context['threads']}, {self.recent_thread.pk, self.older_thread.pk})
         self.assertContains(response, self.recent_thread.subject)
         self.assertNotContains(response, self.other_practice_thread.subject)
@@ -158,12 +160,14 @@ class StaffInboxTests(TestCase):
         message = self.add_message()
         doctor_position = MessageThreadParticipant.objects.get(thread=self.recent_thread, user=self.doctor).last_read_at
         self.login(self.super_admin)
-        # Conversations they aren't in are never unread for them.
-        listed = self.client.get(self.inbox_url())
+        # Conversations they aren't in are never unread for them: the tab's count is theirs alone. In Other messages, such
+        # a conversation counts the patient's messages nobody in it has opened yet, so none waits unnoticed.
+        listed = self.client.get(self.inbox_url(), {'scope': 'other'})
         self.assertEqual({thread.pk: thread.unread_count for thread in listed.context['threads']},
-                         {self.recent_thread.pk: 0, self.older_thread.pk: 0})
+                         {self.recent_thread.pk: 1, self.older_thread.pk: 0})
         self.assertEqual(listed.context['patient_unread_total'], 0)
-        self.assertNotContains(listed, 'is-unread')
+        self.assertContains(listed, '<span class="sr-only">, 1 unread patient message</span>', html=True)
+        self.assertNotContains(self.client.get(self.inbox_url()), 'is-unread')
         # Opened in Patient messages or on the record, it reads like any other, with no Mark as unread or Message action.
         manage = reverse('portal:conversation-manage', args=[self.recent_thread.pk])
         read_state = reverse('portal:staff-thread-read-state', args=[self.recent_thread.pk])
@@ -201,7 +205,123 @@ class StaffInboxTests(TestCase):
         self.assertContains(opened, f'href="{manage}"')
         self.add_message()
         counts = {thread.pk: thread.unread_count for thread in self.client.get(self.inbox_url()).context['threads']}
-        self.assertEqual(counts, {self.recent_thread.pk: 1, self.older_thread.pk: 0})
+        self.assertEqual(counts, {self.recent_thread.pk: 1})
+        # Having joined, it's in My messages, no longer in Other messages.
+        counts = {thread.pk: thread.unread_count for thread in self.client.get(self.inbox_url(), {'scope': 'other'}).context['threads']}
+        self.assertEqual(counts, {self.older_thread.pk: 0})
+
+    def scope_pills(self, response):
+        return [(tab['label'], tab['active'], tab['unread']) for tab in response.context['inbox_scopes']]
+
+    def test_a_super_admin_has_my_messages_and_other_messages_each_with_its_unread_count(self):
+        own = MessageThread.objects.create(company=self.company, patient=self.second_patient, subject='Beth asks the practice',
+                                           opened_by=self.second_patient_user, last_message_at=timezone.now())
+        add_participant(own, self.super_admin)
+        self.add_message(own, self.second_patient_user)
+        # Two of Alice's messages nobody has opened yet, in a conversation the Super Admin isn't in; one already opened.
+        self.add_message()
+        self.add_message()
+        self.add_message(self.older_thread, staff_read_at=timezone.now())
+        self.login(self.super_admin)
+        mine = self.client.get(self.inbox_url())
+        # My messages, the default: only theirs, with their own unread, which is also the tab's count.
+        self.assertEqual([thread.pk for thread in mine.context['threads']], [own.pk])
+        self.assertEqual(self.scope_pills(mine), [('My messages', True, 1), ('Other messages', False, 2)])
+        self.assertEqual(mine.context['patient_unread_total'], 1)
+        self.assertContains(mine, '<nav class="patient-order-subtabs inbox-scope" aria-label="Whose conversations">'
+                                  f'<a href="{self.inbox_url()}" class="is-active" aria-current="page">My messages'
+                                  '<span class="nav-badge" aria-hidden="true">1</span><span class="sr-only">, 1 unread message</span></a>'
+                                  f'<a href="{self.inbox_url()}?scope=other">Other messages'
+                                  '<span class="nav-badge nav-badge--quiet" aria-hidden="true">2</span>'
+                                  '<span class="sr-only">, 2 unread in other messages</span></a></nav>')
+        # The pills take the title's place on the left of the card's header, level with Filters and the search; the
+        # search keeps their links up to date.
+        html = mine.content.decode()
+        start = html.index('<header class="staff-page-card__header staff-list-header record-inbox__header">')
+        header = html[start:html.index('</header>', start)]
+        self.assertTrue(header.split('>', 1)[1].lstrip().startswith(
+            '<div><h2 class="sr-only" id="inbox-heading">Patient messages</h2><div data-search-region="scope">'
+            '<nav class="patient-order-subtabs inbox-scope"'))
+        self.assertLess(header.index('inbox-scope'), header.index('data-filter-menu'))
+        # Other messages: only the ones they aren't in, each counting the patient's messages nobody has opened yet.
+        other = self.client.get(self.inbox_url(), {'scope': 'other'})
+        self.assertEqual({thread.pk: thread.unread_count for thread in other.context['threads']},
+                         {self.recent_thread.pk: 2, self.older_thread.pk: 0})
+        self.assertEqual(self.scope_pills(other), [('My messages', False, 1), ('Other messages', True, 2)])
+        # Their counts are grey and their rows not bold: they aren't the Super Admin's own.
+        self.assertContains(other, '<span class="nav-badge nav-badge--quiet" aria-hidden="true">2</span>'
+                                   '<span class="sr-only">, 2 unread patient messages</span>')
+        self.assertNotContains(other, 'is-unread')
+        self.assertContains(mine, 'class="record-inbox-thread is-unread"')
+        self.assertEqual(other.context['patient_unread_total'], 1)
+        # Together they're every conversation a Super Admin may read, with none in both.
+        listed = [thread.pk for response in (mine, other) for thread in response.context['threads']]
+        self.assertCountEqual(listed, [own.pk, self.recent_thread.pk, self.older_thread.pk])
+
+    def test_other_messages_is_kept_with_the_filters_search_pages_and_an_open_conversation(self):
+        self.add_message()
+        self.login(self.super_admin)
+        query = {'scope': 'other', 'status': 'open', 'q': 'Alpha'}
+        response = self.client.get(self.inbox_url(), query)
+        self.assertEqual({thread.pk for thread in response.context['threads']}, {self.recent_thread.pk, self.older_thread.pk})
+        # Switching keeps the filters and search, from the first page.
+        urls = {tab['label']: tab['url'] for tab in response.context['inbox_scopes']}
+        self.assertEqual(urls, {'My messages': f'{self.inbox_url()}?status=open&q=Alpha',
+                                'Other messages': f'{self.inbox_url()}?scope=other&status=open&q=Alpha'})
+        # The filters, search, rows and way back keep it; clearing a filter or the search doesn't drop it.
+        self.assertIn(('scope', 'other'), response.context['filter_menu']['hidden'])
+        self.assertEqual(response.context['search_hidden']['scope'], 'other')
+        self.assertEqual(parse_qs(urlsplit(response.context['filter_menu']['clear_url']).query), {'scope': ['other'], 'q': ['Alpha']})
+        self.assertEqual(parse_qs(urlsplit(response.context['inbox_search_clear_url']).query), {'scope': ['other'], 'status': ['open']})
+        row = next(thread for thread in response.context['threads'] if thread.pk == self.recent_thread.pk)
+        self.assertEqual(parse_qs(urlsplit(row.list_url).query)['scope'], ['other'])
+        # An open conversation they aren't in keeps it in its reply, and a reply comes back to it.
+        opened = self.client.get(self.inbox_url(), {**query, 'thread': self.recent_thread.pk})
+        self.assertEqual(opened.context['inbox_thread'].pk, self.recent_thread.pk)
+        self.assertEqual(parse_qs(urlsplit(opened.context['inbox_list_url']).query)['scope'], ['other'])
+        self.assertContains(opened, '<input type="hidden" name="scope" value="other">')
+        reply = self.client.post(reverse('portal:staff-message-create', args=[self.recent_thread.pk]),
+                                 {'body': 'Joining to help.', 'return_to': 'patient_messages', 'scope': 'other', 'status': 'open'})
+        self.assertEqual(parse_qs(urlsplit(reply.url).query), {'scope': ['other'], 'status': ['open'], 'thread': [str(self.recent_thread.pk)]})
+        # Mark as read or unread comes back to it too.
+        marked = self.client.post(reverse('portal:staff-thread-read-state', args=[self.recent_thread.pk]),
+                                  {'state': 'unread', 'scope': 'other', 'page': '1'})
+        self.assertEqual(parse_qs(urlsplit(marked.url).query), {'scope': ['other']})
+
+    def test_doctors_and_practice_admins_have_no_my_or_other_messages(self):
+        self.add_message()
+        for user in (self.doctor, self.administrator):
+            with self.subTest(role=user.email):
+                self.login(user)
+                before = [thread.pk for thread in self.client.get(self.inbox_url()).context['threads']]
+                for query in ({}, {'scope': 'other'}):
+                    response = self.client.get(self.inbox_url(), query)
+                    # The same list as ever, whatever the address says, and no pills.
+                    self.assertEqual([thread.pk for thread in response.context['threads']], before)
+                    self.assertNotIn('inbox_scopes', response.context)
+                    self.assertNotContains(response, 'inbox-scope')
+                    self.assertNotIn('scope', response.context['search_hidden'])
+        self.assertEqual(before, [])  # the practice administrator is in none of them
+        self.login(self.doctor)
+        self.assertEqual([thread.pk for thread in self.client.get(self.inbox_url()).context['threads']],
+                         [self.recent_thread.pk, self.older_thread.pk])
+
+    def test_the_title_count_filters_and_search_sit_in_the_inbox_cards_header(self):
+        self.login()
+        html = self.client.get(self.inbox_url()).content.decode()
+        card = html.index('<section class="staff-page-card record-inbox record-inbox--fill"')
+        start = html.index('<header class="staff-page-card__header staff-list-header record-inbox__header">')
+        header = html[start:html.index('</header>', start)]
+        # Inside the card, above both the list and the open conversation.
+        self.assertLess(card, start)
+        self.assertLess(start, html.index('<section class="record-inbox__threads"'))
+        self.assertLess(start, html.index('<section class="record-messages__pane"'))
+        self.assertIn('<h2 id="inbox-heading">Patient messages</h2>', header)
+        # On the right: the count (which the search keeps up to date), then Filters, then the search.
+        count = header.index('<span class="staff-page-card__count" data-search-region="count">2 conversations</span>')
+        self.assertLess(count, header.index('data-filter-menu'))
+        self.assertLess(header.index('data-filter-menu'), header.index('data-conversation-search'))
+        self.assertNotIn('inbox-toolbar', html)
 
     def test_revoked_membership_does_not_keep_session_access(self):
         self.login(self.administrator)
@@ -538,7 +658,7 @@ class StaffInboxTests(TestCase):
         self.assertContains(response, '<span class="nav-badge" aria-hidden="true">1</span><span class="sr-only">, 1 unread message</span>', count=1)
         # Someone else's last message is shown as it is; your own starts "You:". The patient is the first tag.
         self.assertContains(response, '<span class="record-inbox-thread__preview">Secure inbox test message</span>', html=True)
-        self.assertContains(response, '<span class="record-inbox-thread__people person-tags"><span class="sr-only">With </span><span class="person-tag person-tag--patient" title="Alice Patient · Patient">')
+        self.assertContains(response, '<span class="record-inbox-thread__people person-tags person-tags--line"><span class="sr-only">With </span><span class="person-tag person-tag--patient" title="Alice Patient · Patient">')
         self.assertContains(response, 'Alice Patient<span class="sr-only"> (Patient)</span></span>')
         self.add_message(sender=self.doctor)
         self.assertContains(self.client.get(self.inbox_url()), '<strong>You:</strong> Secure inbox test message')

@@ -26,7 +26,7 @@ from video.access import attach_video_join
 from .inbox import latest_from, search_text, search_threads
 from .patient_context import make_patient_context
 from .patient_summary import with_scheduled_end
-from .people_tags import in_join_order
+from .people_tags import in_join_order, people_tags, staff_kinds
 from .realtime_context import records_conversation_view
 from .video_links import safe_video_link
 from .workflow_context import make_workflow_context
@@ -321,9 +321,11 @@ def patient_messages_context(request, company, patient, *, selected_thread_id=No
         filtered = search_threads(filtered, company, search)
     context.update(_paginate(request, filtered))
     threads = list(context['page_obj'].object_list)
+    kinds = staff_kinds(company, [person.pk for thread in threads for person in thread.participants.all()])
     for thread in threads:
-        people = list(thread.participants.all())
-        thread.people = ', '.join(person.full_name for person in people)
+        people = [person for person in thread.participants.all() if person.pk != request.user.pk]
+        # Who it's with first, as the practice's lists show it: the clinic staff, as tags by role (James, 20 Nov 2026).
+        thread.people_tags = people_tags(people, kinds)
         # A clinician is named before their message only when more than one is in the conversation.
         thread.latest_from = latest_from(thread, request.user, unnamed={people[0].pk} if len(people) == 1 else ())
     requested = selected_thread_id if selected_thread_id is not None else request.GET.get('thread')
@@ -394,34 +396,40 @@ class PatientAppointmentsView(LoginRequiredMixin, PatientPortalRequiredMixin, Vi
         return render(request, 'portal/patient_appointments.html', context)
 
 
+def appointment_video_status(request, appointments, *, allowed_role):
+    """What static/js/appointment_video.js asks for to open or close Open meeting room without a reload, for a
+    bounded visible page (?id=, 1 to 50) of the appointments given, already scoped to this person, with the same
+    fresh policy as room access. A patient's My Appointments and My Treatment, and staff appointment lists, share it."""
+    raw = request.GET.getlist('id')
+    if not raw or len(raw) > 50 or any(
+        not value.isascii() or not value.isdecimal() or len(value) > 19
+        or not 0 < int(value) < 2 ** 63 for value in raw
+    ):
+        return JsonResponse({'error': 'Supply between 1 and 50 valid appointment IDs.'}, status=400)
+    now = timezone.now()
+    rows = attach_video_join(appointments.filter(pk__in={int(value) for value in raw}), request.user.pk,
+                             allowed_role=allowed_role, now=now)
+    return JsonResponse({
+        'scope': request.realtime_scope,
+        'serverTime': now.isoformat(),
+        'appointments': [{
+            'id': item.pk,
+            'joinUrl': item.video_room_url,
+            'opensAt': item.video_join_opens_at.isoformat() if item.video_join_opens_at else None,
+            'closesAt': item.video_join_closes_at.isoformat() if item.video_join_closes_at else None,
+            'message': item.video_join_message,
+        } for item in rows],
+    })
+
+
 class PatientAppointmentVideoStatusView(LoginRequiredMixin, PatientPortalRequiredMixin, View):
     """Refresh only a bounded visible page, with the same fresh policy as room access."""
 
     http_method_names = ('get', 'head', 'options')
 
     def get(self, request):
-        raw = request.GET.getlist('id')
-        if not raw or len(raw) > 50 or any(
-            not value.isascii() or not value.isdecimal() or len(value) > 19
-            or not 0 < int(value) < 2 ** 63 for value in raw
-        ):
-            return JsonResponse({'error': 'Supply between 1 and 50 valid appointment IDs.'}, status=400)
-        now = timezone.now()
-        appointments = Appointment.objects.for_company(self.patient_company).filter(
-            patient=self.patient, pk__in={int(value) for value in raw},
-        )
-        rows = attach_video_join(appointments, request.user.pk, allowed_role='patient', now=now)
-        return JsonResponse({
-            'scope': request.realtime_scope,
-            'serverTime': now.isoformat(),
-            'appointments': [{
-                'id': item.pk,
-                'joinUrl': item.video_room_url,
-                'opensAt': item.video_join_opens_at.isoformat() if item.video_join_opens_at else None,
-                'closesAt': item.video_join_closes_at.isoformat() if item.video_join_closes_at else None,
-                'message': item.video_join_message,
-            } for item in rows],
-        })
+        return appointment_video_status(request, Appointment.objects.for_company(self.patient_company).filter(
+            patient=self.patient), allowed_role='patient')
 
 
 class PatientProgressView(LoginRequiredMixin, PatientPortalRequiredMixin, View):

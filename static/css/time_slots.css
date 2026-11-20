@@ -28,5 +28,7 @@
 .slot-picker__status:empty { display: none; }
 .slot-picker__slots { display: grid; gap: .35rem; grid-template-columns: repeat(auto-fill, minmax(4.2rem, 1fr)); list-style: none; margin: 0; max-height: 15.5rem; overflow-y: auto; padding: 0 .1rem .1rem 0; }
 button.schedule-slot { cursor: pointer; font: inherit; text-align: left; width: 100%; }
-.schedule-slot--free[aria-pressed="true"] { background: var(--console-teal, var(--c-1d4a5f)); border-color: var(--console-teal, var(--c-1d4a5f)); color: var(--c-ffffff); }
+button.schedule-slot--current { cursor: pointer; }
+button.schedule-slot--current:hover, button.schedule-slot--current:focus-visible { border-color: var(--c-1072aa); box-shadow: 0 0 0 3px var(--c-1d4a5f-120); outline: none; }
+:is(.schedule-slot--free, .schedule-slot--current)[aria-pressed="true"] { background: var(--console-teal, var(--c-1d4a5f)); border-color: var(--console-teal, var(--c-1d4a5f)); color: var(--c-ffffff); }
 .slot-picker .errorlist { color: var(--console-red, var(--c-a33131)); font-size: .74rem; list-style: none; margin: 0; padding: 0; }

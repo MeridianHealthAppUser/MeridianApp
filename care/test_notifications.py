@@ -174,13 +174,13 @@ class AppointmentNotificationTests(NotificationTestCase):
         self.assertIn('>View my appointments</a>', html)
         self.assertIn('background:#f3f8fa', html)
         doctor = sent['sam@notify.test']
-        self.assertEqual(doctor.subject, f'New booking: Nadia Mokoena on {when}')
+        self.assertEqual(doctor.subject, f'New appointment: Nadia Mokoena on {when}')
         self.assertIn('Hello Dr Marchant,\n\nA new appointment has been booked with you. Booked by Lindiwe Mahlangu.', doctor.body)
         self.assertIn('Patient: Nadia Mokoena\nAppointment: Follow-up', doctor.body)
         self.assertIn(f'{SITE}/schedule/?view=table&date={starts:%Y-%m-%d}', doctor.body)
-        self.assertIn('>Open Calendar &amp; Bookings</a>', self.html(doctor))
+        self.assertIn('>Open Calendar</a>', self.html(doctor))
         # Add to calendar is a calendar file attached for the patient (Dr Czech, Nov 2026), not a button in the app. It
-        # names no patient; the doctor has Download on Calendar & Bookings instead.
+        # names no patient; the doctor has Download on Calendar instead.
         for part in (patient.body, html):
             self.assertIn('To add it to your calendar, open the calendar file attached to this email.', part)
         self.assertEqual(len(patient.attachments), 1)

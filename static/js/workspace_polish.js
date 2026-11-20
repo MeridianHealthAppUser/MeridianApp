@@ -258,6 +258,30 @@
   } else { initialize(); }
 })();
 
+/* A form marked data-submit-when-filled keeps its submit buttons disabled until every field it needs is filled in and
+   valid (Create shipment, Nov 2026), so it can't be sent without them. Buttons that skip validation are left alone. */
+(() => {
+  function initialize() {
+    document.querySelectorAll('form[data-submit-when-filled]').forEach((form) => {
+      const buttons = [...form.querySelectorAll('button[type="submit"], button:not([type]), input[type="submit"]')]
+        .filter((button) => !button.hasAttribute('formnovalidate'));
+      if (!buttons.length) return;
+      const update = () => {
+        const ready = [...form.elements].every((control) => !control.willValidate || control.validity.valid);
+        buttons.forEach((button) => { button.disabled = !ready; });
+      };
+      listen(form, 'input', update);
+      listen(form, 'change', update);
+      listen(form, 'reset', () => window.setTimeout(update));
+      listen(window, 'pageshow', update);
+      update();
+    });
+  }
+  if (document.readyState === 'loading') {
+    listen(document, 'DOMContentLoaded', initialize, { once: true });
+  } else { initialize(); }
+})();
+
 /* Pop-up pickers (such as the mobile patient section list) close on Escape or a tap elsewhere. */
 (() => {
   const openPickers = () => document.querySelectorAll('.patient-workspace-picker[open]');

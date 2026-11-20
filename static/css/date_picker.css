@@ -1,0 +1,84 @@
+/* Date fields' calendar (static/js/date_picker.js): it opens beside its field in the top layer, so dialogs and cards
+   don't clip it, in the look of the dropdown lists (select_menu.css). The selectors are long on purpose: the calendar
+   sits inside forms and consoles whose own rules style the buttons and focus rings in them. */
+.date-picker { --date-picker-accent: var(--console-teal, var(--c-1d4a5f)); --date-picker-wash: var(--c-ecf6fa); }
+:root[data-theme="dark"] .date-picker { --date-picker-wash: var(--c-1d4a5f-160); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .date-picker { --date-picker-wash: var(--c-1d4a5f-160); } }
+
+.date-picker:popover-open { background: var(--c-ffffff); border: 1px solid var(--console-line, var(--c-deeaef)); border-radius: .8rem; box-shadow: 0 18px 44px var(--c-183643-160); box-sizing: border-box; color: var(--console-ink, var(--c-183643)); display: flex; flex-direction: column; font-family: inherit; font-size: .86rem; font-style: normal; font-weight: 500; gap: .35rem; inset: auto; letter-spacing: normal; line-height: 1.2; margin: 0; max-height: calc(100dvh - 1rem); overflow: auto; padding: .55rem; position: fixed; text-align: left; text-transform: none; width: min(18.5rem, calc(100vw - 1rem)); animation: date-picker-in .14s ease-out both; }
+@keyframes date-picker-in { from { opacity: 0; transform: translateY(-4px); } }
+
+/* Every button in it starts plain. */
+.date-picker[popover] button { -webkit-appearance: none; appearance: none; align-items: center; background: none; border: 0; border-radius: .55rem; box-shadow: none; box-sizing: border-box; color: inherit; cursor: pointer; display: inline-flex; font: inherit; height: auto; justify-content: center; letter-spacing: normal; line-height: 1.2; margin: 0; min-height: 0; min-width: 0; padding: 0; text-transform: none; transform: none; width: auto; }
+.date-picker[popover]:popover-open button:focus-visible { outline: 2px solid var(--date-picker-accent); outline-offset: 1px; }
+.date-picker[popover] button[hidden] { display: none; }
+
+.date-picker__head { display: none; }
+.date-picker__bar { align-items: center; display: flex; gap: .4rem; justify-content: space-between; }
+.date-picker[popover] button.date-picker__period { color: var(--console-ink, var(--c-183643)); font-size: .92rem; font-weight: 700; gap: .3rem; padding: .45rem .55rem; }
+.date-picker__caret { color: var(--console-muted, var(--c-70838d)); flex: 0 0 auto; transition: transform .15s ease; }
+.date-picker[data-view="years"] .date-picker__caret { transform: rotate(180deg); }
+.date-picker__steps { display: flex; gap: .15rem; }
+.date-picker[popover] button.date-picker__step { color: var(--console-muted, var(--c-70838d)); height: 2.1rem; width: 2.1rem; }
+.date-picker[popover] button.date-picker__step[aria-disabled] { cursor: default; opacity: .35; }
+
+/* The days, months and years take the same room, so the calendar keeps its size as it changes view. */
+.date-picker__body { height: 15.4rem; min-height: 0; }
+.date-picker__grid { display: grid; gap: .1rem; grid-template-rows: 1.6rem repeat(6, minmax(0, 1fr)); height: 100%; }
+.date-picker__row { display: grid; gap: .1rem; grid-template-columns: repeat(7, minmax(0, 1fr)); }
+.date-picker__weekday { align-self: center; color: var(--console-muted, var(--c-70838d)); font-size: .72rem; font-weight: 700; text-align: center; }
+.date-picker__months { display: grid; gap: .35rem; grid-template-columns: repeat(3, minmax(0, 1fr)); grid-template-rows: repeat(4, minmax(0, 1fr)); height: 100%; }
+.date-picker__years { align-content: start; box-sizing: border-box; display: grid; gap: .3rem; grid-auto-rows: 2.5rem; grid-template-columns: repeat(4, minmax(0, 1fr)); height: 100%; overflow-y: auto; overscroll-behavior: contain; padding: .2rem; scrollbar-width: thin; }
+
+/* Days, months and years: today ringed, the field's date filled, other months' days and dates out of range faint. */
+.date-picker[popover] button.date-picker__cell { color: var(--console-ink, var(--c-183643)); font-size: .84rem; font-variant-numeric: tabular-nums; height: 100%; width: 100%; }
+.date-picker[popover] button:is(.date-picker__month, .date-picker__year) { font-weight: 600; }
+.date-picker[popover] button.date-picker__cell[data-outside] { color: var(--console-muted, var(--c-70838d)); font-weight: 400; opacity: .6; }
+.date-picker[popover] button.date-picker__cell[aria-current="date"] { box-shadow: inset 0 0 0 1.5px var(--date-picker-accent); color: var(--date-picker-accent); font-weight: 700; }
+.date-picker[popover] button.date-picker__cell:is([aria-selected="true"], [aria-pressed="true"]) { background: var(--date-picker-accent); box-shadow: none; color: var(--c-ffffff); font-weight: 700; }
+.date-picker[popover] button.date-picker__cell[aria-disabled] { color: var(--console-muted, var(--c-70838d)); cursor: not-allowed; opacity: .4; }
+
+/* A range (data-date-range): its ends filled, the days between lit; the hint says which day the next press picks. */
+.date-picker[popover] button.date-picker__cell[data-range="between"] { background: var(--date-picker-wash); box-shadow: none; color: var(--date-picker-accent); font-weight: 650; }
+.date-picker[popover] button.date-picker__cell[data-range="between"][aria-current="date"] { box-shadow: inset 0 0 0 1.5px var(--date-picker-accent); }
+.date-picker__hint { color: var(--console-muted, var(--c-70838d)); font-size: .78rem; font-weight: 600; line-height: 1.35; margin: 0; padding: .4rem .35rem .3rem; }
+[data-date-range][data-date-picker-open] { border-color: var(--console-teal, var(--c-1d4a5f)) !important; box-shadow: 0 0 0 3px var(--c-1d4a5f-120) !important; }
+
+.date-picker__foot { align-items: center; border-top: 1px solid var(--console-soft-line, var(--c-e5eef2)); display: flex; gap: .5rem; justify-content: space-between; padding-top: .35rem; }
+.date-picker[popover] button.date-picker__action { color: var(--date-picker-accent); font-size: .82rem; font-weight: 700; padding: .45rem .6rem; }
+.date-picker[popover] button.date-picker__action:last-child { margin-left: auto; }
+.date-picker[popover] button.date-picker__action:disabled { color: var(--console-muted, var(--c-70838d)); cursor: not-allowed; opacity: .5; }
+
+@media (hover: hover) {
+  .date-picker[popover] button:is(.date-picker__period, .date-picker__step, .date-picker__cell, .date-picker__action, .date-picker__close):hover:not(:disabled, [aria-disabled], [aria-selected="true"], [aria-pressed="true"]) { background: var(--date-picker-wash); }
+  .date-picker[popover] button.date-picker__step:hover:not([aria-disabled]) { color: var(--console-ink, var(--c-183643)); }
+}
+
+/* The field keeps its focus ring while its calendar is open, and its calendar icon is in the console's colours. */
+input[data-date-picker-open] { border-color: var(--console-teal, var(--c-1d4a5f)) !important; box-shadow: 0 0 0 3px var(--c-1d4a5f-120) !important; }
+input:is([type="date"], [type="month"])::-webkit-calendar-picker-indicator { background: var(--console-muted, var(--c-70838d)); cursor: pointer; opacity: 1; -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='currentColor' stroke-width='1.6' stroke-linecap='round'%3E%3Crect x='3' y='4.5' width='14' height='12.5' rx='2.5'/%3E%3Cpath d='M3 8.5h14M7 3v3M13 3v3'/%3E%3C/svg%3E") center / contain no-repeat; mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='currentColor' stroke-width='1.6' stroke-linecap='round'%3E%3Crect x='3' y='4.5' width='14' height='12.5' rx='2.5'/%3E%3Cpath d='M3 8.5h14M7 3v3M13 3v3'/%3E%3C/svg%3E") center / contain no-repeat; }
+
+/* On a phone the calendar rises from the bottom as a sheet over the dimmed page, like the dropdown lists, with the
+   field's name and a close button at the top and larger days to tap. */
+@media (max-width: 52rem) {
+  .date-picker--sheet:popover-open { border-radius: 1.1rem; bottom: calc(.6rem + env(safe-area-inset-bottom)); font-size: 1rem; gap: .5rem; left: .6rem; max-height: calc(100dvh - 4.5rem); padding: .6rem .7rem .7rem; right: .6rem; top: auto; width: auto; animation: date-picker-sheet-in .3s cubic-bezier(.2, .9, .3, 1) both; }
+  .date-picker--sheet::backdrop { background: var(--c-183643-350); }
+  .date-picker--sheet .date-picker__head { align-items: center; display: flex; gap: .6rem; justify-content: space-between; padding: 0 0 .1rem .45rem; }
+  .date-picker--sheet .date-picker__title { font-size: 1rem; font-weight: 750; margin: 0; min-width: 0; }
+  .date-picker--sheet[popover] button.date-picker__close { border-radius: .6rem; color: var(--console-muted, var(--c-70838d)); flex: 0 0 auto; height: 2.75rem; width: 2.75rem; }
+  .date-picker--sheet[popover] button.date-picker__period { font-size: 1rem; min-height: 2.75rem; padding: .5rem .6rem; }
+  .date-picker--sheet[popover] button.date-picker__step { height: 2.75rem; width: 2.75rem; }
+  .date-picker--sheet .date-picker__body { height: min(20.5rem, calc(100dvh - 16rem)); }
+  .date-picker--sheet .date-picker__grid { grid-template-rows: 1.75rem repeat(6, minmax(0, 1fr)); }
+  .date-picker--sheet .date-picker__weekday { font-size: .78rem; }
+  .date-picker--sheet[popover] button.date-picker__cell { font-size: 1rem; }
+  .date-picker--sheet .date-picker__years { grid-auto-rows: 2.9rem; }
+  .date-picker--sheet[popover] button.date-picker__action { font-size: .95rem; min-height: 2.75rem; padding: .5rem .75rem; }
+  .date-picker--sheet .date-picker__hint { font-size: .9rem; }
+}
+@keyframes date-picker-sheet-in { from { opacity: 0; transform: translateY(1.5rem); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .date-picker:popover-open, .date-picker--sheet:popover-open { animation: none; }
+  .date-picker__caret { transition: none; }
+}

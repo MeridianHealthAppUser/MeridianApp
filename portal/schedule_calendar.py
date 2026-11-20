@@ -19,7 +19,7 @@ SECTIONS = ('bookings', 'availability')
 
 
 def schedule_section(value):
-    """Calendar & Bookings (the default) or Working Pattern & Availability."""
+    """The Calendar tab (the default) or Working hours & availability."""
     return value if value in SECTIONS else 'bookings'
 
 

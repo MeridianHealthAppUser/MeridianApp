@@ -403,7 +403,7 @@ class SpecialDayPrecedenceTests(AvailabilityTestData, TestCase):
                          (self.company.pk, self.patient.pk, None, None))
         self.assertEqual(task.priority, ClinicalTask.Priority.HIGH)
         self.assertEqual(task.due_at, self.at(11))
-        self.assertEqual(task.title, f"Offer new times: 1 booking clashes with {self.doctor.full_name}'s special hours on {self.monday.day} {self.monday:%b %Y}")
+        self.assertEqual(task.title, f"Offer new times: 1 appointment clashes with {self.doctor.full_name}'s special hours on {self.monday.day} {self.monday:%b %Y}")
         self.assertIn('Alice Patient', task.description)
         # Saving the same hours again doesn't raise a second task.
         self.special(starts=time(8), ends=time(10))

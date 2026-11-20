@@ -1,0 +1,28 @@
+{% comment %}Edit appointment: the type, the length, and a date with one of the clinician's free times, as Create appointment
+  lays them out; same clinician and patient. On an appointment's page it's dialog_id 'appointment-time', opening by
+  itself after a mistake and as a page without scripts (open, ?update=time), with Cancel back to the page (close_url).
+  In staff lists (Calendar's Appointments and Day view, a record's Appointments) each appointment has its own,
+  edit-appointment-<pk>; a mistake opens it again on the appointment's page, and a change made comes back to the list
+  as it was (return_to). show_patient names the patient first. Needs time_form and time_context.{% endcomment %}
+{% with pk=appointment.pk|stringformat:'s' %}{% with list_id='edit-appointment-'|add:pk %}{% with id=dialog_id|default:list_id %}
+<dialog class="app-dialog" id="{{ id }}" aria-labelledby="{{ id }}-title"{% if open %} open{% endif %}>
+  <div class="app-dialog__body">
+    <h2 id="{{ id }}-title">Edit appointment</h2>
+    <p class="app-dialog__sub">{% if show_patient %}{{ appointment.patient }} · {% endif %}{{ appointment.get_appointment_type_display }} with {{ appointment.clinician.titled_name }}, {{ appointment.duration_minutes }} minutes. Now {{ appointment.starts_at|date:'D j M Y, H:i' }}.</p>
+    <form class="console-form" method="post" action="{% url 'portal:appointment-change-time' appointment.pk %}">{% csrf_token %}<input type="hidden" name="workflow_context" value="{{ time_context }}">{% if return_to %}<input type="hidden" name="next" value="{{ return_to }}">{% endif %}
+      {% if time_form.non_field_errors %}<div role="alert">{{ time_form.non_field_errors }}</div>{% endif %}
+      <div class="booking-fields" data-booking-form data-times-url="{% url 'portal:appointment-book-times' %}" data-exclude-appointment="{{ appointment.pk }}">
+        <input type="hidden" name="clinician" value="{{ appointment.clinician_id }}"><input type="hidden" name="patient" value="{{ appointment.patient_id }}">
+        {% include 'portal/includes/form_field.html' with field=time_form.appointment_type %}
+        <div class="booking-fields__when">
+          {% include 'portal/includes/form_field.html' with field=time_form.date %}
+          {% include 'portal/includes/form_field.html' with field=time_form.time %}
+          {% include 'portal/includes/form_field.html' with field=time_form.duration_minutes %}
+        </div>
+      </div>
+      <p class="app-dialog__sub">{{ appointment.patient.first_name }} and {{ appointment.clinician.titled_name }} are emailed the changes.</p>
+      <div class="app-dialog__actions">{% if close_url %}<a class="console-button console-button--secondary" href="{{ close_url }}" data-dialog-close>Cancel</a>{% else %}<button class="console-button console-button--secondary" type="button" data-dialog-close>Back</button>{% endif %}<button class="console-button console-button--primary" type="submit">Save changes</button></div>
+    </form>
+  </div>
+</dialog>
+{% endwith %}{% endwith %}{% endwith %}

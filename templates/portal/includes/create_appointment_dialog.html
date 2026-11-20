@@ -1,0 +1,10 @@
+{# Opened by Create appointment on Calendar's tabs; without scripts that link opens the booking page, which also shows any mistake. #}
+<dialog class="app-dialog" id="create-appointment" aria-labelledby="create-appointment-title">
+  <div class="app-dialog__body">
+    <h2 id="create-appointment-title">Create appointment</h2>
+    <form class="console-form" method="post" action="{% url 'portal:appointment-book' %}">{% csrf_token %}<input type="hidden" name="workflow_context" value="{{ booking_context }}">
+      {% include 'portal/includes/appointment_booking_fields.html' with form=booking_form %}
+      <div class="app-dialog__actions"><button class="console-button console-button--secondary" type="button" data-dialog-close>Cancel</button><button class="console-button console-button--primary" type="submit">Confirm appointment</button></div>
+    </form>
+  </div>
+</dialog>

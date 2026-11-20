@@ -3,6 +3,7 @@
 from datetime import timedelta
 from types import SimpleNamespace
 
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.test import SimpleTestCase, TestCase, override_settings
 from django.urls import reverse
@@ -161,14 +162,16 @@ class ConversationListPreviewTests(GroupConversationTestCase):
         self.assertContains(self.client.get(reverse('portal:patient-messages')),
                             '<span class="patient-inbox-thread__preview"><strong>Lerato:</strong> Happy to help with meal plans.</span>')
 
-    def test_closed_sits_at_the_top_right_after_the_subject(self):
+    def test_closed_sits_at_the_right_of_the_subject(self):
         MessageThread.objects.filter(pk=self.thread.pk).update(is_closed=True)
         self.login(self.doctor)
         self.assertContains(self.client.get(reverse('portal:staff-inbox')),
-                            '<strong><span>Something else</span><span class="record-inbox-pill">Closed</span>')
+                            '<span class="record-inbox-thread__title"><strong class="record-inbox-thread__subject">Something else</strong>'
+                            '<span class="record-inbox-pill">Closed</span></span>')
         self.login(self.patient_user, ACTIVE_PATIENT_COMPANY_SESSION_KEY)
         self.assertContains(self.client.get(f"{reverse('portal:patient-messages')}?status=closed"),
-                            '<strong><span>Something else</span><span class="patient-inbox-pill">Closed</span>')
+                            '<span class="patient-inbox-thread__title"><strong class="patient-inbox-thread__subject">Something else</strong>'
+                            '<span class="patient-inbox-pill">Closed</span></span>')
 
     def test_a_colleague_is_named_in_a_group_team_conversation(self):
         thread = start_team_conversation(company=self.company, actor=self.doctor, members=[self.colleague, self.dietitian],
@@ -202,3 +205,85 @@ class PeopleTagTests(GroupConversationTestCase):
         for kind, name in (('patient', 'Nadia Mokoena'), ('doctor', 'Dr J. Czech'), ('admin', 'Lindiwe M.')):
             self.assertIn(f'<span class="person-tag person-tag--{kind}"', header)
             self.assertIn(f'{name}<span class="sr-only">', header)
+
+
+class ConversationRowOrderTests(GroupConversationTestCase):
+    """Each row in a list of conversations starts with who it's with, leaving out whoever is looking (and on a record,
+    its patient), then the subject, then a team conversation's patient, then the latest message (James, 20 Nov 2026)."""
+
+    def row(self, response, subject, row_class='record-inbox-thread'):
+        """The row (its link) whose subject is this one."""
+        html = response.content.decode()
+        start = html.index(f'<a class="{row_class}', html.index(f'{row_class}__subject">{subject}</strong>') - 2500)
+        while html.find(f'<a class="{row_class}', start + 1) != -1 and html.find(f'<a class="{row_class}', start + 1) < html.index(f'{row_class}__subject">{subject}</strong>'):
+            start = html.find(f'<a class="{row_class}', start + 1)
+        return html[start:html.index('</a>', start)]
+
+    def assert_people_first(self, row, people_class, names, absent):
+        head = row.index(f'<span class="{people_class} person-tags person-tags--line"><span class="sr-only">With </span>')
+        subject = row.index('__subject">')
+        self.assertLess(head, subject)
+        people = row[head:subject]
+        for name in names:
+            self.assertIn(f'{name}<span class="sr-only">', people)
+        for name in absent:
+            self.assertNotIn(name, people)
+        self.assertLess(subject, row.index('__last">'))
+
+    def test_the_people_line_comes_before_the_subject_and_leaves_out_the_viewer(self):
+        # Patient messages: the patient first, then the other staff; never you.
+        self.login(self.doctor)
+        row = self.row(self.client.get(reverse('portal:staff-inbox')), 'Something else')
+        self.assert_people_first(row, 'record-inbox-thread__people', ['Nadia Mokoena', 'J. Czech', 'L. Botha'], ['Marchant'])
+        self.assertLess(row.index('person-tag--patient'), row.index('person-tag--doctor'))
+        # A record's Messages tab: the other staff, not its patient or you.
+        record = self.client.get(reverse('portal:patient-detail', args=[self.patient.pk]), {'tab': 'messages'})
+        self.assert_people_first(self.row(record, 'Something else'), 'record-inbox-thread__people', ['J. Czech', 'L. Botha'], ['Nadia', 'Marchant'])
+        # Team messages: the colleagues, then the subject, then the patient it's about.
+        start_team_conversation(company=self.company, actor=self.doctor, members=[self.colleague], subject='Rota',
+                                body='Who covers Friday?', patient=self.patient)
+        row = self.row(self.client.get(reverse('portal:team-inbox')), 'Rota')
+        self.assert_people_first(row, 'record-inbox-thread__people', ['J. Czech'], ['Marchant'])
+        self.assertLess(row.index('record-inbox-thread__subject'), row.index('record-inbox-thread__about'))
+        self.assertLess(row.index('record-inbox-thread__about'), row.index('record-inbox-thread__last'))
+        # My Messages: the clinic staff the patient is talking to, never the patient.
+        self.login(self.patient_user, ACTIVE_PATIENT_COMPANY_SESSION_KEY)
+        row = self.row(self.client.get(reverse('portal:patient-messages')), 'Something else', 'patient-inbox-thread')
+        self.assert_people_first(row, 'patient-inbox-thread__people', ['S. Marchant', 'J. Czech', 'L. Botha'], ['Nadia'])
+
+    def test_the_unread_count_and_envelope_sit_on_the_people_line(self):
+        self.login(self.doctor)
+        html = self.client.get(reverse('portal:staff-inbox')).content.decode()
+        # Side by side at the top right: the count, then the envelope (positioned at the row's top right).
+        self.assertRegex(html, r'<li class="record-inbox__item--marks">\s*<a class="record-inbox-thread is-unread" [^>]*>\s*'
+                               r'<span class="record-inbox-thread__head"><span class="record-inbox-thread__people [^"]*">.*?</span>'
+                               r'<span class="record-inbox-thread__marks"><span class="nav-badge" aria-hidden="true">\d</span>'
+                               r'<span class="sr-only">, \d unread messages?</span></span></span>\s*'
+                               r'<span class="record-inbox-thread__title"><strong class="record-inbox-thread__subject">Something else</strong>')
+        self.assertIn('.record-inbox__mark { position: absolute; right: .8rem; top: .8rem; }', (settings.BASE_DIR / 'static/css/conversations.css').read_text())
+
+    def test_more_than_three_people_show_the_first_three_and_a_count_naming_the_rest(self):
+        for first, last in (('Lindiwe', 'Mahlangu'), ('Thabo', 'Nkosi')):
+            admin = get_user_model().objects.create_user(email=f'{first.lower()}@example.test', first_name=first, last_name=last)
+            CompanyMembership.objects.create(user=admin, company=self.company, role=CompanyMembership.Role.PRACTICE_ADMIN)
+            add_participant(self.thread, admin)
+        self.login(self.doctor)
+        row = self.row(self.client.get(reverse('portal:staff-inbox')), 'Something else')
+        people = row[row.index('record-inbox-thread__people'):row.index('record-inbox-thread__subject')]
+        # Nadia, Joshua and Lerato, then +2 for Lindiwe and Thabo, named on hover and to screen readers.
+        self.assertEqual(people.count('class="person-tag person-tag--'), 4)
+        self.assertIn('<span class="person-tag person-tag--more" title="Lindiwe Mahlangu · Practice admin, Thabo Nkosi · Practice admin">'
+                      '<span aria-hidden="true">+2</span><span class="sr-only">and Lindiwe Mahlangu (Practice admin), Thabo Nkosi (Practice admin)</span></span>', people)
+        self.assertNotIn('Lindiwe M.<span', people)
+
+    def test_with_nobody_else_in_it_the_subject_comes_first(self):
+        alone = MessageThread.objects.create(company=self.company, patient=self.patient, subject='Note to self',
+                                             opened_by=self.doctor, last_message_at=timezone.now())
+        add_participant(alone, self.doctor)
+        self.login(self.doctor)
+        record = self.client.get(reverse('portal:patient-detail', args=[self.patient.pk]), {'tab': 'messages'})
+        row = self.row(record, 'Note to self')
+        self.assertTrue(row.split('>', 1)[1].lstrip().startswith(
+            '<span class="record-inbox-thread__head record-inbox-thread__head--subject"><strong class="record-inbox-thread__subject">Note to self</strong>'))
+        self.assertNotIn('person-tags', row)
+

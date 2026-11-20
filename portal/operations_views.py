@@ -339,7 +339,7 @@ def shipping_week(company):
 
 
 def week_navigation(url_name, week, *, home=None, **query):
-    """Week 43 · 19 Oct 2026 – 25 Oct 2026 with the weeks either side, as Calendar & Bookings' Week view, and a link
+    """Week 43 · 19 Oct 2026 – 25 Oct 2026 with the weeks either side, as the Calendar's Week view, and a link
     back to the page's own week (home: this week unless given)."""
     link = lambda monday: f'{reverse(url_name)}?{urlencode({**query, "week": monday.isoformat()})}'
     home = home or this_week()
@@ -786,9 +786,8 @@ class ShipmentCreateView(ShippingListView):
         try:
             intent = validate_workflow_context(request, self.company, 'shipment-create')
             if valid:
-                data = dict(form.cleaned_data)
-                data.pop('confirm')
-                shipment = create_manual_shipment(company=self.company, actor=request.user, submission_key=intent['key'], request=request, **data)
+                shipment = create_manual_shipment(company=self.company, actor=request.user, submission_key=intent['key'], request=request,
+                                                  **form.cleaned_data)
                 day = shipment.scheduled_for
                 messages.success(request, f'Draft parcel added for {shipment.patient} on {day:%-d %b %Y}. Confirm & lock it when it is ready for shipping.')
                 return redirect(f'{reverse("portal:ops-shipping")}?{urlencode({"week": (day - timedelta(days=(day.weekday() - 1) % 7)).isoformat()})}')

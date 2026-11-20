@@ -39,3 +39,16 @@
 .dropouts-ended > .staff-page-card__header p { color: var(--c-68828c); font-size: .8rem; margin: 0; }
 @media (max-width: 760px) { .backoffice-grid { grid-template-columns: 1fr; } .backoffice-panel { padding: 1rem; } }
 @media print { .console-sidebar, .console-topbar, .mobile-bottom-nav, .site-header, .site-footer, .backoffice-actions, .backoffice form { display: none !important; } .console-shell, .console-main { display: block; margin: 0; padding: 0; } }
+
+/* Monthly reports' tools (reporting_statements.html): Settings is a square cog button, its name shown below it on
+   hover or keyboard focus; Send now carries an envelope. A button's press effect has ::after and clips it (fluid.css),
+   so the name is ::before and this button doesn't clip, as the appointment lists' icon buttons do. */
+.backoffice-report-tools svg { fill: none; flex: 0 0 auto; height: 1.1rem; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.8; width: 1.1rem; }
+.backoffice-report-tools .console-button--primary { gap: .5rem; }
+.backoffice-icon-button { padding: 0; position: relative; width: 2.65rem; }
+.workspace-page .meridian-console .backoffice-report-tools .backoffice-icon-button { overflow: visible; }
+.backoffice-icon-button svg { height: 1.25rem; width: 1.25rem; }
+.backoffice-icon-button[data-tooltip]::before { background: var(--c-183643); border-radius: .4rem; color: var(--c-ffffff); content: attr(data-tooltip); font-size: .75rem; font-weight: 600; left: 50%; line-height: 1.3; opacity: 0; padding: .35rem .55rem; pointer-events: none; position: absolute; top: calc(100% + .45rem); transform: translate(-50%, -.2rem); transition: opacity .12s ease, transform .12s ease; visibility: hidden; white-space: nowrap; z-index: 40; }
+.backoffice-icon-button[data-tooltip]:is(:hover, :focus-visible)::before { opacity: 1; transform: translate(-50%, 0); visibility: visible; }
+@media (prefers-reduced-motion: reduce) { .backoffice-icon-button[data-tooltip]::before { transition: none; } }
+@media (max-width: 52rem) { .backoffice-icon-button[data-tooltip]::before { display: none; } }

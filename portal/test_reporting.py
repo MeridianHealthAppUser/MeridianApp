@@ -14,8 +14,8 @@ from django.test import Client
 from django.urls import reverse
 
 from care.followups import append_follow_up
-from care.models import AdministrativeFollowUp, AuditEvent, DoctorActivityStatement, Lead, PatientSubscription, Payment, PracticeSettings
-from care.reporting import approve_activity_statement, operational_metrics
+from care.models import AdministrativeFollowUp, AuditEvent, DoctorActivityStatement, Lead, PatientSubscription, Payment
+from care.reporting import approve_activity_statement
 from care.test_reporting import RATES, ReportingFixture
 from practices.models import CompanyMembership
 from practices.services import ACTIVE_COMPANY_SESSION_KEY
@@ -52,105 +52,6 @@ class ReportingPortalFixture(ReportingFixture):
         data.update(extra)
         data.setdefault('workflow_context', self.token('activity-statement-create'))
         return self.client.post(self.url('activity-statement-create'), data)
-
-
-class MetricsPortalTests(ReportingPortalFixture):
-    def test_separate_page_is_super_admin_only_current_practice_scoped_and_private(self):
-        for actor in (self.super_admin,):
-            self.login(actor)
-            response = self.get('metrics', start=self.start, end=self.end)
-            self.assertEqual(response.status_code, 200)
-            self.assertTemplateUsed(response, 'portal/reporting_metrics.html')
-            self.assertEqual(response.context['company_ids'], [self.company.pk])
-            self.assertEqual(len(response.context['analytics']['daily']), (self.end - self.start).days + 1)
-            self.assertIn('no-store', response['Cache-Control'])
-            self.assertNotContains(response, 'name="summary"')
-            self.assertNotContains(response, 'name="body"')
-        # Insights is for Super Admins: practice administrators don't see it either.
-        for actor in (self.admin, self.doctor, self.patient_user):
-            self.login(actor)
-            self.assertEqual(self.get('metrics').status_code, 403)
-        self.client.logout()
-        self.assertEqual(self.get('metrics').status_code, 302)
-        self.assertEqual(self.get('metrics-export').status_code, 302)
-
-    def test_all_scope_combines_only_active_memberships_and_honours_per_practice_roles(self):
-        CompanyMembership.objects.create(company=self.beta, user=self.super_admin, role='doctor')
-        for company in (self.company, self.beta):
-            lead = Lead.objects.create(company=company, first_name='Hidden', last_name='Identity', email='hidden@example.test')
-            Lead.objects.filter(pk=lead.pk).update(created_at=self.at(self.start))
-        response = self.get('metrics', start=self.start, end=self.end, scope='all', company=99999)
-        self.assertEqual(set(response.context['company_ids']), {self.company.pk, self.beta.pk})
-        self.assertEqual(dict(response.context['metrics'])['New enquiries in practices you administer'], 1)
-        self.assertNotContains(response, 'hidden@example.test')
-        CompanyMembership.objects.filter(company=self.beta, user=self.super_admin).update(is_active=False)
-        response = self.get('metrics', start=self.start, end=self.end, scope='all')
-        self.assertEqual(response.context['company_ids'], [self.company.pk])
-
-    def test_invalid_and_extreme_date_filters_are_errors_not_server_errors_or_unscoped_reports(self):
-        for params in ({'start': '9999-12-31', 'end': '9999-12-31'},
-                       {'start': '0001-01-01', 'end': '0001-01-01'},
-                       {'start': 'bad', 'end': self.end},
-                       {'start': self.end, 'end': self.start},
-                       {'start': self.start, 'end': self.end, 'scope': 'foreign'},
-                       {'start': self.start, 'end': self.start + timedelta(days=367)}):
-            with self.subTest(params=params):
-                response = self.get('metrics', **params)
-                self.assertEqual(response.status_code, 200)
-                self.assertTrue(response.context['form'].errors)
-                self.assertNotIn('metrics', response.context)
-                self.assertNotIn('analytics', response.context)
-                export = self.get('metrics-export', **params)
-                self.assertEqual(export.status_code, 400)
-                self.assertNotIn('attachment', export.get('Content-Disposition', ''))
-
-    def test_csv_contains_only_aggregates_escapes_formula_names_and_audits_permitted_practices(self):
-        self.company.name = '=HYPERLINK("malicious")'
-        self.company.save(update_fields=['name'])
-        self.appointment()
-        message = self.message()
-        PracticeSettings.objects.update_or_create(company=self.company, defaults={'store_view_log': True})
-        response = self.get('metrics-export', start=self.start, end=self.end)
-        self.assertEqual(response.status_code, 200)
-        self.assertIn('no-store', response['Cache-Control'])
-        self.assertEqual(response['X-Content-Type-Options'], 'nosniff')
-        self.assertIn('attachment;', response['Content-Disposition'])
-        text = response.content.decode()
-        rows = dict(list(csv.reader(io.StringIO(text)))[1:])
-        self.assertEqual(rows['Scope'], "'" + self.company.name)
-        self.assertEqual(rows['Completed appointments in period'], '1')
-        self.assertNotIn(message.body, text)
-        self.assertNotIn(f'{self.patient.first_name} {self.patient.last_name}', text)
-        self.assertEqual(AuditEvent.objects.filter(action='metrics.exported', company=self.company).count(), 1)
-        self.assertFalse(AuditEvent.objects.filter(action='metrics.exported', company=self.beta).exists())
-
-    def test_head_exports_no_body_no_audit_and_metrics_post_is_disallowed(self):
-        before = AuditEvent.objects.count()
-        response = self.client.head(self.url('metrics-export'), {'start': self.start, 'end': self.end})
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.content, b'')
-        self.assertEqual(AuditEvent.objects.count(), before)
-        self.assertEqual(self.client.post(self.url('metrics'), {}).status_code, 405)
-        self.assertEqual(self.client.post(self.url('metrics-export'), {}).status_code, 405)
-
-    def test_chart_data_does_not_change_the_existing_csv_contract(self):
-        self.appointment()
-        result = operational_metrics(actor=self.super_admin, company=self.company, scope='current', start=self.start, end=self.end)
-        self.assertIn('analytics', result)
-        response = self.get('metrics-export', start=self.start, end=self.end)
-        actual = list(csv.reader(io.StringIO(response.content.decode())))
-        expected = [
-            ('Metric', 'Value'), ('Period start', self.start), ('Period end', self.end), ('Scope', self.company.name),
-            *result['metrics'], ('Weight records with two dated measurements', result['weight_stats']['count']),
-            ('Mean recorded weight change (%)', result['weight_stats']['mean']),
-            *((f"Patient record cohort {item['month']:%Y-%m}", item['records']) for item in result['cohorts']),
-        ]
-        self.assertEqual(actual, [[str(value) if value is not None else '' for value in row] for row in expected])
-
-    def test_revoked_membership_cannot_read_or_export_metrics(self):
-        CompanyMembership.objects.filter(company=self.company, user=self.super_admin).update(is_active=False)
-        self.assertEqual(self.get('metrics').status_code, 403)
-        self.assertEqual(self.get('metrics-export').status_code, 403)
 
 
 class StatementPortalTests(ReportingPortalFixture):
@@ -278,7 +179,7 @@ class StatementPortalTests(ReportingPortalFixture):
         response = self.get('activity-statement-export', statement)
         self.assertEqual(response.status_code, 200)
         rows = list(csv.reader(io.StringIO(response.content.decode())))
-        self.assertIn(['Completed initial consultations', '1', '100.00', '100.00'], rows)
+        self.assertIn(['New consults', '1', '100.00', '100.00'], rows)
         self.assertIn(['Total', '', '', '102.00'], rows)
         self.assertNotIn(f'{self.patient.first_name} {self.patient.last_name}', response.content.decode())
         self.assertNotIn(message.body, response.content.decode())

@@ -1,3 +1,5 @@
+import logging
+from datetime import timedelta
 from decimal import Decimal
 
 from django import forms
@@ -6,55 +8,51 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.core.paginator import Paginator
+from django.core.validators import MaxValueValidator
 from django.db import transaction
-from django.http import HttpResponseBadRequest
+from django.http import HttpResponse, HttpResponseBadRequest
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
+from django.utils import timezone
 from django.utils.decorators import method_decorator
 from django.views import View
 from django.views.decorators.cache import never_cache
 
-from care.models import DoctorActivityStatement
-from care.reporting import (ACTIVITIES, approve_activity_statement, create_activity_statement,
-                            explicit_rates, operational_metrics, period_bounds, refresh_activity_statement, reporting_today)
-from care.services import record_audit
+from care.activity_reports import (PERIOD_DAY, csv_filename, csv_text, current_period, latest_period, period_label,
+                                   rate_phrases, report_doctors, report_totals, send_activity_report, settings_for)
+from care.billing import money
+from care.models import ActivityReport, DoctorActivityStatement, PracticeSettings
+from care.reporting import (ACTIVITIES, approve_activity_statement, create_activity_statement, explicit_rates,
+                            period_bounds, practice_rates, refresh_activity_statement, reporting_today)
+from care.services import record_audit, view_log_enabled
 from practices.models import Company, CompanyMembership
-from practices.tenancy import multi_practice_enabled
 from .operations_views import _csv_response
 from .views import StaffCompanyRequiredMixin
 from .workflow_context import make_workflow_context, validate_workflow_context
 
-
-class ReportPeriodForm(forms.Form):
-    start = forms.DateField(widget=forms.DateInput(attrs={'type': 'date'}))
-    end = forms.DateField(widget=forms.DateInput(attrs={'type': 'date'}))
-    scope = forms.ChoiceField(choices=(('current', 'Current practice'), ('all', 'All my permitted practices')))
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        if not multi_practice_enabled():
-            self.fields['scope'].choices = (('current', 'Current practice'),)
-            self.fields['scope'].widget = forms.HiddenInput()
-
-    def clean(self):
-        data = super().clean()
-        if data.get('start') and data.get('end'):
-            period_bounds(data['start'], data['end'])
-        return data
+logger = logging.getLogger(__name__)
+MONTHLY_REPORTS = 'monthly-reports'
 
 
 class StatementCreateForm(forms.Form):
     doctor = forms.ModelChoiceField(queryset=get_user_model().objects.none())
     start = forms.DateField(widget=forms.DateInput(attrs={'type': 'date'}))
     end = forms.DateField(widget=forms.DateInput(attrs={'type': 'date'}))
-    initial = forms.DecimalField(label='Rate per completed initial consult (R)', min_value=0, max_value=100000, decimal_places=2)
-    review = forms.DecimalField(label='Rate per completed review (R)', min_value=0, max_value=100000, decimal_places=2)
-    follow_up = forms.DecimalField(label='Rate per completed follow-up / ad-hoc consult (R)', min_value=0, max_value=100000, decimal_places=2)
-    messages = forms.DecimalField(label='Rate per message sent (R)', min_value=0, max_value=100000, decimal_places=2)
+    initial = forms.DecimalField(label='Per new consult (R)', min_value=0, max_value=100000, decimal_places=2)
+    follow_up = forms.DecimalField(label='Per follow-up consult (R)', min_value=0, max_value=100000, decimal_places=2)
+    messages = forms.DecimalField(label='Per message answered (R)', min_value=0, max_value=100000, decimal_places=2)
+    review = forms.DecimalField(label='Per blood result reviewed (R)', min_value=0, max_value=100000, decimal_places=2)
     confirm = forms.BooleanField(label='I have checked these explicit rates. This creates a local draft statement only.')
 
     def __init__(self, *args, company, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields['doctor'].queryset = get_user_model().objects.filter(is_active=True, company_memberships__company=company, company_memberships__is_active=True, company_memberships__clinician_type__in=CompanyMembership.CLINICIAN_TYPES).distinct().order_by('first_name', 'last_name')
+        # The practice's rates (Monthly reports) to start from; each can be changed for this statement.
+        try:
+            for key, rate in practice_rates(company).items():
+                self.fields[key].initial = rate
+        except ValidationError:
+            pass
 
     def clean(self):
         data = super().clean()
@@ -63,6 +61,23 @@ class StatementCreateForm(forms.Form):
             if data['end'] >= reporting_today():
                 raise ValidationError('Choose completed dates ending before today.')
         return data
+
+
+class ActivityReportSettingsForm(forms.ModelForm):
+    """Monthly reports' settings: who the report goes to and the rate for each activity."""
+
+    class Meta:
+        model = PracticeSettings
+        fields = ('activity_report_email', 'activity_rate_initial', 'activity_rate_follow_up', 'activity_rate_messages', 'activity_rate_review')
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['activity_report_email'].label = 'Send the report to'
+        self.fields['activity_report_email'].help_text = 'Emailed on the 25th of each month. Leave blank to stop it.'
+        for name in self.Meta.fields[1:]:
+            # As statements take them (care.reporting.explicit_rates): whole Rand and cents, up to R100 000.
+            self.fields[name].validators.append(MaxValueValidator(Decimal('100000')))
+            self.fields[name].widget.attrs.update(min='0', max='100000', step='0.01')
 
 
 class StatementActionForm(forms.Form):
@@ -80,36 +95,6 @@ class ReportingView(LoginRequiredMixin, StaffCompanyRequiredMixin, View):
         return dict(company=self.company, active_membership=self.membership, nav_section=self.nav_section, **kwargs)
 
 
-class MetricsView(ReportingView):
-    http_method_names = ('get', 'head', 'options')
-    export = False
-
-    def get(self, request):
-        # Insights is for Super Admins; practice administrators don't see it.
-        if self.membership.role != CompanyMembership.Role.SUPER_ADMIN:
-            raise PermissionDenied('Metrics and cohorts are available to the practice Super Admin.')
-        data = request.GET.copy()
-        data.setdefault('start', reporting_today().replace(day=1))
-        data.setdefault('end', reporting_today())
-        data.setdefault('scope', 'current')
-        form = ReportPeriodForm(data)
-        results = {}
-        if form.is_valid():
-            results = operational_metrics(actor=request.user, company=self.company, **form.cleaned_data)
-            if self.export:
-                for practice in results['practices']:
-                    if request.method != 'HEAD':
-                        record_audit(company=practice, actor=request.user, action='metrics.exported', request=request)
-                rows = [('Period start', results['start']), ('Period end', results['end']), ('Scope', ', '.join(practice.name for practice in results['practices'])), *results['metrics'],
-                        ('Weight records with two dated measurements', results['weight_stats']['count']),
-                        ('Mean recorded weight change (%)', results['weight_stats']['mean'])]
-                rows.extend((f"Patient record cohort {item['month']:%Y-%m}", item['records']) for item in results['cohorts'])
-                return _csv_response('meridian-operational-metrics.csv', ('Metric', 'Value'), rows)
-            from .reporting_presentation import metrics_dashboard
-            results['dashboard'] = metrics_dashboard(results)
-        return render(request, 'portal/reporting_metrics.html', self.context(form=form, **results), status=400 if self.export else 200)
-
-
 class StatementView(ReportingView):
     nav_section = 'statements'
 
@@ -125,20 +110,143 @@ class StatementView(ReportingView):
 
 
 class StatementListView(StatementView):
+    """Activity statements, and for the Super Admin the monthly reports above them (care.activity_reports)."""
+
     http_method_names = ('get', 'head', 'options')
 
     def get(self, request):
-        status = request.GET.get('status', 'all')
+        return self.display(request)
+
+    def display(self, request, settings_form=None, status=200):
+        status_filter = request.GET.get('status', 'all')
         queryset = self.statements()
-        if status == 'draft':
+        if status_filter == 'draft':
             queryset = queryset.filter(approved_at__isnull=True)
-        elif status == 'approved':
+        elif status_filter == 'approved':
             queryset = queryset.filter(approved_at__isnull=False)
-        elif status != 'all':
+        elif status_filter != 'all':
             queryset = queryset.none()
         page = Paginator(queryset, 20).get_page(request.GET.get('page'))
-        return render(request, 'portal/reporting_statements.html', self.context(page_obj=page, status_filter=status,
-            pagination_query='status=' + status if status in ('draft', 'approved') else '', can_edit=self.membership.role == 'super_admin'))
+        is_super_admin = self.membership.role == 'super_admin'
+        return render(request, 'portal/reporting_statements.html', self.context(page_obj=page, status_filter=status_filter,
+            pagination_query='status=' + status_filter if status_filter in ('draft', 'approved') else '', can_edit=is_super_admin,
+            monthly=self.monthly(request, settings_form) if is_super_admin else None), status=status)
+
+    def monthly(self, request, settings_form=None):
+        """Monthly reports: the recipient and rates, Send now for the latest period, and the log of reports sent."""
+        row = settings_for(self.company)
+        start, end = latest_period()
+        upcoming = current_period()
+        reports = ActivityReport.objects.for_company(self.company).select_related('created_by')
+        page = Paginator(reports, 12).get_page(request.GET.get('reports_page'))
+        for report in page:
+            report.total_text = money(report.total)
+        try:
+            rates = rate_phrases(practice_rates(self.company))
+        except ValidationError:
+            rates = []
+        latest_report = reports.filter(period_start=start, period_end=end, sent_at__isnull=False).first()
+        posted = request.method == 'POST' and settings_form is not None
+        return {
+            'settings': row, 'rates': rates,
+            'settings_form': settings_form if settings_form is not None else ActivityReportSettingsForm(instance=row),
+            'settings_context': request.POST.get('workflow_context', '') if posted else make_workflow_context(request, self.company, 'activity-report-settings'),
+            'send_context': make_workflow_context(request, self.company, 'activity-report-send'),
+            # Not yet sent although its 25th has come: the daily job hasn't run or couldn't send it.
+            'latest': {'start': start, 'end': end, 'label': period_label(start, end), 'report': latest_report,
+                       'due': latest_report is None and reporting_today().day >= PERIOD_DAY},
+            'upcoming': {'label': period_label(*upcoming), 'sends_on': upcoming[1] + timedelta(days=1)},
+            'reports': page,
+            'reports_query': 'status=' + request.GET['status'] if request.GET.get('status') in ('draft', 'approved') else '',
+        }
+
+
+class ActivityReportSettingsView(StatementListView):
+    """Save Monthly reports' recipient and rates (a dialog on Activity statements)."""
+
+    http_method_names = ('post',)
+
+    @transaction.atomic
+    def post(self, request):
+        self.require_editor()
+        self.company = Company.objects.select_for_update().get(pk=self.company.pk)
+        row = settings_for(self.company)
+        fields = ActivityReportSettingsForm.Meta.fields
+        before = {name: getattr(row, name) for name in fields}
+        form = ActivityReportSettingsForm(request.POST, instance=row)
+        valid = form.is_valid()
+        try:
+            validate_workflow_context(request, self.company, 'activity-report-settings')
+            if valid:
+                row = form.save()
+                changed = [name for name in fields if getattr(row, name) != before[name]]
+                record_audit(company=self.company, actor=request.user, action='activity_report.settings_changed', target=row,
+                             request=request, metadata={'fields': changed})
+                messages.success(request, 'Monthly report settings saved.' if changed else 'Nothing changed in the monthly report settings.')
+                return redirect(f"{reverse('portal:activity-statements')}#{MONTHLY_REPORTS}")
+        except ValidationError as error:
+            form.add_error(None, error)
+        return self.display(request, form, 400)
+
+
+class ActivityReportSendView(StatementView):
+    """Send now: email the latest period's report, or send it again when confirmed in the dialog."""
+
+    http_method_names = ('post',)
+
+    def post(self, request):
+        self.require_editor()
+        start, end = latest_period()
+        back = redirect(f"{reverse('portal:activity-statements')}#{MONTHLY_REPORTS}")
+        try:
+            validate_workflow_context(request, self.company, 'activity-report-send')
+            if request.POST.get('period_end') != end.isoformat():
+                raise ValidationError('A newer period has ended since this page opened. Reload it and send that one.')
+            report, sent = send_activity_report(self.company, start, end, actor=request.user, resend=request.POST.get('resend') == '1', request=request)
+        except ValidationError as error:
+            messages.error(request, ' '.join(error.messages))
+            return back
+        except PermissionDenied:
+            raise
+        except Exception:  # The mail server refused it; nothing was saved.
+            logger.exception('Could not email the activity report for %s.', self.company.pk)
+            messages.error(request, 'The report couldn’t be emailed. Nothing was saved, so try again in a few minutes.')
+            return back
+        label = period_label(start, end)
+        if sent:
+            messages.success(request, f'The activity report for {label} was sent to {report.sent_to}.')
+        else:
+            sent_on = timezone.localtime(report.sent_at)
+            messages.warning(request, f'The activity report for {label} was already sent on {sent_on.day} {sent_on:%B}, so it wasn’t sent again.')
+        return redirect('portal:activity-report-detail', pk=report.pk)
+
+
+class ActivityReportDetailView(StatementView):
+    """One monthly report as it was sent: each doctor's activity, amounts and total payout. Super Admin only, as it
+    lists every doctor's pay. Its CSV is the one the email attached."""
+
+    http_method_names = ('get', 'head', 'options')
+    export = False
+
+    def get(self, request, pk):
+        self.require_editor()
+        report = get_object_or_404(ActivityReport.objects.for_company(self.company).select_related('created_by'), pk=pk)
+        try:
+            doctors = report_doctors(report)
+        except ValidationError:
+            return HttpResponseBadRequest('This report’s saved figures don’t add up, so it can’t be shown or downloaded. Ask your practice Super Admin to review it.')
+        if request.method != 'HEAD' and view_log_enabled(self.company):
+            record_audit(company=self.company, actor=request.user, action='activity_report.exported' if self.export else 'activity_report.viewed',
+                         target=report, request=request)
+        if self.export:
+            response = HttpResponse(csv_text(report), content_type='text/csv; charset=utf-8')
+            response['Content-Disposition'] = f'attachment; filename="{csv_filename(report)}"'
+            response['Cache-Control'] = 'private, no-store, max-age=0'
+            response['X-Content-Type-Options'] = 'nosniff'
+            return response
+        return render(request, 'portal/reporting_statement_report.html', self.context(
+            report=report, doctors=doctors, totals=report_totals(doctors), rates=rate_phrases(report.rates),
+            period=period_label(report.period_start, report.period_end), total=money(report.total)))
 
 
 class StatementCreateView(StatementView):

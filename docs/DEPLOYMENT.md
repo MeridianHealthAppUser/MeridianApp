@@ -152,6 +152,7 @@ With the `DJANGO_EMAIL_*` settings in place, the app emails:
 | Appointment reminder | The patient and the clinician | 24 hours before it starts |
 | Appointment starting soon | The patient and the clinician | When the appointment enters its final 15 minutes, independently of the booking confirmation or day-before reminder |
 | PathCare form | The patient | A doctor requests blood tests, or resends the form |
+| Monthly doctor activity report | The address in Insights > Activity statements > Monthly reports | The 25th of each month, by the `send_activity_reports` job (see below), or Send now |
 
 Patients are emailed only when they have an active login, and staff only while active in the practice. Each email links into the app. `templates/emails/` holds their look; `care/notifications.py` decides who gets what.
 
@@ -254,6 +255,14 @@ Billing (`care/billing.py`) and The Courier Guy (`care/courier.py`) were added o
 - Schedule `python manage.py send_journey_emails` once a day (the `journey-emails` job) for the email journeys
   (`care/journeys.py`). Every journey email starts switched off: a Super Admin rewrites and switches each on under
   Settings > Email journeys.
+- Schedule `python manage.py send_activity_reports` once a day, e.g. cron `0 7 * * *` with time zone
+  `Africa/Johannesburg` (an `activity-reports` job, set up like `blood-test-checks` with the same environment). From
+  the 25th it emails each practice's monthly doctor activity report (`care/activity_reports.py`) for the 25th of last
+  month to the 24th: per doctor, new and follow-up consults, messages answered and blood results reviewed at the
+  practice's rates, the total payout, and a CSV. It goes to the address in Insights > Activity statements > Monthly
+  reports, which also keeps the log. Each period is sent once; a run that fails tries again the next day until the end
+  of the month. `--dry-run` says what would be sent and `--company <slug>` limits it to one practice. A Super Admin can
+  also send the latest period with Send now, and send it again only after confirming. Nothing is paid.
 
 ## Meridian administration and first login
 

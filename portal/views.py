@@ -282,6 +282,9 @@ class ActivateCompanyView(LoginRequiredMixin, View):
                 membership = active_membership_for(request, company)
                 if membership.is_admin:
                     return redirect(destination)
+        # Calendar: the tab they were on, Appointments (where Calendar opens) or the Calendar tab on today.
+        if next_path.startswith(reverse('portal:schedule-appointments')):
+            return redirect('portal:schedule-appointments')
         if next_path.startswith(reverse('portal:staff-schedule')):
             return redirect('portal:staff-schedule')
         for destination in (
@@ -618,7 +621,7 @@ class StaffMessageCreateView(LoginRequiredMixin, StaffCompanyRequiredMixin, View
                 if from_inbox:
                     from .inbox import search_text, staff_inbox_url
                     return redirect(staff_inbox_url(thread, status=request.POST.get('status', ''), search=search_text(request.POST.get('q')),
-                                                    patients=request.POST.get('patients', '')))
+                                                    patients=request.POST.get('patients', ''), scope=request.POST.get('scope', '')))
                 if from_record:
                     return staff_inbox_redirect(thread)
                 from .patient_workspace import workspace_url
@@ -820,7 +823,7 @@ class StaffThreadReadStateView(LoginRequiredMixin, StaffCompanyRequiredMixin, Vi
         from .inbox import staff_inbox_url
         page = request.POST.get('page', '')
         return redirect(staff_inbox_url(status=request.POST.get('status', ''), page=page if page.isdecimal() and len(page) < 10 else 1,
-                                        search=search, patients=request.POST.get('patients', '')))
+                                        search=search, patients=request.POST.get('patients', ''), scope=request.POST.get('scope', '')))
 
 
 def _staff_booking_form(company, *args, **kwargs):

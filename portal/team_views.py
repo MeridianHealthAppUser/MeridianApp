@@ -163,6 +163,8 @@ def team_inbox_context(request, company, membership, *, selected_id=None, **over
         team_read_state_fields={'status': ','.join(status), 'about': ','.join(about), 'page': page.number, 'q': search},
         filter_status=','.join(status), filter_about=','.join(about), search=search,
         search_hidden={'status': ','.join(status), 'about': ','.join(about)},
+        # The card's header: Team messages, then how many conversations, Filters and the search (list_tools.html).
+        team_count_label=f'{page.paginator.count} conversation{"" if page.paginator.count == 1 else "s"}',
         filter_menu=filter_menu(
             action=reverse('portal:team-inbox'), hidden=[('q', search)], clear_url=team_url(search=search),
             label='Filter team messages', sections=[

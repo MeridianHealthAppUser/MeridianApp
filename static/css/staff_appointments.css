@@ -1,0 +1,67 @@
+/* Staff appointment lists in the format of a patient's My Appointments (Nov 2026): Calendar's Appointments tab and a
+   record's Appointments tab (templates/portal/includes/staff_appointment_list.html). Loaded only there. The
+   patient page's own rules are in patient_pages.css, which staff pages don't load; these follow them, kept to the list.
+   At or below 52rem the table is one card per appointment, as other staff tables are (staff_mobile.css). */
+
+/* Upcoming and Past keep the card's inset, as on My Appointments. */
+.staff-appointment-list > .patient-order-subtabs { display: flex; margin: .85rem 1.2rem; }
+.staff-appointment-list .patient-table td { color: var(--console-ink); font-size: .8rem; }
+.staff-appointment-list .patient-table td:first-child { font-weight: inherit; }
+
+/* The date over its time and length; when the video room opens behind an (i) beside them. */
+.staff-appointment-list .patient-table__when { align-items: center; display: flex; gap: .15rem; min-width: 8rem; }
+.staff-appointment-list .patient-table__date { display: grid; gap: .2rem; }
+.staff-appointment-list .patient-table__date time { font-weight: 650; }
+.staff-appointment-list .patient-table__date span { color: var(--console-muted); font-size: .74rem; white-space: nowrap; }
+.staff-appointment-list .patient-table__when .info-tip { margin-left: .4rem; }
+
+/* Actions: small buttons with short text side by side at the end of the row, as on My Appointments (patient_pages.css),
+   in its order, size and gap. Open meeting room is greyed out, and does nothing, until the room opens. Cancel is a
+   plain button, not red, as for patients (James, Nov 2026). */
+.staff-appointment-list .patient-table .patient-table__fit { text-align: right; white-space: nowrap; width: 1%; }
+.staff-appointment-list .patient-table__actions { align-items: center; display: flex; flex-wrap: nowrap; gap: .5rem; justify-content: flex-end; }
+.staff-appointment-list .patient-table__actions .console-button { align-items: center; display: inline-flex; gap: .4rem; white-space: nowrap; }
+.staff-appointment-list .patient-table__actions .console-button svg { flex: 0 0 auto; }
+.staff-appointment-list .patient-row-action.console-button { font-size: .68rem; min-height: 2rem; padding: .35rem .65rem; }
+.staff-appointment-list .console-button[aria-disabled="true"] { box-shadow: none; opacity: .5; pointer-events: none; }
+.staff-appointment-list .patient-table__empty { color: var(--console-muted); font-weight: 500; text-align: center; }
+/* Complete and No-show: square icon buttons as tall as the others, each naming itself in a tooltip above it on hover or
+   keyboard focus (as Weekly shipping's icon buttons do, operations.css). The press effect has ::after and clips the
+   button (fluid.css), so the tooltip is ::before and these buttons don't clip. */
+.staff-appointment-list .patient-row-action.staff-row-icon { justify-content: center; padding: 0; position: relative; width: 2rem; }
+.workspace-page .meridian-console .staff-appointment-list .staff-row-icon { overflow: visible; }
+.staff-appointment-list .staff-row-icon svg { height: 1rem; width: 1rem; }
+.staff-appointment-list .staff-row-icon[data-tooltip]::before { background: var(--c-183643); border-radius: .4rem; bottom: calc(100% + .4rem); color: var(--c-ffffff); content: attr(data-tooltip); font-size: .75rem; font-weight: 500; left: 50%; line-height: 1.3; opacity: 0; padding: .35rem .55rem; pointer-events: none; position: absolute; transform: translate(-50%, .2rem); transition: opacity .12s ease, transform .12s ease; visibility: hidden; white-space: nowrap; z-index: 20; }
+.staff-appointment-list .staff-row-icon[data-tooltip]:is(:hover, :focus-visible)::before { opacity: 1; transform: translate(-50%, 0); visibility: visible; }
+@media (prefers-reduced-motion: reduce) { .staff-appointment-list .staff-row-icon[data-tooltip]::before { transition: none; } }
+/* With less room the buttons go one under another, still on the right, as on My Appointments; Complete and No-show
+   stay side by side. */
+@media (max-width: 75rem) {
+  .staff-appointment-list .patient-table .patient-table__fit { white-space: normal; }
+  .staff-appointment-list .patient-table__actions { align-items: stretch; flex-direction: column; flex-wrap: nowrap; }
+  .staff-appointment-list .patient-table__actions .console-button { justify-content: center; }
+  .staff-appointment-list .patient-table__actions:has(.staff-row-icon) { align-items: center; flex-direction: row; flex-wrap: wrap; justify-content: flex-end; margin-left: auto; max-width: 4.5rem; min-width: 4.5rem; }
+  .staff-appointment-list .patient-table__actions:has(.staff-row-icon) > :not(.staff-row-icon) { flex: 1 1 100%; }
+}
+
+.staff-appointment-list + .patient-pagination { align-items: center; display: flex; flex-wrap: wrap; gap: .85rem; justify-content: center; margin-top: 1.2rem; }
+.staff-appointment-list + .patient-pagination > span { color: var(--console-muted); font-size: .8rem; }
+
+/* Phones: each appointment is a card, its status a pill at the start of its line and its buttons across the card under
+   it, side by side and big enough for a thumb; Open meeting room takes a line of its own. */
+@media (max-width: 52rem) {
+  /* The title, count and Filters on one line; a record's Book an appointment across the card under them. */
+  .workspace-page .meridian-console .staff-appointment-list > .console-card__header { flex-wrap: wrap; }
+  .workspace-page .meridian-console .staff-appointment-list > .console-card__header > .console-card__heading { flex: 1 1 auto; }
+  .workspace-page .meridian-console .staff-appointment-list > .console-card__header > .staff-list-tools { display: contents; }
+  .workspace-page .meridian-console .staff-appointment-list .staff-list-tools > .console-button--primary { flex: 1 1 100%; justify-content: center; }
+  .workspace-page .meridian-console .staff-appointment-list .staff-phone-cards td > .console-status { justify-self: start; }
+  .workspace-page .meridian-console .staff-appointment-list .staff-phone-cards td.patient-table__fit { display: block; padding-top: .65rem; text-align: left; width: auto; }
+  .workspace-page .meridian-console .staff-appointment-list .staff-phone-cards td.patient-table__fit::before { content: none; }
+  .workspace-page .meridian-console .staff-appointment-list .patient-table__actions { flex-direction: row; flex-wrap: wrap; justify-content: flex-start; max-width: none; min-width: 0; margin-left: 0; }
+  .workspace-page .meridian-console .staff-appointment-list .patient-table__actions > * { flex: 1 1 6rem; justify-content: center; }
+  .workspace-page .meridian-console .staff-appointment-list .patient-table__actions > [data-appointment-video-join] { flex-basis: 100%; }
+  .workspace-page .meridian-console .staff-appointment-list .patient-row-action.console-button { font-size: .8rem; min-height: 2.75rem; }
+  /* Complete and No-show are thumb-sized squares; Details takes the rest of their line. */
+  .workspace-page .meridian-console .staff-appointment-list .patient-table__actions > .staff-row-icon { flex: 0 0 2.75rem; width: 2.75rem; }
+}

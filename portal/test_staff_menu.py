@@ -98,10 +98,69 @@ class StaffMenuTests(TestCase):
             self.assertIsNone(page_tabs('statements', membership=membership))
             self.assertIsNone(page_tabs('users', membership=membership))
 
+    def test_calendars_three_tabs_are_pages_in_care(self):
+        # James, 20 Nov 2026: Calendar & Bookings is Calendar, and its tabs Appointments, Calendar and Working hours &
+        # availability are pages in Care, where it was (not a section of their own).
+        self.login('super_admin')
+        appointments, calendar = reverse('portal:schedule-appointments'), reverse('portal:staff-schedule')
+        for url, current in ((appointments, 'Appointments'), (calendar, 'Calendar'),
+                             (f'{calendar}?section=availability', 'Working hours &amp; availability')):
+            with self.subTest(url=url):
+                html = self.client.get(url).content.decode()
+                sidebar = html[html.index('class="console-nav'):]
+                sidebar = sidebar[:sidebar.index('</nav>')]
+                sections = re.findall(r'data-navigation-(?:group|link)="([a-z]+)"', sidebar)
+                self.assertNotIn('schedule', sections)
+                care = sidebar[sidebar.index('data-navigation-group="care"'):]
+                care = care[:care.index('</details>')]
+                self.assertIn('data-navigation-group="care" open', sidebar)
+                links = re.findall(r'<a(?: class="is-active" aria-current="(\w+)")? href="([^"]+)"><span class="console-nav__text">([^<]+)</span>',
+                                   care[care.index('console-nav__links'):])
+                self.assertEqual([(href, label) for _, href, label in links][-3:], [
+                    (appointments, 'Appointments'), (calendar, 'Calendar'),
+                    (f'{calendar}?section=availability', 'Working hours &amp; availability')])
+                self.assertEqual([label for state, _, label in links if state == 'page'], [current])
+        # On a phone they are in Care's page of options; the bar has no Calendar of its own.
+        html = self.client.get(reverse('portal:mobile-dashboard')).content.decode()
+        bar = html[html.index('class="mobile-bottom-nav staff-mobile-nav"'):]
+        self.assertNotIn('title="Calendar"', bar[:bar.index('</nav>')])
+        care = self.client.get(reverse('portal:staff-menu-section', args=['care']))
+        self.assertEqual([item['url'] for item in care.context['section']['items']][-3:],
+                         [appointments, calendar, f'{calendar}?section=availability'])
+
+    def test_breadcrumbs_name_the_menu_section_a_page_is_in(self):
+        # James, 20 Nov 2026: Overview > Care > Blood tests, Care linking to its page of options (as on phones).
+        care, purchasing = reverse('portal:staff-menu-section', args=['care']), reverse('portal:staff-menu-section', args=['purchasing'])
+
+        def trail(url):
+            html = self.client.get(url).content.decode()
+            crumbs = html[html.index('class="page-breadcrumbs"'):]
+            crumbs = crumbs[:crumbs.index('</nav>')]
+            return re.findall(r'<li>(?:<a href="([^"]+)">([^<]+)</a>|<span aria-current="page">([^<]+)</span>)</li>', crumbs), crumbs
+
+        self.login('super_admin')
+        for url, page in ((reverse('portal:clinical-labs'), 'Blood tests'), (reverse('portal:staff-tasks'), 'Tasks'),
+                          (reverse('portal:schedule-appointments'), 'Calendar')):
+            with self.subTest(url=url):
+                items, crumbs = trail(url)
+                self.assertEqual([(href or None, label or current) for href, label, current in items],
+                                 [(reverse('portal:desktop-dashboard'), 'Overview'), (care, 'Care'), (None, page)])
+                # Back goes one level up: to Care.
+                self.assertIn(f'class="page-breadcrumbs__back" href="{care}"', crumbs)
+        # Procurement (James, 20 Nov 2026) holds Purchasing and Suppliers.
+        for url in (reverse('portal:supplier-list'), reverse('portal:purchasing')):
+            self.assertIn((purchasing, 'Procurement', ''), trail(url)[0])
+        # A page of tabs (Insights) names its section already.
+        self.assertNotIn(f'href="{care}"', trail(reverse('portal:metrics'))[1])
+        self.assertNotIn(f'href="{purchasing}"', trail(reverse('portal:metrics'))[1])
+        # Clinicians and practice administrators have no sections, so no section in the trail.
+        self.login('doctor')
+        self.assertNotIn(care, trail(reverse('portal:staff-tasks'))[1])
+
     def test_purchasing_section_opens_its_dedicated_page(self):
         self.login('super_admin')
         response = self.client.get(reverse('portal:staff-menu-section', args=['purchasing']))
-        self.assertContains(response, '<h1>Purchasing</h1>', html=True)
+        self.assertContains(response, '<h1>Procurement</h1>', html=True)
         self.assertEqual([item['url'] for item in response.context['section']['items']],
                          [reverse('portal:purchasing'), reverse('portal:supplier-list')])
 
@@ -177,7 +236,7 @@ class StaffMenuTests(TestCase):
         sidebar = page[page.index('class="console-nav'):]
         sidebar = sidebar[:sidebar.index('</nav>')]
         self.assertNotIn('<details', sidebar)
-        labels = ['Overview', 'My tasks', 'Patient Records &amp; Messages', 'Calendar &amp; Bookings']
+        labels = ['Overview', 'My tasks', 'Patient Records &amp; Messages', 'Calendar']
         self.assertEqual([label for label in labels if label in sidebar], labels)
         self.assertNotIn('My Messages', sidebar)
         # Both red navigation badges combine patient/team unread counts.
@@ -194,7 +253,7 @@ class StaffMenuTests(TestCase):
         sidebar = page[page.index('class="console-nav'):]
         sidebar = sidebar[:sidebar.index('</nav>')]
         self.assertNotIn('<details', sidebar)
-        labels = ['Overview', 'My tasks', 'Messages', 'Calendar &amp; Bookings', 'Purchasing', 'Inventory', 'Shipping', 'Leads and dropouts']
+        labels = ['Overview', 'My tasks', 'Messages', 'Calendar', 'Purchasing', 'Inventory', 'Shipping', 'Leads and dropouts']
         self.assertEqual(re.findall(r'<span class="console-nav__text">([^<]+)</span>', sidebar), labels)
         self.assertNotIn('Insights', sidebar)
         self.assertIn('data-live-unread="total" hidden', sidebar)

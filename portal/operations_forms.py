@@ -219,11 +219,13 @@ class HistoryFilterForm(forms.Form):
 
 
 class ShipmentCreateForm(forms.Form):
+    """Create shipment: an ad-hoc draft parcel. No confirmation tick (Dr Czech, 19 Nov 2026): Add draft parcel waits
+    until all four fields are filled in (data-submit-when-filled), and the dialog says nothing is dispatched."""
+
     patient = forms.ModelChoiceField(queryset=Patient.objects.none())
     product = forms.ModelChoiceField(queryset=MedicationProduct.objects.none())
     quantity = forms.IntegerField(min_value=1, max_value=100)
     scheduled_for = forms.DateField(label='Planned dispatch date', widget=forms.DateInput(attrs={'type': 'date'}), initial=timezone.localdate)
-    confirm = forms.BooleanField(label='Add this as a draft parcel; nothing is dispatched automatically')
 
     def __init__(self, *args, company, **kwargs):
         super().__init__(*args, **kwargs)

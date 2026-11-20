@@ -33,7 +33,8 @@ def _return_url(request, access):
     if access.role == 'doctor':
         if request.session.get(ACTIVE_COMPANY_SESSION_KEY) == access.company_id:
             return reverse('portal:appointment-detail', args=[access.appointment_id])
-        return reverse('portal:staff-schedule')
+        # Calendar, which opens on Appointments.
+        return reverse('portal:schedule-appointments')
     # Patients have no page for one appointment (Dr Czech, Nov 2026): back to My Appointments.
     return reverse('portal:patient-appointments')
 

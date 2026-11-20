@@ -1,0 +1,9 @@
+/* Who a conversation is with, on one line at the top of its row in a list of conversations (Patient messages, Team
+   messages, a record's Messages tab and My Messages; templates/portal/includes/conversation_people.html). The tags
+   keep their colours (person_tags.css); a name too long for the line ends in "…", and "+N" stands for anyone past the
+   first three. */
+.person-tags.person-tags--line { flex-wrap: nowrap; overflow: hidden; }
+.person-tags--line > span.person-tag { display: block; flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.person-tags--line > span.person-tag svg { display: inline-block; margin-right: .3rem; vertical-align: -.1em; }
+.person-tags--line > span.person-tag.person-tag--more { flex: 0 0 auto; overflow: visible; padding-inline: .45rem; }
+.person-tag.person-tag--more { background: var(--c-f3f5f5); border-color: var(--c-dfe5e7); color: var(--c-61727a); }

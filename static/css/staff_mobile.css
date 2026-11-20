@@ -23,7 +23,8 @@
   .workspace-page .record-inbox:not(.record-inbox--open, .record-inbox--single) .record-messages__pane { display: none; }
   .workspace-page .record-inbox:not(.record-inbox--open) .record-inbox__threads { border-bottom: 0; border-right: 0; }
   .workspace-page .record-inbox:not(.record-inbox--open) .record-inbox__list { max-height: none; }
-  .workspace-page .record-inbox--open .record-inbox__threads, .workspace-page .inbox-toolbar--open { display: none; }
+  /* The card's header (title, count, Filters, search) goes with the list, so an open conversation starts at the top. */
+  .workspace-page .record-inbox--open .record-inbox__threads, .workspace-page .record-inbox--open > .record-inbox__header { display: none; }
   .record-inbox__back { align-items: center; align-self: flex-start; border-radius: .5rem; color: var(--console-teal-dark); display: inline-flex; font-size: .82rem; font-weight: 600; gap: .4rem; margin: -.35rem 0 .35rem -.35rem; min-height: 2.5rem; padding: 0 .35rem; text-decoration: none; }
   .record-inbox__back svg { fill: none; height: 1rem; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 2; width: 1rem; }
   .record-inbox__back:focus-visible { outline: 2px solid var(--console-teal); outline-offset: 2px; }

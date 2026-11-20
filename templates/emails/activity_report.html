@@ -1,0 +1,33 @@
+{% extends 'emails/base.html' %}{% comment %}The monthly doctor activity report (care/activity_reports.py): a box for each doctor with each activity's count, rate and amount, then the total for everyone. The CSV is attached.{% endcomment %}{% block content %}
+        <p style="margin:0 0 16px;">Hello,</p>
+        <p style="margin:0 0 20px;">Here is each doctor’s activity for {{ period }}, at the practice’s rates.</p>
+{% for doctor in doctors %}        <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:0 0 16px;background:#f3f8fa;border:1px solid #d2e2e8;border-radius:12px;">
+          <tr>
+            <td style="padding:14px 18px;">
+              <p style="margin:0 0 8px;font-size:16px;font-weight:700;color:#1d4a5e;">{{ doctor.doctor }}</p>
+              <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">
+                <tr>
+                  <td style="padding:4px 12px 4px 0;font-size:12px;color:#506e7c;">Activity</td>
+                  <td align="right" style="padding:4px 12px 4px 0;font-size:12px;color:#506e7c;">Count</td>
+                  <td align="right" style="padding:4px 12px 4px 0;font-size:12px;color:#506e7c;">Rate</td>
+                  <td align="right" style="padding:4px 0;font-size:12px;color:#506e7c;">Amount</td>
+                </tr>{% for line in doctor.lines %}
+                <tr>
+                  <td style="padding:5px 12px 5px 0;vertical-align:top;font-size:14px;color:#1d4a5e;">{{ line.label }}{% if line.completed is not None %}<br><span style="font-size:12px;color:#506e7c;">{{ line.completed }} marked completed</span>{% endif %}</td>
+                  <td align="right" style="padding:5px 12px 5px 0;vertical-align:top;font-size:14px;color:#1d4a5e;">{{ line.count }}</td>
+                  <td align="right" style="padding:5px 12px 5px 0;vertical-align:top;font-size:14px;color:#506e7c;white-space:nowrap;">{{ line.rate_text }}</td>
+                  <td align="right" style="padding:5px 0;vertical-align:top;font-size:14px;color:#1d4a5e;white-space:nowrap;">{{ line.amount_text }}</td>
+                </tr>{% endfor %}
+                <tr>
+                  <td colspan="3" style="padding:8px 12px 2px 0;border-top:1px solid #d2e2e8;font-size:14px;font-weight:700;color:#1d4a5e;">Total payout</td>
+                  <td align="right" style="padding:8px 0 2px;border-top:1px solid #d2e2e8;font-size:14px;font-weight:700;color:#1d4a5e;white-space:nowrap;">{{ doctor.total_text }}</td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+        </table>
+{% empty %}        <p style="margin:0 0 16px;">No clinicians are set up in the practice.</p>
+{% endfor %}        <p style="margin:4px 0 20px;font-size:17px;font-weight:700;">Total for all doctors: <span style="white-space:nowrap;">{{ total }}</span></p>
+        <p style="margin:0 0 16px;font-size:14px;color:#506e7c;">A consult counts when it took place, unless it was cancelled or a no-show. Follow-up consults include six-month reviews and ad-hoc consults. Messages answered are the doctor’s messages to patients; blood results reviewed are blood tests they marked reviewed. The same figures are attached as a spreadsheet.</p>
+        {% include 'emails/button.html' with label='Open the report' %}
+{% endblock %}

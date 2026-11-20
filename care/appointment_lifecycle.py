@@ -69,10 +69,12 @@ def book_staff_appointment(*, company, patient, actor, clinician, starts_at, dur
 
 
 @transaction.atomic
-def reschedule_appointment(*, appointment, actor, starts_at, expected_updated, request=None):
-    """Move a booked appointment to a new time with the same clinician and length. Practice administrators and Super
-    Admins move any; a doctor moves their own. The new time is checked like a booking, the reminder starts again for
-    it, and the patient and clinician are emailed (the clinician unless they moved it themselves)."""
+def reschedule_appointment(*, appointment, actor, starts_at, expected_updated, appointment_type=None, duration_minutes=None,
+                           request=None):
+    """Edit a booked appointment: a new time with the same clinician, and if needed another type or length (19 Nov 2026;
+    not given, they stay as they are). Practice administrators and Super Admins edit any; a doctor their own. A new time
+    or length is checked like a booking, a new time starts the reminder again, and the patient and clinician are
+    emailed (the clinician unless they made the change themselves): "moved" for a new time, else "changed"."""
     original = Appointment.objects.select_related('patient').get(pk=appointment.pk, company_id=appointment.company_id)
     user_ids = {actor.pk, original.clinician_id}
     if original.patient.user_id:
@@ -83,7 +85,7 @@ def reschedule_appointment(*, appointment, actor, starts_at, expected_updated, r
     require_enabled_company(appointment.company)
     if (appointment.clinician_id != original.clinician_id or appointment.patient_id != original.patient_id
             or appointment.patient.user_id != original.patient.user_id):
-        raise ValidationError('Appointment participants changed. Reload before changing the time.')
+        raise ValidationError('Appointment participants changed. Reload before changing the appointment.')
     if actor is None or not actor.is_active or not appointment.patient.is_active or appointment.patient.company_id != appointment.company_id:
         raise PermissionDenied('This appointment is not available in the selected practice.')
     membership = _membership(appointment.company, actor)
@@ -92,39 +94,68 @@ def reschedule_appointment(*, appointment, actor, starts_at, expected_updated, r
     if membership.role == CompanyMembership.Role.DOCTOR and appointment.clinician_id != actor.pk:
         raise PermissionDenied('Only the booked clinician or a practice administrator can change this appointment.')
     if appointment.status != Appointment.Status.BOOKED:
-        raise ValidationError('Only a booked appointment can be moved.')
+        raise ValidationError('Only a booked appointment can be changed.')
     if appointment.updated_at.isoformat() != expected_updated:
-        raise ValidationError('This appointment changed since you opened it. Reload before changing the time.')
-    if not isinstance(starts_at, datetime) or timezone.is_naive(starts_at) or starts_at <= timezone.now():
+        raise ValidationError('This appointment changed since you opened it. Reload before changing it.')
+    if not isinstance(starts_at, datetime) or timezone.is_naive(starts_at):
         raise ValidationError('Choose a future appointment time.')
-    if starts_at == appointment.starts_at:
-        raise ValidationError('Choose a different time from the current one.')
+    kind = appointment_type or appointment.appointment_type
+    length = duration_minutes or appointment.duration_minutes
+    if kind not in Appointment.Type.values:
+        raise ValidationError('Choose an appointment type.')
+    if not isinstance(length, int) or not 0 < length <= 240:
+        raise ValidationError('Choose how long the appointment is.')
+    moved = starts_at != appointment.starts_at
+    resized = length != appointment.duration_minutes
+    retyped = kind != appointment.appointment_type
+    if not (moved or resized or retyped):
+        raise ValidationError('Change the time, type or length first.')
+    # Only a new time or length has to fit the diaries; another type alone keeps the time it has.
+    if (moved or resized) and starts_at <= timezone.now():
+        raise ValidationError('Choose a future appointment time.')
     if ClinicalEncounter.objects.for_company(appointment.company).filter(appointment=appointment, status='signed').exists():
-        raise ValidationError('This appointment has a signed consultation note, so it can’t be moved. Book a new appointment instead.')
-    ensure_clinician_available(company=appointment.company, clinician=appointment.clinician, starts_at=starts_at,
-                               duration_minutes=appointment.duration_minutes, exclude_appointment=appointment)
-    ensure_patient_available(patient=appointment.patient, starts_at=starts_at, duration_minutes=appointment.duration_minutes,
-                             exclude_appointment=appointment)
-    previous = appointment.starts_at
+        raise ValidationError('This appointment has a signed consultation note, so it can’t be changed. Book a new appointment instead.')
+    if moved or resized:
+        ensure_clinician_available(company=appointment.company, clinician=appointment.clinician, starts_at=starts_at,
+                                   duration_minutes=length, exclude_appointment=appointment)
+        ensure_patient_available(patient=appointment.patient, starts_at=starts_at, duration_minutes=length,
+                                 exclude_appointment=appointment)
+    previous = (appointment.starts_at, appointment.appointment_type, appointment.get_appointment_type_display(), appointment.duration_minutes)
     appointment.starts_at = starts_at
-    appointment.reminder_sent_at = None  # The reminder is for the new time.
+    appointment.appointment_type = kind
+    appointment.duration_minutes = length
+    fields = ['starts_at', 'appointment_type', 'duration_minutes', 'updated_at']
+    if moved:
+        appointment.reminder_sent_at = None  # The reminder is for the new time.
+        fields.append('reminder_sent_at')
     appointment.full_clean()
-    appointment.save(update_fields=('starts_at', 'reminder_sent_at', 'updated_at'))
-    slots = AvailabilitySlot.objects.for_company(appointment.company)
-    slots.filter(appointment=appointment).update(appointment=None, is_booked=False, updated_at=timezone.now())
-    slots.filter(clinician=appointment.clinician, starts_at=starts_at,
-                 ends_at=starts_at + timedelta(minutes=appointment.duration_minutes), is_booked=False,
-                 appointment__isnull=True).update(is_booked=True, appointment=appointment, updated_at=timezone.now())
-    AppointmentProposal.objects.for_company(appointment.company).filter(appointment=appointment, status='pending').update(
-        status='superseded', responded_by=actor, responded_at=timezone.now(), updated_at=timezone.now())
+    appointment.save(update_fields=fields)
+    if moved or resized:
+        slots = AvailabilitySlot.objects.for_company(appointment.company)
+        slots.filter(appointment=appointment).update(appointment=None, is_booked=False, updated_at=timezone.now())
+        slots.filter(clinician=appointment.clinician, starts_at=starts_at, ends_at=starts_at + timedelta(minutes=length),
+                     is_booked=False, appointment__isnull=True).update(is_booked=True, appointment=appointment, updated_at=timezone.now())
+        # A patient's request for another time was for the booking as it was.
+        AppointmentProposal.objects.for_company(appointment.company).filter(appointment=appointment, status='pending').update(
+            status='superseded', responded_by=actor, responded_at=timezone.now(), updated_at=timezone.now())
+    when = lambda moment: f'{timezone.localtime(moment):%d %B %Y at %H:%M}'
+    detail = f'{previous[2]} moved from {when(previous[0])} to {when(starts_at)}' if moved else f'{previous[2]} changed'
+    if retyped or resized:
+        detail += f'; now {appointment.get_appointment_type_display()}, {length} minutes'
     PatientEvent.objects.create(company=appointment.company, patient=appointment.patient, category='appointment',
-        title='Appointment moved',
-        detail=f'{appointment.get_appointment_type_display()} moved from {timezone.localtime(previous):%d %B %Y at %H:%M} '
-               f'to {timezone.localtime(starts_at):%d %B %Y at %H:%M}.',
+        title='Appointment moved' if moved else 'Appointment changed', detail=f'{detail}.',
         source_type=appointment._meta.label_lower, source_id=str(appointment.pk))
-    record_audit(company=appointment.company, actor=actor, patient=appointment.patient, action='appointment.time_changed',
-                 target=appointment, request=request, metadata={'from': previous.isoformat(), 'to': starts_at.isoformat()})
-    notify('appointment_moved', appointment.pk, actor.pk)
+    metadata = {}
+    if moved:
+        metadata.update({'from': previous[0].isoformat(), 'to': starts_at.isoformat()})
+    if retyped:
+        metadata.update({'type_from': previous[1], 'type_to': kind})
+    if resized:
+        metadata.update({'minutes_from': previous[3], 'minutes_to': length})
+    record_audit(company=appointment.company, actor=actor, patient=appointment.patient,
+                 action='appointment.time_changed' if moved else 'appointment.changed', target=appointment, request=request,
+                 metadata=metadata)
+    notify('appointment_moved' if moved else 'appointment_changed', appointment.pk, actor.pk)
     return appointment
 
 
@@ -146,7 +177,7 @@ def change_appointment_status(*, appointment, actor, status, expected_updated, c
         raise PermissionDenied('This appointment is not available in the selected practice.')
     if patient_portal:
         if actor.pk != appointment.patient.user_id or status != 'cancelled':
-            raise PermissionDenied('Patients may only cancel their own upcoming booking.')
+            raise PermissionDenied('Patients may only cancel their own upcoming appointment.')
     else:
         membership = _membership(appointment.company, actor)
         if membership is None:
@@ -160,7 +191,7 @@ def change_appointment_status(*, appointment, actor, status, expected_updated, c
     if appointment.status == status:
         return appointment
     if appointment.status != 'booked' or appointment.updated_at.isoformat() != expected_updated:
-        raise ValidationError('Only an unchanged booked appointment may be updated. Rebooking is a new booking.')
+        raise ValidationError('Only an unchanged booked appointment may be updated. Rebooking is a new appointment.')
     if status in ('completed', 'no_show') and appointment.starts_at + timedelta(minutes=appointment.duration_minutes) > timezone.now():
         raise ValidationError('Attendance can only be recorded after the appointment has ended.')
     if patient_portal and appointment.starts_at <= timezone.now():

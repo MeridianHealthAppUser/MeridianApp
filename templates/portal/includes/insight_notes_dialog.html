@@ -1,0 +1,15 @@
+{% comment %}Notes on Insights and Cohorts (InsightNote): a change worth seeing on the charts, such as a price change,
+  shown as a marker at its month. Added and removed here.{% endcomment %}
+<dialog class="app-dialog" id="insight-notes" aria-labelledby="insight-notes-title">
+  <div class="app-dialog__body">
+    <h2 id="insight-notes-title">Notes</h2>
+    <p class="app-dialog__sub">Mark a change, such as a new price or an email series, so its effect can be seen. Each note shows as a marker at its month on the charts over time and on the cohort trends.</p>
+    <form method="post" action="{% url 'portal:insight-notes' %}" class="console-form insights-note-form">{% csrf_token %}<input type="hidden" name="workflow_context" value="{{ note_context }}"><input type="hidden" name="next" value="{{ next_url }}">
+      <div class="console-form__field"><label for="{{ note_form.on.id_for_label }}">Date</label>{{ note_form.on }}</div>
+      <div class="console-form__field"><label for="{{ note_form.label.id_for_label }}">Note</label>{{ note_form.label }}</div>
+      <button class="console-button console-button--primary" type="submit">Add note</button>
+    </form>
+    {% if notes %}<ul class="insights-note-list">{% for note in notes %}<li><span><time datetime="{{ note.on|date:'Y-m-d' }}">{{ note.on|date:'j M Y' }}</time> {{ note.label }}</span><form method="post" action="{% url 'portal:insight-note-delete' note.pk %}">{% csrf_token %}<input type="hidden" name="workflow_context" value="{{ note_context }}"><input type="hidden" name="next" value="{{ next_url }}"><button class="console-button console-button--secondary console-button--cancel" type="submit">Remove<span class="sr-only"> the note for {{ note.on|date:'j M Y' }}</span></button></form></li>{% endfor %}</ul>{% else %}<p class="insights-empty">No notes yet.</p>{% endif %}
+    <div class="app-dialog__actions"><button class="console-button console-button--secondary" type="button" data-dialog-close>Close</button></div>
+  </div>
+</dialog>

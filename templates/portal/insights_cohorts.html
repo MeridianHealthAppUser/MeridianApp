@@ -1,0 +1,59 @@
+{% extends 'portal/staff_page_base.html' %}{% load static workspace_ui insights_ui %}
+{% comment %}Cohorts (portal/insights_views.py CohortsView, care/insights.py cohorts): of everyone whose subscription started
+  in a month, the share still subscribed months on, in the three views from Dr Czech's notes (Nov 2026): the detailed
+  heatmap first (James, 20 Nov 2026), then the average per signup year, and one milestone across every month's cohort
+  with the practice's notes.{% endcomment %}
+{% block title %}Cohorts | Meridian{% endblock %}
+{% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/dialogs.css' %}?v=20261115a"><link rel="stylesheet" href="{% static 'css/insights.css' %}?v=20261120c"><script src="{% static 'js/dialogs.js' %}?v=20261115b" defer></script><script src="{% static 'js/insights_charts.js' %}?v=20261119b" defer></script><script src="{% static 'js/submit_on_change.js' %}?v=20261017a" defer></script>{% endblock %}
+{% block breadcrumbs %}{% breadcrumbs 'Insights' %}{% endblock %}
+{% block page_heading %}<header class="staff-page-header"><div><h1>Insights</h1><p>Cohort retention: of everyone who started a subscription in a month, how many are still subscribed months on.</p></div></header>
+<div class="insights-bar">{% page_tabs %}<div class="insights-tools">{% include 'portal/includes/insight_notes_button.html' %}</div></div>{% endblock %}
+{% block page_content %}
+<div class="insights">
+  <nav class="insights-segments" aria-label="Patients">
+    <a href="?{% if grouping == 'quarter' %}group=quarter{% endif %}"{% if not medicine %} aria-current="page"{% endif %}>All patients</a>
+    {% for key, label in medicines %}<a href="?medicine={{ key }}{% if grouping == 'quarter' %}&amp;group=quarter{% endif %}"{% if medicine == key %} aria-current="page"{% endif %}>{{ label }}</a>{% endfor %}
+  </nav>
+
+  {% if not data.rows %}
+    <section class="insights-card insights-card--wide"><p class="insights-empty">No subscriptions{% if medicine %} for {{ medicine_label }}{% endif %} yet. Cohorts appear once patients have subscribed.</p></section>
+  {% else %}
+  <section class="insights-kpis" aria-label="Average retention">
+    {% for months, share, reached in kpi_rows %}
+    <article class="insights-kpi"><h2>Still subscribed at month {{ months }}</h2><strong>{% if share is not None %}{{ share }}%{% else %}—{% endif %}</strong><p>{% if reached %}Of {{ reached|grouped }} subscriber{{ reached|pluralize }} who have reached month {{ months }}.{% else %}No cohort has reached month {{ months }} yet.{% endif %}</p></article>
+    {% endfor %}
+  </section>
+
+  <section class="insights-card insights-card--wide" aria-labelledby="heatmap-title">
+    <header class="insights-card__header insights-card__header--controls">
+      <div><h2 id="heatmap-title">Cohort heatmap</h2><p>The share of each {% if grouping == 'quarter' %}quarter’s{% else %}month’s{% endif %} new subscribers still subscribed, by months since they started. Read across a row to see a cohort shrink; down a column to see whether newer cohorts do better at the same stage.</p></div>
+      <form method="get" class="insights-heat-controls console-form">{% if medicine %}<input type="hidden" name="medicine" value="{{ medicine }}">{% endif %}
+        <div class="console-form__field"><label for="cohort-group">Group by</label><select id="cohort-group" name="group" data-submit-on-change><option value="month"{% if grouping == 'month' %} selected{% endif %}>Month</option><option value="quarter"{% if grouping == 'quarter' %} selected{% endif %}>Quarter</option></select></div>
+        {% if grouping == 'month' %}<div class="console-form__field"><label for="cohort-year">Cohorts</label><select id="cohort-year" name="year" data-submit-on-change><option value="">Last 12 months</option>{% for option in years %}<option value="{{ option }}"{% if option == year %} selected{% endif %}>{{ option }}</option>{% endfor %}</select></div>{% endif %}
+        <noscript><button class="console-button console-button--secondary" type="submit">Show</button></noscript>
+      </form>
+    </header>
+    <div class="insights-table-scroll" tabindex="0" role="region" aria-labelledby="heatmap-title">
+      <table class="insights-heatmap">
+        <thead><tr><th scope="col">Cohort</th><th scope="col">Signups</th>{% for month in horizon_range %}<th scope="col">M{{ month }}</th>{% endfor %}</tr></thead>
+        <tbody>{% for row in rows %}<tr><th scope="row">{% if row.label %}{{ row.label }}{% else %}{{ row.month|date:'M Y' }}{% endif %}</th><td class="insights-heatmap__size">{{ row.size }}</td>{% for value, step in row.cells %}{% if value is None %}<td class="insights-heatmap__empty"><span class="sr-only">Not reached yet</span></td>{% else %}<td class="insights-heat insights-heat--{{ step }}">{{ value|floatformat:0 }}%</td>{% endif %}{% endfor %}</tr>{% endfor %}</tbody>
+      </table>
+    </div>
+    <p class="insights-footnote">Still subscribed: paid up to at least that many months after starting. A cohort shows at a month once all of it has reached that month and a week has passed for the debit. Empty cells haven’t been reached yet; nothing is projected.</p>
+  </section>
+
+  <div class="insights-grid">
+    {% include 'portal/includes/insight_chart.html' with key='years' title='Average retention by signup year' sub='Each year’s monthly cohorts together, weighted by their size. A year is only shown as far as its cohorts have reached, so years compare at the same age. Where the curve levels off is your loyal core.' wide=True %}
+  </div>
+
+  <section class="insights-card insights-card--wide" aria-labelledby="milestones-title">
+    <header class="insights-card__header"><h2 id="milestones-title">Retention at a fixed month, for every monthly cohort</h2><p>Each point is one month’s new subscribers. A drop right after a note, such as a price change, shows its effect. If the line rises and falls in the same months every year, compare each month with the same month a year earlier.</p></header>
+    <div class="insights-multiples">
+      {% for months, key, title in milestones %}<div><h3>{{ title }}</h3>{% include 'portal/includes/insight_chart.html' with key=key title=title bare=True %}</div>{% endfor %}
+    </div>
+  </section>
+  {% endif %}
+</div>
+{% include 'portal/includes/insight_notes_dialog.html' %}
+{{ charts|json_script:"insight-charts" }}{{ chart_notes|json_script:"insight-chart-notes" }}
+{% endblock %}

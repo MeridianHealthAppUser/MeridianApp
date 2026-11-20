@@ -242,3 +242,30 @@ jobs:
       - key: DJANGO_SITE_URL
         value: '${APP_URL}'
         scope: RUN_TIME
+  - name: activity-reports
+    # Emails the monthly doctor activity report (care/activity_reports.py) on the 25th, for the 25th of last month to
+    # the 24th. Safe to run every day: each month's report goes once, and a missed day is caught up until month end.
+    kind: SCHEDULED
+    schedule:
+      cron: '0 7 * * *'
+      time_zone: Africa/Johannesburg
+    github:
+      repo: MeridianHealthAppUser/MeridianApp
+      branch: main
+      deploy_on_push: false
+    dockerfile_path: Dockerfile
+    source_dir: /
+    run_command: python manage.py send_activity_reports
+    envs:
+      - key: MULTI_PRACTICE_ENABLED
+        value: 'false'
+        scope: RUN_TIME
+      - key: SINGLE_PRACTICE_SLUG
+        value: meridian-health
+        scope: RUN_TIME
+      - key: DJANGO_DEBUG
+        value: 'false'
+        scope: RUN_TIME
+      - key: DJANGO_SITE_URL
+        value: '${APP_URL}'
+        scope: RUN_TIME

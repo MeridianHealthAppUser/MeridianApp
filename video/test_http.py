@@ -176,7 +176,8 @@ class VideoHTTPTests(AppointmentLifecycleFixture):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.context['video_config']['companyName'], self.company.name)
         self.assertEqual(self.client.session[ACTIVE_COMPANY_SESSION_KEY], self.beta.pk)
-        self.assertEqual(response.context['video_config']['returnUrl'], reverse('portal:staff-schedule'))
+        # Calendar, which opens on Appointments (James, 20 Nov 2026).
+        self.assertEqual(response.context['video_config']['returnUrl'], reverse('portal:schedule-appointments'))
         self.login(self.patient_user, self.beta)
         response = self.client.get(self.url())
         self.assertEqual(response.status_code, 200)

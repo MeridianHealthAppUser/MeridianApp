@@ -99,7 +99,7 @@ class OperationsTableExportTests(OperationsPortalFixture):
         self.assertEqual((query['view'], query['shipping_step']), (['medication'], ['all']))
         page = self.page('ops-history')
         self.assertContains(page, 'data-search-region="table-export"')
-        self.assertContains(page, 'title="Download Excel"')
+        self.assertContains(page, 'title="Download XLSX"')
         self.assertNotContains(page, 'data-search-region="history-export"')
         submitted = SimpleNamespace(GET=QueryDict('q=sema&weeks=-1&workflow_context=private&csrfmiddlewaretoken=private'))
         self.assertEqual(parse_qs(urlsplit(export_url('inventory', submitted)).query), {'q': ['sema']})

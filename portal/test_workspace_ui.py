@@ -116,8 +116,9 @@ class WorkspacePresentationTests(TestCase):
         self.login(self.super_admin)
         response = self.page('desktop-dashboard')
         self.assertContains(response, 'data-rail-navigation')
-        for group in ('Care', 'Purchasing'):
-            self.assertContains(response, f'data-navigation-group="{group.lower()}"')
+        # Purchasing's section is labelled Procurement (James, 20 Nov 2026); its key is still purchasing.
+        for key, group in (('care', 'Care'), ('purchasing', 'Procurement')):
+            self.assertContains(response, f'data-navigation-group="{key}"')
             self.assertContains(response, f'</svg>{group}</span>')
         # Inventory, Shipping, Leads and dropouts, Insights and Settings are one page each: the row opens it in one
         # click, and its tabs are listed for the menu to open beside it on hover.

@@ -2,7 +2,7 @@
 {% load static workspace_ui %}
 
 {% block title %}{{ active_company.name }} | Meridian Mobile{% endblock %}
-{% block extra_css %}<link rel="stylesheet" href="{% static 'css/console.css' %}?v=20261108a"><link rel="stylesheet" href="{% static 'css/person_tags.css' %}?v=20261104a">{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{% static 'css/console.css' %}?v=20261120a"><link rel="stylesheet" href="{% static 'css/person_tags.css' %}?v=20261104a">{% endblock %}
 {% block content %}
   <div class="meridian-console console-mobile workspace-overview">
     <header class="mobile-console__top">
@@ -50,7 +50,7 @@
             <h2 id="mobile-appointments-heading">Upcoming appointments</h2>
             <p>{% if is_patient_portal %}Your scheduled care{% else %}Your practice schedule{% endif %}</p>
           </div>
-          {% if is_patient_portal %}<a class="console-button console-button--quiet" href="#schedule">All</a>{% else %}<a class="console-button console-button--quiet" href="{% url 'portal:staff-schedule' %}">All</a>{% endif %}
+          {% if is_patient_portal %}<a class="console-button console-button--quiet" href="#schedule">All</a>{% else %}<a class="console-button console-button--quiet" href="{% url 'portal:schedule-appointments' %}">All</a>{% endif %}
         </header>
         <div class="console-card__body">
           <ul class="console-list">
@@ -64,7 +64,7 @@
                 <span class="console-status console-status--{{ appointment.status }}">{{ appointment.get_status_display }}</span>
               </li>
             {% empty %}
-              <li class="console-empty"><p>{% if is_patient_portal %}You have no upcoming appointments. Your next booking will appear here.{% elif active_membership.role == 'doctor' %}You have no upcoming appointments.{% else %}There are no upcoming appointments yet.{% endif %}</p></li>
+              <li class="console-empty"><p>{% if is_patient_portal %}You have no upcoming appointments. Your next appointment will appear here.{% elif active_membership.role == 'doctor' %}You have no upcoming appointments.{% else %}There are no upcoming appointments yet.{% endif %}</p></li>
             {% endfor %}
           </ul>
         </div>

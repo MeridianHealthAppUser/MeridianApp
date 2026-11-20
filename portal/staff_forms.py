@@ -38,6 +38,8 @@ class PatientDirectoryFilterForm(forms.Form):
 
 
 class TaskFilterForm(forms.Form):
+    # The search at the top right of the table (James, 20 Nov 2026): a task's title or note, its patient, or who has it.
+    q = forms.CharField(label='Search tasks', required=False, max_length=100)
     status = forms.ChoiceField(
         required=False, initial='open',
         choices=(('open', 'Open'), ('done', 'Completed'), ('cancelled', 'Cancelled'), ('all', 'Everything')),

@@ -91,6 +91,62 @@ class ClinicalPortalTests(TestCase):
         data.update(overrides)
         return data
 
+    def test_blood_tests_have_a_search_and_filters(self):
+        # James, 20 Nov 2026: the standard tools at the top right of the table: a search, and Filters for Status,
+        # Patient, Doctor and a Required by range.
+        today = timezone.localdate()
+        soon = self.lab(panel_name='HbA1c', due_on=today + timedelta(days=3))
+        later = self.lab(patient=self.other_patient, panel_name='Thyroid TSH', due_on=today + timedelta(days=30))
+        self.login(self.super_admin)
+        url = reverse('portal:clinical-labs')
+        page = self.client.get(url)
+        self.assertContains(page, 'data-conversation-search')
+        self.assertContains(page, 'aria-label="Filter blood tests"')
+        self.assertNotContains(page, 'Find a request')
+
+        def shown(**query):
+            return [lab.pk for lab in self.client.get(url, query).context['lab_requests']]
+
+        self.assertEqual(shown(q='thyroid'), [later.pk])
+        self.assertEqual(shown(q='Beth'), [later.pk])
+        self.assertEqual(shown(patient=self.patient.pk), [soon.pk])
+        self.assertEqual(set(shown(doctor=self.doctor.pk)), {soon.pk, later.pk})
+        self.assertEqual(shown(doctor=self.colleague.pk), [])
+        self.assertEqual(shown(due_from=(today + timedelta(days=1)).isoformat(), due_to=(today + timedelta(days=10)).isoformat()), [soon.pk])
+        self.assertEqual(shown(due_from=(today + timedelta(days=10)).isoformat()), [later.pk])
+        self.assertEqual(shown(status='reviewed'), [])
+        self.assertEqual(set(shown(status='all')), {soon.pk, later.pk})
+        # One patient picked (as the patient page's link does) offers Request blood tests for them.
+        self.assertEqual(self.client.get(url, {'patient': self.patient.pk}).context['selected_patient'], self.patient)
+        self.assertContains(self.client.get(url, {'due_from': (today + timedelta(days=9)).isoformat(),
+                                                  'due_to': today.isoformat()}), 'The end date must be on or after the start date.')
+
+    def test_consultations_have_a_search_and_filters(self):
+        # James, 20 Nov 2026: a search, and Filters for Status, Patient, Clinician and the date (one day or a range).
+        earlier = self.encounter(sign=True, occurred_at=floor_quarter_hour(timezone.now() - timedelta(days=10)))
+        latest = self.encounter(patient=self.other_patient, sign=True)
+        self.login(self.super_admin)
+        url = reverse('portal:clinical-consultations')
+        page = self.client.get(url)
+        self.assertContains(page, 'data-conversation-search')
+        self.assertContains(page, 'aria-label="Filter consultations"')
+        self.assertContains(page, 'Leave empty for just the one day.')
+        self.assertNotContains(page, 'Find a consultation')
+
+        def shown(**query):
+            return [encounter.pk for encounter in self.client.get(url, query).context['consultations']]
+
+        day = timezone.localtime(earlier.occurred_at).date()
+        # One date is that day, whichever field it's in; two are a range.
+        self.assertEqual(shown(date_from=day.isoformat()), [earlier.pk])
+        self.assertEqual(shown(date_to=day.isoformat()), [earlier.pk])
+        self.assertEqual(shown(date_from=day.isoformat(), date_to=timezone.localdate().isoformat()), [latest.pk, earlier.pk])
+        self.assertEqual(shown(patient=self.other_patient.pk), [latest.pk])
+        self.assertEqual(shown(clinician=self.doctor.pk), [latest.pk, earlier.pk])
+        self.assertEqual(shown(clinician=self.colleague.pk), [])
+        self.assertEqual(shown(q='Beth'), [latest.pk])
+        self.assertEqual(shown(status='draft'), [])
+
     def test_anonymous_clinical_and_patient_lab_pages_require_login(self):
         for route in ('clinical-consultations', 'clinical-labs', 'patient-labs'):
             url = reverse(f'portal:{route}')

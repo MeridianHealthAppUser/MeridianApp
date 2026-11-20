@@ -1,9 +1,11 @@
 """Separate authorisation and local-plan pages; no billing or email actions."""
 
+import hashlib
 from urllib.parse import urlencode
 
 from django import forms
 from django.contrib import messages
+from django.contrib.auth import get_user_model
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.exceptions import ValidationError
 from django.core.paginator import Paginator
@@ -16,19 +18,20 @@ from django.views import View
 from django.views.decorators.cache import never_cache
 
 from care.followups import request_help
-from care.models import AuditEvent, PatientSubscription, Shipment, TreatmentAuthorization
+from care.models import AuditEvent, MedicationProduct, PatientSubscription, Shipment, TreatmentAuthorization
 from care.treatment import (
     authorization_is_current, change_authorization_status, change_subscription_status, current_authorizations,
     create_authorization, dose_in_effect, enroll_local_subscription, other_treatments, subscription_hold_reason,
 )
-from .clinical_views import StaffClinicalView, _error, _listing
-from .filter_menus import TickedChoiceField, list_tools, ticked_sections, without_all
+from .clinical_views import StaffClinicalView, _date_field, _error
+from .filter_menus import TickedChoiceField, choice_section, fields_section, list_tools, ticked_ids, ticked_sections, without_all
 from .patient_views import patient_page_context
 from .treatment_forms import (
     AuthorizationForm, CancelSubscriptionForm, ConfirmTreatmentForm, EnrollmentForm, HelpRequestForm, make_treatment_context,
     validate_treatment_context,
 )
 from .views import PatientPortalRequiredMixin, StaffCompanyRequiredMixin
+from practices.models import Patient
 from .patient_action_context import patient_action_context, workspace_redirect
 
 
@@ -66,10 +69,96 @@ class AuthorizationListView(StaffClinicalView):
     clinician_redirect_message = 'Treatment authorisations are on each patient’s record, under Treatment.'
 
     def get(self, request):
-        listing = _listing(request, self.company, _authorizations(self.company), TreatmentAuthorization.Status.choices)
-        patient = listing['filter_form'].cleaned_data.get('patient') if listing['filter_form'].is_valid() else None
+        """The table with the standard tools at its top right (James, 20 Nov 2026): a search for patient, medicine or
+        doctor, and Filters for Status, Patient, Doctor, Product, Maximum dose and Valid dates. ?patient= links from a
+        patient's page still pick that patient."""
+        data = without_all(request.GET, 'status')
+        form, records, ticked = authorisation_listing(data, self.company)
+        page = Paginator(records, 20).get_page(request.GET.get('page'))
+        query = request.GET.copy()
+        query.pop('page', None)
+        count = page.paginator.count
+        everyone = _authorizations(self.company)
+        people = Patient.objects.for_company(self.company).filter(pk__in=everyone.values('patient')).order_by('last_name', 'first_name', 'pk')
+        doctors = get_user_model().objects.filter(pk__in=everyone.values('prescribed_by')).order_by('first_name', 'last_name', 'pk')
+        products = MedicationProduct.objects.for_company(self.company).filter(pk__in=everyone.values('product')).order_by('name', 'strength', 'pk')
+        # Authorise treatment needs one patient, picked in Filters.
+        selected = people.filter(pk=ticked['patient'][0]).first() if len(ticked['patient']) == 1 else None
+        dated = bool(data.get('valid_from') or data.get('valid_to'))
         return render(request, 'portal/treatment_authorisations.html', self.context(
-            **listing, selected_patient=patient, other_treatments_offered=other_treatments(self.company).exists()))
+            filter_form=form, page_obj=page, is_paginated=page.has_other_pages(), pagination_query=query.urlencode(),
+            selected_patient=selected, other_treatments_offered=other_treatments(self.company).exists(),
+            count_label=f'{count} authorisation{"" if count == 1 else "s"}',
+            **list_tools(action=reverse('portal:treatment-authorisations'), data=request.GET, form=form,
+                         label='Filter authorisations', placeholder='Patient, medicine or doctor', sections=[
+                             *ticked_sections(form, data, ('status',)),
+                             choice_section('patient', 'Patient', [(person.pk, str(person)) for person in people],
+                                            ticked['patient'], icon='person'),
+                             choice_section('doctor', 'Doctor', [(person.pk, person.full_name) for person in doctors],
+                                            ticked['doctor'], icon='person'),
+                             choice_section('product', 'Product', [(item.pk, f'{item.name} {item.strength}'.strip()) for item in products],
+                                            ticked['product'], icon='type'),
+                             *ticked_sections(form, data, ('dose',), icons={'dose': 'list'}),
+                             fields_section('valid', 'Valid dates', [form['valid_from'], form['valid_to']], count=int(dated)),
+                         ])))
+
+
+def dose_key(label):
+    """A maximum dose as a Filters choice: it's free text and may hold a comma, which Filters uses between choices."""
+    return hashlib.sha1(label.encode()).hexdigest()[:10]
+
+
+class AuthorisationFilterForm(forms.Form):
+    """Authorisations: a search at the top right of the table, with Filters before it. Patient, Doctor and Product
+    are ticked ids; Maximum dose ticks the practice's dose labels."""
+
+    q = forms.CharField(label='Search authorisations', required=False, max_length=100)
+    status = TickedChoiceField(label='Status', choices=TreatmentAuthorization.Status.choices)
+    dose = TickedChoiceField(label='Maximum dose')
+    valid_from = _date_field('From')
+    valid_to = _date_field('To', help_text='Authorisations valid on any day from one date to the other.')
+
+    def __init__(self, *args, company, **kwargs):
+        super().__init__(*args, **kwargs)
+        labels = sorted(set(_authorizations(company).values_list('max_dose', flat=True)), key=str.casefold)
+        self.fields['dose'].choices = [(dose_key(label), label) for label in labels]
+
+    def clean(self):
+        data = super().clean()
+        if data.get('valid_from') and data.get('valid_to') and data['valid_from'] > data['valid_to']:
+            self.add_error('valid_to', 'The end date must be on or after the start date.')
+        return data
+
+
+def authorisation_listing(data, company):
+    """The filtered authorisations, and the ids ticked in Filters' Patient, Doctor and Product (any that aren't one
+    are ignored)."""
+    form = AuthorisationFilterForm(data, company=company)
+    records = _authorizations(company)
+    ticked = {name: ticked_ids(data.getlist(name)) for name in ('patient', 'doctor', 'product')}
+    if not form.is_valid():
+        return form, records.none(), ticked
+    for term in form.cleaned_data['q'].split():
+        records = records.filter(Q(patient__first_name__icontains=term) | Q(patient__last_name__icontains=term)
+                                 | Q(product__name__icontains=term) | Q(prescribed_by__first_name__icontains=term)
+                                 | Q(prescribed_by__last_name__icontains=term))
+    if form.cleaned_data['status']:
+        records = records.filter(status__in=form.cleaned_data['status'])
+    if ticked['patient']:
+        records = records.filter(patient_id__in=ticked['patient'])
+    if ticked['doctor']:
+        records = records.filter(prescribed_by_id__in=ticked['doctor'])
+    if ticked['product']:
+        records = records.filter(product_id__in=ticked['product'])
+    if form.cleaned_data['dose']:
+        labels = {key: label for key, label in form.fields['dose'].choices}
+        records = records.filter(max_dose__in=[labels[key] for key in form.cleaned_data['dose']])
+    # Valid on any day in the range: it starts by the range's end and expires on or after its start.
+    if form.cleaned_data['valid_from']:
+        records = records.filter(expires_on__gte=form.cleaned_data['valid_from'])
+    if form.cleaned_data['valid_to']:
+        records = records.filter(starts_on__lte=form.cleaned_data['valid_to'])
+    return form, records, ticked
 
 
 class AuthorizationEditorView(StaffClinicalView):

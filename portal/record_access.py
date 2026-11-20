@@ -8,7 +8,7 @@ Clinicians (the Clinician role) are limited by their link to the patient:
 - READ: a clinician assigned to the patient before, or whose cover has ended, reads the record only.
 - None: anyone else can't open it.
 
-Practice administrators don't open patient records at all (22 Oct 2026): they work from Calendar & Bookings,
+Practice administrators don't open patient records at all (22 Oct 2026): they work from Calendar,
 Messages, Operations and Administration. Super Admins are not limited. Conversations stay open to the people in
 them either way: a past clinician can still read and reply in a conversation they are part of.
 """

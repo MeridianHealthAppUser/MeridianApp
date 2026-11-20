@@ -1,0 +1,15 @@
+{% extends 'emails/base.txt' %}{% block content %}Hello,
+
+Here is each doctor’s activity for {{ period }}, at the practice’s rates.
+{% for doctor in doctors %}
+{{ doctor.doctor }}
+{% for line in doctor.lines %}- {{ line.label }}: {{ line.count }} × {{ line.rate_text }} = {{ line.amount_text }}{% if line.completed is not None %} ({{ line.completed }} marked completed){% endif %}
+{% endfor %}Total payout: {{ doctor.total_text }}
+{% empty %}
+No clinicians are set up in the practice.
+{% endfor %}
+Total for all doctors: {{ total }}
+
+A consult counts when it took place, unless it was cancelled or a no-show. Follow-up consults include six-month reviews and ad-hoc consults. Messages answered are the doctor’s messages to patients; blood results reviewed are blood tests they marked reviewed. The same figures are attached as a spreadsheet.
+
+Open the report: {{ url }}{% endblock %}

@@ -40,10 +40,12 @@
       {% if month_to_date %}<section class="account-profile__card" aria-labelledby="profile-month-heading">
         <div class="account-profile__card-heading"><h2 id="profile-month-heading">Your month to date</h2><span class="account-profile__role">Provisional</span></div>
         <dl class="account-profile__facts account-profile__details">
-          <div><dt>First consultations</dt><dd>{{ month_to_date.first }}</dd></div>
-          <div><dt>Review consultations</dt><dd>{{ month_to_date.review }}</dd></div>
+          {# Since the 25th, as the monthly activity report counts it, at the practice's rates. #}
+          <div><dt>Since</dt><dd>{{ month_to_date.since|date:"j F" }}</dd></div>
+          <div><dt>New consults</dt><dd>{{ month_to_date.first }}</dd></div>
+          <div><dt>Follow-up consults</dt><dd>{{ month_to_date.follow_up }}</dd></div>
           <div><dt>Messages answered</dt><dd>{{ month_to_date.messages }}</dd></div>
-          {# This month's activity at the rates on the latest approved statement. #}
+          <div><dt>Blood results reviewed</dt><dd>{{ month_to_date.reviews }}</dd></div>
           <div class="account-profile__total"><dt>Provisional total</dt><dd>{% if month_to_date.total %}{{ month_to_date.total }}{% else %}<span>No rates on file yet</span>{% endif %}</dd></div>
         </dl>
       </section>{% endif %}

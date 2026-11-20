@@ -337,11 +337,12 @@ class ReportAnalyticsTests(ReportingFixture):
 
 
 class ActivityStatementTests(ReportingFixture):
-    def test_counts_only_completed_owned_appointments_and_doctor_messages_with_explicit_decimal_rates(self):
+    def test_counts_consults_that_took_place_owned_messages_and_reviews_with_explicit_decimal_rates(self):
         self.appointment()
         self.appointment(appointment_type='review')
         self.appointment(appointment_type='follow_up')
         self.appointment(appointment_type='ad_hoc')
+        # A past booking not marked completed still took place; cancelled and no-show ones didn't.
         for status in ('booked', 'cancelled', 'no_show'):
             self.appointment(status=status)
         self.appointment(clinician=self.other_doctor)
@@ -351,8 +352,10 @@ class ActivityStatementTests(ReportingFixture):
         self.message(sender=self.patient_user)
         self.message(company=self.beta, patient=self.beta_patient)
         statement = self.statement()
-        self.assertEqual(statement.counts, {'initial': 1, 'review': 1, 'follow_up': 2, 'messages': 2})
-        self.assertEqual(statement.amount, Decimal('204.00'))
+        self.assertEqual(statement.counts, {'initial': 2, 'follow_up': 3, 'messages': 2, 'review': 0,
+                                            'initial_completed': 1, 'follow_up_completed': 3})
+        # 2 × 100 + 3 × 25 + 2 × 2
+        self.assertEqual(statement.amount, Decimal('279.00'))
         self.assertEqual(statement.rates, RATES)
         self.assertFalse(Payment.objects.exists())
         self.assertEqual(len(mail.outbox), 0)
@@ -397,7 +400,8 @@ class ActivityStatementTests(ReportingFixture):
         refreshed = refresh_activity_statement(statement=statement, actor=self.super_admin,
                                                 expected_updated=statement.updated_at.isoformat())
         self.assertEqual(refreshed.rates, RATES)
-        self.assertEqual(refreshed.amount, Decimal('150.00'))
+        # A six-month review is a follow-up consult: 100 + 25.
+        self.assertEqual(refreshed.amount, Decimal('125.00'))
         approved = approve_activity_statement(statement=refreshed, actor=self.super_admin,
             expected_updated=refreshed.updated_at.isoformat(), confirm=True)
         self.assertIsNotNone(approved.approved_at)

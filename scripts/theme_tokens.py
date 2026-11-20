@@ -31,6 +31,12 @@ COMMENT = re.compile(r'/\*.*?\*/', re.S)
 
 # Dark values chosen by hand, by token name.
 DARK_OVERRIDES = {
+    # Insights' charts (insights.css): the series colours' own dark steps (a colour-blind-checked palette), and one blue
+    # whose steps run the other way in the dark, so older years and lower shares stay quiet and the latest stand out.
+    '2a78d6': '#3987e5', 'eb6834': '#d95926', '1baf7a': '#199e70', 'eda100': '#c98500',
+    'e87ba4': '#d55181', '008300': '#0ca30c', '6250d6': '#9085e9', 'e34948': '#e66767',
+    '86b6ef': '#1c5cab', '5598e7': '#2a78d6', '256abf': '#5598e7', '104281': '#9ec5f4',
+    'cde2fb': '#0d366b', 'b7d3f6': '#104281', '9ec5f4': '#184f95', '6da7ec': '#256abf', '3987e5': '#3987e5', '184f95': '#86b6ef',
     'ffffff': '#172b36',   # cards, panels and inputs: the patient pages' dark surface
     'f4f8f9': '#101e27',   # the page behind them
     'f5f8f9': '#101e27',

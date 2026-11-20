@@ -1,0 +1,18 @@
+{% comment %}Cancel appointment, from a staff list (Calendar's Appointments and Day view, a record's Appointments):
+  the reason is shown to the patient and sent in their cancellation email. Once cancelled it comes back to the list as
+  it was (return_to); a mistake opens the appointment's page with its status dialog. show_patient names the patient
+  first. Needs appointment.cancel_context.{% endcomment %}
+<dialog class="app-dialog" id="cancel-appointment-{{ appointment.pk }}" aria-labelledby="cancel-appointment-{{ appointment.pk }}-title">
+  <div class="app-dialog__body">
+    <h2 id="cancel-appointment-{{ appointment.pk }}-title">Cancel appointment</h2>
+    <p class="app-dialog__sub">{% if show_patient %}{{ appointment.patient }} · {% endif %}{{ appointment.get_appointment_type_display }} with {{ appointment.clinician.titled_name }} on {{ appointment.starts_at|date:'D j M Y, H:i' }}.</p>
+    <form class="console-form" method="post" action="{% url 'portal:appointment-detail' appointment.pk %}">{% csrf_token %}<input type="hidden" name="workflow_context" value="{{ appointment.cancel_context }}"><input type="hidden" name="next" value="{{ return_to }}"><input type="hidden" name="status" value="cancelled">
+      <div class="console-form__field">
+        <label for="cancel_{{ appointment.pk }}_reason">Reason</label>
+        <textarea id="cancel_{{ appointment.pk }}_reason" name="reason" rows="3" maxlength="500" required aria-describedby="cancel_{{ appointment.pk }}_reason_help"></textarea>
+        <span class="helptext" id="cancel_{{ appointment.pk }}_reason_help">{{ appointment.patient.first_name }} sees this in the app and in their cancellation email.{% if appointment.clinician_id != request.user.pk %} {{ appointment.clinician.titled_name }} is emailed too.{% endif %}</span>
+      </div>
+      <div class="app-dialog__actions"><button class="console-button console-button--secondary" type="button" data-dialog-close>Back</button><button class="console-button console-button--primary" type="submit">Cancel appointment</button></div>
+    </form>
+  </div>
+</dialog>

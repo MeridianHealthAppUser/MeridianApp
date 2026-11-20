@@ -1,0 +1,30 @@
+{% extends 'portal/staff_page_base.html' %}{% load static workspace_ui %}
+{% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/backoffice.css' %}?v=20261120c">{% endblock %}
+{% block breadcrumbs %}{% breadcrumbs 'Activity statements' 'portal:activity-statements' 'Monthly report' %}{% endblock %}
+{% block page_heading %}<header class="staff-page-header"><div><h1>Monthly activity report</h1><p>{{ period }} · {{ company.name }}</p></div><a class="console-button console-button--secondary" data-no-loader href="{% url 'portal:activity-report-export' report.pk %}">Download CSV</a></header>{% endblock %}
+{% block page_content %}<div class="backoffice">
+  {# The report as it was emailed (care/activity_reports.py), at the rates it used. #}
+  <section class="staff-page-card" aria-labelledby="activity-report-heading">
+    <header class="staff-page-card__header staff-list-header">
+      <div><h2 id="activity-report-heading">Each doctor’s activity and payout</h2>
+        <p>{% if report.sent_at %}Sent to {{ report.sent_to }} on {{ report.sent_at|date:'j F Y, H:i' }}{% if report.created_by %} by {{ report.created_by.full_name }}{% else %}, automatically{% endif %}.{% else %}Not sent.{% endif %}</p>
+        <p>{{ rates|join:' · ' }}</p>
+      </div>
+      <span class="staff-page-card__count">Total {{ total }}</span>
+    </header>
+    <div class="backoffice-table-wrap"><table class="staff-phone-cards">
+      <thead><tr><th scope="col">Doctor</th>{% for line in totals %}<th scope="col">{{ line.label }}</th>{% endfor %}<th scope="col">Total payout</th></tr></thead>
+      <tbody>{% for doctor in doctors %}<tr>
+        <td data-label="Doctor"><strong>{{ doctor.doctor }}</strong></td>
+        {% for line in doctor.lines %}<td data-label="{{ line.label }}">{{ line.count }} × {{ line.rate_text }}<br><strong>{{ line.amount_text }}</strong>{% if line.completed is not None %}<br><small class="backoffice-muted">{{ line.completed }} marked completed</small>{% endif %}</td>{% endfor %}
+        <td data-label="Total payout"><strong>{{ doctor.total_text }}</strong></td>
+      </tr>{% empty %}<tr><td colspan="6">No clinicians were set up in the practice.</td></tr>{% endfor %}
+      {% if doctors|length > 1 %}<tr>
+        <td data-label="Doctor"><strong>All doctors</strong></td>
+        {% for line in totals %}<td data-label="{{ line.label }}">{{ line.count }}<br><strong>{{ line.amount_text }}</strong>{% if line.completed is not None %}<br><small class="backoffice-muted">{{ line.completed }} marked completed</small>{% endif %}</td>{% endfor %}
+        <td data-label="Total payout"><strong>{{ total }}</strong></td>
+      </tr>{% endif %}</tbody>
+    </table></div>
+    <div class="backoffice-panel"><p class="backoffice-muted">A consult counts when it took place, unless it was cancelled or a no-show, whether or not it was marked completed. Follow-up consults include six-month reviews and ad-hoc consults. Messages answered are the doctor’s messages to patients; blood results reviewed are blood tests they marked reviewed. Demo patients never count. Nothing is paid from here.</p></div>
+  </section>
+</div>{% endblock %}

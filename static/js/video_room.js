@@ -162,7 +162,7 @@
         signal: this.abortIce.signal,
       });
       if (!response.ok || response.redirected || !response.headers.get('Content-Type')?.includes('application/json')) {
-        const error = new Error(response.status === 403 ? 'Your appointment access has changed or its joining window has closed. Return to appointments to check the booking.' : 'Connection settings could not be loaded. Return to your appointment and try again.');
+        const error = new Error(response.status === 403 ? 'Your appointment access has changed or its joining window has closed. Return to appointments to check the appointment.' : 'Connection settings could not be loaded. Return to your appointment and try again.');
         error.videoAccessFailure = true;
         throw error;
       }

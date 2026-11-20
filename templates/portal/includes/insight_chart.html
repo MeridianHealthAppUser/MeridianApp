@@ -1,0 +1,5 @@
+{% comment %}One chart on Insights or Cohorts (static/js/insights_charts.js draws it from the page's insight-charts specs):
+  its title, a line on what it counts, the chart, and its numbers as a table. bare: no card or title of its own.{% endcomment %}{% if bare %}<div class="insight-chart" data-insight-chart="{{ key }}" data-title="{{ title }}"><div class="insight-chart__legend"></div><div class="insight-chart__plot"></div><details class="insight-chart__table"><summary>Show as a table</summary><div></div></details></div>{% else %}<section class="insights-card{% if wide %} insights-card--wide{% endif %}" aria-labelledby="chart-{{ key }}-title">
+  <header class="insights-card__header"><h2 id="chart-{{ key }}-title">{{ title }}</h2>{% if sub %}<p>{{ sub }}</p>{% endif %}</header>
+  <div class="insight-chart" data-insight-chart="{{ key }}" data-title="{{ title }}"><div class="insight-chart__legend"></div><div class="insight-chart__plot"></div><details class="insight-chart__table"><summary>Show as a table</summary><div></div></details></div>
+</section>{% endif %}

@@ -14,13 +14,14 @@
     {# Roboto, Meridian's typeface, on every page. #}
     <link rel="preload" href="{% static 'fonts/roboto/roboto-latin.woff2' %}" as="font" type="font/woff2" crossorigin>
     <link rel="stylesheet" href="{% static 'css/fonts.css' %}?v=20261007">
-    <link rel="stylesheet" href="{% static 'css/theme.css' %}?v=20261106a">
+    <link rel="stylesheet" href="{% static 'css/theme.css' %}?v=20261119a">
     <link rel="stylesheet" href="{% static 'css/base.css' %}?v=20261104a">
     {% if page_navigation_config %}<link rel="stylesheet" href="{% static 'css/page_navigation.css' %}?v=20261104a"><script src="{% static 'js/page_lifecycle.js' %}" defer></script>{% endif %}
     {% block extra_css %}{% endblock %}
-    {# Every dropdown's list, after each page's own form styles (static/js/select_menu.js). #}
+    {# Every dropdown's list and every date field's calendar, after each page's own form styles (static/js/select_menu.js, date_picker.js). #}
     <link rel="stylesheet" href="{% static 'css/select_menu.css' %}?v=20261119a"><script src="{% static 'js/select_menu.js' %}?v=20261119a" defer></script>
-    {% if is_workspace_page %}<link rel="stylesheet" href="{% static 'css/workspace_polish.css' %}?v=20261106a"><script src="{% static 'js/workspace_polish.js' %}?v=20261105a" defer></script>{% endif %}
+    <link rel="stylesheet" href="{% static 'css/date_picker.css' %}?v=20261120a"><script src="{% static 'js/date_picker.js' %}?v=20261120a" defer></script>
+    {% if is_workspace_page %}<link rel="stylesheet" href="{% static 'css/workspace_polish.css' %}?v=20261106a"><script src="{% static 'js/workspace_polish.js' %}?v=20261119a" defer></script>{% endif %}
     {% if user.is_authenticated %}<link rel="stylesheet" href="{% static 'css/account_menu.css' %}?v=20261117a"><script src="{% static 'js/account_menu.js' %}?v=20261117a" defer></script>{% endif %}
     <script src="{% static 'js/theme.js' %}?v=20261113a" defer></script>
     {% if active_membership.role == 'super_admin' and not is_patient_portal %}<link rel="stylesheet" href="{% static 'css/demo_data.css' %}?v=20261104a"><script src="{% static 'js/demo_data.js' %}?v=20261103a" defer></script>{% endif %}
@@ -34,8 +35,8 @@
     {# Most patients use a phone: the portal's phone layout (bottom sheets, list then conversation), after everything it adjusts. #}
     {% if is_patient_portal %}<link rel="stylesheet" href="{% static 'css/patient_mobile.css' %}?v=20261115d">{% endif %}
     {# Staff use phones too: the same phone layout for staff pages (bottom sheets, list then conversation, card tables). #}
-    {% if is_workspace_page and not is_patient_portal %}<link rel="stylesheet" href="{% static 'css/staff_mobile.css' %}?v=20261115a">{% endif %}
-    {% if page_navigation_config %}<script src="{% static 'js/app_navigation.js' %}" defer></script>{% endif %}
+    {% if is_workspace_page and not is_patient_portal %}<link rel="stylesheet" href="{% static 'css/staff_mobile.css' %}?v=20261120e">{% endif %}
+    {% if page_navigation_config %}<script src="{% static 'js/app_navigation.js' %}?v=20261120c" defer></script>{% endif %}
   </head>
   <body{% if is_workspace_page or is_patient_portal %} class="{% if is_workspace_page %}workspace-page{% endif %}{% if is_patient_portal %}{% if is_workspace_page %} {% endif %}patient-app{% endif %}"{% endif %}>
     {% if page_navigation_config %}{{ page_navigation_config|json_script:"page-navigation-config" }}{% endif %}

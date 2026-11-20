@@ -180,10 +180,18 @@
         const candidate = absolute(link.href);
         if (!candidate) return;
         link.classList.remove('is-active'); link.removeAttribute('aria-current');
-        const prefix = candidate.pathname.endsWith('/') ? candidate.pathname : `${candidate.pathname}/`;
-        if ((url.pathname === candidate.pathname || url.pathname.startsWith(prefix)) && candidate.pathname.length > length) {
-          best = link; length = candidate.pathname.length;
-        }
+        // A menu entry that opens one tab of a section stands for the section's other pages too: Calendar opens
+        // Appointments (/schedule/appointments/) and is still current on the Calendar tab (/schedule/). Of two entries
+        // for the same page, the one with the page's query wins: Working hours (/schedule/?section=availability) over
+        // Calendar (/schedule/).
+        const paths = [candidate.pathname, ...(link.dataset.navigationMatch || '').split(' ').filter(path => path.startsWith('/'))];
+        paths.forEach(path => {
+          const prefix = path.endsWith('/') ? path : `${path}/`;
+          const score = path.length + (path === candidate.pathname && candidate.search && candidate.search === url.search ? 0.5 : 0);
+          if ((url.pathname === path || url.pathname.startsWith(prefix)) && score > length) {
+            best = link; length = score;
+          }
+        });
       });
       if (best) { best.classList.add('is-active'); best.setAttribute('aria-current', 'page'); }
     });

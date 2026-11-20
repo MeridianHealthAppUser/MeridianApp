@@ -403,8 +403,8 @@ class StaffPagesTests(TestCase):
         self.assertEqual(self.page('staff-schedule', date=self.day.isoformat()).context['day_diaries'], [])
 
     def test_primary_navigation_routes_to_real_sections_on_desktop_and_mobile(self):
-        # Patient Records & Messages opens on its first tab, All patients.
-        expected = {reverse(f'portal:{name}') for name in ('staff-tasks', 'staff-schedule', 'patient-list')}
+        # Patient Records & Messages opens on its first tab, All patients; Calendar on its first, Appointments.
+        expected = {reverse(f'portal:{name}') for name in ('staff-tasks', 'schedule-appointments', 'patient-list')}
         self.login()
         # A clinician's mobile bar holds the same flat menu as the sidebar; there are no section pages.
         mobile = StaffNavigationParser()
@@ -429,7 +429,7 @@ class StaffPagesTests(TestCase):
         self.assertEqual(response.status_code, 200)
         parser = StaffNavigationParser()
         parser.feed(response.content.decode())
-        expected = {reverse(f'portal:{name}') for name in ('staff-tasks', 'staff-schedule', 'patient-list')}
+        expected = {reverse(f'portal:{name}') for name in ('staff-tasks', 'schedule-appointments', 'patient-list')}
         self.assertTrue(expected.issubset({href for href, label in parser.links}))
         # An open record highlights Patient Records & Messages rather than adding its own menu item.
         self.assertIn(reverse('portal:patient-list'), parser.active_links)

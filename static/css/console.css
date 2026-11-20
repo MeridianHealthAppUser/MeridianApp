@@ -887,6 +887,13 @@
   margin: 0;
 }
 .staff-page-header > div > p:last-child { color: var(--console-muted); font-size: .9rem; line-height: 1.5; margin: .6rem 0 0; }
+/* A page's actions sit at the top right, level with its title, whether or not a description follows the title
+   (James, 20 Nov 2026): they used to drop to the description's line, onto the card below. Phones stack them under
+   the title as before. */
+@media (min-width: 52.001rem) {
+  .staff-page-header { align-items: flex-start; }
+  .staff-page-header > :not(:first-child) { margin-top: max(0rem, calc((1.12 * clamp(1.9rem, 2.65vw, 2.65rem) - 2.65rem) / 2)); }
+}
 .staff-metrics { display: grid; gap: .75rem; margin-bottom: 1rem; }
 .staff-metrics--three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .staff-metrics--four { grid-template-columns: repeat(4, minmax(0, 1fr)); }

@@ -16,7 +16,6 @@ from video.access import VideoAccessDenied, attach_video_join, resolve_room_acce
 from .privacy_forms import AccessHistoryFilterForm
 from .record_forms import ClinicalRecordFilterForm, ScopedPatientDirectoryFilterForm
 from .record_views import scoped_source, staff_memberships
-from .reporting_views import ReportPeriodForm
 
 
 @override_settings(DEBUG=True, MULTI_PRACTICE_ENABLED=False, SINGLE_PRACTICE_SLUG='single-access', VIDEO_ENABLED=True,
@@ -62,11 +61,9 @@ class SinglePracticeAccessTests(TestCase):
         self.assertEqual(list(scoped_source(PatientEvent, [self.patient, self.other_patient])), [self.event])
 
     def test_scope_fields_are_hidden_and_forged_all_is_invalid(self):
-        today = timezone.localdate().isoformat()
         cases = (
             (ClinicalRecordFilterForm, {'category': 'all', 'reason': 'direct_care'}, {}),
             (ScopedPatientDirectoryFilterForm, {}, {'company': self.company, 'companies': [self.company, self.other]}),
-            (ReportPeriodForm, {'start': today, 'end': today}, {}),
             (AccessHistoryFilterForm, {}, {}),
         )
         for form_class, values, kwargs in cases:
@@ -117,12 +114,6 @@ class SinglePracticeAccessTests(TestCase):
         for company, scope in ((self.company, 'all'), (self.other, 'current')):
             with self.subTest(company=company.pk, scope=scope), self.assertRaises(PermissionDenied):
                 report_companies(self.doctor, company, scope)
-
-    def test_report_export_rejects_forged_all(self):
-        self.client.force_login(self.admin)
-        response = self.client.get(reverse('portal:metrics-export'), {'scope': 'all'})
-        self.assertEqual(response.status_code, 400)
-        self.assertNotContains(response, 'Disabled Access', status_code=400)
 
     def test_own_access_history_is_pinned(self):
         self.assertEqual(self.client.get(reverse('portal:account-access-history')).status_code, 403)

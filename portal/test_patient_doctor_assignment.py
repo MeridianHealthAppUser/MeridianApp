@@ -191,8 +191,12 @@ class PatientDoctorAssignmentTests(TestCase):
         for tab, record in (('consultations', consultation), ('notes', note), ('appointments', appointment),
                             ('blood-tests', lab), ('tasks', task)):
             with self.subTest(tab=tab):
-                response = self.client.get(detail, {'tab': tab})
-                self.assertIn(record.pk, [row.pk for row in response.context['rows']])
+                if tab == 'appointments':
+                    # The week-old appointment is under Past, in the list Calendar shares (Nov 2026).
+                    rows = self.client.get(detail, {'tab': tab, 'list': 'past'}).context['appointments']
+                else:
+                    rows = self.client.get(detail, {'tab': tab}).context['rows']
+                self.assertIn(record.pk, [row.pk for row in rows])
         self.assertContains(self.client.get(detail, {'tab': 'notes'}), 'PREVIOUS_CLINICIAN_NOTE')
 
         # Records stay attributed to whoever created them.

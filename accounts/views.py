@@ -90,8 +90,10 @@ class AccountProfileView(LoginRequiredMixin, View):
 
 
 def staff_profile_context(request, user, memberships):
-    """My profile for staff: their details, the practice they're in, and a clinician's month so far."""
-    from care.reporting import doctor_activity, provisional_total
+    """My profile for staff: their details, the practice they're in, and a clinician's month so far: since the 25th,
+    as the monthly activity report counts it (care.activity_reports), at the practice's rates."""
+    from care.activity_reports import current_period_start
+    from care.reporting import doctor_activity, provisional_total, reporting_today
     from practices.services import active_membership_for, get_active_company
 
     company = get_active_company(request)
@@ -99,11 +101,12 @@ def staff_profile_context(request, user, memberships):
     is_clinician = any(member.is_clinician for member in memberships)
     month_to_date = None
     if membership is not None and membership.is_clinician:
-        today = timezone.localdate()
-        counts, _ = doctor_activity(company=membership.company, doctor=user, start=today.replace(day=1), end=today)
+        today = reporting_today()
+        since = current_period_start(today)
+        counts, _ = doctor_activity(company=membership.company, doctor=user, start=since, end=today)
         total = provisional_total(company=membership.company, doctor=user, counts=counts)
-        month_to_date = {'first': counts['initial'], 'review': counts['review'] + counts['follow_up'],
-                         'messages': counts['messages'],
+        month_to_date = {'since': since, 'first': counts['initial'], 'follow_up': counts['follow_up'],
+                         'messages': counts['messages'], 'reviews': counts['review'],
                          # Rand with a space between thousands, as in "R14 350.00".
                          'total': f'R{total:,.2f}'.replace(',', '\u00a0') if total is not None else ''}
     return {'staff_membership': membership, 'staff_is_clinician': is_clinician, 'month_to_date': month_to_date}

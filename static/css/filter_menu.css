@@ -45,3 +45,5 @@
 
 /* A card clips what spills out of it; while its Filters menu is open the menu shows in full, even over a short table. */
 .staff-page-card:has(.filter-menu[open]) { overflow: visible; }
+/* A hint under a field, such as Consultations' To date: "Leave empty for just the one day." */
+.filter-menu__help { color: var(--console-muted, var(--c-70838d)); display: block; font-size: .74rem; line-height: 1.4; margin-top: .3rem; }

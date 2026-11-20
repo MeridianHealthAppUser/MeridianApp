@@ -1,4 +1,5 @@
 from datetime import datetime, time as time_of_day, timedelta
+from urllib.parse import urlsplit
 
 from django import forms
 from django.contrib import messages
@@ -93,29 +94,73 @@ class BookingTimesView(LoginRequiredMixin, StaffCompanyRequiredMixin, View):
             free_times=times, exclude_appointment=data['appointment']))})
 
 
-def schedule_return(request, page='portal:staff-schedule'):
-    """Back to the list a change was made from, as it was: Calendar & Bookings' Day view, or a patient's
-    My Appointments. Otherwise None."""
+def schedule_return(request, page='portal:staff-schedule', *, appointment=None):
+    """Back to the list a change was made from, as it was: Calendar (its Appointments list at /schedule/appointments/,
+    or its Day view), a patient's My Appointments, or, given the appointment, the Appointments tab of
+    that patient's own record. Only on this site; otherwise None."""
     target = request.POST.get('next', '')
-    schedule = reverse(page)
-    if (target.startswith(schedule) and url_has_allowed_host_and_scheme(target, allowed_hosts={request.get_host()},
-                                                                        require_https=request.is_secure())):
+    if not url_has_allowed_host_and_scheme(target, allowed_hosts={request.get_host()}, require_https=request.is_secure()):
+        return None
+    record = appointment is not None and urlsplit(target).path == reverse('portal:patient-detail', args=[appointment.patient_id])
+    if target.startswith(reverse(page)) or record:
         return redirect(target)
     return None
 
 
-class AppointmentTimeForm(forms.Form):
-    """Change time: a new date and one of the clinician's free quarter hours on it. Same clinician and length."""
+def can_change_time(membership, user, appointment):
+    """Staff move a booked appointment: administrators any, a doctor their own. Patients ask the practice."""
+    return appointment.status == Appointment.Status.BOOKED and (
+        membership.role in ('practice_admin', 'super_admin') or appointment.clinician_id == user.pk)
 
-    date = forms.DateField(label='New date', widget=forms.DateInput(format='%Y-%m-%d', attrs={'type': 'date'}))
-    time = forms.ChoiceField(label='New time', choices=[('', 'Choose a time'), *QUARTER_HOUR_CHOICES])
+
+def can_record_attendance(membership, user, appointment, now=None):
+    """Who may record Completed or No show, and from when, as care.appointment_lifecycle.change_appointment_status
+    allows it: only the booked clinician (a clinician member: a doctor, or a Super Admin who is also one), once the
+    appointment has ended (its start plus its length). Practice administrators never record attendance. The change
+    itself also needs the appointment still booked, and No show needs no signed consultation note."""
+    now = timezone.now() if now is None else now
+    return (membership.is_clinician and appointment.clinician_id == user.pk
+            and appointment.starts_at + timedelta(minutes=appointment.duration_minutes) <= now)
+
+
+class AppointmentTimeForm(forms.Form):
+    """Edit appointment (Change time until Nov 2026): the type, the length, and a date with one of the clinician's free
+    quarter hours on it, all starting as the appointment is now, so changing only the type or length keeps its time
+    (19 Nov 2026). Same clinician and patient. A practice administrator chooses Initial consultation or Follow-up, as
+    when booking, or keeps the type it has. Without a type or length, as older forms send, they stay as they are."""
+
+    appointment_type = forms.ChoiceField(label='Appointment type', required=False, choices=Appointment.Type.choices)
+    date = forms.DateField(label='Date', widget=forms.DateInput(format='%Y-%m-%d', attrs={'type': 'date'}))
+    time = forms.ChoiceField(label='Time', choices=[('', 'Choose a time'), *QUARTER_HOUR_CHOICES])
+    duration_minutes = forms.TypedChoiceField(label='Duration', required=False, coerce=int, empty_value=None,
+                                              choices=[(minutes, f'{minutes} minutes') for minutes in BOOKING_DURATIONS])
+
+    def __init__(self, *args, appointment, membership, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.appointment = appointment
+        if membership.role == membership.Role.PRACTICE_ADMIN:
+            self.fields['appointment_type'].choices = [
+                (value, label) for value, label in Appointment.Type.choices
+                if value in PRACTICE_ADMIN_TYPES or value == appointment.appointment_type]
+        if appointment.duration_minutes not in BOOKING_DURATIONS:
+            self.fields['duration_minutes'].choices = sorted(
+                [*self.fields['duration_minutes'].choices, (appointment.duration_minutes, f'{appointment.duration_minutes} minutes')])
+        local = timezone.localtime(appointment.starts_at)
+        for name, value in (('appointment_type', appointment.appointment_type), ('date', local.date()),
+                            ('time', f'{local:%H:%M}'), ('duration_minutes', appointment.duration_minutes)):
+            self.initial.setdefault(name, value)
 
     def starts_at(self):
         return timezone.make_aware(datetime.combine(self.cleaned_data['date'], time_of_day.fromisoformat(self.cleaned_data['time'])))
 
+    def changes(self):
+        """What reschedule_appointment changes: the time, and the type and length when they were sent."""
+        return dict(starts_at=self.starts_at(), appointment_type=self.cleaned_data.get('appointment_type') or None,
+                    duration_minutes=self.cleaned_data.get('duration_minutes') or None)
+
 
 class AppointmentStatusForm(forms.Form):
-    status = forms.ChoiceField(choices=(('cancelled', 'Cancel booking'), ('completed', 'Record completed'), ('no_show', 'Record no show')))
+    status = forms.ChoiceField(choices=(('cancelled', 'Cancel appointment'), ('completed', 'Record completed'), ('no_show', 'Record no show')))
     reason = forms.CharField(label='Note / Cancellation Reason (Optional)', max_length=500, required=False, widget=forms.Textarea(attrs={'rows': 3}))
     # No confirmation tick (Nov 2026): opening the dialog and pressing its confirm button is already two clicks. The
     # dialog shows the 24-hour cancellation policy instead (includes/appointment_cancellation_policy.html).
@@ -123,7 +168,7 @@ class AppointmentStatusForm(forms.Form):
     def __init__(self, *args, attendance=False, staff=False, cancel_only=False, **kwargs):
         super().__init__(*args, **kwargs)
         if not attendance:
-            self.fields['status'].choices = (('cancelled', 'Cancel booking'),)
+            self.fields['status'].choices = (('cancelled', 'Cancel appointment'),)
         if cancel_only:
             # Someone who can only cancel sees the status greyed out, and it submits as a cancellation whatever is sent.
             self.fields['status'].disabled = True
@@ -207,13 +252,10 @@ class AppointmentDetailMixin:
         return self.membership.role in ('practice_admin', 'super_admin') or appointment.clinician_id == self.request.user.pk
 
     def can_change_time(self, appointment):
-        """Staff move a booked appointment: administrators any, a doctor their own. Patients ask the practice."""
-        return appointment.status == Appointment.Status.BOOKED and (
-            self.membership.role in ('practice_admin', 'super_admin') or appointment.clinician_id == self.request.user.pk)
+        return can_change_time(self.membership, self.request.user, appointment)
 
     def attendance(self, appointment):
-        return (self.membership.is_clinician and appointment.clinician_id == self.request.user.pk
-                and appointment.starts_at + timedelta(minutes=appointment.duration_minutes) <= timezone.now())
+        return can_record_attendance(self.membership, self.request.user, appointment)
 
     def status_form(self, appointment, data=None):
         # Practice administrators never record attendance, so cancelling is their only update.
@@ -251,10 +293,9 @@ class AppointmentDetailMixin:
             workflow_context=request.POST.get('workflow_context', '') if request.method == 'POST' else make_workflow_context(request, company, 'appointment-status', appointment))
         attach_video_join([appointment], request.user.pk, allowed_role='doctor' if self.membership.is_clinician else None)
         if self.can_change_time(appointment):
-            local = timezone.localtime(appointment.starts_at)
             context.update(can_change_time=True, time_dialog_open=time_form is not None or request.GET.get('update') == 'time',
                            time_form=time_form if time_form is not None else AppointmentTimeForm(
-                               initial={'date': local.date(), 'time': f'{local:%H:%M}'}, auto_id='time_%s'),
+                               appointment=appointment, membership=self.membership, auto_id='time_%s'),
                            time_context=request.POST.get('workflow_context', '') if time_form is not None
                            else make_workflow_context(request, company, 'appointment-time', appointment))
         if no_records(self.membership):
@@ -277,14 +318,18 @@ class AppointmentDetailMixin:
             if valid:
                 change_appointment_status(appointment=appointment, actor=request.user, expected_updated=token['updated'], request=request,
                                           confirm=True, **form.cleaned_data)
-                if form.cleaned_data['status'] == 'cancelled':
+                status = form.cleaned_data['status']
+                if status == 'cancelled':
                     messages.success(request, f'Appointment with {appointment.patient} cancelled.')
-                    back = schedule_return(request)
-                    if back:
-                        return back
+                elif 'next' in request.POST:
+                    # Complete or No-show from a staff list's row (Nov 2026).
+                    messages.success(request, f'Appointment with {appointment.patient} marked as '
+                                              f'{"completed" if status == "completed" else "a no-show"}.')
                 else:
                     messages.success(request, 'Appointment status recorded.')
-                return redirect('portal:appointment-detail', pk=pk)
+                # Back to the list it was changed from, as it was (Cancel, Complete and No-show on a row); otherwise
+                # this page.
+                return schedule_return(request, appointment=appointment) or redirect('portal:appointment-detail', pk=pk)
         except ValidationError as error:
             for message in error.messages:
                 form.add_error(None, message)
@@ -297,7 +342,7 @@ class StaffAppointmentDetailView(LoginRequiredMixin, StaffCompanyRequiredMixin, 
 
 
 class StaffAppointmentCalendarView(StaffAppointmentDetailView):
-    """Download on a doctor's Calendar & Bookings: the appointment for their own calendar, without the patient's name
+    """Download on a doctor's Calendar: the appointment for their own calendar, without the patient's name
     (care.calendar_files). The link asks them to sign in to Meridian for who it's with."""
 
     http_method_names = ('get', 'head', 'options')
@@ -315,22 +360,28 @@ class StaffAppointmentCalendarView(StaffAppointmentDetailView):
 
 
 class StaffAppointmentTimeView(StaffAppointmentDetailView):
-    """Change time, from the appointment's page: moves it and emails the patient and clinician."""
+    """Edit appointment, from the appointment's page or Day view: a new time, type or length, emailed to the patient
+    and clinician."""
 
     http_method_names = ('post',)
 
     def post(self, request, pk):
         appointment = self.resolve(pk)
-        form = AppointmentTimeForm(request.POST, auto_id='time_%s')
+        form = AppointmentTimeForm(request.POST, appointment=appointment, membership=self.membership, auto_id='time_%s')
         valid = form.is_valid()
         try:
             token = validate_workflow_context(request, self.company, 'appointment-time', appointment)
             if valid:
-                moved = reschedule_appointment(appointment=appointment, actor=request.user, starts_at=form.starts_at(),
-                                               expected_updated=token['updated'], request=request)
-                messages.success(request, f'Appointment moved to {date_format(timezone.localtime(moved.starts_at), "D j M, H:i")}. '
-                                          'The patient and clinician have been emailed.')
-                return schedule_return(request) or redirect('portal:appointment-detail', pk=pk)
+                before = appointment.starts_at
+                saved = reschedule_appointment(appointment=appointment, actor=request.user, expected_updated=token['updated'],
+                                               request=request, **form.changes())
+                if saved.starts_at != before:
+                    messages.success(request, f'Appointment moved to {date_format(timezone.localtime(saved.starts_at), "D j M, H:i")}. '
+                                              'The patient and clinician have been emailed.')
+                else:
+                    messages.success(request, f'Appointment changed to {saved.get_appointment_type_display()}, '
+                                              f'{saved.duration_minutes} minutes. The patient and clinician have been emailed.')
+                return schedule_return(request, appointment=appointment) or redirect('portal:appointment-detail', pk=pk)
         except ValidationError as error:
             for message in error.messages:
                 form.add_error(None, message)

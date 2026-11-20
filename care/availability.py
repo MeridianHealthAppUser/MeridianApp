@@ -243,7 +243,7 @@ def notify_practice_of_conflicts(*, company, clinician, actor, starts_at, ends_a
         last_day = timezone.localdate(ends_at - timedelta(microseconds=1), timezone=SAST)
         cause = f'leave on {when}' if last_day == first_day else f'leave from {when} to {last_day.strftime("%-d %b %Y")}'
     count = len(affected)
-    clash = '1 booking clashes' if count == 1 else f'{count} bookings clash'
+    clash = '1 appointment clashes' if count == 1 else f'{count} appointments clash'
     title = f"Offer new times: {clash} with {clinician.full_name}'s {cause}"[:255]
     if ClinicalTask.objects.for_company(company).filter(
         title=title, status__in=(ClinicalTask.Status.OPEN, ClinicalTask.Status.IN_PROGRESS),
@@ -258,7 +258,7 @@ def notify_practice_of_conflicts(*, company, clinician, actor, starts_at, ends_a
         company=company, patient=affected[0].patient if count == 1 else None,
         title=title, priority=ClinicalTask.Priority.HIGH, due_at=affected[0].starts_at,
         description=(
-            f'{clinician.full_name} changed their availability, and these bookings now fall outside it. '
+            f'{clinician.full_name} changed their availability, and these appointments now fall outside it. '
             'Nobody has been moved. Agree a new time with each patient, then cancel and rebook.\n\n'
             + '\n'.join(lines)
         ),
@@ -443,7 +443,7 @@ SLOT_MINUTES = 15
 
 
 def day_diaries(*, company, clinicians, day, exclude_appointment=None):
-    """Calendar & Bookings' Available time: each clinician's day, in SLOT_MINUTES slots across their working hours
+    """The Calendar's Available time: each clinician's day, in SLOT_MINUTES slots across their working hours
     (a special day's instead, when it has one). Each slot is free, booked, on leave or past. Bookings in any practice
     take the time, but only this practice's say who. A whole day of leave, a day not worked or no working hours saved
     has no slots; without working hours, any availability recorded by hand for the day is shown instead. An

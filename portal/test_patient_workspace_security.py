@@ -201,6 +201,14 @@ class PatientWorkspaceSecurityTests(TestCase):
         for tab in ('appointments', 'consultations', 'blood-tests', 'tasks', 'payments', 'treatment', 'deliveries'):
             response = self.get(tab, status='PRIVATE_INVALID_STATUS')
             self.assertEqual(response.status_code, 200)
+            if tab == 'appointments':
+                # The list Calendar shares (portal/staff_appointments.py), on Upcoming and Past alike.
+                self.assertTrue(response.context['filter_menu']['invalid'])
+                self.assertEqual(response.context['appointments'], [])
+                past = self.get(tab, status='PRIVATE_INVALID_STATUS', list='past')
+                self.assertTrue(past.context['filter_menu']['invalid'])
+                self.assertEqual(past.context['appointments'], [])
+                continue
             self.assertTrue(response.context['workspace_filter'].errors)
             self.assertEqual(response.context['rows'], [])
 

@@ -13,12 +13,18 @@ from django.utils import timezone
 from practices.models import Company, CompanyMembership, Patient
 from practices.tenancy import require_enabled_company, require_multi_practice, scope_queryset
 from .models import (Appointment, DoctorActivityStatement, LabRequest, Lead,
-                     PatientMessage, PatientSubscription, Shipment, WeightEntry)
+                     PatientMessage, PatientSubscription, PracticeSettings, Shipment, WeightEntry)
 from .operations import require_operations_actor
 from .services import record_audit
 
-ACTIVITIES = (('initial', 'Completed initial consultations'), ('review', 'Completed reviews'),
-              ('follow_up', 'Completed follow-up / ad-hoc consultations'), ('messages', 'Messages sent'))
+# What a doctor is paid for, in the order Dr Czech lists them (Nov 2026): activity statements and the monthly
+# report (care.activity_reports) both count these, at a rate each.
+ACTIVITIES = (('initial', 'New consults'), ('follow_up', 'Follow-up consults'), ('messages', 'Messages answered'),
+              ('review', 'Blood results reviewed'))
+# The appointment types each kind of consult is. A six-month review is a follow-up consult.
+CONSULT_TYPES = {'initial': ('initial',), 'follow_up': ('follow_up', 'review', 'ad_hoc')}
+# A consult that was cancelled or missed didn't take place, so it never counts.
+NOT_HELD = ('cancelled', 'no_show')
 REPORT_TIMEZONE = ZoneInfo('Africa/Johannesburg')
 
 
@@ -142,15 +148,41 @@ def operational_metrics(*, actor, company, scope, start, end):
 
 
 def doctor_activity(*, company, doctor, start, end):
+    """What a doctor did from start to end (inclusive days): (counts, source_ids), each keyed by ACTIVITIES.
+
+    A consult counts when it takes place, not when it was booked, so a booking cancelled later never counts: any of
+    the doctor's appointments starting in the period, unless cancelled or a no-show. One still marked booked counts
+    once its time has come. Counts also hold initial_completed and follow_up_completed, how many of those consults
+    were marked completed, for information only. Messages answered are the doctor's messages in patient
+    conversations; blood results reviewed are the blood tests they marked reviewed in the period. Demo patients never
+    count."""
     lower, upper = period_bounds(start, end)
-    appointments = Appointment.objects.for_company(company).filter(patient__company=company, patient__demo_data_set__isnull=True, clinician=doctor, status='completed', starts_at__gte=lower, starts_at__lt=upper).order_by('pk')
+    appointments = Appointment.objects.for_company(company).filter(
+        patient__company=company, patient__demo_data_set__isnull=True, clinician=doctor, starts_at__gte=lower, starts_at__lt=upper,
+    ).exclude(status__in=NOT_HELD).filter(Q(status='completed') | Q(starts_at__lte=timezone.now())).order_by('pk')
+    consults = {key: list(appointments.filter(appointment_type__in=types).values_list('pk', 'status')) for key, types in CONSULT_TYPES.items()}
     source_ids = {
-        'initial': list(appointments.filter(appointment_type='initial').values_list('pk', flat=True)),
-        'review': list(appointments.filter(appointment_type='review').values_list('pk', flat=True)),
-        'follow_up': list(appointments.filter(appointment_type__in=('follow_up', 'ad_hoc')).values_list('pk', flat=True)),
+        'initial': [pk for pk, _ in consults['initial']],
+        'follow_up': [pk for pk, _ in consults['follow_up']],
         'messages': list(PatientMessage.objects.for_company(company).filter(thread__company=company, thread__patient__company=company, thread__patient__demo_data_set__isnull=True, sender=doctor, created_at__gte=lower, created_at__lt=upper).order_by('pk').values_list('pk', flat=True)),
+        'review': list(LabRequest.objects.for_company(company).filter(patient__company=company, patient__demo_data_set__isnull=True, reviewed_by=doctor, reviewed_at__gte=lower, reviewed_at__lt=upper).order_by('pk').values_list('pk', flat=True)),
     }
-    return {key: len(values) for key, values in source_ids.items()}, source_ids
+    counts = {key: len(source_ids[key]) for key, _ in ACTIVITIES}
+    for key, rows in consults.items():
+        counts[f'{key}_completed'] = sum(status == 'completed' for _, status in rows)
+    return counts, source_ids
+
+
+def practice_rates(company):
+    """The practice's rate for each activity (Insights > Activity statements > Monthly reports), as explicit_rates
+    gives them; the defaults until a Super Admin changes them."""
+    row = PracticeSettings.objects.for_company(company).first() or PracticeSettings(company=company)
+    return explicit_rates({key: getattr(row, f'activity_rate_{key}') for key, _ in ACTIVITIES})
+
+
+def activity_amount(rates, counts):
+    """Each activity's count at its rate, added up."""
+    return sum((Decimal(rates[key]) * counts[key] for key, _ in ACTIVITIES), Decimal('0.00'))
 
 
 def explicit_rates(rates):
@@ -168,19 +200,14 @@ def explicit_rates(rates):
 
 
 def provisional_total(*, company, doctor, counts):
-    """Activity so far at the rates on the doctor's latest approved statement here; None without one.
+    """Activity so far at the practice's rates, the ones the monthly report uses (care.activity_reports); None when
+    a saved rate can't be used.
 
     An estimate for the doctor's own My profile, not a statement: nothing is saved or paid."""
-    statement = DoctorActivityStatement.objects.for_company(company).filter(
-        doctor=doctor, approved_at__isnull=False,
-    ).order_by('-period_end', '-pk').first()
-    if statement is None:
-        return None
     try:
-        rates = explicit_rates(statement.rates)
+        return activity_amount(practice_rates(company), counts)
     except ValidationError:
         return None
-    return sum((Decimal(rates[key]) * counts[key] for key, _ in ACTIVITIES), Decimal('0.00'))
 
 
 @transaction.atomic
@@ -197,7 +224,7 @@ def create_activity_statement(*, company, actor, doctor, start, end, rates, requ
         raise ValidationError('A statement already overlaps these dates for this doctor. Open that statement instead.')
     clean_rates = explicit_rates(rates)
     counts, source_ids = doctor_activity(company=company, doctor=doctor, start=start, end=end)
-    amount = sum((Decimal(clean_rates[key]) * counts[key] for key, _ in ACTIVITIES), Decimal('0.00'))
+    amount = activity_amount(clean_rates, counts)
     record = DoctorActivityStatement(company=company, doctor=doctor, period_start=start, period_end=end,
                                      counts=counts, rates=clean_rates, source_ids=source_ids, amount=amount, prepared_by=actor)
     record.full_clean()
@@ -220,8 +247,7 @@ def approve_activity_statement(*, statement, actor, expected_updated, confirm=Fa
     counts, ids = doctor_activity(company=company, doctor=statement.doctor, start=statement.period_start, end=statement.period_end)
     if counts != statement.counts or ids != statement.source_ids:
         raise ValidationError('Source activity changed since preparation. Refresh the draft before approval.')
-    rates = explicit_rates(statement.rates)
-    amount = sum((Decimal(rates[key]) * counts[key] for key, _ in ACTIVITIES), Decimal('0.00'))
+    amount = activity_amount(explicit_rates(statement.rates), counts)
     if amount != statement.amount:
         raise ValidationError('The stored total does not match the activity and rates. Refresh the draft before approval.')
     statement.approved_by, statement.approved_at = actor, timezone.now()
@@ -238,8 +264,7 @@ def refresh_activity_statement(*, statement, actor, expected_updated, request=No
     if statement.approved_at or statement.updated_at.isoformat() != expected_updated:
         raise ValidationError('Only an unchanged draft may be refreshed. Approved statements are immutable.')
     statement.counts, statement.source_ids = doctor_activity(company=company, doctor=statement.doctor, start=statement.period_start, end=statement.period_end)
-    rates = explicit_rates(statement.rates)
-    statement.amount = sum((Decimal(rates[key]) * statement.counts[key] for key, _ in ACTIVITIES), Decimal('0.00'))
+    statement.amount = activity_amount(explicit_rates(statement.rates), statement.counts)
     statement.full_clean()
     statement.save(update_fields=('counts', 'source_ids', 'amount', 'updated_at'))
     record_audit(company=company, actor=actor, action='activity_statement.refreshed', target=statement, request=request)

@@ -51,7 +51,10 @@ STAFF_PAGES = {
     'patient-list': Page('Patient Records & Messages', 'patients', 'directory'),
     'staff-inbox': Page('Patient messages', 'messages', 'staff_messages'),
     'team-inbox': Page('Team messages', 'team', 'team_messages'),
-    'staff-schedule': Page('Calendar & Bookings', 'schedule'),
+    # Calendar's Calendar tab (and its Working hours & availability tab, ?section=availability).
+    'staff-schedule': Page('Calendar', 'calendar'),
+    # Calendar's Appointments tab, where Calendar opens: open to every member, as the Calendar tab is.
+    'schedule-appointments': Page('Calendar', 'schedule'),
     'clinical-consultations': Page('Consultation notes', 'consultations', 'clinical'),
     'clinical-labs': Page('Blood tests', 'labs', 'clinical'),
     'treatment-authorisations': Page('Authorisations', 'authorisations', 'clinical'),
@@ -64,7 +67,8 @@ STAFF_PAGES = {
     'staff-leads': Page('Leads and enquiries', 'leads', 'admin'),
     'staff-lead-history': Page('Lead history', 'leads', 'admin'),
     'dropouts': Page('Dropouts', 'dropouts', 'admin'),
-    'metrics': Page('Metrics and cohorts', 'metrics', 'super_admin'),
+    'metrics': Page('Insights', 'metrics', 'super_admin'),
+    'insights-cohorts': Page('Cohorts', 'cohorts', 'super_admin'),
     'activity-statements': Page('Activity statements', 'statements', 'statements'),
     'staff-data-requests': Page('Privacy requests', 'privacy_requests', 'privacy'),
     'policy-list': Page('Policy versions', 'policies', 'policies'),
@@ -94,7 +98,7 @@ PATIENT_PAGES = {
 # Downloads, background fragments, status APIs and POST-only actions must never
 # be requested speculatively as page content, even when their URL has no suffix.
 HTML_PAGE_ROUTES = frozenset(STAFF_PAGES) | frozenset(PATIENT_PAGES) | frozenset((
-    'activity-statement-create', 'activity-statement-detail',
+    'activity-statement-create', 'activity-statement-detail', 'activity-report-detail',
     'appointment-book', 'appointment-detail',
     'clinical-consultation-create', 'clinical-consultation-detail',
     'clinical-lab-detail',
@@ -134,11 +138,11 @@ STAFF_HTML_PAGE_ROUTES = HTML_PAGE_ROUTES - PATIENT_HTML_PAGE_ROUTES
 # registry inventory check until their transport is chosen explicitly.
 NATIVE_GET_ROUTES = frozenset((
     'demo-data',
-    'patient-appointment-video-status', 'staff-message-status', 'patient-message-status',
+    'patient-appointment-video-status', 'staff-appointment-video-status', 'staff-message-status', 'patient-message-status',
     'public-terms', 'public-privacy', 'public-contact',
     'questionnaire', 'questionnaire-result', 'questionnaire-checkout', 'questionnaire-old-address',
     'appointment-book-times', 'patient-booking-times', 'appointment-calendar',
-    'compounding-print', 'metrics-export', 'activity-statement-export',
+    'compounding-print', 'metrics-export', 'activity-statement-export', 'activity-report-export',
     'staff-patient-record-export', 'staff-patient-record-history',
     'staff-patient-record-excel', 'staff-patient-record-workbook',
     'ops-manifest', 'ops-week-order', 'ops-history-export', 'ops-table-export',

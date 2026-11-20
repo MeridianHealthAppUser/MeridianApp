@@ -2,7 +2,7 @@
 {% load static workspace_ui conversation_ui %}
 
 {% block title %}My Messages | Meridian{% endblock %}
-{% block patient_extra_css %}<link rel="stylesheet" href="{% static 'css/patient_messages.css' %}?v=20261104a"><link rel="stylesheet" href="{% static 'css/message_tones.css' %}?v=20261008a"><link rel="stylesheet" href="{% static 'css/conversation_search.css' %}?v=20261104a"><script src="{% static 'js/conversation_search.js' %}?v=20261005" defer></script>{% endblock %}
+{% block patient_extra_css %}<link rel="stylesheet" href="{% static 'css/patient_messages.css' %}?v=20261120f"><link rel="stylesheet" href="{% static 'css/person_tags.css' %}?v=20261104a"><link rel="stylesheet" href="{% static 'css/conversation_people.css' %}?v=20261120d"><link rel="stylesheet" href="{% static 'css/message_tones.css' %}?v=20261008a"><link rel="stylesheet" href="{% static 'css/conversation_search.css' %}?v=20261104a"><script src="{% static 'js/conversation_search.js' %}?v=20261005" defer></script>{% endblock %}
 {% block patient_content_class %}patient-messages-page{% endblock %}
 
 {% block patient_breadcrumbs %}{% breadcrumbs 'My Messages' %}{% endblock %}
@@ -34,9 +34,16 @@
         {% for thread in threads %}
           <li>
             <a class="patient-inbox-thread{% if selected_thread.pk == thread.pk %} is-selected{% endif %}{% if thread.unread_count %} is-unread{% endif %}"{% if selected_thread.pk == thread.pk %} aria-current="page"{% endif %} href="{% url 'portal:patient-messages' %}?status={{ filter_form.status.value|default:'all'|urlencode }}{% if search %}&amp;q={{ search|urlencode }}{% endif %}&amp;page={{ page_obj.number }}&amp;thread={{ thread.pk }}#patient-conversation">
-              <strong><span>{{ thread.subject|default:"Your care" }}</span>{% if thread.is_closed %}<span class="patient-inbox-pill">Closed</span>{% endif %}{% if thread.unread_count %}<span class="patient-inbox-thread__badge" aria-hidden="true">{% if thread.unread_count > 9 %}9+{% else %}{{ thread.unread_count }}{% endif %}</span>{% endif %}</strong>
-              {% if thread.people %}<span class="patient-inbox-thread__with">With {{ thread.people }}</span>{% endif %}
-              {# As in the practice console: the latest message, and on the right its time today or its date. #}
+              {# As in the practice console: who it's with first, the clinic staff as tags by role on one line, with #}
+              {# any unread count at its right; then the subject, with "Closed" at its right (James, 20 Nov 2026). #}
+              {# With nobody in it yet, the subject comes first and carries both. #}
+              {% if thread.people_tags %}
+                <span class="patient-inbox-thread__head">{% include 'portal/includes/conversation_people.html' with tags=thread.people_tags people_class='patient-inbox-thread__people' %}{% if thread.unread_count %}<span class="patient-inbox-thread__marks"><span class="patient-inbox-thread__badge" aria-hidden="true">{% if thread.unread_count > 9 %}9+{% else %}{{ thread.unread_count }}{% endif %}</span></span>{% endif %}</span>
+                <span class="patient-inbox-thread__title"><strong class="patient-inbox-thread__subject">{{ thread.subject|default:"Your care" }}</strong>{% if thread.is_closed %}<span class="patient-inbox-pill">Closed</span>{% endif %}</span>
+              {% else %}
+                <span class="patient-inbox-thread__head patient-inbox-thread__head--subject"><strong class="patient-inbox-thread__subject">{{ thread.subject|default:"Your care" }}</strong>{% if thread.is_closed or thread.unread_count %}<span class="patient-inbox-thread__marks">{% if thread.is_closed %}<span class="patient-inbox-pill">Closed</span>{% endif %}{% if thread.unread_count %}<span class="patient-inbox-thread__badge" aria-hidden="true">{% if thread.unread_count > 9 %}9+{% else %}{{ thread.unread_count }}{% endif %}</span>{% endif %}</span>{% endif %}</span>
+              {% endif %}
+              {# The latest message, and on the right its time today or its date. #}
               <span class="patient-inbox-thread__last">
                 <span class="patient-inbox-thread__preview">{% if thread.latest_body %}{% if thread.latest_from %}<strong>{{ thread.latest_from }}:</strong> {% endif %}{{ thread.latest_body|truncatechars:90 }}{% else %}No messages yet{% endif %}</span>
                 {% if thread.last_activity %}<time datetime="{{ thread.last_activity|date:'c' }}" title="{{ thread.last_activity|date:'j M Y, H:i' }}">{{ thread.last_activity|list_when }}</time>{% endif %}

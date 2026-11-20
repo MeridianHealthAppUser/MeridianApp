@@ -5,7 +5,7 @@
 {% block breadcrumbs %}{% breadcrumbs 'Shipping' %}{% endblock %}
 {% block page_heading %}<header class="staff-page-header"><div><h1>Shipping</h1><p>{{ company.name }} · Confirm the week’s parcels, arrange the courier and follow their delivery.</p></div><div class="ops-actions">{% if can_edit %}<a class="console-button console-button--primary" href="?{{ list_query }}&amp;create=1" data-modal-open="create-shipment" aria-haspopup="dialog">Create shipment</a>{% endif %}</div></header>{% page_tabs %}{% endblock %}
 {% block operations_content %}<section class="staff-page-card ops-shipping-card" data-shipping-workflow aria-labelledby="shipping-week-heading">
-  {# A shipping week at a time, as Calendar & Bookings' Week view; the search and Filters keep the week. #}
+  {# A shipping week at a time, as the Calendar's Week view; the search and Filters keep the week. #}
   <header class="shipping-primary-toolbar">
   {% if can_edit and not filter_form.errors %}
     {# Each stage loads its shipments from the server, in the app like any other tab; without scripts it's a normal link. #}
@@ -106,7 +106,7 @@
     <div class="app-dialog__body">
       <h2 id="create-shipment-title">Create shipment</h2>
       <p class="app-dialog__sub">For an ad-hoc parcel. Parcels a prescription needs are drafted here by themselves. The prescription, care plan and remaining allowance are checked; nothing is dispatched.</p>
-      <form class="ops-form" method="post" action="{% url 'portal:ops-shipping-create' %}">{% csrf_token %}<input type="hidden" name="workflow_context" value="{{ create_context }}">
+      <form class="ops-form" method="post" action="{% url 'portal:ops-shipping-create' %}" data-submit-when-filled>{% csrf_token %}<input type="hidden" name="workflow_context" value="{{ create_context }}">
         {% include 'portal/operations_fields.html' with form=create_form %}
         <div class="app-dialog__actions"><a class="console-button console-button--secondary" href="{% url 'portal:ops-shipping' %}?{{ list_query }}" data-dialog-close>Cancel</a><button class="console-button console-button--primary" type="submit">Add draft parcel</button></div>
       </form>

@@ -11,7 +11,7 @@ from django.utils import timezone
 
 from practices.models import Company, CompanyMembership, Patient
 
-from .models import Appointment, ClinicalNote, ClinicalTask, WeightEntry
+from .models import Appointment, ClinicalNote, ClinicalTask, Lead, WeightEntry
 from .tag_forms import TagFieldsMixin
 from .widgets import QUARTER_HOUR_CHOICES, QuarterHourDateTimeField, quarter_hour_text
 
@@ -351,6 +351,9 @@ class EligibilityQuestionnaireForm(forms.Form):
         help_text='Include anything else you would like the clinician to know. Your wording is saved as entered.',
         strip=False,
     )
+    # Optional; Insights counts the sources of bookings from it (Dr Czech, Nov 2026).
+    heard_from = forms.MultipleChoiceField(label='How did you hear about us?', required=False, choices=Lead.HEARD_FROM,
+                                           widget=forms.CheckboxSelectMultiple)
     service_consent = forms.BooleanField(label='I accept the terms of service, privacy notice and telehealth consent for my selected practice.')
 
     def __init__(self, *args, bound_practice=None, **kwargs):
@@ -390,6 +393,7 @@ class EligibilityQuestionnaireForm(forms.Form):
             'height_cm': str(data['height_cm']),
             'weight_kg': str(data['weight_kg']),
             'health_context': data['health_context'],
+            'heard_from': data.get('heard_from') or [],
             'service_consent': True,
             'telehealth_consent': True,
             'bmi': str(bmi),

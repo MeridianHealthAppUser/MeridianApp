@@ -52,13 +52,32 @@ class TeamMessagingTests(TestCase):
         self.assertIsNone(thread.patient)
         self.assertEqual(thread.messages.get().sender, self.admin)
 
+    def test_the_title_count_filters_and_search_sit_in_the_inbox_cards_header(self):
+        self.start()
+        self.start(subject='Rota', patient=None)
+        CompanyMembership.objects.filter(company=self.company, user=self.admin).update(role='super_admin')
+        self.login(self.admin)
+        html = self.client.get(reverse('portal:team-inbox')).content.decode()
+        start = html.index('<header class="staff-page-card__header staff-list-header record-inbox__header">')
+        header = html[start:html.index('</header>', start)]
+        # Inside the card, above the list and the open conversation: the title on the left (a Super Admin too: team
+        # conversations are only ever their members'), then the count, Filters and the search on the right.
+        self.assertLess(html.index('<section class="staff-page-card record-inbox record-inbox--fill"'), start)
+        self.assertLess(start, html.index('<section class="record-inbox__threads"'))
+        self.assertIn('<div><h2 id="team-heading">Team messages</h2></div>', header)
+        count = header.index('<span class="staff-page-card__count" data-search-region="count">2 conversations</span>')
+        self.assertLess(count, header.index('data-filter-menu'))
+        self.assertLess(header.index('data-filter-menu'), header.index('data-conversation-search'))
+        self.assertNotIn('inbox-scope', html)
+        self.assertNotIn('inbox-toolbar', html)
+
     def test_the_list_matches_patient_messages_and_marks_read_or_unread(self):
         thread = self.start()
         self.login(self.admin)
         page = self.client.get(reverse('portal:team-inbox'))
         # Subject, the others in it as tags by role, the patient as a tag on its own line, then the latest message;
         # nothing opens until chosen.
-        self.assertContains(page, '<span class="record-inbox-thread__people person-tags"><span class="sr-only">With </span><span class="person-tag person-tag--doctor" title="Dora Doctor · Doctor">')
+        self.assertContains(page, '<span class="record-inbox-thread__people person-tags person-tags--line"><span class="sr-only">With </span><span class="person-tag person-tag--doctor" title="Dora Doctor · Doctor">')
         self.assertContains(page, 'D. Doctor<span class="sr-only"> (Doctor)</span></span></span>')
         self.assertContains(page, '<span class="record-inbox-thread__about"><span class="person-tags__label">Patient:</span><span class="person-tag person-tag--patient" title="Pat Patient · Patient">')
         self.assertContains(page, 'Pat Patient<span class="sr-only"> (Patient)</span></span></span>')

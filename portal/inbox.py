@@ -73,6 +73,22 @@ def _inbox_threads(company, user):
 # The Filters menu: Open or Closed, and any of the patients your conversations are with.
 STATUS_CHOICES = (('open', 'Open'), ('closed', 'Closed'))
 SEARCH_LENGTH = 100
+# A Super Admin's My messages (the default), the conversations they're in, and Other messages (?scope=other), the
+# rest of the practice's, which they may read without being in them (James, 20 Nov 2026). Everyone else only ever
+# sees their own.
+SCOPES = (('mine', 'My messages'), ('other', 'Other messages'))
+
+
+def inbox_scope(value, membership):
+    """'other' only for a Super Admin who asked for it; otherwise 'mine'."""
+    return 'other' if value == 'other' and membership.role == CompanyMembership.Role.SUPER_ADMIN else 'mine'
+
+
+def waiting_patient_messages(company, threads):
+    """The patient's messages nobody in the conversation has opened yet (no practice receipt), in these conversations."""
+    return PatientMessage.objects.for_company(company).filter(
+        thread__in=threads, sender_id=F('thread__patient__user_id'), staff_read_at__isnull=True,
+    )
 
 
 def messageable_patients(company, user, membership):
@@ -124,11 +140,12 @@ def search_threads(threads, company, search):
     return threads
 
 
-def staff_inbox_url(thread=None, *, status=(), page=1, search='', patients=()):
-    """Patient messages with its filters, search and page kept, and a conversation open if one is given."""
+def staff_inbox_url(thread=None, *, status=(), page=1, search='', patients=(), scope=''):
+    """Patient messages with a Super Admin's Other messages, its filters, search and page kept, and a conversation
+    open if one is given."""
     from .filter_menus import one_ticked, ticked_ids
 
-    query = {}
+    query = {'scope': 'other'} if scope == 'other' else {}
     if statuses := one_ticked(status, STATUS_CHOICES):
         query['status'] = statuses[0]
     if patients := ticked_ids(patients):
@@ -154,7 +171,11 @@ def staff_inbox_context(request, company, membership, *, selected_id=None, **ove
     # Open or Closed, and which patients; a reply or suggestion that wasn't sent comes back to the same filters.
     status = one_ticked(request.POST.getlist('status') or request.GET.getlist('status'), STATUS_CHOICES)
     patients = ticked_ids(request.POST.getlist('patients') or request.GET.getlist('patients'))
-    filtered = all_threads
+    # A Super Admin's My messages lists only the conversations they're in (participants, as member_threads has it);
+    # Other messages, the rest of the practice's. Everyone else sees only theirs anyway, so nothing changes there.
+    super_admin = membership.role == CompanyMembership.Role.SUPER_ADMIN
+    scope = inbox_scope(request.POST.get('scope') or request.GET.get('scope'), membership)
+    filtered = all_threads.filter(is_member=scope == 'mine') if super_admin else all_threads
     if status:
         filtered = filtered.filter(is_closed=status[0] == 'closed')
     if patients:
@@ -173,16 +194,25 @@ def staff_inbox_context(request, company, membership, *, selected_id=None, **ove
         selected = next((thread for thread in threads if thread.pk == wanted), None) or all_threads.get(pk=wanted)
     shown = {*threads, *([selected] if selected else [])}
     kinds = staff_kinds(company, [person.pk for thread in shown for person in thread.participants.all()])
+    # In Other messages, a conversation the Super Admin isn't in has no unread of theirs; its count is the patient's
+    # messages nobody in it has opened yet, so none waits unnoticed.
+    if scope == 'other':
+        waiting = dict(waiting_patient_messages(company, [thread.pk for thread in threads]).order_by()
+                       .values('thread_id').annotate(count=Count('pk')).values_list('thread_id', 'count'))
+        for thread in threads:
+            # In grey, and not bold: they aren't the Super Admin's own.
+            thread.unread_count, thread.unread_label, thread.unread_class = (
+                waiting.get(thread.pk, 0), 'unread patient message', 'nav-badge--quiet')
     for thread in shown:
         thread.record_url = record_thread_url(thread)
-        thread.list_url = staff_inbox_url(thread, status=status, page=page.number, search=search, patients=patients)
+        thread.list_url = staff_inbox_url(thread, status=status, page=page.number, search=search, patients=patients, scope=scope)
         thread.is_selected = selected is not None and thread.pk == selected.pk
         # Across patients, the patient is first, then anyone else in it besides you, each as a tag.
         others = [person for person in thread.participants.all() if person.pk not in (request.user.pk, thread.patient.user_id)]
         thread.people_tags = people_tags(others, kinds, patient=thread.patient)
         thread.latest_from = latest_from(thread, request.user, unnamed={thread.patient.user_id})
         thread.read_state_url = read_state_url(thread)
-    kept = {'status': ','.join(status), 'patients': ','.join(map(str, patients))}
+    kept = {'status': ','.join(status), 'patients': ','.join(map(str, patients)), **({'scope': 'other'} if scope == 'other' else {})}
     read_state_fields = {'return_to': 'patient_messages', **kept, 'q': search, 'page': page.number}
     # Only the patients your conversations are with are offered, by name.
     people = Patient.objects.filter(pk__in=all_threads.order_by().values('patient_id')).order_by('first_name', 'last_name', 'pk')
@@ -191,6 +221,8 @@ def staff_inbox_context(request, company, membership, *, selected_id=None, **ove
     context = {
         'company': company,
         'active_membership': membership,
+        # Patient Records & Messages: the menu item, and its section in the breadcrumbs (Overview > Care > ...).
+        'nav_section': 'messages',
         'is_staff_inbox': True,
         'is_doctor': membership.role == CompanyMembership.Role.DOCTOR,
         'threads': threads,
@@ -198,17 +230,21 @@ def staff_inbox_context(request, company, membership, *, selected_id=None, **ove
         'page_obj': page,
         'is_paginated': page.has_other_pages(),
         'search': search, 'search_hidden': kept,
+        # The card's header: Patient messages, then how many conversations, Filters and the search (list_tools.html).
+        'inbox_count_label': f'{paginator.count} conversation{"" if paginator.count == 1 else "s"}',
+        'inbox_scope': scope,
         'filter_menu': filter_menu(
-            action=reverse('portal:staff-inbox'), hidden=[('q', search)], clear_url=staff_inbox_url(search=search),
+            action=reverse('portal:staff-inbox'), hidden=[('q', search), *([('scope', 'other')] if scope == 'other' else [])],
+            clear_url=staff_inbox_url(search=search, scope=scope),
             label='Filter patient messages', sections=[
                 choice_section('status', 'Status', STATUS_CHOICES, status),
                 choice_section('patients', 'Patient', [(person.pk, str(person)) for person in people], patients, icon='person'),
             ]),
-        'inbox_search_clear_url': staff_inbox_url(status=status, patients=patients),
+        'inbox_search_clear_url': staff_inbox_url(status=status, patients=patients, scope=scope),
         # A phone shows the list or a conversation, and this is the way back to the list (staff_mobile.css).
-        'inbox_list_url': staff_inbox_url(status=status, page=page.number, search=search, patients=patients),
-        'inbox_previous_url': staff_inbox_url(status=status, page=page.previous_page_number(), search=search, patients=patients) if page.has_previous() else '',
-        'inbox_next_url': staff_inbox_url(status=status, page=page.next_page_number(), search=search, patients=patients) if page.has_next() else '',
+        'inbox_list_url': staff_inbox_url(status=status, page=page.number, search=search, patients=patients, scope=scope),
+        'inbox_previous_url': staff_inbox_url(status=status, page=page.previous_page_number(), search=search, patients=patients, scope=scope) if page.has_previous() else '',
+        'inbox_next_url': staff_inbox_url(status=status, page=page.next_page_number(), search=search, patients=patients, scope=scope) if page.has_next() else '',
         'messages_title': messages_title(membership),
         'inbox_thread': selected,
         'inbox_read_state_fields': read_state_fields,
@@ -234,6 +270,18 @@ def staff_inbox_context(request, company, membership, *, selected_id=None, **ove
         context = open_conversation(request, company, membership, selected, context)
     # Worked out after the open conversation is marked read, so the tab counts include it.
     context.update(message_tab_counts(company, request.user))
+    if super_admin:
+        # My messages and Other messages, as pills over the list, each with its own unread count: theirs (the same
+        # as the tab's, red), and the patient's messages nobody has opened yet in the conversations they aren't in
+        # (grey: they aren't theirs).
+        # Switching keeps the filters and search and starts at the first page.
+        unread = {'mine': context['patient_unread_total'],
+                  'other': waiting_patient_messages(company, staff_threads(company, request.user).exclude(participants=request.user)).count()}
+        context['inbox_scopes'] = [
+            {'value': value, 'label': label, 'active': value == scope, 'unread': unread[value],
+             'url': staff_inbox_url(status=status, search=search, patients=patients, scope=value)}
+            for value, label in SCOPES
+        ]
     return context
 
 

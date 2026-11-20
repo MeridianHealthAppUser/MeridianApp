@@ -96,7 +96,7 @@ class EmailLogFilterForm(forms.Form):
 
 
 KIND_GROUPS = {
-    'appointment': ('appointment_booked', 'appointment_moved', 'appointment_cancelled', 'appointment_reminder'),
+    'appointment': ('appointment_booked', 'appointment_moved', 'appointment_changed', 'appointment_cancelled', 'appointment_reminder'),
     'payment': ('payment_failed', 'debit_order_update', 'debit_order_request'),
 }
 

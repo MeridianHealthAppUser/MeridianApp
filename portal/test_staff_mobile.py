@@ -125,8 +125,11 @@ class StaffPhoneLayoutTests(TestCase):
         self.assertNotContains(listing, 'record-inbox--open')
         self.assertNotContains(listing, 'class="record-inbox__back"')
         reading = self.client.get(inbox, {'q': 'dose', 'thread': self.thread.pk})
-        self.assertContains(reading, 'class="record-inbox record-inbox--fill record-inbox--open"')
-        self.assertContains(reading, 'class="inbox-toolbar inbox-toolbar--search-only inbox-toolbar--open"')
+        self.assertContains(reading, 'class="staff-page-card record-inbox record-inbox--fill record-inbox--open"')
+        # The card's header (title, count, Filters, search) goes with the list on a phone, so the conversation starts at
+        # the top; above phone width it stays (staff_mobile.css).
+        self.assertContains(reading, '<header class="staff-page-card__header staff-list-header record-inbox__header">')
+        self.assertIn('.workspace-page .record-inbox--open > .record-inbox__header', (CSS / 'staff_mobile.css').read_text())
         self.assertContains(reading, f'<a class="record-inbox__back" href="{staff_inbox_url(search="dose")}">')
         self.assertContains(self.client.get(inbox, {'compose': 1}), 'record-inbox--open')
 

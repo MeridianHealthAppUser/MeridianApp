@@ -1,5 +1,56 @@
 {% extends 'portal/staff_page_base.html' %}{% load static workspace_ui %}
-{% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/backoffice.css' %}?v=20261104a">{% endblock %}
+{% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/backoffice.css' %}?v=20261120c">{% if monthly %}<link rel="stylesheet" href="{% static 'css/dialogs.css' %}?v=20261115a"><script src="{% static 'js/dialogs.js' %}?v=20261115b" defer></script>{% endif %}{% endblock %}
 {% block breadcrumbs %}{% if active_membership.role == 'super_admin' %}{% breadcrumbs 'Insights' %}{% else %}{% breadcrumbs 'Activity statements' %}{% endif %}{% endblock %}
-{% block page_heading %}<header class="staff-page-header"><div><h1>{% if active_membership.role == 'super_admin' %}Insights{% else %}Activity statements{% endif %}</h1><p>Local records of completed appointments and messages, using explicitly entered rates. No payment is executed.</p></div>{% if can_edit %}<a class="console-button console-button--primary" href="{% url 'portal:activity-statement-create' %}">Prepare statement</a>{% endif %}</header>{% page_tabs %}{% endblock %}
-{% block page_content %}<div class="backoffice"><section class="staff-page-card backoffice-panel"><form class="console-form" method="get"><div class="console-form__field"><label for="statement_status">Status</label><select id="statement_status" name="status"><option value="all">All statements</option><option value="draft"{% if status_filter == 'draft' %} selected{% endif %}>Draft</option><option value="approved"{% if status_filter == 'approved' %} selected{% endif %}>Approved snapshot</option></select></div><button class="console-button console-button--secondary" type="submit">Filter statements</button></form></section><section class="staff-page-card"><div class="backoffice-table-wrap"><table class="staff-phone-cards"><thead><tr><th>Doctor</th><th>Period</th><th>Status</th><th>Reference amount</th><th>Action</th></tr></thead><tbody>{% for item in page_obj %}<tr><td data-label="Doctor">{{ item.doctor.full_name }}</td><td data-label="Period">{{ item.period_start|date:'j M Y' }} – {{ item.period_end|date:'j M Y' }}</td><td data-label="Status">{% if item.approved_at %}Approved snapshot{% else %}Draft{% endif %}</td><td data-label="Reference amount">R{{ item.amount }}<br><small>No payment made</small></td><td data-label="Action"><a href="{% url 'portal:activity-statement-detail' item.pk %}">Open statement</a></td></tr>{% empty %}<tr><td colspan="5">No statements in this view. Rates are never assumed.</td></tr>{% endfor %}</tbody></table></div></section>{% include 'portal/includes/patient_pagination.html' with pagination_label='Statement' %}</div>{% endblock %}
+{% block page_heading %}<header class="staff-page-header"><div><h1>{% if active_membership.role == 'super_admin' %}Insights{% else %}Activity statements{% endif %}</h1><p>Each doctor’s consults, messages answered and blood results reviewed, at the practice’s rates. Nothing is paid from here.</p></div>{% if can_edit %}<a class="console-button console-button--primary" href="{% url 'portal:activity-statement-create' %}">Prepare statement</a>{% endif %}</header>{% page_tabs %}{% endblock %}
+{% block page_content %}<div class="backoffice">
+{% if monthly %}
+  {# The monthly activity report (care/activity_reports.py): emailed on the 25th by the daily job, or with Send now. #}
+  <section class="staff-page-card" id="monthly-reports" aria-labelledby="monthly-reports-heading">
+    <header class="staff-page-card__header staff-list-header">
+      <div><h2 id="monthly-reports-heading">Monthly reports</h2>
+        <p>{% if monthly.settings.activity_report_email %}On the 25th, each doctor’s activity from the 25th of last month to the 24th is emailed to {{ monthly.settings.activity_report_email }}.{% if monthly.latest.due %} The report for {{ monthly.latest.label }} hasn’t gone out yet.{% else %} The next one, for {{ monthly.upcoming.label }}, goes out on {{ monthly.upcoming.sends_on|date:'j F' }}.{% endif %}{% else %}No one gets the report yet. Add an email address in Settings to send it on the 25th of each month.{% endif %}</p>
+        {% if monthly.rates %}<p>{{ monthly.rates|join:' · ' }}</p>{% endif %}
+      </div>
+      <div class="staff-list-tools backoffice-report-tools">
+        <button class="console-button console-button--secondary backoffice-icon-button" type="button" data-modal-open="activity-report-settings" aria-haspopup="dialog" aria-label="Settings" data-tooltip="Settings"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg></button>
+        <button class="console-button console-button--primary" type="button" data-modal-open="activity-report-send" aria-haspopup="dialog"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 6 9 7 9-7"/></svg>Send now</button>
+      </div>
+    </header>
+    <div class="backoffice-table-wrap"><table class="staff-phone-cards">
+      <thead><tr><th scope="col">Period</th><th scope="col">Sent to</th><th scope="col">Sent</th><th scope="col">Total payout</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead>
+      <tbody>{% for report in monthly.reports %}<tr>
+        <td data-label="Period"><a href="{% url 'portal:activity-report-detail' report.pk %}">{{ report.period_start|date:'j M Y' }} – {{ report.period_end|date:'j M Y' }}</a></td>
+        <td data-label="Sent to">{{ report.sent_to|default:'—' }}</td>
+        <td data-label="Sent">{% if report.sent_at %}{{ report.sent_at|date:'j M Y, H:i' }}<br><small class="backoffice-muted">{% if report.created_by %}By {{ report.created_by.full_name }}{% else %}Automatically{% endif %}</small>{% else %}Not sent{% endif %}</td>
+        <td data-label="Total payout">{{ report.total_text }}</td>
+        <td data-label="Actions"><div class="backoffice-actions"><a class="console-button console-button--secondary" href="{% url 'portal:activity-report-detail' report.pk %}">Open report</a><a class="console-button console-button--secondary" data-no-loader href="{% url 'portal:activity-report-export' report.pk %}">Download CSV</a></div></td>
+      </tr>{% empty %}<tr><td colspan="5">No reports yet. The first goes out on {{ monthly.upcoming.sends_on|date:'j F' }}, or use Send now for {{ monthly.latest.label }}.</td></tr>{% endfor %}</tbody>
+    </table></div>
+    {% include 'portal/includes/patient_pager.html' with pager=monthly.reports param='reports_page' query=monthly.reports_query anchor='monthly-reports' label='Monthly report' %}
+  </section>
+
+  <dialog class="app-dialog" id="activity-report-settings" aria-labelledby="activity-report-settings-title"{% if monthly.settings_form.errors %} open{% endif %}>
+    <div class="app-dialog__body">
+      <h2 id="activity-report-settings-title">Monthly report settings</h2>
+      <p class="app-dialog__sub">New rates apply to reports sent from now on, and fill in new statements. Reports already sent keep the rates they used.</p>
+      <form class="console-form" method="post" action="{% url 'portal:activity-report-settings' %}">{% csrf_token %}<input type="hidden" name="workflow_context" value="{{ monthly.settings_context }}">{{ monthly.settings_form.non_field_errors }}
+        {% for field in monthly.settings_form %}{% include 'portal/includes/form_field.html' %}{% endfor %}
+        <div class="app-dialog__actions"><button class="console-button console-button--secondary" type="button" data-dialog-close>Cancel</button><button class="console-button console-button--primary" type="submit">Save settings</button></div>
+      </form>
+    </div>
+  </dialog>
+
+  <dialog class="app-dialog" id="activity-report-send" aria-labelledby="activity-report-send-title">
+    <div class="app-dialog__body">
+      <h2 id="activity-report-send-title">{% if monthly.latest.report %}Send the report again?{% else %}Send the report now?{% endif %}</h2>
+      <p class="app-dialog__sub">{{ monthly.latest.label }}</p>
+      {% if not monthly.settings.activity_report_email %}<p class="app-dialog__policy">Add the email address to send it to in Settings first.</p>
+      <div class="app-dialog__actions"><button class="console-button console-button--secondary" type="button" data-dialog-close>Close</button></div>
+      {% else %}<p class="app-dialog__policy">{% if monthly.latest.report %}It was sent to {{ monthly.latest.report.sent_to }} on {{ monthly.latest.report.sent_at|date:'j F Y, H:i' }}. Sending it again works it out afresh at today’s rates, emails it to {{ monthly.settings.activity_report_email }} and replaces it in the log.{% else %}Each doctor’s activity is emailed to {{ monthly.settings.activity_report_email }} and kept in the log. It isn’t sent again on the 25th.{% endif %}</p>
+      <form class="console-form" method="post" action="{% url 'portal:activity-report-send' %}">{% csrf_token %}<input type="hidden" name="workflow_context" value="{{ monthly.send_context }}"><input type="hidden" name="period_end" value="{{ monthly.latest.end|date:'Y-m-d' }}">{% if monthly.latest.report %}<input type="hidden" name="resend" value="1">{% endif %}
+        <div class="app-dialog__actions"><button class="console-button console-button--secondary" type="button" data-dialog-close>Cancel</button><button class="console-button console-button--primary" type="submit">{% if monthly.latest.report %}Send again{% else %}Send report{% endif %}</button></div>
+      </form>{% endif %}
+    </div>
+  </dialog>
+{% endif %}
+  <section class="staff-page-card backoffice-panel"><form class="console-form" method="get"><div class="console-form__field"><label for="statement_status">Status</label><select id="statement_status" name="status"><option value="all">All statements</option><option value="draft"{% if status_filter == 'draft' %} selected{% endif %}>Draft</option><option value="approved"{% if status_filter == 'approved' %} selected{% endif %}>Approved snapshot</option></select></div><button class="console-button console-button--secondary" type="submit">Filter statements</button></form></section><section class="staff-page-card"><div class="backoffice-table-wrap"><table class="staff-phone-cards"><thead><tr><th>Doctor</th><th>Period</th><th>Status</th><th>Reference amount</th><th>Action</th></tr></thead><tbody>{% for item in page_obj %}<tr><td data-label="Doctor">{{ item.doctor.full_name }}</td><td data-label="Period">{{ item.period_start|date:'j M Y' }} – {{ item.period_end|date:'j M Y' }}</td><td data-label="Status">{% if item.approved_at %}Approved snapshot{% else %}Draft{% endif %}</td><td data-label="Reference amount">R{{ item.amount }}<br><small>No payment made</small></td><td data-label="Action"><a href="{% url 'portal:activity-statement-detail' item.pk %}">Open statement</a></td></tr>{% empty %}<tr><td colspan="5">No statements in this view. Rates are never assumed.</td></tr>{% endfor %}</tbody></table></div></section>{% include 'portal/includes/patient_pagination.html' with pagination_label='Statement' %}</div>{% endblock %}

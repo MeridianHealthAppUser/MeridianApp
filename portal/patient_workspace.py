@@ -47,7 +47,7 @@ CLINICIAN_TABS = {'overview', 'blood-tests', 'messages'}
 OPERATIONAL_AUDIT_LABELS = {
     'appointment.created': 'Appointment booked', 'appointment.patient_booked': 'Appointment booked by patient',
     'appointment.status_changed': 'Appointment status changed', 'appointment.proposal.accepted': 'Appointment time changed',
-    'appointment.time_changed': 'Appointment time changed',
+    'appointment.time_changed': 'Appointment time changed', 'appointment.changed': 'Appointment type or length changed',
     'patient.contact_updated': 'Patient contact details updated', 'patient.doctor_assigned': 'Prescribing doctor changed',
     'patient.details_updated': 'Patient details updated',
     'shipment.created': 'Delivery prepared',
@@ -239,18 +239,18 @@ def workspace_tab_context(request, company, membership, patient, tab, **override
         context['legacy_appointment_context'] = make_workflow_context(request, company, 'legacy-staff-booking', patient)
         context['patient_age'] = age(patient.date_of_birth)
     elif tab == 'appointments':
-        appointments = scoped(Appointment, company, patient).select_related('clinician').order_by('-starts_at', '-pk')
-        context.update(paginated(request, patient, tab, appointments, filters=[
-            FilterSection('status', 'Status', 'status', Appointment.Status.choices),
-            FilterSection('type', 'Appointment type', 'appointment_type', Appointment.Type.choices, icon='type'),
-            doctor_filter(appointments)]))
-        from video.access import attach_video_join, join_window
-        attach_video_join(context['rows'], request.user.pk, allowed_role='doctor' if membership.is_clinician else None)
-        for row in context['rows']:
-            # The Join window column: when the room opens and closes, for a booking that's still on.
-            row.join_window = join_window(row) if row.status == Appointment.Status.BOOKED else None
+        # The patient's appointments as Calendar's Appointments tab lists them (portal/staff_appointments.py),
+        # in the format of their own My Appointments: Upcoming and Past, with Filters and each row's actions.
+        from .staff_appointments import staff_appointment_list
+
+        context.update(staff_appointment_list(
+            request, company, membership, scoped(Appointment, company, patient),
+            action_url=reverse('portal:patient-detail', args=[patient.pk]), hidden=[('tab', tab)], show_patient=False))
         from .appointment_detail_views import staff_booking_form
-        context.update(appointment_form=staff_booking_form(company, patient=patient, membership=membership),
+        # Book an appointment, beside Filters, for whoever can change the record.
+        context.update(appointment_book_url=f'{reverse("portal:appointment-book")}?{urlencode({"patient": patient.pk})}'
+                       if context['can_change_record'] else '',
+                       appointment_form=staff_booking_form(company, patient=patient, membership=membership),
                        legacy_appointment_context=request.POST.get('workflow_context', '') if request.method == 'POST' else make_workflow_context(request, company, 'legacy-staff-booking', patient))
     elif tab == 'consultations':
         encounters = consultations(company, membership, patient, request.user)

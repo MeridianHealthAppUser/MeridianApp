@@ -1,6 +1,6 @@
 {% extends 'emails/base.html' %}{% block content %}
         <p style="margin:0 0 16px;">Hello{% if greeting %} {{ greeting }}{% endif %},</p>
-        <p style="margin:0 0 16px;">{% if moved %}An appointment with you has moved to a new time.{% else %}A new appointment has been booked with you.{% endif %}{% if booked_by %} Booked by {{ booked_by }}.{% endif %}</p>
+        <p style="margin:0 0 16px;">{% if moved %}An appointment with you has moved to a new time.{% elif changed %}An appointment with you has changed. It's at the same time.{% else %}A new appointment has been booked with you.{% endif %}{% if booked_by %} Booked by {{ booked_by }}.{% endif %}</p>
         {% include 'emails/details.html' %}
-        {% include 'emails/button.html' with label='Open Calendar &amp; Bookings' %}
+        {% include 'emails/button.html' with label='Open Calendar' %}
 {% endblock %}

@@ -6,7 +6,8 @@
    date and a clinician, then shows every slot in their hours: the ones a booking of the chosen length can start in
    are free to choose, and the rest say why not. The Time list stays, hidden, as what the form sends. If the day
    can't be loaded, the list comes back with every quarter hour and booking checks the time when saved. Fields in a
-   closed dialog, such as each booking's Edit appointment in Day view, wait until it opens. A free slot in Available
+   closed dialog, such as each booking's Edit appointment in Day view, wait until it opens. There, the appointment's
+   own time (Current) can be chosen too while it fits the length, so only its type or length can change. A free slot in Available
    time ([data-book-slot]) opens Create appointment with its clinician, date and time chosen. The form's button
    waits until everything it needs is chosen, the time included. */
 (() => {
@@ -24,6 +25,7 @@
     const originallyDisabled = time.disabled;
     let chosen = time.value;
     let pending = null;
+    let bookable = new Set();
 
     // The grid takes the Time field's place, with its label and any error from the last try.
     const field = time.closest('.console-form__field') || time.parentElement;
@@ -75,7 +77,7 @@
 
     function chip(slot) {
       const item = document.createElement('li');
-      const free = slot.state === 'free';
+      const free = slot.state === 'free' || (slot.state === 'current' && bookable.has(slot.time));
       const element = document.createElement(free ? 'button' : 'span');
       element.className = `schedule-slot schedule-slot--${slot.state}`;
       const at = document.createElement('time');
@@ -111,6 +113,7 @@
         const response = await fetch(`${fields.dataset.timesUrl}?${query}`, { credentials: 'same-origin', signal: pending.signal });
         if (!response.ok) throw new Error('No times');
         const { times, slots } = await response.json();
+        bookable = new Set(times);
         time.replaceChildren(new Option('Choose a time', ''), ...times.map((at) => new Option(at, at, false, at === chosen)));
         time.disabled = !times.length;
         status.textContent = slots.length ? (times.length ? '' : 'No free times on this day.') : 'Not available on this day.';

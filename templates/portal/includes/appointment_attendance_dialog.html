@@ -1,0 +1,17 @@
+{% comment %}Complete or No-show, from a staff list's Past row (Nov 2026): a dialog to confirm it, as recording attendance on
+  the appointment's page is (Update appointment status, then Confirm). It posts there with the status, as that page's
+  own form does, and comes back to the list as it was (return_to); a mistake opens the appointment's page with its
+  status dialog. status: 'completed' or 'no_show'; dialog_prefix: the start of its id, before the appointment's
+  number. show_patient names the patient first. Needs appointment.attendance_context.{% endcomment %}
+{% with pk=appointment.pk|stringformat:'s' %}{% with id=dialog_prefix|add:pk %}
+<dialog class="app-dialog" id="{{ id }}" aria-labelledby="{{ id }}-title">
+  <div class="app-dialog__body">
+    <h2 id="{{ id }}-title">{% if status == 'completed' %}Complete appointment{% else %}Mark as no-show{% endif %}</h2>
+    <p class="app-dialog__sub">{% if show_patient %}{{ appointment.patient }} · {% endif %}{{ appointment.get_appointment_type_display }} with {{ appointment.clinician.titled_name }} on {{ appointment.starts_at|date:'D j M Y, H:i' }}.</p>
+    <p class="app-dialog__sub">{% if status == 'completed' %}This records that {{ appointment.patient.first_name }} attended the appointment.{% else %}This records that {{ appointment.patient.first_name }} didn’t attend the appointment.{% endif %}</p>
+    <form class="console-form" method="post" action="{% url 'portal:appointment-detail' appointment.pk %}">{% csrf_token %}<input type="hidden" name="workflow_context" value="{{ appointment.attendance_context }}"><input type="hidden" name="next" value="{{ return_to }}"><input type="hidden" name="status" value="{{ status }}">
+      <div class="app-dialog__actions"><button class="console-button console-button--secondary" type="button" data-dialog-close>Back</button><button class="console-button console-button--primary" type="submit">{% if status == 'completed' %}Complete appointment{% else %}Mark as no-show{% endif %}</button></div>
+    </form>
+  </div>
+</dialog>
+{% endwith %}{% endwith %}

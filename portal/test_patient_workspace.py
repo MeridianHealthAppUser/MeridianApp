@@ -123,14 +123,16 @@ class PatientWorkspaceTests(TestCase):
         Appointment.objects.bulk_create([Appointment(company=self.company, patient=self.patient, clinician=self.doctor,
             starts_at=timezone.now() + timedelta(days=index + 1), duration_minutes=30) for index in range(22)])
         response = self.page('appointments', status='booked')
-        self.assertEqual(len(response.context['rows']), 20)
-        next_url = response.context['workspace_next_url']
-        self.assertEqual(urlsplit(next_url).path, self.path())
-        self.assertEqual(parse_qs(urlsplit(next_url).query), {'tab': ['appointments'], 'status': ['booked'], 'page': ['2']})
-        self.assertEqual(len(self.client.get(next_url).context['rows']), 2)
+        self.assertEqual(len(response.context['appointments']), 20)
+        # The shared appointment list's pages (portal/staff_appointments.py) are relative to the record's address.
+        self.assertContains(response, 'href="?tab=appointments&amp;status=booked&amp;page=2"')
+        self.assertEqual(parse_qs(response.context['pagination_query']), {'tab': ['appointments'], 'status': ['booked']})
+        next_page = self.client.get(self.path(), {'tab': 'appointments', 'status': 'booked', 'page': 2})
+        self.assertEqual(next_page.context['workspace_patient'], self.patient)
+        self.assertEqual(len(next_page.context['appointments']), 2)
         invalid = self.page('appointments', status='invented')
-        self.assertTrue(invalid.context['workspace_filter'].errors)
-        self.assertEqual(invalid.context['rows'], [])
+        self.assertTrue(invalid.context['filter_menu']['invalid'])
+        self.assertEqual(invalid.context['appointments'], [])
 
     def test_message_and_new_conversation_success_return_to_the_exact_patient_thread(self):
         self.login(self.doctor)

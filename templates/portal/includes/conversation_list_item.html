@@ -1,15 +1,23 @@
 {% load workspace_ui %}{% comment %}
-  One conversation in a list of conversations: the subject, who else is in it (only when someone
-  besides the patient you are looking at and you, as tags by role: portal/people_tags.py), then the latest message,
-  after who wrote it (`latest_from`), and its time today or its date. The thread carries `list_url`, `is_selected`,
-  `people_tags` and `about` (the patient a team conversation is about, as a tag on its own line), and
-  `read_state_url` when it has messages from others to mark read or unread. The parent passes
-  `read_state_fields`, the hidden fields that bring the button back to this list.
+  One conversation in a list of conversations (Patient messages, Team messages, a record's Messages tab). First who
+  it's with, leaving you out (and on a record, its patient), as tags by role on one line (conversation_people.html,
+  portal/people_tags.py), with any unread count and the mark read/unread envelope side by side at its right, the
+  tags cut short when they need to make room; then, after a gap, the subject with "Closed" at its right, close to
+  the patient a team conversation is about and the latest message, after who wrote it (`latest_from`), and its time
+  today or its date (James, 20 Nov 2026). With nobody else in it, the subject comes first and carries "Closed" and
+  the count. The thread carries `list_url`, `is_selected`, `people_tags`, `about`, `unread_count` (with
+  `unread_label` and a grey `unread_class`, and no bold, when it counts something other than your own unread), and
+  `read_state_url` when it has messages from others to mark read or unread. The parent passes `read_state_fields`, the hidden fields that bring the button
+  back to this list.
 {% endcomment %}
 <li{% if thread.read_state_url %} class="record-inbox__item--marks"{% endif %}>
-  <a class="record-inbox-thread{% if thread.is_selected %} is-selected{% endif %}{% if thread.unread_count %} is-unread{% endif %}" href="{{ thread.list_url }}"{% if thread.is_selected %} aria-current="true"{% endif %}>
-    <strong><span>{{ thread.subject|default:"Patient message" }}</span>{% if thread.is_closed %}<span class="record-inbox-pill">Closed</span>{% endif %}{% include 'portal/includes/nav_badge.html' with count=thread.unread_count %}</strong>
-    {% if thread.people_tags %}<span class="record-inbox-thread__people person-tags"><span class="sr-only">With </span>{% for tag in thread.people_tags %}{% include 'portal/includes/person_tag.html' %}{% endfor %}</span>{% endif %}
+  <a class="record-inbox-thread{% if thread.is_selected %} is-selected{% endif %}{% if thread.unread_count and not thread.unread_class %} is-unread{% endif %}" href="{{ thread.list_url }}"{% if thread.is_selected %} aria-current="true"{% endif %}>
+    {% if thread.people_tags %}
+      <span class="record-inbox-thread__head">{% include 'portal/includes/conversation_people.html' with tags=thread.people_tags people_class='record-inbox-thread__people' %}{% if thread.unread_count %}<span class="record-inbox-thread__marks">{% include 'portal/includes/nav_badge.html' with count=thread.unread_count badge_label=thread.unread_label badge_class=thread.unread_class %}</span>{% endif %}</span>
+      <span class="record-inbox-thread__title"><strong class="record-inbox-thread__subject">{{ thread.subject|default:"Patient message" }}</strong>{% if thread.is_closed %}<span class="record-inbox-pill">Closed</span>{% endif %}</span>
+    {% else %}
+      <span class="record-inbox-thread__head record-inbox-thread__head--subject"><strong class="record-inbox-thread__subject">{{ thread.subject|default:"Patient message" }}</strong>{% if thread.is_closed or thread.unread_count %}<span class="record-inbox-thread__marks">{% if thread.is_closed %}<span class="record-inbox-pill">Closed</span>{% endif %}{% include 'portal/includes/nav_badge.html' with count=thread.unread_count badge_label=thread.unread_label badge_class=thread.unread_class %}</span>{% endif %}</span>
+    {% endif %}
     {% if thread.about %}<span class="record-inbox-thread__about"><span class="person-tags__label">Patient:</span>{% include 'portal/includes/person_tag.html' with tag=thread.about %}</span>{% endif %}
     <span class="record-inbox-thread__last">
       <span class="record-inbox-thread__preview">{% if thread.latest_body %}{% if thread.latest_from %}<strong>{{ thread.latest_from }}:</strong> {% endif %}{{ thread.latest_body|truncatechars:90 }}{% else %}No messages yet{% endif %}</span>

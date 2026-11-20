@@ -213,6 +213,48 @@ class TreatmentPageTests(TestCase):
         self.assertEqual(secure.post(url, dict(authorization=auth.pk, confirm='on')).status_code, 403)
         self.assertFalse(PatientSubscription.objects.exists())
 
+    def test_authorisations_have_a_search_and_filters(self):
+        # James, 20 Nov 2026: the standard tools at the top right of the table: a search, and Filters for Status,
+        # Patient, Doctor, Product, Maximum dose and Valid dates.
+        from .treatment_views import dose_key
+
+        mine = self.authorization()
+        other = create_authorization(company=self.company, patient=self.other, actor=self.doctor, product=self.product,
+                                     max_dose='1 mg, weekly', quantity_per_cycle=4, starts_on=timezone.localdate(),
+                                     expires_on=timezone.localdate() + timedelta(days=90), review_interval_days=90)
+        self.login(self.super_admin)
+        url = reverse('portal:treatment-authorisations')
+        page = self.client.get(url)
+        self.assertContains(page, 'data-conversation-search')
+        self.assertContains(page, 'aria-label="Filter authorisations"')
+        self.assertNotContains(page, 'Apply filters')
+
+        def shown(**query):
+            return [item.pk for item in self.client.get(url, query).context['page_obj']]
+
+        self.assertEqual(shown(patient=self.other.pk), [other.pk])
+        self.assertEqual(shown(q='Other'), [other.pk])
+        self.assertEqual(set(shown(q='Selected treatment')), {mine.pk, other.pk})
+        self.assertEqual(set(shown(status='active')), {mine.pk, other.pk})
+        self.assertEqual(shown(status='cancelled'), [])
+        self.assertEqual(self.client.get(url, {'patient': self.patient.pk}).context['selected_patient'], self.patient)
+        self.assertEqual(set(shown(doctor=self.doctor.pk)), {mine.pk, other.pk})
+        self.assertEqual(shown(doctor=self.admin.pk), [])
+        self.assertEqual(set(shown(product=self.product.pk)), {mine.pk, other.pk})
+        # A dose with a comma in it is still one choice.
+        self.assertEqual(shown(dose=dose_key('1 mg, weekly')), [other.pk])
+        self.assertEqual(shown(dose=f"{dose_key('1 mg, weekly')},{dose_key('Recorded doctor decision')}"), [other.pk, mine.pk])
+        self.assertEqual(shown(dose='not-a-dose'), [])
+        # Valid on any day in the range.
+        today = timezone.localdate()
+        self.assertEqual(set(shown(valid_from=(today + timedelta(days=10)).isoformat(), valid_to=(today + timedelta(days=20)).isoformat())),
+                         {mine.pk, other.pk})
+        self.assertEqual(shown(valid_from=(today + timedelta(days=100)).isoformat()), [])
+        self.assertEqual(shown(valid_to=(today - timedelta(days=1)).isoformat()), [])
+        page = self.client.get(url)
+        for label in ('Doctor', 'Product', 'Maximum dose', 'Valid dates', '1 mg, weekly'):
+            self.assertContains(page, label)
+
     def test_staff_authorization_history_paginates_and_patient_history_is_not_shown(self):
         for _ in range(23):
             self.authorization()

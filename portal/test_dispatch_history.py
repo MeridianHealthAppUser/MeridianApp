@@ -112,7 +112,7 @@ class DispatchHistoryTests(OperationsPortalFixture):
         self.assertNotContains(response, 'Previous week')
         self.assertNotContains(response, self.beta_product.name)
         self.assertNotIn(foreign.pk, self.ids(response))
-        self.assertContains(response, 'Download Excel')
+        self.assertContains(response, 'Download XLSX')
         form = response.context['filter_form']
         for field, label in (('start_month', 'From month'), ('end_month', 'To month')):
             self.assertEqual(form.fields[field].label, label)

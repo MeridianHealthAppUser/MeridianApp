@@ -1,0 +1,24 @@
+{% extends 'portal/staff_page_base.html' %}
+{% load static workspace_ui %}
+
+{% block title %}Appointments | {{ page_title }} | {{ company.name }} | Meridian{% endblock %}
+{% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/schedule_availability.css' %}?v=20261105a"><link rel="stylesheet" href="{% static 'css/staff_appointments.css' %}?v=20261120d"><script src="{% static 'js/appointment_video.js' %}?v=20261108a" defer></script><link rel="stylesheet" href="{% static 'css/info_tips.css' %}?v=20261104a"><script src="{% static 'js/info_tips.js' %}?v=20261008a" defer></script><link rel="stylesheet" href="{% static 'css/dialogs.css' %}?v=20261115a"><script src="{% static 'js/dialogs.js' %}?v=20261115b" defer></script><link rel="stylesheet" href="{% static 'css/time_slots.css' %}?v=20261119a"><script src="{% static 'js/appointment_booking.js' %}?v=20261119a" defer></script><link rel="stylesheet" href="{% static 'css/filter_menu.css' %}?v=20261120a"><script src="{% static 'js/filter_menu.js' %}?v=20261114a" defer></script>{% endblock %}
+
+{% block breadcrumbs %}{% breadcrumbs page_title %}{% endblock %}
+{% block page_heading %}
+  <header class="staff-page-header staff-schedule-page-header">
+    <div>
+      <h1>{{ page_title }}</h1>
+    </div>
+    <div class="staff-schedule-header-actions">
+      <a class="console-button console-button--primary" href="{% url 'portal:appointment-book' %}" data-modal-open="create-appointment" aria-haspopup="dialog">Create appointment</a>
+    </div>
+  </header>
+  {% include 'portal/includes/schedule_tabs.html' %}
+{% endblock %}
+
+{% block page_content %}
+  {# Every appointment this person may see, as a patient's My Appointments lists theirs; a doctor's are their own. #}
+  {% include 'portal/includes/staff_appointment_list.html' %}
+  {% include 'portal/includes/create_appointment_dialog.html' %}
+{% endblock %}

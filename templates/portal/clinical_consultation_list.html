@@ -1,7 +1,10 @@
 {% extends 'portal/staff_page_base.html' %}
 {% load static workspace_ui %}
+{% comment %}Consultations (portal/clinical_views.py ConsultationListView): the standard tools at the top right of the
+  table (James, 20 Nov 2026): a search, as you type, for patient or clinician, and Filters for Status, Patient,
+  Clinician and Consultation date (one day, or a range). New consultation shows when one patient is picked.{% endcomment %}
 {% block title %}Consultations | {{ company.name }} | Meridian{% endblock %}
-{% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/clinical_workflow.css' %}?v=20261105a">{% endblock %}
+{% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/clinical_workflow.css' %}?v=20261120a"><link rel="stylesheet" href="{% static 'css/filter_menu.css' %}?v=20261120a"><script src="{% static 'js/filter_menu.js' %}?v=20261114a" defer></script><link rel="stylesheet" href="{% static 'css/conversation_search.css' %}?v=20261104a"><script src="{% static 'js/conversation_search.js' %}?v=20261103a" defer></script>{% endblock %}
 
 {% block breadcrumbs %}{% breadcrumbs 'Consultations' %}{% endblock %}
 {% block page_heading %}
@@ -9,7 +12,7 @@
     <div><h1>Consultations</h1><p>Draft and signed consultation records at {{ company.name }}.</p></div>
     {% if can_create %}
       <div class="clinical-heading-actions">
-        {% if filter_form.cleaned_data.patient %}<a class="console-button console-button--primary" href="{% url 'portal:clinical-consultation-create' filter_form.cleaned_data.patient.pk %}">New consultation</a>{% else %}<a class="console-button console-button--primary" href="{% url 'portal:patient-list' %}">Choose a patient</a>{% endif %}
+        {% if selected_patient %}<a class="console-button console-button--primary" href="{% url 'portal:clinical-consultation-create' selected_patient.pk %}">New consultation</a>{% else %}<a class="console-button console-button--primary clinical-records-button" href="{% url 'portal:patient-list' %}"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg>View Patient Records</a>{% endif %}
       </div>
     {% endif %}
   </header>
@@ -17,18 +20,9 @@
 
 {% block page_content %}
   <div class="clinical-workflow">
-    <section class="staff-page-card" aria-labelledby="consultation-filters-heading">
-      <header class="staff-page-card__header"><div><h2 id="consultation-filters-heading">Find a consultation</h2><p>Select a patient to view their consultations{% if can_create %} or start a new note{% endif %}.</p></div></header>
-      <form class="staff-filter-form clinical-filter-form" method="get" action="{% url 'portal:clinical-consultations' %}">
-        {{ filter_form.non_field_errors }}
-        <div class="staff-filter-form__field"><label for="{{ filter_form.status.id_for_label }}">{{ filter_form.status.label }}</label>{{ filter_form.status }}{{ filter_form.status.errors }}</div>
-        <div class="staff-filter-form__field"><label for="{{ filter_form.patient.id_for_label }}">{{ filter_form.patient.label }}</label>{{ filter_form.patient }}{{ filter_form.patient.errors }}</div>
-        <button class="console-button console-button--primary" type="submit">Apply filters</button>
-      </form>
-    </section>
     <section class="staff-page-card" aria-labelledby="consultation-list-heading">
-      <header class="staff-page-card__header"><div><h2 id="consultation-list-heading">Consultation records</h2></div><span class="staff-page-card__count">{{ page_obj.paginator.count }} record{{ page_obj.paginator.count|pluralize }}</span></header>
-      {% if filter_form.errors %}<div class="staff-filter-error" role="alert">Correct the filter fields above to view consultations.</div>{% else %}
+      <header class="staff-page-card__header staff-list-header"><div><h2 id="consultation-list-heading">Consultation records</h2></div>{% include 'portal/includes/list_tools.html' with search_label='Search consultations' %}</header>
+      <div data-search-region="list">{% if filter_form.errors %}<div class="staff-filter-error" role="alert">{% for field in filter_form %}{% for error in field.errors %}{{ error }} {% endfor %}{% endfor %}Correct the filters to view consultations.</div>{% else %}
         <div class="clinical-table-wrap"><table class="clinical-table" aria-labelledby="consultation-list-heading">
           <thead><tr><th scope="col">Patient</th><th scope="col">Consultation</th><th scope="col">Clinician</th><th scope="col">Status</th><th scope="col">Action</th></tr></thead>
           <tbody>{% for encounter in consultations %}<tr>
@@ -37,10 +31,10 @@
             <td data-label="Clinician">{{ encounter.clinician.full_name }}</td>
             <td data-label="Status"><span class="console-status{% if encounter.status == 'signed' %} console-status--active{% endif %}">{{ encounter.get_status_display }}</span></td>
             <td data-label="Action"><a class="console-button console-button--secondary" href="{{ encounter.detail_url }}">Open note<span class="sr-only"> for {{ encounter.patient }}</span></a></td>
-          </tr>{% empty %}<tr><td class="clinical-table__empty" colspan="5">No consultation records match this view.</td></tr>{% endfor %}</tbody>
+          </tr>{% empty %}<tr><td class="clinical-table__empty" colspan="5">No consultation records match {% if search %}this search{% else %}this view{% endif %}.</td></tr>{% endfor %}</tbody>
         </table></div>
-      {% endif %}
+      {% endif %}</div>
     </section>
-    {% if page_obj.has_other_pages %}<nav class="clinical-pagination" aria-label="Consultation pages">{% if page_obj.has_previous %}<a class="console-button console-button--secondary" href="?{{ pagination_query }}{% if pagination_query %}&amp;{% endif %}page={{ page_obj.previous_page_number }}">Previous</a>{% endif %}<span>Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>{% if page_obj.has_next %}<a class="console-button console-button--secondary" href="?{{ pagination_query }}{% if pagination_query %}&amp;{% endif %}page={{ page_obj.next_page_number }}">Next</a>{% endif %}</nav>{% endif %}
+    <div data-search-region="pages">{% if page_obj.has_other_pages %}<nav class="clinical-pagination" aria-label="Consultation pages">{% if page_obj.has_previous %}<a class="console-button console-button--secondary" href="?{{ pagination_query }}{% if pagination_query %}&amp;{% endif %}page={{ page_obj.previous_page_number }}">Previous</a>{% endif %}<span>Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>{% if page_obj.has_next %}<a class="console-button console-button--secondary" href="?{{ pagination_query }}{% if pagination_query %}&amp;{% endif %}page={{ page_obj.next_page_number }}">Next</a>{% endif %}</nav>{% endif %}</div>
   </div>
 {% endblock %}

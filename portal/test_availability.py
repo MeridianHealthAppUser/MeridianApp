@@ -582,7 +582,7 @@ class AvailabilityPortalTests(TestCase):
         self.assertEqual(bookings.context['schedule_section'], 'bookings')
         self.assertContains(bookings, 'id="appointment-list-heading"')
         self.assertNotContains(bookings, 'id="working-pattern-heading"')
-        self.assertContains(bookings, 'Working Hours &amp; Availability')
+        self.assertContains(bookings, 'Working hours &amp; availability')
         tab = self.client.get(bookings.context['availability_tab_url'])
         self.assertEqual(tab.context['schedule_section'], 'availability')
         self.assertNotContains(tab, 'id="appointment-list-heading"')

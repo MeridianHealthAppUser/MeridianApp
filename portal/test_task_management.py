@@ -187,6 +187,23 @@ class TaskManagementTests(TestCase):
         response = self.client.get(reverse('portal:staff-tasks'), {'kind': 'patient', 'tag': self.tag.pk})
         self.assertEqual([task.pk for task in response.context['tasks']], [self.own_task.pk])
 
+    def test_task_search_finds_title_note_patient_or_person(self):
+        self.login()
+        url = reverse('portal:staff-tasks')
+        everything = [task.pk for task in self.client.get(url).context['tasks']]
+        self.assertTrue(everything)
+
+        def found(term):
+            return [task.pk for task in self.client.get(url, {'q': term}).context['tasks']]
+
+        self.assertIn(self.own_task.pk, found(self.own_task.title))
+        self.assertIn(self.own_task.pk, found(self.own_task.patient.last_name))
+        self.assertEqual(found('no-task-is-called-this'), [])
+        # The search is kept by Filters, and the filters by the search.
+        page = self.client.get(url, {'q': 'Own', 'status': 'all'})
+        self.assertContains(page, '<input type="hidden" name="q" value="Own">')
+        self.assertContains(page, '<input type="hidden" name="status" value="all">')
+
     def test_task_filters_are_in_a_filters_menu_where_patients_and_tags_tick_any(self):
         second_tag = RecordTag.objects.create(company=self.company, name='Follow up')
         TaskTagAssignment.objects.create(company=self.company, task=self.created_task, tag=self.tag)
@@ -194,7 +211,9 @@ class TaskManagementTests(TestCase):
         self.login()
         url = reverse('portal:staff-tasks')
         response = self.client.get(url)
-        self.assertContains(response, '<details class="filter-menu" data-filter-menu>')
+        # The table's tools at its top right (James, 20 Nov 2026): Filters, then the search.
+        self.assertContains(response, '<details class="filter-menu filter-menu--compact" data-filter-menu>')
+        self.assertContains(response, 'data-conversation-search')
         self.assertNotContains(response, 'staff-filter-form--tasks')
         self.assertContains(response, '<input type="radio" name="status" value="open" checked>')
         # Open is where the list starts, so it isn't counted as a filter.

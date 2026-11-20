@@ -123,6 +123,16 @@ class PublicLeadIntakeTests(TestCase):
         self.assertEqual(self.identity_counts(), before)
         self.assertNotIn('_auth_user_id', self.client.session)
 
+    def test_how_did_you_hear_about_us_is_optional_and_saved_for_insights(self):
+        response, _ = self.submit(heard_from=['google', 'ai_overview'])
+        self.assert_successful_submission(response)
+        self.assertEqual(ScreeningQuestionnaire.objects.get().answers['heard_from'], ['google', 'ai_overview'])
+        self.client = self.client_class()
+        response, _ = self.submit(email='second@example.test')
+        self.assert_successful_submission(response)
+        self.assertEqual(ScreeningQuestionnaire.objects.get(lead__email='second@example.test').answers['heard_from'], [])
+        self.assertContains(self.client.get(reverse('portal:questionnaire')), 'How did you hear about us?')
+
     def test_selected_practice_owns_every_intake_record_and_its_notice_versions(self):
         response, _ = self.submit(practice=self.other_company.pk)
         self.assert_successful_submission(response)

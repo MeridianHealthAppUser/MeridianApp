@@ -100,3 +100,6 @@
   .clinical-form-actions { align-items: stretch; }
   .clinical-form-actions .console-button { flex: 1 1 auto; }
 }
+/* View Patient Records: an eye before the words. */
+.clinical-records-button { gap: .5rem; }
+.clinical-records-button svg { flex: 0 0 auto; height: 1.1rem; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.8; width: 1.1rem; }

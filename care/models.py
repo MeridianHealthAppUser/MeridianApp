@@ -109,6 +109,20 @@ class PracticeSettings(CompanyScopedModel):
     parcel_width_cm = models.PositiveSmallIntegerField('Parcel width (cm)', default=20)
     parcel_height_cm = models.PositiveSmallIntegerField('Parcel height (cm)', default=15)
     parcel_weight_kg = models.DecimalField('Parcel weight (kg)', max_digits=5, decimal_places=2, default=Decimal('2.00'))
+    # The monthly doctor activity report (care.activity_reports, Dr Czech, Nov 2026): on the 25th, each doctor's
+    # consults, messages and blood results reviewed from the 25th of the month before to the 24th, at these rates.
+    activity_report_email = models.EmailField(
+        'Send the monthly activity report to', blank=True,
+        help_text='Each doctor’s activity and payout from the 25th of last month to the 24th, emailed on the 25th. Leave blank to stop it.',
+    )
+    activity_rate_initial = models.DecimalField('Per new consult (R)', max_digits=10, decimal_places=2, default=Decimal('300.00'),
+                                                validators=[MinValueValidator(Decimal('0'))])
+    activity_rate_follow_up = models.DecimalField('Per follow-up consult (R)', max_digits=10, decimal_places=2, default=Decimal('170.00'),
+                                                  validators=[MinValueValidator(Decimal('0'))])
+    activity_rate_messages = models.DecimalField('Per message answered (R)', max_digits=10, decimal_places=2, default=Decimal('10.00'),
+                                                 validators=[MinValueValidator(Decimal('0'))])
+    activity_rate_review = models.DecimalField('Per blood result reviewed (R)', max_digits=10, decimal_places=2, default=Decimal('10.00'),
+                                               validators=[MinValueValidator(Decimal('0'))])
 
     class Meta:
         constraints = [models.UniqueConstraint(fields=('company',), name='one_practice_settings_per_company')]
@@ -171,6 +185,9 @@ class Lead(CompanyScopedModel):
     screening_status = models.CharField(max_length=16, choices=ScreeningStatus.choices, default=ScreeningStatus.PENDING)
     stage = models.CharField(max_length=20, choices=Stage.choices, default=Stage.QUESTIONNAIRE)
     converted_patient = models.OneToOneField(Patient, null=True, blank=True, on_delete=models.SET_NULL, related_name='source_lead')
+    # How did you hear about us? on the screening form (answers['heard_from']), for Insights' sources of bookings.
+    HEARD_FROM = (('google', 'Google (sponsored link)'), ('ai_overview', 'AI overview'), ('word_of_mouth', 'Word of mouth'),
+                  ('facebook', 'Facebook'), ('instagram', 'Instagram'))
     # From the unsubscribe link at the foot of a journey email (care.journeys); the enquiry itself is kept.
     emails_unsubscribed_at = models.DateTimeField(null=True, blank=True)
 
@@ -2013,6 +2030,67 @@ class DoctorActivityStatement(CompanyScopedModel):
             raise ValidationError({'period_end': 'The end date must be on or after the start date.'})
         if self.amount is not None and self.amount < 0:
             raise ValidationError({'amount': 'Amounts cannot be negative.'})
+
+
+class ActivityReport(CompanyScopedModel):
+    """One month's doctor activity report (care.activity_reports): each doctor's new and follow-up consults, messages
+    answered and blood results reviewed from the 25th to the 24th, at the practice's rates, as it was emailed. The log
+    Insights > Activity statements lists. Nothing is paid."""
+
+    period_start = models.DateField()
+    period_end = models.DateField()
+    # [{doctor_id, doctor, counts: {initial, follow_up, messages, review, initial_completed, follow_up_completed},
+    #   amounts: {...}, total}] in Rand as strings.
+    rows = models.JSONField(default=list)
+    rates = models.JSONField(default=dict)
+    total = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    sent_to = models.CharField(max_length=254, blank=True)
+    sent_at = models.DateTimeField(null=True, blank=True)
+    # None when the monthly job made it; else who pressed Send now.
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name='+')
+
+    class Meta:
+        ordering = ('-period_end', '-pk')
+        constraints = [models.UniqueConstraint(fields=('company', 'period_start', 'period_end'), name='one_activity_report_per_period')]
+
+
+class InsightNote(CompanyScopedModel):
+    """A dated note on Insights' charts (Dr Czech, Nov 2026), such as "Decreased price to R1000": a marker at its month
+    on every chart over time, and on the cohort trend, so the effect of a change can be seen."""
+
+    on = models.DateField('Date')
+    label = models.CharField('Note', max_length=160)
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name='+')
+
+    class Meta:
+        ordering = ('on', 'pk')
+
+
+class InsightFigure(CompanyScopedModel):
+    """A month's figure from before the app (Dr Czech's spreadsheet). Insights uses it in place of the app's own count
+    for that month and measure."""
+
+    class Metric(models.TextChoices):
+        NEW_BOOKINGS = 'new_bookings', 'New patient bookings'
+        GOOGLE = 'source_google', 'Google (sponsored link)'
+        AI_OVERVIEW = 'source_ai_overview', 'AI overview'
+        WORD_OF_MOUTH = 'source_word_of_mouth', 'Word of mouth'
+        FACEBOOK = 'source_facebook', 'Facebook'
+        INSTAGRAM = 'source_instagram', 'Instagram'
+
+    month = models.DateField()
+    metric = models.CharField(max_length=32, choices=Metric.choices)
+    value = models.PositiveIntegerField()
+    updated_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name='+')
+
+    class Meta:
+        ordering = ('month', 'metric')
+        constraints = [models.UniqueConstraint(fields=('company', 'month', 'metric'), name='one_insight_figure_per_month')]
+
+    def clean(self):
+        super().clean()
+        if self.month and self.month.day != 1:
+            raise ValidationError({'month': 'Use the first day of the month.'})
 
 
 class AppointmentProposal(PatientCompanyScopedModel):

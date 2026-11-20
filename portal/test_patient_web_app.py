@@ -115,8 +115,13 @@ class PatientWebAppTests(TestCase):
     def test_conversation_list_rows_look_like_the_practice_consoles(self):
         self.incoming(1)
         listing = self.page('patient-messages')
-        # Who it's with stays; the latest message sits beside its time today (or its date), as in the console.
-        self.assertContains(listing, '<span class="patient-inbox-thread__with">With Sam Doctor</span>', html=True)
+        # Who it's with comes first, the clinic staff as tags by role, then the subject; the latest message sits beside
+        # its time today (or its date), as in the console.
+        html = listing.content.decode()
+        self.assertNotContains(listing, 'patient-inbox-thread__with')
+        self.assertIn('<span class="patient-inbox-thread__people person-tags person-tags--line"><span class="sr-only">With </span>'
+                      '<span class="person-tag person-tag--doctor" title="Sam Doctor · Doctor">', html)
+        self.assertLess(html.index('patient-inbox-thread__people'), html.index('<strong class="patient-inbox-thread__subject">'))
         sent = timezone.localtime(listing.context['threads'][0].last_activity)
         self.assertRegex(listing.content.decode(), rf'class="patient-inbox-thread__last">\s*<span class="patient-inbox-thread__preview">Reply 0</span>\s*<time [^>]*>{sent:%H:%M}</time>')
         self.assertNotContains(listing, 'patient-inbox-thread__meta')

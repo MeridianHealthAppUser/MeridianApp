@@ -1,5 +1,5 @@
 """An appointment as a calendar file (.ics): attached to a patient's Appointment confirmed and Appointment moved
-emails (Dr Czech, Nov 2026: in the email only, not in the app), and Download on a doctor's Calendar & Bookings.
+emails (Dr Czech, Nov 2026: in the email only, not in the app), and Download on a doctor's Calendar.
 
 Calendars are often synced to other services, so the event names no patient and carries no clinical detail: just
 the appointment's time, a short title, the practice and a link back to Meridian, which asks the reader to sign in.

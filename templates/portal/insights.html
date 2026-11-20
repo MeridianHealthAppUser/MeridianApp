@@ -1,0 +1,81 @@
+{% extends 'portal/staff_page_base.html' %}{% load static workspace_ui insights_ui %}
+{% comment %}Insights (portal/insights_views.py, care/insights.py): Dr Czech's measures month by month, over all time unless a
+  period is chosen. Each chart is drawn by static/js/insights_charts.js from the specs at the foot of the page, with the
+  practice's notes as markers; each has its numbers as a table too. The bar under the heading (James, 20 Nov 2026) has
+  the tabs, then Download XLSX, Historical data and Notes as square buttons, then the period: a quick range and its dates,
+  which open a calendar to pick a range (static/js/date_picker.js). Changing either shows the new period straight away
+  (static/js/insights_range.js).{% endcomment %}
+{% block title %}Insights | Meridian{% endblock %}
+{% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/dialogs.css' %}?v=20261115a"><link rel="stylesheet" href="{% static 'css/insights.css' %}?v=20261120c"><script src="{% static 'js/dialogs.js' %}?v=20261115b" defer></script><script src="{% static 'js/insights_charts.js' %}?v=20261119b" defer></script><script src="{% static 'js/insights_range.js' %}?v=20261120a" defer></script>{% endblock %}
+{% block breadcrumbs %}{% breadcrumbs 'Insights' %}{% endblock %}
+{% block page_heading %}<header class="staff-page-header"><div><h1>Insights</h1><p>Bookings, subscriptions, revenue, retention and weight lost, month by month.</p></div></header>
+<div class="insights-bar">{% page_tabs %}
+  <div class="insights-tools">
+    <a class="insights-tool" href="{% url 'portal:metrics-export' %}{% if export_query %}?{{ export_query }}{% endif %}" download data-no-loader aria-label="Download XLSX" data-tooltip="Download XLSX"><svg viewBox="0 0 24 24" width="21" height="21" aria-hidden="true" focusable="false"><path d="M14 3H5v18h14V8l-5-5Z"/><path d="M14 3v5h5M8 11l5 6m0-6-5 6M15 12h2m-2 3h2"/></svg></a>
+    <button class="insights-tool" type="button" data-modal-open="insight-figures" aria-haspopup="dialog" aria-label="Historical data" data-tooltip="Historical data"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" focusable="false"><path d="M3.5 12a8.5 8.5 0 1 0 2.6-6.1L3.5 8.5"/><path d="M3.5 3.5v5h5"/><path d="M12 7.5V12l3 2"/></svg></button>
+    {% include 'portal/includes/insight_notes_button.html' %}
+    <form class="insights-range" method="get" action="{% url 'portal:metrics' %}" data-insights-range>
+      <span class="insights-range__preset"><select name="range" aria-label="Period">{% for key, label in ranges %}<option value="{{ key }}"{% if key == period.range %} selected{% endif %}>{{ label }}</option>{% endfor %}</select></span>
+      <button class="insights-range__dates" type="button" data-date-range data-date-label="Dates" data-range-start="insights-start" data-range-end="insights-end" data-max="{{ today|date:'Y-m-d' }}" aria-haspopup="dialog"><span class="sr-only">Dates: </span><span data-range-text>{{ shown.0|date:'j M Y' }} – {{ shown.1|date:'j M Y' }}</span><svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true" focusable="false"><rect x="3" y="4.5" width="14" height="12.5" rx="2.5"/><path d="M3 8.5h14M7 3v3M13 3v3"/></svg></button>
+      <input type="hidden" id="insights-start" name="start" value="{{ shown.0|date:'Y-m-d' }}"><input type="hidden" id="insights-end" name="end" value="{{ shown.1|date:'Y-m-d' }}">
+      <noscript><button class="console-button console-button--secondary" type="submit">Show</button></noscript>
+    </form>
+  </div>
+</div>{% endblock %}
+{% block page_content %}
+<div class="insights">
+  {% if form.non_field_errors %}<p class="insights-error" role="alert">{% for error in form.non_field_errors %}{{ error }} {% endfor %}Showing all time.</p>{% endif %}
+
+  <section class="insights-kpis" aria-label="Key figures">
+    <article class="insights-kpi"><h2>Weight lost</h2><strong>{{ kpis.kg_lost|grouped }} kg</strong><p>By {{ kpis.weighed|grouped }} patient{{ kpis.weighed|pluralize }}, from the screening form to their latest weight. All time.</p></article>
+    <article class="insights-kpi"><h2>Monthly recurring revenue</h2><strong>{{ kpis.mrr|rand }}</strong><p>{{ kpis.active|grouped }} active subscription{{ kpis.active|pluralize }} now.</p></article>
+    <article class="insights-kpi"><h2>Average subscription</h2><strong>{% if kpis.duration is not None %}{{ kpis.duration }} months{% else %}—{% endif %}</strong><p>{% if kpis.duration_count %}Months of successful billing, for the {{ kpis.duration_count|grouped }} that ended in this period.{% else %}No subscriptions ended in this period.{% endif %}</p></article>
+    <article class="insights-kpi"><h2>Average lifetime value</h2><strong>{{ kpis.ltv|rand }}</strong><p>{% if kpis.ltv is not None %}{{ kpis.duration }} months × {{ kpis.arpu|rand }} a month per subscriber.{% else %}Needs subscriptions that have ended.{% endif %}</p></article>
+    <article class="insights-kpi"><h2>Churn</h2><strong>{% if data.all_time %}{% if kpis.churn is not None %}{{ kpis.churn }}%{% else %}—{% endif %}{% else %}{% if kpis.period_churn is not None %}{{ kpis.period_churn }}%{% else %}—{% endif %}{% endif %}</strong><p>{% if data.all_time %}A month on average. {{ kpis.period_dropouts|grouped }} dropout{{ kpis.period_dropouts|pluralize }} in all.{% else %}{{ kpis.period_dropouts|grouped }} dropout{{ kpis.period_dropouts|pluralize }}, of {{ kpis.running_start|grouped }} subscription{{ kpis.running_start|pluralize }} at the start of the period.{% endif %}</p></article>
+  </section>
+
+  <div class="insights-grid">
+    {% include 'portal/includes/insight_chart.html' with key='bookings' title='Bookings per month' sub='Appointments in the month they’re for, not counting cancelled ones. Historical data, where entered, stands in for the app’s count of new bookings.' %}
+    {% include 'portal/includes/insight_chart.html' with key='sources' title='Sources of bookings' sub='How did you hear about us? on the screening form, for patients who went on to book. A patient can tick more than one.' %}
+    {% include 'portal/includes/insight_chart.html' with key='signups' title='New subscriptions per month' sub='Subscriptions in the month they start.' %}
+    {% include 'portal/includes/insight_chart.html' with key='mrr' title='Monthly recurring revenue' sub='What the paid-up subscriptions bring in a month, at the end of each month (today, for this month).' %}
+    {% include 'portal/includes/insight_chart.html' with key='dropouts' title='Dropouts per month' sub='Subscriptions cancelled in the month.' %}
+    {% include 'portal/includes/insight_chart.html' with key='churn' title='Churn rate' sub='The month’s dropouts as a share of the subscriptions running when it began.' %}
+    {% include 'portal/includes/insight_chart.html' with key='weight' title='Average weight lost by month of subscription' sub='From the weight at the start to the last logged in each month of a patient’s first subscription to that medicine. All time.' wide=True %}
+  </div>
+
+  <section class="insights-card insights-card--wide insights-doctors" aria-labelledby="doctors-title">
+    <header class="insights-card__header"><h2 id="doctors-title">Each doctor, per month</h2><p>Consults that took place (not cancelled or no-show), and new subscriptions they prescribed, by medicine.</p></header>
+    {% include 'portal/includes/insight_chart.html' with key='doctors' title='Consults per month' bare=True %}
+    {% if data.doctors %}
+    <div class="insights-table-scroll" tabindex="0" role="region" aria-labelledby="doctors-title">
+      <table class="insights-table insights-table--doctors">
+        <thead><tr><th scope="col" rowspan="2">Month</th>{% for doctor in data.doctors %}<th scope="colgroup" colspan="3">{{ doctor.name }}</th>{% endfor %}</tr>
+          <tr>{% for doctor in data.doctors %}<th scope="col">Consults</th><th scope="col">Semaglutide</th><th scope="col">Tirzepatide</th>{% endfor %}</tr></thead>
+        <tbody>{% for row in data.doctor_months %}<tr><th scope="row">{{ row.month|date:'M Y' }}</th>{% for cell in row.cells %}<td>{{ cell.consults }}</td><td>{{ cell.semaglutide }}</td><td>{{ cell.tirzepatide }}</td>{% endfor %}</tr>{% endfor %}</tbody>
+      </table>
+    </div>
+    {% else %}<p class="insights-empty">No consults or prescriptions in this period.</p>{% endif %}
+  </section>
+</div>
+
+{% include 'portal/includes/insight_notes_dialog.html' %}
+
+{# Historical data: each month's numbers from before the app, from the practice's spreadsheet. #}
+<dialog class="app-dialog app-dialog--wide" id="insight-figures" aria-labelledby="insight-figures-title">
+  <div class="app-dialog__body">
+    <h2 id="insight-figures-title">Historical data</h2>
+    <p class="app-dialog__sub">Monthly figures from before the app. A month with a figure uses it on Insights in place of the app’s own count; empty a cell to use the app’s count again.</p>
+    <form method="post" action="{% url 'portal:insight-figures' %}" class="insights-figures">{% csrf_token %}<input type="hidden" name="workflow_context" value="{{ figures_context }}"><input type="hidden" name="next" value="{{ next_url }}">
+      <div class="insights-table-scroll insights-figures__scroll" tabindex="0" role="region" aria-label="Historical data by month">
+        <table class="insights-table">
+          <thead><tr><th scope="col">Month</th>{% for metric, label in figure_columns %}<th scope="col">{{ label }}</th>{% endfor %}</tr></thead>
+          <tbody>{% for row in figure_rows %}<tr><th scope="row">{{ row.month|date:'M Y' }}</th>{% for metric, value in row.cells %}<td><input type="text" inputmode="numeric" pattern="[0-9]*" name="figure-{{ row.month|date:'Y_m' }}-{{ metric }}" value="{{ value }}" aria-label="{% for key, label in figure_columns %}{% if key == metric %}{{ label }}{% endif %}{% endfor %}, {{ row.month|date:'F Y' }}"></td>{% endfor %}</tr>{% endfor %}</tbody>
+        </table>
+      </div>
+      <div class="app-dialog__actions"><button class="console-button console-button--secondary" type="button" data-dialog-close>Cancel</button><button class="console-button console-button--primary" type="submit">Save figures</button></div>
+    </form>
+  </div>
+</dialog>
+{{ charts|json_script:"insight-charts" }}{{ chart_notes|json_script:"insight-chart-notes" }}
+{% endblock %}

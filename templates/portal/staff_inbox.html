@@ -2,7 +2,7 @@
 {% load static workspace_ui %}
 
 {% block title %}{{ messages_title }} | {{ company.name }} | Meridian{% endblock %}
-{% block extra_css %}<link rel="stylesheet" href="{% static 'css/console.css' %}?v=20261108a"><link rel="stylesheet" href="{% static 'css/conversations.css' %}?v=20261104a"><link rel="stylesheet" href="{% static 'css/person_tags.css' %}?v=20261104a"><link rel="stylesheet" href="{% static 'css/message_tones.css' %}?v=20261008a"><link rel="stylesheet" href="{% static 'css/conversation_search.css' %}?v=20261104a"><script src="{% static 'js/conversations.js' %}?v=20261007b" defer></script><script src="{% static 'js/conversation_search.js' %}?v=20261005" defer></script><link rel="stylesheet" href="{% static 'css/dialogs.css' %}?v=20261115a"><script src="{% static 'js/dialogs.js' %}?v=20261115b" defer></script><script src="{% static 'js/conversation_management.js' %}?v=20261008b" defer></script><link rel="stylesheet" href="{% static 'css/filter_menu.css' %}?v=20261104a"><script src="{% static 'js/filter_menu.js' %}?v=20261114a" defer></script>{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{% static 'css/console.css' %}?v=20261120a"><link rel="stylesheet" href="{% static 'css/conversations.css' %}?v=20261120h"><link rel="stylesheet" href="{% static 'css/conversation_people.css' %}?v=20261120d"><link rel="stylesheet" href="{% static 'css/person_tags.css' %}?v=20261104a"><link rel="stylesheet" href="{% static 'css/message_tones.css' %}?v=20261008a"><link rel="stylesheet" href="{% static 'css/conversation_search.css' %}?v=20261104a"><script src="{% static 'js/conversations.js' %}?v=20261007b" defer></script><script src="{% static 'js/conversation_search.js' %}?v=20261005" defer></script><link rel="stylesheet" href="{% static 'css/dialogs.css' %}?v=20261115a"><script src="{% static 'js/dialogs.js' %}?v=20261115b" defer></script><script src="{% static 'js/conversation_management.js' %}?v=20261008b" defer></script><link rel="stylesheet" href="{% static 'css/filter_menu.css' %}?v=20261120a"><script src="{% static 'js/filter_menu.js' %}?v=20261114a" defer></script>{% endblock %}
 {% block content %}
   <div class="meridian-console console-desktop inbox-console">
     <div class="console-shell">
@@ -26,24 +26,27 @@
         <main class="console-content inbox-content">
           {% breadcrumbs messages_title %}
           {% url 'portal:staff-inbox' as inbox_url %}
-          {# New patient message at the top right, as Create appointment is on Calendar & Bookings. #}
+          {# New patient message at the top right, as Create appointment is on Calendar. #}
           {% include 'portal/includes/records_header.html' with records_tab='messages' action_url=inbox_url|add:'?compose=1' action_label='New patient message' %}
 
-          {# Filters (Open or Closed, and which patients) to the left of the search on the right, as in Team messages. #}
-          <div class="inbox-toolbar inbox-toolbar--search-only{% if inbox_thread or inbox_composing %} inbox-toolbar--open{% endif %}">
-            {% include 'portal/includes/filter_menu.html' with filter_menu_class='filter-menu--compact' %}
-            {# Searches the conversations you are in: messages, subjects, the patient and the clinicians. #}
-            {% url 'portal:staff-inbox' as search_action %}
-            {% include 'portal/includes/conversation_search.html' with search_clear_url=inbox_search_clear_url %}
-          </div>
-
-          {# The conversations on the left and the one being read on the right, as on the patient record. #}
-          <section class="record-inbox record-inbox--fill{% if inbox_thread or inbox_composing %} record-inbox--open{% endif %}" aria-label="Patient conversations" data-record-messages>
+          {# The conversations on the left and the one being read on the right, as on the patient record, in a card whose #}
+          {# header runs across both: on the left the title, or for a Super Admin My messages (the default: the ones #}
+          {# they're in) and Other messages (the rest of the practice's) as pills in its place, each with its unread #}
+          {# count (Other messages' grey: they aren't theirs); on the right how many conversations, Filters (Open or #}
+          {# Closed, and which patients) and the search, as on every table (list_tools.html; James, 20 Nov 2026). The #}
+          {# search keeps the pills' links up to date. #}
+          <section class="staff-page-card record-inbox record-inbox--fill{% if inbox_thread or inbox_composing %} record-inbox--open{% endif %}" aria-labelledby="inbox-heading" data-record-messages>
+            <header class="staff-page-card__header staff-list-header record-inbox__header">
+              <div>{% if inbox_scopes %}<h2 class="sr-only" id="inbox-heading">Patient messages</h2><div data-search-region="scope"><nav class="patient-order-subtabs inbox-scope" aria-label="Whose conversations">{% for tab in inbox_scopes %}<a href="{{ tab.url }}"{% if tab.active %} class="is-active" aria-current="page"{% endif %}>{{ tab.label }}{% if tab.value == 'other' %}{% if tab.unread %}<span class="nav-badge nav-badge--quiet" aria-hidden="true">{% if tab.unread > 9 %}9+{% else %}{{ tab.unread }}{% endif %}</span><span class="sr-only">, {{ tab.unread }} unread in other messages</span>{% endif %}{% else %}{% include 'portal/includes/nav_badge.html' with count=tab.unread %}{% endif %}</a>{% endfor %}</nav></div>{% else %}<h2 id="inbox-heading">Patient messages</h2>{% endif %}</div>
+              {# Searches the conversations listed: messages, subjects, the patient and the clinicians. #}
+              {% url 'portal:staff-inbox' as search_action %}
+              {% include 'portal/includes/list_tools.html' with search_clear_url=inbox_search_clear_url count_label=inbox_count_label %}
+            </header>
             <section class="record-inbox__threads" aria-labelledby="inbox-thread-list-heading" data-search-region="list">
-              <h2 class="sr-only" id="inbox-thread-list-heading">Conversations</h2>
+              <h3 class="sr-only" id="inbox-thread-list-heading">{% if inbox_scope == 'other' %}Other messages{% elif inbox_scopes %}My messages{% else %}Conversations{% endif %}</h3>
               <ol class="record-inbox__list">
                 {% for thread in threads %}{% include 'portal/includes/conversation_list_item.html' with read_state_fields=inbox_read_state_fields %}
-                {% empty %}<li class="record-inbox__none">{% if search %}No conversations match “{{ search }}”.{% else %}No conversations match this filter.{% endif %}</li>{% endfor %}
+                {% empty %}<li class="record-inbox__none">{% if search %}No conversations match “{{ search }}”.{% elif inbox_scopes and not filter_menu.count %}{% if inbox_scope == 'mine' %}You aren’t in any conversations yet. Other messages lists the rest of the practice’s.{% else %}You’re in every conversation in the practice.{% endif %}{% else %}No conversations match this filter.{% endif %}</li>{% endfor %}
               </ol>
               {% if is_paginated %}
                 <nav class="inbox-pagination" aria-label="Conversation pages">

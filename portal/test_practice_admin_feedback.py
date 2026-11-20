@@ -41,7 +41,7 @@ class PracticeAdminMenuTests(SessionMixin, OperationsFixture):
         self.login(self.admin)
         page = self.client.get(reverse('portal:staff-inbox'))
         labels = re.findall(r'<span class="console-nav__text">([^<]+)</span>', self.sidebar(page))
-        self.assertEqual(labels, ['Overview', 'My tasks', 'Messages', 'Calendar &amp; Bookings',
+        self.assertEqual(labels, ['Overview', 'My tasks', 'Messages', 'Calendar',
                                   'Purchasing', 'Inventory', 'Shipping', 'Leads and dropouts'])
         self.assertContains(page, '<h1>Messages</h1>', html=True)
         self.assertNotContains(page, '>All patients<')
@@ -149,7 +149,7 @@ class PracticeAdminCalendarTests(SessionMixin, AppointmentLifecycleFixture):
             self.assertContains(page, f'>{label}<span class="sr-only">')
         self.assertNotContains(page, 'Open record<span')
         self.assertNotContains(page, reverse('portal:patient-detail', args=[self.patient.pk]))
-        # Its page stands alone, under Calendar & Bookings, not inside the patient's record.
+        # Its page stands alone, under Calendar, not inside the patient's record.
         details = self.client.get(reverse('portal:appointment-detail', args=[appointment.pk]))
         self.assertTemplateUsed(details, 'portal/staff_appointment_detail.html')
         self.assertNotContains(details, reverse('portal:patient-detail', args=[self.patient.pk]))
@@ -175,7 +175,7 @@ class PracticeAdminCalendarTests(SessionMixin, AppointmentLifecycleFixture):
         appointment.refresh_from_db()
         self.assertEqual((appointment.status, appointment.cancellation_reason),
                          ('cancelled', 'Dr Doctor is unwell. Please book another time.'))
-        # Only to Calendar & Bookings: anywhere else goes to the appointment's page.
+        # Only to Calendar: anywhere else goes to the appointment's page.
         other = self.appointment(starts_at=self.starts_at + timedelta(days=4))
         page = self.client.get(reverse('portal:appointment-detail', args=[other.pk]))
         response = self.client.post(reverse('portal:appointment-detail', args=[other.pk]), {
@@ -362,7 +362,7 @@ class OperationsFeedbackTests(SessionMixin, OperationsFixture):
         self.assertEqual([item.pk for item in page.context['shipments']], [shipment.pk])
         self.assertNotContains(page, 'Tracking reference')
         self.assertNotContains(page, 'TRK-1')
-        self.assertContains(page, 'Download Excel')
+        self.assertContains(page, 'Download XLSX')
         export = self.client.get(f"{reverse('portal:ops-history-export')}?{page.context['export_query']}")
         self.assertIn('.xlsx', export['Content-Disposition'])
         self.assertEqual(export['Content-Type'], 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')

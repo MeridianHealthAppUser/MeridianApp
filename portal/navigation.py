@@ -2,7 +2,8 @@
 
 Clinicians and practice administrators get one flat list with icons. Super Admins get sections.
 Operations and Administration are each one page of tabs (page_tabs) for whoever opens them: their menu row opens the
-page, and their tabs open beside it on hover.
+page, and their tabs open beside it on hover. Calendar's three tabs (schedule_tabs.html) are pages in Care for Super
+Admins, and one Calendar entry, opening on Appointments, in the flat menu.
 """
 
 from django.urls import reverse
@@ -33,7 +34,9 @@ INVENTORY_TABS = (
 )
 # Insights and Settings are one page of tabs each too, for Super Admins (James, 6 Nov 2026).
 INSIGHTS_TABS = (
-    ('metrics', 'Metrics and cohorts', 'portal:metrics'),
+    ('metrics', 'Insights', 'portal:metrics'),
+    # Cohort retention on its own tab, the insight Dr Czech uses most (Nov 2026).
+    ('cohorts', 'Cohorts', 'portal:insights-cohorts'),
     ('statements', 'Activity statements', 'portal:activity-statements'),
 )
 SETTINGS_TABS = (
@@ -43,6 +46,16 @@ SETTINGS_TABS = (
     ('policies', 'Policy versions', 'portal:policy-list'),
     ('practice_settings', 'Practice settings', 'portal:practice-settings'),
 )
+# Calendar's tabs (Calendar & Bookings until Nov 2026; templates/portal/includes/schedule_tabs.html). For Super Admins
+# they are three pages in Care (James, 20 Nov 2026); the flat menu has one Calendar entry opening Appointments.
+# Appointment pages and booking count as Appointments ('schedule'); the Calendar page is 'calendar', or 'availability'
+# on its Working hours tab.
+SCHEDULE_TABS = (
+    ('schedule', 'Appointments', 'portal:schedule-appointments'),
+    ('calendar', 'Calendar', 'portal:staff-schedule'),
+    ('availability', 'Working hours & availability', 'portal:staff-schedule'),
+)
+SCHEDULE_TAB_QUERY = {'availability': '?section=availability'}
 TAB_GROUPS = {'operations': ('Shipping', OPERATIONS_TABS), 'administration': ('Leads and dropouts', ADMINISTRATION_TABS),
               'insights': ('Insights', INSIGHTS_TABS), 'settings': ('Settings', SETTINGS_TABS)}
 # The Operations tabs a doctor has when the practice lets doctors ship (Practice settings).
@@ -123,6 +136,23 @@ def _inventory_item():
     return _item('inventory', 'Inventory', 'portal:inventory', also=tuple(tab[0] for tab in INVENTORY_TABS[1:]))
 
 
+def _schedule_item():
+    """Calendar as one entry in the flat menu: it opens Appointments and stays current on the Calendar and Working hours tabs,
+    also after moving between them without a full page load (match: app_navigation.js)."""
+    item = _item('schedule', 'Calendar', 'portal:schedule-appointments', also=tuple(tab[0] for tab in SCHEDULE_TABS[1:]))
+    item['match'] = reverse('portal:staff-schedule')
+    return item
+
+
+def _schedule_tab_items():
+    items = []
+    for key, label, url_name in SCHEDULE_TABS:
+        item = _item(key, label, url_name)
+        item['url'] = item['mobile_url'] = item['url'] + SCHEDULE_TAB_QUERY.get(key, '')
+        items.append(item)
+    return items
+
+
 def _section_link(key):
     return _inventory_item() if key == 'inventory' else _group_item(key, TAB_GROUPS[key][0])
 
@@ -153,7 +183,7 @@ def build_flat_menu(membership, *, nav_section='', unread=0, data_requests=0):
         _item('overview', 'Overview', 'portal:desktop-dashboard', mobile_url_name='portal:mobile-dashboard'),
         _item('tasks', 'My tasks', 'portal:staff-tasks', short_label='Tasks'),
         _records_item(membership),
-        _item('schedule', 'Calendar & Bookings', 'portal:staff-schedule', short_label='Calendar'),
+        _schedule_item(),
     ]
     if membership.is_admin:
         items += [_item('purchasing', 'Purchasing', 'portal:purchasing', short_label='Purchase'),
@@ -190,9 +220,11 @@ def build_staff_menu(membership, *, multi_practice=False, nav_section='', unread
             # Only for a practice whose catalogue has a compounded product (Meridian has none).
             *([_item('compounding', 'Compounding records', 'portal:compounding-list')]
               if clinical and MedicationProduct.objects.filter(company=membership.company, is_compounded=True).exists() else []),
-            _item('schedule', 'Calendar & Bookings', 'portal:staff-schedule'),
+            # Calendar's three tabs, where Calendar & Bookings was (James, 20 Nov 2026).
+            *_schedule_tab_items(),
         ]),
-        ('purchasing', 'Purchasing', 'Purchase', [
+        # Procurement (James, 20 Nov 2026), with its pages Purchasing and Suppliers.
+        ('purchasing', 'Procurement', 'Procurement', [
             _item('purchasing', 'Purchasing', 'portal:purchasing'),
             *([_item('suppliers', 'Suppliers', 'portal:supplier-list')] if super_admin else []),
         ] if admin else []),
@@ -227,6 +259,18 @@ def build_staff_menu(membership, *, multi_practice=False, nav_section='', unread
             'badge_label': labels.pop() if len(labels) == 1 else 'waiting item',
         })
     return menu
+
+
+def breadcrumb_section(membership, nav_section):
+    """The menu section a page sits in, as a step in its breadcrumbs (James, 20 Nov 2026): Care or Procurement, whose
+    own page is the list of their pages (Overview > Care > Blood tests). Only Super Admins have sections; a section
+    that is one page of tabs (Insights, Shipping...) is already in its pages' trails."""
+    if membership is None or not nav_section or nav_section.startswith('section:') or uses_flat_menu(membership):
+        return None
+    for section in build_staff_menu(membership, nav_section=nav_section):
+        if section['link'] is None and section['active']:
+            return section['label'], section['url']
+    return None
 
 
 def build_staff_navigation(membership, *, multi_practice=False, nav_section='', unread=0, data_requests=0):
