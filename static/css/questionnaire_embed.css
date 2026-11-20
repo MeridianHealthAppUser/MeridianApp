@@ -1,0 +1,4 @@
+/* The questionnaire inside the practice's WordPress screening page (docs/WORDPRESS_EMBED.md). The page around it
+   supplies the header, the background and the side margins, so the frame is see-through and close to the edges. */
+html.questionnaire-embed, html.questionnaire-embed body { background: transparent; }
+html.questionnaire-embed .page-shell { max-width: none; padding: .25rem .25rem 1.5rem; }

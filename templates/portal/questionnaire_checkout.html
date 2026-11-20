@@ -74,11 +74,11 @@
           <p>You are signed in as <strong>{{ request.user.email }}</strong>. Your patient record will be added to this login.</p>
         {% elif identity == 'sign_in_required' %}
           <p>An account already uses <strong>{{ lead.email }}</strong>. Sign in with it to continue. You will come back to this page.</p>
-          <a class="questionnaire-button questionnaire-button--secondary" href="{{ login_url }}">Sign in to continue</a>
+          <a class="questionnaire-button questionnaire-button--secondary" href="{{ login_url }}"{% if request.questionnaire_embed %} target="_top"{% endif %}>Sign in to continue</a>
         {% elif identity == 'other_account' %}
           <p>You are signed in as <strong>{{ request.user.email }}</strong>, but this enquiry is for <strong>{{ lead.email }}</strong>. Sign out and return to this page, or <a href="{% url 'portal:questionnaire' %}?edit=1">change your enquiry email</a>.</p>
         {% else %}
-          <p>You already have a patient record at {{ lead.company.name }}. <a href="{% url 'portal:patient-book-appointment' %}">Book from your patient portal</a> instead.</p>
+          <p>You already have a patient record at {{ lead.company.name }}. <a href="{% url 'portal:patient-book-appointment' %}"{% if request.questionnaire_embed %} target="_top"{% endif %}>Book from your patient portal</a> instead.</p>
         {% endif %}
       </section>
 

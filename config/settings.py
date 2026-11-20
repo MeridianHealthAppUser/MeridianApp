@@ -11,6 +11,7 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -318,6 +319,16 @@ if not DEBUG:
     SECURE_HSTS_INCLUDE_SUBDOMAINS = True
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
+
+# The questionnaire inside the practice's WordPress screening page (docs/WORDPRESS_EMBED.md). Only these sites may
+# show the questionnaire pages in a frame; every other page still refuses to be framed. Comma-separated origins.
+QUESTIONNAIRE_FRAME_ANCESTORS = [
+    origin.rstrip('/') for origin in (part.strip() for part in os.getenv(
+        'DJANGO_QUESTIONNAIRE_FRAME_ANCESTORS', 'https://www.meridianhealth.co.za,https://meridianhealth.co.za').split(','))
+    if re.fullmatch(r'https?://[A-Za-z0-9.-]+(:\d+)?/?', origin)
+]
+# The app's cookies need no change for the frame: app.meridianhealth.co.za and www.meridianhealth.co.za are the same
+# site, so browsers (iPhones included) send the default SameSite=Lax cookies inside it.
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field

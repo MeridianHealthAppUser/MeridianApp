@@ -14,6 +14,7 @@ from django.http import Http404, HttpResponseRedirect
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
+from django.utils.cache import patch_vary_headers
 from django.utils.decorators import method_decorator
 from django.views import View
 from django.views.decorators.cache import never_cache
@@ -38,17 +39,48 @@ OWNER_KEY = 'public_intake_owner'
 LEAD_KEY = 'public_intake_lead_id'
 
 
+def questionnaire_embedded(request):
+    """Shown inside another site's page, the practice's WordPress screening page (docs/WORDPRESS_EMBED.md).
+
+    Browsers mark every load inside a frame, so each step after the first stays embedded without carrying ?embed=1.
+    """
+    return request.headers.get('Sec-Fetch-Dest') in ('iframe', 'frame') or request.GET.get('embed') == '1'
+
+
+def allow_questionnaire_framing(response):
+    """Let the configured sites frame this page; the rest of the app keeps X-Frame-Options: DENY."""
+    if settings.QUESTIONNAIRE_FRAME_ANCESTORS:
+        response['Content-Security-Policy'] = ' '.join(("frame-ancestors 'self'", *settings.QUESTIONNAIRE_FRAME_ANCESTORS))
+        response.xframe_options_exempt = True
+    patch_vary_headers(response, ('Sec-Fetch-Dest',))
+    return response
+
+
 @method_decorator(never_cache, name='dispatch')
 class PrivateIntakeView(View):
     """Anonymous health information is session-owned and never cacheable."""
 
     def dispatch(self, request, *args, **kwargs):
+        request.questionnaire_embed = questionnaire_embedded(request)
+        # The sites the embedded page may report its height to (static/js/questionnaire_embed.js).
+        request.questionnaire_parent_origins = settings.QUESTIONNAIRE_FRAME_ANCESTORS
         response = super().dispatch(request, *args, **kwargs)
         # Keep the same-origin form Origin/Referer usable by CSRF checks while
         # withholding the referrer from external sites. no-referrer can cause
         # browsers to submit Origin: null on the local HTTP development site.
         response['Referrer-Policy'] = 'same-origin'
-        return response
+        return allow_questionnaire_framing(response)
+
+    def leave_for(self, url_name):
+        """Go to a page outside the questionnaire, such as the patient portal.
+
+        Inside the WordPress frame the whole tab goes there: the portal never runs inside WordPress, and it refuses
+        to be framed anyway.
+        """
+        url = reverse(url_name)
+        if not self.request.questionnaire_embed:
+            return redirect(url)
+        return render(self.request, 'portal/questionnaire_embed_exit.html', {'exit_url': self.request.build_absolute_uri(url)})
 
     def owned_lead(self):
         lead_id = self.request.session.get(LEAD_KEY)
@@ -184,7 +216,7 @@ class QuestionnaireResultView(PrivateIntakeView):
     def get(self, request, *args, **kwargs):
         context = self.get_context()
         if context['lead'].converted_patient_id:
-            return redirect('portal:patient-dashboard')
+            return self.leave_for('portal:patient-dashboard')
         return render(request, self.template_name, context)
 
 
@@ -202,7 +234,7 @@ class QuestionnaireCallbackView(QuestionnaireResultView):
     def post(self, request, *args, **kwargs):
         lead = self.owned_lead()
         if lead.converted_patient_id:
-            return redirect('portal:patient-dashboard')
+            return self.leave_for('portal:patient-dashboard')
         form = CallbackForm(request.POST)
         if form.is_valid():
             try:
@@ -277,7 +309,7 @@ class QuestionnaireCheckoutView(QuestionnaireResultView):
         context = self.get_context()
         self.lead = context['lead']
         if self.lead.converted_patient_id:
-            return context, redirect('portal:patient-dashboard')
+            return context, self.leave_for('portal:patient-dashboard')
         if not context['can_continue']:
             return context, redirect('portal:questionnaire-result')
         return context, None
@@ -311,7 +343,7 @@ class QuestionnaireCheckoutView(QuestionnaireResultView):
             )
         except ValidationError as error:
             if Lead.objects.filter(pk=self.lead.pk, converted_patient__isnull=False).exists():
-                return redirect('portal:patient-dashboard')  # A concurrent submit already converted it.
+                return self.leave_for('portal:patient-dashboard')  # A concurrent submit already converted it.
             for message in error.messages:
                 form.add_error(None, message)
             return self.render_checkout(context, form)
@@ -323,4 +355,4 @@ class QuestionnaireCheckoutView(QuestionnaireResultView):
             f'Your initial consultation with {result.appointment.clinician.full_name} is booked for '
             f'{when:%d %B %Y at %H:%M}. The test code covered the fee, so no money was taken.'
         ))
-        return redirect('portal:patient-dashboard')
+        return self.leave_for('portal:patient-dashboard')

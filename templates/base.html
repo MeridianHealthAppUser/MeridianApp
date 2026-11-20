@@ -1,15 +1,16 @@
 {% load static workspace_ui %}
 {% workspace_page as is_workspace_page %}
 <!doctype html>
-<html lang="en">
+{# Inside the WordPress frame the dropdowns and calendars are the phone's own: ours rise from the bottom of the frame, which is below the screen. #}
+<html lang="en"{% if request.questionnaire_embed %} class="questionnaire-embed" data-theme="light" data-native-select data-native-date{% endif %}>
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="theme-color" content="#1d4a5e">
-    <meta name="color-scheme" content="light dark">
+    <meta name="color-scheme" content="{% if request.questionnaire_embed %}light{% else %}light dark{% endif %}">
     {# Light or dark as the person chose in their account menu, set before anything is drawn; else the device's. #}
     {# The side menu stays collapsed if they collapsed it (static/js/fluid.js). #}
-    <script>try { var theme = localStorage.getItem('meridian-theme'); if (theme === 'light' || theme === 'dark') document.documentElement.setAttribute('data-theme', theme); if (localStorage.getItem('meridian-sidebar') === 'collapsed') document.documentElement.setAttribute('data-sidebar', 'collapsed'); } catch (error) {}</script>
+    {% if not request.questionnaire_embed %}<script>try { var theme = localStorage.getItem('meridian-theme'); if (theme === 'light' || theme === 'dark') document.documentElement.setAttribute('data-theme', theme); if (localStorage.getItem('meridian-sidebar') === 'collapsed') document.documentElement.setAttribute('data-sidebar', 'collapsed'); } catch (error) {}</script>{% endif %}
     <title>{% block title %}Meridian Health{% endblock %}</title>
     {# Roboto, Meridian's typeface, on every page. #}
     <link rel="preload" href="{% static 'fonts/roboto/roboto-latin.woff2' %}" as="font" type="font/woff2" crossorigin>
@@ -23,7 +24,7 @@
     <link rel="stylesheet" href="{% static 'css/date_picker.css' %}?v=20261120a"><script src="{% static 'js/date_picker.js' %}?v=20261120a" defer></script>
     {% if is_workspace_page %}<link rel="stylesheet" href="{% static 'css/workspace_polish.css' %}?v=20261106a"><script src="{% static 'js/workspace_polish.js' %}?v=20261119a" defer></script>{% endif %}
     {% if user.is_authenticated %}<link rel="stylesheet" href="{% static 'css/account_menu.css' %}?v=20261117a"><script src="{% static 'js/account_menu.js' %}?v=20261117a" defer></script>{% endif %}
-    <script src="{% static 'js/theme.js' %}?v=20261113a" defer></script>
+    {% if request.questionnaire_embed %}{# Inside the practice's WordPress page (docs/WORDPRESS_EMBED.md): it sizes the frame and leaves it for the portal. #}<link rel="stylesheet" href="{% static 'css/questionnaire_embed.css' %}?v=20261117a"><script src="{% static 'js/questionnaire_embed.js' %}?v=20261117a" data-parent-origins="{{ request.questionnaire_parent_origins|join:' ' }}" defer></script>{% else %}<script src="{% static 'js/theme.js' %}?v=20261113a" defer></script>{% endif %}
     {% if active_membership.role == 'super_admin' and not is_patient_portal %}<link rel="stylesheet" href="{% static 'css/demo_data.css' %}?v=20261104a"><script src="{% static 'js/demo_data.js' %}?v=20261103a" defer></script>{% endif %}
     {% if can_switch_practice_role %}<link rel="stylesheet" href="{% static 'css/practice_role_switcher.css' %}?v=20261104a">{% endif %}
     {% if video_notifications_enabled %}<link rel="stylesheet" href="{% static 'css/call_notifications.css' %}?v=20261104a"><script src="{% static 'js/call_notifications.js' %}" defer></script>{% endif %}
@@ -42,7 +43,7 @@
     {% if page_navigation_config %}{{ page_navigation_config|json_script:"page-navigation-config" }}{% endif %}
     {% if is_workspace_page %}<a class="workspace-skip-link" href="#workspace-content">Skip to content</a>{% endif %}
     {% if request.realtime_scope %}<div hidden data-live-messages data-live-scope="{{ request.realtime_scope }}" data-status-url="{% if is_patient_portal %}{% url 'portal:patient-message-status' %}{% else %}{% url 'portal:staff-message-status' %}{% endif %}">{% csrf_token %}</div>{% endif %}
-    {% block site_header %}
+    {% block site_header %}{% if not request.questionnaire_embed %}
     <header class="site-header{% if user.is_authenticated %} site-header--authenticated{% endif %}">
       {% if user.is_authenticated and is_patient_portal %}
         <a class="brand" href="{% url 'portal:patient-dashboard' %}">{% include "includes/brand_logo.html" %}</a>
@@ -86,14 +87,14 @@
       {% else %}{% block public_header_actions %}{% endblock %}
       {% endif %}
     </header>
-    {% endblock %}
+    {% endif %}{% endblock %}
     {% if active_membership.role == 'super_admin' and not is_patient_portal %}<dialog class="demo-data-dialog" data-demo-data-dialog aria-label="Demo data"><div data-demo-data-content></div></dialog>{% endif %}
-    {% if messages %}
+    {% block messages %}{% if messages %}
       {# Toasts at the top right, above everything: confirmations fade after 5 seconds, errors stay until closed. #}
       <div class="toast-stack">
         {% for message in messages %}<div class="flash-message toast {{ message.tags }}" role="{% if 'error' in message.tags %}alert{% else %}status{% endif %}" data-toast><span>{{ message }}</span><button class="toast__close" type="button" aria-label="Dismiss" data-toast-close>&times;</button></div>{% endfor %}
       </div>
-    {% endif %}
+    {% endif %}{% endblock %}
     <script src="{% static 'js/toasts.js' %}?v=20261025" defer></script>
     <main class="page-shell" id="workspace-content"{% if page_navigation_config %} data-page-navigation{% endif %}>
       {% block content %}{% endblock %}

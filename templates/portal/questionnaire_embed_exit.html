@@ -1,0 +1,19 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{# Leaving the questionnaire inside the WordPress frame (docs/WORDPRESS_EMBED.md): static/js/questionnaire_embed.js #}
+{# asks WordPress to move the whole tab to the portal. The button does the same if that page can't. #}
+{% block title %}Opening your patient portal | Meridian Health{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{% static 'css/questionnaire.css' %}?v=20261104a">{% endblock %}
+{# The confirmation waiting for the portal (such as the booking) is shown there, not here. #}
+{% block messages %}{% endblock %}
+
+{% block content %}
+  <section class="questionnaire-layout" aria-labelledby="exit-title">
+    <section class="questionnaire-card">
+      <h1 id="exit-title" class="questionnaire-kicker">Opening your patient portal…</h1>
+      <p>If it doesn’t open by itself, use the button below.</p>
+      <div class="questionnaire-next-step"><a class="questionnaire-button" href="{{ exit_url }}" target="_top" data-questionnaire-exit>Open your patient portal</a></div>
+    </section>
+  </section>
+{% endblock %}
