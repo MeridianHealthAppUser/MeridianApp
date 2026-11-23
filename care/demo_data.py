@@ -288,15 +288,23 @@ def _seed(company, actor):
             price=product.price, pens_per_dispatch=1, dispatch_weeks=1, billing_weeks=4) if amount else None)
     suppliers = []
     for index, label in enumerate(('Medical Supplies', 'Wellness Wholesale')):
+        # The details a purchase order prints (all fictional), and supplier prices on every other product so
+        # Review order shows both a supplier price and a catalogue reference price.
         supplier = Supplier.objects.create(company=company, demo_data_set=dataset,
             name=f'Demo {label} {tag}', contact_name='Fictional supplier contact',
-            email=f'demo-{index}-{tag}@example.invalid')
+            email=f'demo-{index}-{tag}@example.invalid', registered_name=f'Demo {label} {tag} (Pty) Ltd',
+            vat_number='4000000000', address_street=f'{index + 1} Example Park', address_city='Midrand',
+            address_province='GP', address_postal_code='1685', payment_terms='30 days from statement',
+            account_number=f'DEMO-{tag}-{index + 1}', sahpra_licence_number='22C-DEMO',
+            sahpra_licence_expiry=today + timedelta(days=365))
         suppliers.append(supplier)
         for number, product in enumerate(products):
             if index == 1 and number == 2:
                 continue
             SupplierProduct.objects.create(company=company, supplier=supplier, product=product,
-                supplier_code=f'DEMO-{tag}-{index+1}-{number+1}')
+                supplier_code=f'DEMO-{tag}-{index+1}-{number+1}', description=f'{product.name} {product.strength}'.strip(),
+                pack_size='2,4ml' if product.requires_cold_chain else '',
+                unit_price=(product.price * Decimal('0.6')).quantize(Decimal('0.01')) if number % 2 == 0 else None)
     patients, plans, authorizations, addresses = [], [], [], []
     for index, name in enumerate(('Emma', 'Liam', 'Zola', 'Sara', 'Noah', 'Ava', 'Leo', 'Mia')):
         product_index = (0, 1, 3, 2, 2, 0, 1, 1)[index]

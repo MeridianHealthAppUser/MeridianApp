@@ -17,6 +17,15 @@
 .purchasing-order-table tr.is-selected { background:var(--c-e4f4fa); }
 .purchasing-select-all-mobile { display:none; }
 .app-dialog.purchasing-order-dialog { max-width:min(44rem,calc(100vw - 2rem)); }
+#purchasing-order-preview.app-dialog { max-width:min(56rem,calc(100vw - 2rem)); }
+.purchasing-money { text-align:right; white-space:nowrap; font-variant-numeric:tabular-nums; }
+.purchasing-order-preview-table th.purchasing-money { text-align:right; }
+.purchasing-price-tag { display:block; width:fit-content; margin:.3rem 0 0 auto; padding:.1rem .5rem; border-radius:2rem; border:1px solid var(--c-f0d9a0); background:var(--c-fff6e0); color:var(--c-8a5a00); font-size:.7rem; font-weight:600; white-space:nowrap; }
+.purchasing-order-preview-table .purchasing-order-totals th, .purchasing-order-preview-table .purchasing-order-totals td { background:transparent; border:0; color:var(--c-4d6c7b); font-size:.85rem; font-weight:600; letter-spacing:0; padding:.35rem .75rem; text-align:right; text-transform:none; }
+.purchasing-order-preview-table .purchasing-order-totals td { color:var(--c-1c3947); }
+.purchasing-order-preview-table .purchasing-order-totals tr:first-child th, .purchasing-order-preview-table .purchasing-order-totals tr:first-child td { border-top:1px solid var(--c-dde8ec); padding-top:.7rem; }
+.purchasing-order-preview-table .purchasing-order-totals .purchasing-order-grand-total th, .purchasing-order-preview-table .purchasing-order-totals .purchasing-order-grand-total td { color:var(--c-173d4d); font-size:.95rem; font-weight:750; padding-bottom:.75rem; }
+.purchasing-price-note { color:var(--c-607c87); font-size:.75rem; margin:.5rem 0 0; }
 .purchasing-order-dialog-header { align-items:flex-start; display:flex; gap:1rem; justify-content:space-between; margin-bottom:1.1rem; }
 .purchasing-order-dialog-title { align-items:center; display:flex; flex-wrap:wrap; gap:.7rem; margin-bottom:.5rem; }
 .purchasing-order-dialog-title h2 { margin:0; }
@@ -63,7 +72,9 @@
   .purchasing-order-preview-table { table-layout:fixed; }
   .purchasing-order-preview-table th:nth-child(2) { width:6rem; }
   .purchasing-order-preview-table th:nth-child(3) { width:8.5rem; }
-  .purchasing-order-preview-table th:last-child { width:3.5rem; }
+  .purchasing-order-preview-table th:nth-child(4) { width:9.5rem; }
+  .purchasing-order-preview-table th:nth-child(5) { width:9rem; }
+  .purchasing-order-preview-table thead th:last-child { width:3.5rem; }
 }
 @media(max-width:42rem) {
   .purchasing-select-all-mobile { align-items:center; display:inline-flex; gap:.45rem; }
@@ -77,9 +88,20 @@
   .purchasing-order-preview-table td[data-label=Remove] { grid-column:2; grid-row:1; }
   .purchasing-order-preview-table td[data-label=Suggested] { align-items:center; display:flex; gap:.6rem; grid-column:1/-1; grid-row:2; }
   .purchasing-order-preview-table td[data-label='Order quantity'] { align-items:center; display:flex; gap:.6rem; grid-column:1/-1; grid-row:3; justify-content:space-between; }
+  .purchasing-order-preview-table td[data-label='Unit price'], .purchasing-order-preview-table td[data-label='Line total'] { align-items:center; display:flex; flex-wrap:wrap; gap:.4rem .6rem; grid-column:1/-1; justify-content:space-between; }
+  .purchasing-order-preview-table td[data-label='Unit price'], .purchasing-order-preview-table td[data-label='Line total'] { justify-content:flex-end; }
+  .purchasing-order-preview-table td[data-label='Unit price']::before, .purchasing-order-preview-table td[data-label='Line total']::before { margin-right:auto; }
+  .purchasing-order-preview-table td[data-label='Unit price'] .purchasing-price-tag { margin:0; }
+  .purchasing-order-preview-table tfoot.purchasing-order-totals:not([hidden]) { display:block; }
+  .purchasing-order-totals tr { display:flex; justify-content:space-between; gap:1rem; padding:0 .75rem; border:0; }
+  .purchasing-order-totals tr:first-child { border-top:1px solid var(--c-dde8ec); }
+  .purchasing-order-preview-table .purchasing-order-totals th, .purchasing-order-preview-table .purchasing-order-totals td, .purchasing-order-preview-table .purchasing-order-totals tr:first-child th, .purchasing-order-preview-table .purchasing-order-totals tr:first-child td { border:0; padding:.35rem 0; }
+  .purchasing-order-totals td:empty { display:none; }
   .purchasing-order-dialog-footer .app-dialog__actions { flex:1 1 100%; justify-content:flex-end; }
 }
 @media(max-width:360px) { .purchasing-subtabs { gap:.5rem; padding-inline:0; } }
 .purchasing-supplier-field { margin-bottom:1rem; }
 .purchasing-supplier-field select { width:100%; min-height:2.6rem; border:1px solid var(--c-dde8ec); border-radius:.6rem; padding:.6rem .7rem; background:var(--c-ffffff); color:var(--console-ink); font:inherit; }
 .purchasing-supplier-field small { display:block; font-size:.7rem; color:var(--console-muted); line-height:1.5; margin-top:.4rem; }
+.purchasing-setup-note { background:var(--c-fff6e0); border:1px solid var(--c-f0d9a0); border-radius:.65rem; color:var(--c-8a5a00); font-size:.78rem; line-height:1.45; margin:.5rem 0 .75rem; padding:.5rem .7rem; }
+.purchasing-setup-note[hidden] { display:none; }

@@ -1,4 +1,5 @@
 """Placing supplier orders and receiving their deliveries into the stock ledger."""
+from decimal import Decimal
 from urllib.parse import urlencode
 from django.contrib import messages
 from django.core.exceptions import ValidationError
@@ -7,7 +8,10 @@ from django.http import Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from care.models import MedicationProduct, PurchaseOrder, SupplierProduct
-from care.purchasing import create_purchase_order, receive_purchase_order
+from care.purchasing import (CENT, VAT_RATE, bill_to_missing, create_purchase_order, order_amounts,
+                             receive_purchase_order, unit_price_for)
+from care.suppliers import supplier_flags
+from django.utils import timezone
 from .export_support import export_url
 from .filter_menus import list_tools, ticked_sections
 from .operations_views import OperationsView
@@ -117,11 +121,20 @@ class PurchasingView(OperationsView):
             purchase_create_open=create_formset is not None,
             purchase_create_context=(request.POST.get('workflow_context', '') if create_formset is not None else
                 make_workflow_context(request, self.company, 'purchase-order-create')))
+        # For Review order: what each supplier supplies, at what unit price excl. VAT (theirs, else the catalogue
+        # reference price), and the VAT rate an order to them carries. The server prices the order itself again.
         supplier_products = {}
-        for supplier_id, product_id in SupplierProduct.objects.filter(company=self.company,
-                supplier__company=self.company, product__company=self.company).order_by('supplier_id', 'product_id').values_list('supplier_id', 'product_id'):
-            supplier_products.setdefault(str(supplier_id), []).append(product_id)
+        for link in SupplierProduct.objects.filter(company=self.company, supplier__company=self.company,
+                product__company=self.company).select_related('supplier', 'product').order_by('supplier_id', 'product_id'):
+            entry = supplier_products.setdefault(str(link.supplier_id), {
+                'vat_rate': str(VAT_RATE if link.supplier.vat_registered else Decimal('0.00')),
+                'incomplete': supplier_flags(link.supplier, timezone.localdate())['incomplete'], 'products': {}})
+            price, source = unit_price_for(link, link.product)
+            entry['products'][str(link.product_id)] = {'price': str(price.quantize(CENT)),
+                                                       'reference': source == 'reference'}
         context['purchase_supplier_products'] = supplier_products
+        # Details are saved on an order when it is created: say so before one is created without them.
+        context['purchase_bill_to_missing'] = bill_to_missing(self.company)
         if create_formset is not None:
             own_products = {str(product.pk): product for product in MedicationProduct.objects.filter(company=self.company, is_active=True)}
             suggestions = {str(row['product'].pk): row['order_quantity'] for row in rows} if view == 'to-order' else {}
@@ -143,9 +156,17 @@ class PurchasingView(OperationsView):
         if email_order is None and data.get('email'):
             email_order = selected_order(self.company, data.get('email'))
         if email_order is not None:
-            from .purchase_document_views import PurchaseOrderEmailForm
+            from .purchase_document_views import (MAX_ATTACHMENT_BYTES, MAX_ATTACHMENTS, PurchaseOrderEmailForm,
+                                                  uses_own_order_form)
+            email_items = list(email_order.items.all())
+            context.update(email_own_form=uses_own_order_form(email_order), email_supplier=email_order.supplier,
+                email_pdf_url=reverse('portal:purchase-order-pdf', args=[email_order.pk]) + '?inline=1',
+                email_amounts=order_amounts(email_order), email_line_count=len(email_items),
+                email_unit_count=sum(item.quantity for item in email_items),
+                email_reference_count=sum(item.price_source == 'reference' for item in email_items),
+                email_attachment_limits={'files': MAX_ATTACHMENTS, 'bytes': MAX_ATTACHMENT_BYTES})
             context.update(email_order=email_order, email_form=email_form if email_form is not None else
-                PurchaseOrderEmailForm(order=email_order),
+                PurchaseOrderEmailForm(order=email_order, user=request.user),
                 purchase_email_context=request.POST.get('workflow_context', '') if request.method == 'POST' else
                     make_workflow_context(request, self.company, 'purchase-order-email', email_order))
         return render(request, 'portal/purchasing.html', context, status=status)

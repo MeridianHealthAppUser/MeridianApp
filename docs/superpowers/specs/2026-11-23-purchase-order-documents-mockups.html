@@ -1,0 +1,291 @@
+<!doctype html><meta charset="utf-8"><title>PO mockups (approved 23 Nov 2026)</title><body style="font-family:Inter,sans-serif;background:#f4f5f7;padding:24px">
+<style>
+  .mx { --ink:#1d4a5e; --ink2:#14384a; --muted:#506e7c; --line:#d2e2e8; --soft:#e5eef2; --tealsoft:#e4f4fa; --teal:#a5e3f0; --canvas:#f2f6f8; --amber:#8a5a00; --amberbg:#fff6e0; --amberline:#f0d9a0;
+        font-family: Inter, -apple-system, "Segoe UI", sans-serif; color: var(--ink); }
+  .mx * { box-sizing: border-box; }
+  .mx .sect { margin: 0 0 56px; }
+  .mx .sect > h3 { margin: 0 0 4px; }
+  .mx .sect > p.note { color: #5b6b73; margin: 0 0 18px; font-size: 14px; max-width: 820px; line-height: 1.5; }
+  .mx .stage { background: #8fa3ad; border-radius: 14px; padding: 36px 24px; display: flex; justify-content: center; }
+
+  /* ---------- PDF ---------- */
+  .pdf { width: 680px; background: #fff; box-shadow: 0 10px 30px rgba(0,0,0,.25); padding: 26px 28px 20px; font-size: 10.5px; color: #1c2b33; }
+  .pdf .head { display: grid; grid-template-columns: 1fr 210px; border: 2px solid var(--ink); }
+  .pdf .head .band { background: var(--ink); color: #fff; font-size: 26px; font-weight: 800; letter-spacing: .04em; padding: 18px 18px; }
+  .pdf .head .logo { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 8px; }
+  .pdf .head .logo b { font-size: 22px; font-weight: 500; color: #1c2b33; letter-spacing: -.01em; }
+  .pdf .head .logo span { font-size: 11px; line-height: 1.15; color: #3a8fa8; border-left: 1.5px solid #3a8fa8; padding-left: 7px; }
+  .pdf .meta { display: grid; grid-template-columns: repeat(4, 1fr); border: 1px solid #b9c7ce; border-top: 0; }
+  .pdf .meta div { padding: 6px 8px; border-right: 1px solid #b9c7ce; }
+  .pdf .meta div:last-child { border-right: 0; }
+  .pdf .k { display: block; font-size: 8.5px; text-transform: uppercase; letter-spacing: .06em; color: #5b6b73; margin-bottom: 2px; }
+  .pdf .v { font-weight: 600; }
+  .pdf .parties { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin: 14px 0; }
+  .pdf .party { border: 1px solid #b9c7ce; }
+  .pdf .party h5 { margin: 0; background: #e9eef1; padding: 5px 8px; font-size: 10px; text-transform: uppercase; letter-spacing: .06em; border-bottom: 1px solid #b9c7ce; }
+  .pdf .party table { width: 100%; border-collapse: collapse; }
+  .pdf .party td { padding: 3px 8px; vertical-align: top; border-bottom: 1px solid #edf1f3; }
+  .pdf .party td:first-child { color: #5b6b73; width: 44%; }
+  .pdf .party tr:last-child td { border-bottom: 0; }
+  .pdf table.lines { width: 100%; border-collapse: collapse; border: 1px solid #b9c7ce; }
+  .pdf table.lines th { background: #e9eef1; text-align: left; padding: 6px 7px; font-size: 9.5px; border-bottom: 1px solid #b9c7ce; }
+  .pdf table.lines td { padding: 6px 7px; border-bottom: 1px solid #edf1f3; }
+  .pdf table.lines td.code { background: #f4f7f8; font-weight: 600; white-space: nowrap; }
+  .pdf .num { text-align: right; white-space: nowrap; }
+  .pdf .totals { display: grid; grid-template-columns: 1fr 230px; gap: 14px; margin-top: 10px; }
+  .pdf .totals table { width: 100%; border-collapse: collapse; border: 1px solid #b9c7ce; }
+  .pdf .totals td { padding: 5px 8px; border-bottom: 1px solid #edf1f3; }
+  .pdf .totals tr.grand td { background: var(--ink); color: #fff; font-weight: 700; font-size: 11.5px; }
+  .pdf .terms { border: 1px solid #b9c7ce; padding: 8px; line-height: 1.5; }
+  .pdf .terms b { display: block; margin-bottom: 2px; }
+  .pdf .sign { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 14px; }
+  .pdf .sign div { border: 1px solid #b9c7ce; padding: 8px; height: 62px; position: relative; }
+  .pdf .sign div i { position: absolute; bottom: 8px; left: 8px; right: 8px; border-top: 1px solid #9aa9b0; font-style: normal; padding-top: 3px; color: #5b6b73; font-size: 9px; }
+  .pdf .foot { display: flex; justify-content: space-between; color: #7a8a92; font-size: 8.5px; margin-top: 14px; border-top: 1px solid #e2e8eb; padding-top: 6px; }
+  .pdf .callout { color: #b3261e; font-weight: 700; margin-top: 10px; font-size: 10px; }
+
+  /* ---------- Dialog ---------- */
+  .dlg { width: 1040px; max-width: 100%; background: #fff; border-radius: 28px; box-shadow: 0 24px 60px rgba(24,54,67,.35); display: grid; grid-template-columns: 1fr 330px; overflow: hidden; }
+  .dlg .main { padding: 30px 32px 26px; }
+  .dlg .side { background: var(--canvas); border-left: 1px solid var(--soft); padding: 30px 24px 26px; display: flex; flex-direction: column; gap: 16px; }
+  .dlg .top { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 18px; }
+  .dlg h4 { margin: 0; font-size: 26px; font-weight: 800; color: #1f4256; letter-spacing: -.01em; }
+  .dlg .sub { color: var(--muted); font-size: 15px; margin-top: 6px; }
+  .dlg .x { width: 46px; height: 46px; border-radius: 50%; border: 1px solid var(--line); display: grid; place-items: center; color: var(--ink); font-size: 20px; background: #f7fafb; }
+  .dlg label { display: block; font-weight: 700; color: #2c4a58; font-size: 14.5px; margin: 14px 0 7px; }
+  .dlg .row { display: flex; align-items: center; gap: 8px; }
+  .dlg .field { flex: 1; min-height: 48px; border: 1px solid var(--line); border-radius: 14px; padding: 8px 12px; display: flex; align-items: center; flex-wrap: wrap; gap: 6px; font-size: 15px; color: #1f3a47; background: #fff; }
+  .dlg .chip { background: var(--tealsoft); border: 1px solid #c4e4ee; color: var(--ink2); border-radius: 999px; padding: 4px 6px 4px 11px; font-size: 13.5px; display: inline-flex; gap: 6px; align-items: center; }
+  .dlg .chip em { font-style: normal; color: var(--muted); font-size: 12px; }
+  .dlg .chip .cx { color: var(--muted); font-size: 14px; padding: 0 3px; }
+  .dlg .ghost { color: #9aabb3; font-size: 14px; }
+  .dlg .pill { border: 1px solid var(--line); border-radius: 999px; padding: 8px 14px; font-size: 13.5px; font-weight: 600; color: var(--ink); background: #fff; white-space: nowrap; }
+  .dlg .msg { border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; font-size: 14.5px; line-height: 1.6; color: #1f3a47; min-height: 210px; white-space: pre-line; }
+  .dlg .att { display: flex; gap: 10px; flex-wrap: wrap; align-items: stretch; }
+  .dlg .file { display: flex; gap: 10px; align-items: center; border: 1px solid #c4e4ee; background: var(--tealsoft); border-radius: 14px; padding: 10px 14px; min-width: 250px; }
+  .dlg .file .ic { width: 34px; height: 40px; border-radius: 6px; background: #fff; border: 1px solid #c4e4ee; display: grid; place-items: center; font-size: 9px; font-weight: 800; color: #b3261e; }
+  .dlg .file b { display: block; font-size: 14px; }
+  .dlg .file small { color: var(--muted); font-size: 12.5px; }
+  .dlg .file .lock { margin-left: auto; color: var(--muted); font-size: 13px; }
+  .dlg .add { border: 1.5px dashed #b7cfd8; border-radius: 14px; padding: 10px 16px; color: var(--ink); font-weight: 600; font-size: 14px; display: flex; align-items: center; gap: 8px; background: #fbfdfe; }
+  .dlg .warn { border: 1px solid var(--amberline); background: var(--amberbg); color: var(--amber); border-radius: 14px; padding: 12px 14px; font-size: 14px; line-height: 1.5; margin-bottom: 10px; }
+  .dlg .warn b { color: #6b4500; }
+  .dlg .drop { border: 1.5px dashed #b7cfd8; border-radius: 14px; padding: 22px; text-align: center; color: var(--muted); font-size: 14px; background: #fbfdfe; }
+  .dlg .drop b { color: var(--ink); display: block; font-size: 15px; margin-bottom: 3px; }
+  .dlg .actions { display: flex; justify-content: flex-end; gap: 12px; margin-top: 22px; }
+  .dlg .btn { border-radius: 18px; padding: 13px 24px; font-weight: 700; font-size: 16px; border: 1px solid var(--line); background: #fff; color: #1f4256; }
+  .dlg .btn.primary { background: #1c4557; color: #fff; border-color: #1c4557; box-shadow: 0 6px 14px rgba(28,69,87,.3); }
+  .dlg .side h6 { margin: 0; font-size: 15px; font-weight: 800; color: #1f4256; }
+  .dlg .side .thumb { background: #3b4a52; border-radius: 14px; padding: 14px; display: flex; justify-content: center; }
+  .dlg .side .thumb .pg { width: 190px; height: 268px; background: #fff; padding: 9px; display: flex; flex-direction: column; gap: 5px; }
+  .dlg .side .thumb .pg .b { height: 18px; background: var(--ink); }
+  .dlg .side .thumb .pg .l { height: 4px; background: #d5dde1; border-radius: 2px; }
+  .dlg .side .thumb .pg .g { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 4px; }
+  .dlg .side .thumb .pg .g div { height: 34px; border: 1px solid #d5dde1; }
+  .dlg .side .thumb .pg .t { flex: 1; border: 1px solid #d5dde1; background: repeating-linear-gradient(#fff 0 9px, #eef2f4 9px 10px); }
+  .dlg .side .empty { border: 1.5px dashed #c3d3da; border-radius: 14px; height: 296px; display: grid; place-items: center; text-align: center; color: var(--muted); font-size: 14px; padding: 20px; background: #fff; }
+  .dlg .side .open { border: 1px solid var(--line); border-radius: 14px; background: #fff; text-align: center; padding: 11px; font-weight: 700; color: var(--ink); font-size: 14.5px; }
+  .dlg .side dl { margin: 0; background: #fff; border: 1px solid var(--soft); border-radius: 14px; padding: 12px 14px; display: grid; grid-template-columns: auto 1fr; gap: 8px 12px; font-size: 13.5px; }
+  .dlg .side dt { color: var(--muted); }
+  .dlg .side dd { margin: 0; text-align: right; font-weight: 700; color: #1f4256; }
+
+  /* ---------- Review table ---------- */
+  .rev { width: 900px; max-width: 100%; background: #fff; border-radius: 20px; border: 1px solid var(--soft); padding: 22px 24px; }
+  .rev h4 { margin: 0 0 4px; font-size: 19px; color: #1f4256; }
+  .rev p { margin: 0 0 14px; color: var(--muted); font-size: 14px; }
+  .rev table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  .rev th { text-align: left; color: var(--muted); font-weight: 600; font-size: 12.5px; text-transform: uppercase; letter-spacing: .04em; padding: 8px 10px; border-bottom: 1px solid var(--line); }
+  .rev td { padding: 12px 10px; border-bottom: 1px solid var(--soft); vertical-align: middle; }
+  .rev td small { display: block; color: var(--muted); font-size: 12.5px; }
+  .rev .q { width: 70px; border: 1px solid var(--line); border-radius: 10px; padding: 7px 9px; text-align: right; }
+  .rev .tag { display: inline-block; margin-top: 3px; background: var(--amberbg); border: 1px solid var(--amberline); color: var(--amber); border-radius: 999px; font-size: 11.5px; padding: 1px 8px; font-weight: 600; }
+  .rev .num { text-align: right; white-space: nowrap; }
+  .rev tfoot td { border-bottom: 0; padding: 6px 10px; }
+  .rev tfoot tr.g td { font-weight: 800; color: #1f4256; font-size: 15.5px; border-top: 1px solid var(--line); padding-top: 10px; }
+</style>
+
+<div class="mx">
+  <h2>Purchase orders: PDF and email pop-up</h2>
+  <p class="subtitle">Four mockups with real Bio-Swiss lines. Only the look is being decided, so nothing here is wired up. Reply in the terminal.</p>
+
+  <!-- 1. PDF -->
+  <div class="sect">
+    <h3>1 · The Meridian purchase order PDF</h3>
+    <p class="note">Modelled on the Bio-Swiss form: a heavy header band, a row of order facts, three boxes (supplier, bill to, ship to), then the product table with prices excl. VAT and the totals. Only the lines you ordered are printed, not the whole catalogue.</p>
+    <div class="stage">
+      <div class="pdf">
+        <div class="head">
+          <div class="band">PURCHASE ORDER</div>
+          <div class="logo"><b>Meridian</b><span>Medical<br>Weight Loss</span></div>
+        </div>
+        <div class="meta">
+          <div><span class="k">PO number</span><span class="v">PO-00012</span></div>
+          <div><span class="k">Date of order</span><span class="v">23 Nov 2026</span></div>
+          <div><span class="k">Delivery requested</span><span class="v">27 Nov 2026</span></div>
+          <div><span class="k">Ordered by</span><span class="v">Lindiwe Mahlangu</span></div>
+        </div>
+
+        <div class="parties">
+          <div class="party"><h5>Supplier</h5><table>
+            <tr><td>Name</td><td><b>Bio-Swiss (Pty) Ltd</b></td></tr>
+            <tr><td>Reg. no.</td><td>2015/123456/07</td></tr>
+            <tr><td>VAT reg. no.</td><td>4350263226</td></tr>
+            <tr><td>SAHPRA licence</td><td>22C-0000123</td></tr>
+            <tr><td>Address</td><td>12 Example Park, Midrand, 1685</td></tr>
+            <tr><td>Orders email</td><td>dc.orders@bioswiss-med.co.za</td></tr>
+            <tr><td>Our account no.</td><td>MER-0042</td></tr>
+          </table></div>
+          <div class="party"><h5>Bill to</h5><table>
+            <tr><td>Entity</td><td><b>Dr Joshua Czech</b></td></tr>
+            <tr><td>Practice</td><td>Meridian Health</td></tr>
+            <tr><td>Address</td><td>6 Harfield Rd, Claremont, Cape Town, 7708</td></tr>
+            <tr><td>Doctor HPCSA</td><td>MP0000000</td></tr>
+            <tr><td>Pharmacy Y no.</td><td>–</td></tr>
+            <tr><td>VAT reg. no.</td><td>N/A</td></tr>
+            <tr><td>Accounts</td><td>accounts@meridian.example</td></tr>
+          </table></div>
+          <div class="party"><h5>Ship to</h5><table>
+            <tr><td>Deliver to</td><td><b>Meridian Health</b></td></tr>
+            <tr><td>Address</td><td>6 Harfield Rd, Claremont, Cape Town, 7708</td></tr>
+            <tr><td>Contact</td><td>Alison</td></tr>
+            <tr><td>Phone</td><td>084 000 0000</td></tr>
+            <tr><td>Instructions</td><td>Cold chain: hand to reception, refrigerate on arrival</td></tr>
+          </table></div>
+        </div>
+
+        <table class="lines">
+          <thead><tr><th>Product code</th><th>Description</th><th>Size</th><th class="num">Unit price<br>(excl VAT)</th><th class="num">Qty</th><th class="num">Line total<br>(excl VAT)</th></tr></thead>
+          <tbody>
+            <tr><td class="code">T5/0.6/2.4 PFS</td><td>Tirzepatide 5mg/0,6ml PFS</td><td>2,4ml</td><td class="num">R 1 600.00</td><td class="num">10</td><td class="num">R 16 000.00</td></tr>
+            <tr><td class="code">T10/0.6/2.4 PFS</td><td>Tirzepatide 10mg/0,6ml PFS</td><td>2,4ml</td><td class="num">R 2 500.00</td><td class="num">6</td><td class="num">R 15 000.00</td></tr>
+            <tr><td class="code">T15/0.6/2.4 PFS</td><td>Tirzepatide 15mg/0,6ml PFS</td><td>2,4ml</td><td class="num">R 3 300.00</td><td class="num">4</td><td class="num">R 13 200.00</td></tr>
+          </tbody>
+        </table>
+
+        <div class="totals">
+          <div class="terms"><b>Payment terms</b>30 days from statement<br><b style="margin-top:6px">Notes</b>Please confirm receipt and the delivery date by email.</div>
+          <table>
+            <tr><td>Subtotal (excl VAT)</td><td class="num">R 44 200.00</td></tr>
+            <tr><td>VAT 15%</td><td class="num">R 6 630.00</td></tr>
+            <tr class="grand"><td>Total (incl VAT)</td><td class="num">R 50 830.00</td></tr>
+          </table>
+        </div>
+
+        <div class="sign">
+          <div><span class="k">Authorised by</span><b>Dr Joshua Czech</b><i>Signature</i></div>
+          <div><span class="k">Date</span><b>23 Nov 2026</b><i>Supplier acknowledgement</i></div>
+        </div>
+        <div class="callout">Cold-chain products: deliver refrigerated (2–8 °C). Report any shortfall within 48 hours.</div>
+        <div class="foot"><span>Meridian Health · PO-00012</span><span>Page 1 of 1</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 2. Email: Meridian PDF -->
+  <div class="sect">
+    <h3>2 · Email pop-up: supplier set to “Meridian-generated PDF”</h3>
+    <p class="note">The same rounded dialog, fields and buttons as the current one, made wider, with a preview panel on the right. To is filled with the supplier’s orders email, and CC and BCC open when clicked. The message is filled in and you can edit it. The PO PDF is always attached and can’t be removed. You can add more files.</p>
+    <div class="stage">
+      <div class="dlg">
+        <div class="main">
+          <div class="top"><div><h4>Email purchase order</h4><div class="sub">PO-00012 · Bio-Swiss (Pty) Ltd</div></div><div class="x">✕</div></div>
+          <label>To</label>
+          <div class="row"><div class="field"><span class="chip">dc.orders@bioswiss-med.co.za <em>Orders</em><span class="cx">✕</span></span><span class="ghost">Add email…</span></div><span class="pill">CC</span><span class="pill">BCC</span></div>
+          <label>Subject</label>
+          <div class="field">Purchase order PO-00012 · Meridian Health</div>
+          <label>Message</label>
+          <div class="msg">Dear Bio-Swiss team,
+
+Please find attached purchase order PO-00012, for delivery by Thursday 27 November 2026.
+
+Please confirm receipt of this order and let us know the delivery date and any tracking details.
+
+Kind regards,
+Lindiwe Mahlangu
+Meridian Health</div>
+          <label>Attachments (1)</label>
+          <div class="att">
+            <div class="file"><div class="ic">PDF</div><div><b>PO-00012.pdf</b><small>38 KB · always attached</small></div><span class="lock">🔒</span></div>
+            <div class="add">＋ Add files</div>
+          </div>
+          <div class="actions"><span class="btn">Cancel</span><span class="btn primary">Send email</span></div>
+        </div>
+        <div class="side">
+          <h6>Preview</h6>
+          <div class="thumb"><div class="pg"><div class="b"></div><div class="l" style="width:60%"></div><div class="g"><div></div><div></div><div></div></div><div class="t"></div><div class="l" style="width:40%;margin-left:auto"></div></div></div>
+          <div class="open">↗ Open PDF in new tab</div>
+          <dl>
+            <dt>Supplier</dt><dd>Bio-Swiss (Pty) Ltd</dd>
+            <dt>Our account</dt><dd>MER-0042</dd>
+            <dt>Lines</dt><dd>3 products · 20 units</dd>
+            <dt>Total incl VAT</dt><dd>R 50 830.00</dd>
+          </dl>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 3. Email: supplier's own form -->
+  <div class="sect">
+    <h3>3 · Email pop-up: supplier set to “Supplier-generated PDF”</h3>
+    <p class="note">No Meridian PDF is attached. A notice tells you to add the supplier’s own completed form. Send stays available, so you can still email without an attachment.</p>
+    <div class="stage">
+      <div class="dlg">
+        <div class="main">
+          <div class="top"><div><h4>Email purchase order</h4><div class="sub">PO-00012 · Bio-Swiss (Pty) Ltd</div></div><div class="x">✕</div></div>
+          <label>To</label>
+          <div class="row"><div class="field"><span class="chip">dc.orders@bioswiss-med.co.za <em>Orders</em><span class="cx">✕</span></span><span class="ghost">Add email…</span></div><span class="pill">CC</span><span class="pill">BCC</span></div>
+          <label>Subject</label>
+          <div class="field">Purchase order PO-00012 · Meridian Health</div>
+          <label>Message</label>
+          <div class="msg" style="min-height:150px">Dear Bio-Swiss team,
+
+Please find our completed order form attached, for delivery by Thursday 27 November 2026.
+
+Kind regards,
+Lindiwe Mahlangu
+Meridian Health</div>
+          <label>Attachments (0)</label>
+          <div class="warn"><b>Bio-Swiss uses their own order form.</b> No Meridian PDF is attached. Upload their completed form below. You can still send without one.</div>
+          <div class="drop"><b>＋ Upload their order form</b>Drop a PDF, Excel file or photo here, or click to choose</div>
+          <div class="actions"><span class="btn">Cancel</span><span class="btn primary">Send email</span></div>
+        </div>
+        <div class="side">
+          <h6>Preview</h6>
+          <div class="empty">No attachment yet.<br>Their form will show here once you upload it.</div>
+          <dl>
+            <dt>Supplier</dt><dd>Bio-Swiss (Pty) Ltd</dd>
+            <dt>Our account</dt><dd>MER-0042</dd>
+            <dt>Lines</dt><dd>3 products · 20 units</dd>
+            <dt>Total incl VAT</dt><dd>R 50 830.00</dd>
+          </dl>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 4. Review step -->
+  <div class="sect">
+    <h3>4 · Creating the PO: the review step with prices</h3>
+    <p class="note">New price columns. A product the supplier hasn’t priced uses the catalogue reference price and gets a tag, so you can spot it. The PDF just shows the price, without the tag.</p>
+    <div class="stage" style="background:#e9eff2">
+      <div class="rev">
+        <h4>Review order · Bio-Swiss (Pty) Ltd</h4>
+        <p>Prices are excl. VAT and are saved on the order when you create it.</p>
+        <table>
+          <thead><tr><th>Product</th><th>Suggested</th><th>Order qty</th><th class="num">Unit price</th><th class="num">Line total</th></tr></thead>
+          <tbody>
+            <tr><td><b>Tirzepatide 5mg/0,6ml PFS</b><small>T5/0.6/2.4 PFS · 2,4ml</small></td><td>12</td><td><span class="q" style="display:inline-block">10</span></td><td class="num">R 1 600.00</td><td class="num">R 16 000.00</td></tr>
+            <tr><td><b>Tirzepatide 10mg/0,6ml PFS</b><small>T10/0.6/2.4 PFS · 2,4ml</small></td><td>6</td><td><span class="q" style="display:inline-block">6</span></td><td class="num">R 2 500.00</td><td class="num">R 15 000.00</td></tr>
+            <tr><td><b>Tirzepatide 15mg/0,6ml PFS</b><small>T15/0.6/2.4 PFS · 2,4ml</small></td><td>3</td><td><span class="q" style="display:inline-block">4</span></td><td class="num">R 3 300.00<br><span class="tag">Reference price</span></td><td class="num">R 13 200.00</td></tr>
+          </tbody>
+          <tfoot>
+            <tr><td colspan="4" class="num">Subtotal (excl VAT)</td><td class="num">R 44 200.00</td></tr>
+            <tr><td colspan="4" class="num">VAT 15%</td><td class="num">R 6 630.00</td></tr>
+            <tr class="g"><td colspan="4" class="num">Total (incl VAT)</td><td class="num">R 50 830.00</td></tr>
+          </tfoot>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>

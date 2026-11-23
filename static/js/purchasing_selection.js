@@ -16,6 +16,11 @@
   const supplier = form.querySelector('[name="supplier"]');
   const supplierHelp = form.querySelector('[data-purchase-supplier-help]');
   const supplierProducts = JSON.parse(document.getElementById('purchase-supplier-products')?.textContent || '{}');
+  const totals = dialog.querySelector('[data-order-totals]');
+  const priceNote = dialog.querySelector('[data-order-price-note]');
+  // Money in whole cents as BigInt, so totals match the server exactly at any quantity.
+  const toCents = text => { const [whole, part = ''] = String(text).split('.'); return BigInt(whole) * 100n + BigInt((part + '00').slice(0, 2)); };
+  const formatRand = cents => `R ${(cents / 100n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' ')}.${(cents % 100n).toString().padStart(2, '0')}`;
   const quantities = new Map();
   let searching = false;
   const boxes = () => [...table.querySelectorAll('[data-select-product]')];
@@ -45,8 +50,8 @@
     if (supplier) {
       [...supplier.options].forEach(option => {
         if (!option.value) return;
-        const supplied = supplierProducts[option.value] || [];
-        const eligible = productIds.every(id => supplied.includes(id));
+        const supplied = supplierProducts[option.value]?.products || {};
+        const eligible = productIds.every(id => Object.hasOwn(supplied, String(id)));
         option.disabled = !eligible;
         if (eligible) matching++;
       });
@@ -56,11 +61,60 @@
         : supplier.value ? 'This supplier supplies all selected products.' : 'Choose a supplier. Suppliers that do not supply every selected product are unavailable.';
     }
     create.disabled = !inputs.length || !valid || !supplier?.value || matching === 0;
+    refreshPrices();
     [...body.querySelectorAll('[data-order-preview-row]')].forEach((row, index) => {
       row.querySelector('[data-order-product-input]').name = `items-${index}-product`;
       row.querySelector('[data-order-quantity]').name = `items-${index}-quantity`;
     });
     total.value = inputs.length;
+  }
+
+  // Unit price (the supplier's, or the catalogue reference price, tagged), line totals, VAT and total.
+  function refreshPrices() {
+    const entry = supplier?.value ? supplierProducts[supplier.value] : null;
+    const incompleteNote = dialog.querySelector('[data-supplier-incomplete-note]');
+    if (incompleteNote) incompleteNote.hidden = !entry?.incomplete;
+    const rows = [...body.querySelectorAll('[data-order-preview-row]')];
+    let subtotal = 0n;
+    let complete = Boolean(entry) && rows.length > 0;
+    rows.forEach(row => {
+      const unitCell = row.querySelector('[data-order-unit-price]');
+      const lineCell = row.querySelector('[data-order-line-total]');
+      const quantity = row.querySelector('[data-order-quantity]');
+      const info = entry?.products[row.dataset.productId];
+      if (!unitCell || !lineCell) return;
+      if (!info) {
+        unitCell.textContent = '—';
+        lineCell.textContent = '—';
+        complete = false;
+        return;
+      }
+      const cents = toCents(info.price);
+      unitCell.textContent = formatRand(cents);
+      if (info.reference) {
+        const tag = document.createElement('span');
+        tag.className = 'purchasing-price-tag';
+        tag.textContent = 'Reference price';
+        unitCell.append(tag);
+      }
+      if (quantity.validity.valid && Number.isSafeInteger(quantity.valueAsNumber)) {
+        const line = cents * BigInt(quantity.valueAsNumber);
+        lineCell.textContent = formatRand(line);
+        subtotal += line;
+      } else {
+        lineCell.textContent = '—';
+        complete = false;
+      }
+    });
+    if (totals) totals.hidden = !complete;
+    if (priceNote) priceNote.hidden = !entry;
+    if (!complete) return;
+    const rate = toCents(entry.vat_rate);  // 15.00% is 1500 hundredths of a percent
+    const vat = (subtotal * rate + 5000n) / 10000n;  // rounded half-up to cents, like the server
+    totals.querySelector('[data-order-subtotal]').textContent = formatRand(subtotal);
+    totals.querySelector('[data-order-vat-label]').textContent = `VAT ${Number(entry.vat_rate)}%`;
+    totals.querySelector('[data-order-vat]').textContent = formatRand(vat);
+    totals.querySelector('[data-order-total]').textContent = formatRand(subtotal + vat);
   }
 
   function renderPreview() {

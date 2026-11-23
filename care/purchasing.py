@@ -2,7 +2,7 @@
 
 from collections.abc import Mapping
 from datetime import date, datetime, timedelta
-from decimal import Decimal, ROUND_CEILING
+from decimal import Decimal, ROUND_CEILING, ROUND_HALF_UP
 from uuid import UUID
 
 from .demo_safety import require_same_demo_data
@@ -13,12 +13,111 @@ from django.db.models import F, Max, Sum
 from django.utils import timezone
 
 from .inventory import receive_stock_batch, stock_rows
-from .models import AuditEvent, MedicationProduct, PurchaseOrder, PurchaseOrderItem, StockMovement, Supplier, SupplierProduct
+from .models import (AuditEvent, MedicationProduct, PracticeSettings, PurchaseOrder, PurchaseOrderItem, StockMovement,
+                     Supplier, SupplierProduct)
 from .operations import _lock_company, week_stock
 from .services import record_audit
 
 
 MAX_ORDER_QUANTITY = 2147483647
+CENT = Decimal('0.01')
+
+
+def person_name(user):
+    """A person as a purchase order names them: Dr Sam Marchant (their email when no name is on record)."""
+    name = ' '.join(part for part in (user.get_title_display() if user.title else '', user.get_full_name()) if part)
+    return name.strip() or user.email
+
+
+def format_rand(value):
+    """An amount the way purchase orders print it: R 1 600.00 (rounded half-up to cents, spaces between thousands)."""
+    amount = Decimal(value).quantize(CENT, rounding=ROUND_HALF_UP)
+    return 'R ' + f'{amount:,.2f}'.replace(',', ' ')
+
+
+VAT_RATE = Decimal('15.00')
+
+
+def unit_price_for(link, product):
+    """The unit price excl. VAT a new order line uses, and where it came from: the supplier, else the catalogue."""
+    if link.unit_price is not None:
+        return link.unit_price, PurchaseOrderItem.PriceSource.SUPPLIER
+    return product.price, PurchaseOrderItem.PriceSource.REFERENCE
+
+
+def supplier_snapshot(supplier):
+    """What a purchase order prints about its supplier, as it was when the order was created."""
+    expiry = supplier.sahpra_licence_expiry
+    return {
+        'name': supplier.name, 'registered_name': supplier.registered_name,
+        'registration_number': supplier.registration_number, 'vat_registered': supplier.vat_registered,
+        'vat_number': supplier.vat_number, 'address': supplier.address_lines(), 'email': supplier.email,
+        'accounts_email': supplier.accounts_email, 'contact_name': supplier.contact_name, 'phone': supplier.phone,
+        'payment_terms': supplier.payment_terms, 'account_number': supplier.account_number,
+        'sahpra_licence_number': supplier.sahpra_licence_number,
+        'sahpra_licence_expiry': expiry.isoformat() if expiry else None,
+    }
+
+
+def po_doctors(company):
+    """Who can be named on purchase orders: this practice's active prescribers, and any other active member with an
+    HPCSA number on their staff profile (a Super Admin who is a doctor but not set up as a clinician)."""
+    from django.contrib.auth import get_user_model
+    from django.db.models import Q
+    from practices.models import CompanyMembership
+
+    members = CompanyMembership.objects.filter(company=company, is_active=True)
+    return get_user_model().objects.filter(is_active=True).filter(
+        Q(pk__in=members.filter(clinician_type__in=CompanyMembership.PRESCRIBER_TYPES).values('user_id'))
+        | Q(pk__in=members.values('user_id'), hpcsa_number__gt=''),
+    ).order_by('first_name', 'last_name', 'email')
+
+
+def buyer_snapshot(company):
+    """Bill to (Practice settings → Purchase orders) and Ship to (the courier collection address), as they were."""
+    row = PracticeSettings.objects.filter(company=company).select_related('po_doctor').first() or PracticeSettings()
+    doctor = row.po_doctor
+    if doctor is not None and not po_doctors(company).filter(pk=doctor.pk).exists():
+        doctor = None  # they have left the practice (or no longer qualify): never print them on a new order
+    last = ' '.join(part for part in (row.collection_city, row.collection_postal_code) if part)
+    return {
+        'bill_to': {
+            'name': row.po_bill_to_name, 'practice': company.name, 'address': row.po_billing_lines(),
+            'vat_number': row.po_vat_number, 'pharmacy_number': row.po_pharmacy_number,
+            'accounts_email': row.po_accounts_email, 'doctor_name': person_name(doctor) if doctor else '',
+            'doctor_hpcsa': doctor.hpcsa_number if doctor else '',
+        },
+        'ship_to': {
+            'name': row.collection_business or company.name,
+            'address': [part for part in (row.collection_street, row.collection_suburb, last) if part],
+            'contact': row.collection_contact, 'phone': row.collection_phone,
+            'instructions': row.po_delivery_instructions,
+        },
+    }
+
+
+def bill_to_missing(company):
+    """What Practice settings → Purchase orders still needs before orders carry a complete Bill to."""
+    row = PracticeSettings.objects.filter(company=company).first() or PracticeSettings()
+    missing = []
+    if not row.po_bill_to_name:
+        missing.append('billing name')
+    if not (row.po_billing_street and row.po_billing_city and row.po_billing_postal_code):
+        missing.append('billing address')
+    if row.po_doctor_id is None or not po_doctors(company).filter(pk=row.po_doctor_id).exists():
+        missing.append('doctor named on orders')
+    return missing
+
+
+def order_amounts(order):
+    """Line totals, subtotal, VAT and total, or None for an order without saved prices (created before them)."""
+    items = list(order.items.all())
+    if order.vat_rate is None or any(item.unit_price is None for item in items):
+        return None
+    lines = {item.pk: item.unit_price * item.quantity for item in items}
+    subtotal = sum(lines.values(), Decimal('0.00'))
+    vat = (subtotal * order.vat_rate / 100).quantize(CENT, rounding=ROUND_HALF_UP)
+    return {'lines': lines, 'subtotal': subtotal, 'vat_rate': order.vat_rate, 'vat': vat, 'total': subtotal + vat}
 
 
 def outstanding_order_quantities(company):
@@ -79,30 +178,37 @@ def create_purchase_order(*, company, actor, items, submission_key, supplier=Non
     if products.keys() != quantities.keys():
         raise ValidationError('Choose active products from this practice.')
     demo_data_set_id = require_same_demo_data(supplier, *products.values())
-    supplier_codes = dict(SupplierProduct.objects.filter(company=company, supplier=supplier,
-        supplier__company=company, product__company=company, product_id__in=products).values_list('product_id', 'supplier_code'))
-    if supplier_codes.keys() != products.keys() or any(not code.strip() for code in supplier_codes.values()):
+    links = {link.product_id: link for link in SupplierProduct.objects.filter(company=company, supplier=supplier,
+        supplier__company=company, product__company=company, product_id__in=products)}
+    if links.keys() != products.keys() or any(not link.supplier_code.strip() for link in links.values()):
         raise ValidationError('Every selected product must be linked to this supplier with a supplier product code.')
     number = (PurchaseOrder.objects.filter(company=company).aggregate(last=Max('number'))['last'] or 0) + 1
     if number > MAX_ORDER_QUANTITY:
         raise ValidationError('This practice has reached its purchase order number limit.')
     order = PurchaseOrder(company=company, number=number, submission_key=key, created_by=actor, eta=eta,
                           supplier=supplier, supplier_name=supplier.name, supplier_email=supplier.email,
+                          supplier_details=supplier_snapshot(supplier), buyer_details=buyer_snapshot(company),
+                          vat_rate=VAT_RATE if supplier.vat_registered else Decimal('0.00'),
                           demo_data_set_id=demo_data_set_id)
     order.full_clean()
     order.save()
+    audit_items = []
     for product_id, quantity in quantities.items():
-        product = products[product_id]
+        product, link = products[product_id], links[product_id]
+        unit_price, source = unit_price_for(link, product)
         line = PurchaseOrderItem(company=company, purchase_order=order, product=product, quantity=quantity,
                                  product_name=product.name, strength=product.strength, category=product.category,
-                                 supplier_code=supplier_codes[product.pk])
+                                 supplier_code=link.supplier_code, description=link.description,
+                                 pack_size=link.pack_size, unit_price=unit_price, price_source=source)
         line.full_clean()
         line.save()
+        audit_items.append({'product_id': product_id, 'quantity': quantity, 'unit_price': str(unit_price),
+                            'price_source': source})
     record_audit(company=company, actor=actor, action='purchase_order.created', target=order, request=request,
                  metadata={'number': order.number, 'reference': order.reference, 'submission_key': str(key),
                            'supplier_id': supplier.pk, 'supplier_name': supplier.name,
-                           'eta': eta.isoformat() if eta is not None else None,
-                           'items': [{'product_id': pk, 'quantity': quantity} for pk, quantity in quantities.items()]})
+                           'eta': eta.isoformat() if eta is not None else None, 'vat_rate': str(order.vat_rate),
+                           'items': audit_items})
     return order
 
 

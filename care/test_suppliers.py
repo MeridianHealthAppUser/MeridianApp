@@ -1,6 +1,7 @@
 """Supplier maintenance permissions, linkage, concurrency and retry guarantees."""
 
 from datetime import timedelta
+from decimal import Decimal
 from unittest.mock import patch
 from uuid import uuid4
 
@@ -10,7 +11,7 @@ from django.utils import timezone
 
 from practices.models import CompanyMembership
 from .models import AuditEvent, MedicationProduct, StockMovement, Supplier, SupplierProduct
-from .suppliers import delete_supplier, save_supplier
+from .suppliers import delete_supplier, save_supplier, supplier_flags
 from .test_operations import OperationsFixture
 
 
@@ -40,7 +41,7 @@ class SupplierTests(OperationsFixture):
         self.assertEqual(self.product.supplier_links.get().supplier_id, supplier.pk)
         self.assertEqual(list(StockMovement.objects.order_by('pk').values()), before)
         audit = AuditEvent.objects.get(action='supplier.created')
-        self.assertEqual(audit.metadata['after']['products'], [{'product_id': self.product.pk, 'supplier_code': 'A-001'}])
+        self.assertEqual(audit.metadata['after']['products'], [{'product_id': self.product.pk, 'supplier_code': 'A-001', 'description': '', 'pack_size': '', 'unit_price': None}])
 
     def test_supplier_can_start_without_contacts_or_links_and_product_can_have_multiple_suppliers(self):
         blank = self.save()
@@ -192,7 +193,7 @@ class SupplierTests(OperationsFixture):
         audit = AuditEvent.objects.get(action='supplier.deleted')
         self.assertEqual(audit.target_id, str(pk))
         self.assertEqual(audit.metadata['before']['name'], 'Alpha Supplies')
-        self.assertEqual(audit.metadata['before']['products'], [{'product_id': self.product.pk, 'supplier_code': 'ALPHA-1'}])
+        self.assertEqual(audit.metadata['before']['products'], [{'product_id': self.product.pk, 'supplier_code': 'ALPHA-1', 'description': '', 'pack_size': '', 'unit_price': None}])
         with self.assertRaises(ValidationError):
             self.delete(stub, key=uuid4(), expected_updated=supplier.updated_at)
 
@@ -212,3 +213,56 @@ class SupplierTests(OperationsFixture):
             SupplierProduct.objects.create(company=self.company, supplier=supplier, product=self.open_product, supplier_code='alpha-1')
         with self.assertRaises(ValidationError):
             SupplierProduct(company=self.company, supplier=supplier, product=self.beta_product, supplier_code='FOREIGN').full_clean()
+
+
+    def test_details_are_saved_normalised_and_audited(self):
+        supplier = self.save(registered_name=' Bio-Swiss (Pty) Ltd ', vat_number='435 026 3226', address_street='1 Road',
+                             address_city='Midrand', address_province='GP', address_postal_code='1685',
+                             payment_terms='30 days from statement', uses_own_order_form=True,
+                             sahpra_licence_expiry=self.today + timedelta(days=30))
+        self.assertEqual((supplier.registered_name, supplier.vat_number, supplier.uses_own_order_form),
+                         ('Bio-Swiss (Pty) Ltd', '4350263226', True))
+        after = AuditEvent.objects.get(action='supplier.created').metadata['after']
+        self.assertEqual(after['vat_number'], '4350263226')
+        self.assertEqual(after['sahpra_licence_expiry'], (self.today + timedelta(days=30)).isoformat())
+
+    def test_invalid_vat_number_and_province_are_rejected(self):
+        for values in ({'vat_number': '123'}, {'vat_number': '5350263226'}, {'address_province': 'XX'}):
+            with self.subTest(values=values), self.assertRaises(ValidationError):
+                self.save(**values)
+        self.assertFalse(Supplier.objects.exists())
+
+    def test_not_vat_registered_clears_the_vat_number(self):
+        self.assertEqual(self.save(vat_registered=False, vat_number='4350263226').vat_number, '')
+
+    def test_address_lines_skip_blank_parts(self):
+        supplier = self.save(address_street='1 Road', address_city='Midrand', address_postal_code='1685')
+        self.assertEqual(supplier.address_lines(), ['1 Road', 'Midrand 1685'])
+
+    def test_flags_mark_incomplete_and_expired_licence(self):
+        supplier = self.save()
+        self.assertEqual(supplier_flags(supplier, self.today), {'incomplete': True, 'licence_expired': False})
+        supplier.sahpra_licence_expiry = self.today - timedelta(days=1)
+        self.assertTrue(supplier_flags(supplier, self.today)['licence_expired'])
+        complete = self.save(name='Complete', registered_name='Complete (Pty) Ltd', vat_number='4350263226',
+                             address_street='1 Road', address_city='Midrand', address_province='GP',
+                             address_postal_code='1685', email='orders@example.test', payment_terms='COD')
+        self.assertFalse(supplier_flags(complete, self.today)['incomplete'])
+
+    def test_link_saves_description_size_and_price(self):
+        supplier = self.save(products=[{'product': self.product, 'supplier_code': 'T5/0.6/2.4 PFS',
+                                        'description': ' Tirzepatide 5mg/0,6ml PFS ', 'pack_size': ' 2,4ml ',
+                                        'unit_price': Decimal('1600.00')}, self.line(self.open_product, 'OPEN-1')])
+        links = {link.product_id: link for link in supplier.product_links.all()}
+        self.assertEqual((links[self.product.pk].description, links[self.product.pk].pack_size,
+                          links[self.product.pk].unit_price), ('Tirzepatide 5mg/0,6ml PFS', '2,4ml', Decimal('1600.00')))
+        self.assertIsNone(links[self.open_product.pk].unit_price)
+        products = AuditEvent.objects.get(action='supplier.created').metadata['after']['products']
+        self.assertEqual(products[0]['unit_price'], '1600.00')
+        self.assertIsNone(products[1]['unit_price'])
+
+    def test_negative_or_malformed_price_is_rejected(self):
+        for index, price in enumerate((Decimal('-1'), Decimal('100000000'), '12', Decimal('1.005'))):
+            with self.subTest(price=price), self.assertRaises(ValidationError):
+                self.save(name=f'Priced {index}', products=[{**self.line(), 'unit_price': price}])
+        self.assertFalse(Supplier.objects.exists())

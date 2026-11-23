@@ -4,14 +4,16 @@ from django import forms
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.exceptions import PermissionDenied
-from django.db import transaction
+from django.db import models, transaction
 from django.shortcuts import redirect, render
 from django.utils.decorators import method_decorator
 from django.views import View
 from django.views.decorators.cache import never_cache
 
-from care.models import PracticeSettings
+from care.models import PROVINCES, PracticeSettings
+from care.purchasing import person_name, po_doctors
 from care.services import record_audit
+from care.suppliers import normalise_vat_number
 from practices.models import CompanyMembership
 from .views import StaffCompanyRequiredMixin
 
@@ -105,12 +107,44 @@ class CourierSettingsForm(forms.ModelForm):
                   'courier_service_level', 'parcel_length_cm', 'parcel_width_cm', 'parcel_height_cm', 'parcel_weight_kg')
 
 
+class PurchaseOrderSettingsForm(forms.ModelForm):
+    """Bill to on every purchase order, and the doctor whose name and HPCSA number it carries."""
+
+    class Meta:
+        model = PracticeSettings
+        fields = ('po_bill_to_name', 'po_billing_street', 'po_billing_suburb', 'po_billing_city', 'po_billing_province',
+                  'po_billing_postal_code', 'po_vat_number', 'po_pharmacy_number', 'po_accounts_email', 'po_doctor',
+                  'po_delivery_instructions')
+
+    def __init__(self, *args, company, **kwargs):
+        super().__init__(*args, **kwargs)
+        field = self.fields['po_doctor']
+        field.queryset = po_doctors(company)
+        field.empty_label = 'Choose a doctor'
+        self.fields['po_billing_province'].choices = [('', 'Choose a province'), *PROVINCES]
+        field.label_from_instance = lambda user: f'{person_name(user)} · ' + (
+            f'HPCSA {user.hpcsa_number}' if user.hpcsa_number else 'HPCSA not on profile')
+
+    def clean_po_vat_number(self):
+        return normalise_vat_number(self.cleaned_data['po_vat_number'])
+
+
 def _json_value(value):
-    """A setting as the audit log keeps it: amounts (Decimal) as text, everything else as it is."""
+    """A setting as the audit log keeps it: amounts (Decimal) as text, a person by their id, everything else as it is."""
+    if isinstance(value, models.Model):
+        return value.pk
     return value if value is None or isinstance(value, (bool, int, str)) else str(value)
 
 
-SECTION_FORMS = {'shipping': ShippingSettingsForm, 'billing': BillingSettingsForm, 'courier': CourierSettingsForm}
+SECTION_FORMS = {'shipping': ShippingSettingsForm, 'billing': BillingSettingsForm, 'courier': CourierSettingsForm,
+                 'purchasing': PurchaseOrderSettingsForm}
+
+
+def _section_form(form_class, company, *args, **kwargs):
+    """Only the purchase order section needs the practice, to offer its own doctors."""
+    if form_class is PurchaseOrderSettingsForm:
+        kwargs['company'] = company
+    return form_class(*args, **kwargs)
 
 
 @method_decorator(never_cache, name='dispatch')
@@ -133,7 +167,7 @@ class PracticeSettingsView(LoginRequiredMixin, StaffCompanyRequiredMixin, View):
             page_title='Practice settings', event_log_sections=EVENT_LOG_SECTIONS, courier_enabled=courier_enabled(),
             payment_provider=current_provider(), form=forms.get('form') or PracticeSettingsForm(instance=row))
         for section, form_class in SECTION_FORMS.items():
-            context[f'{section}_form'] = forms.get(f'{section}_form') or form_class(instance=row)
+            context[f'{section}_form'] = forms.get(f'{section}_form') or _section_form(form_class, self.company, instance=row)
         return render(request, 'portal/practice_settings.html', context, status=status)
 
     def get(self, request):
@@ -142,7 +176,7 @@ class PracticeSettingsView(LoginRequiredMixin, StaffCompanyRequiredMixin, View):
     def post(self, request):
         row = self.settings_row()
         section = request.POST.get('section')
-        form = SECTION_FORMS.get(section, PracticeSettingsForm)(request.POST, instance=row)
+        form = _section_form(SECTION_FORMS.get(section, PracticeSettingsForm), self.company, request.POST, instance=row)
         if not form.is_valid():
             row.refresh_from_db()
             return self.display(request, row, status=400, **{f'{section}_form' if section in SECTION_FORMS else 'form': form})

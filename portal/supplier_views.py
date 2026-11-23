@@ -9,17 +9,19 @@ from django.db.models import Prefetch, Q
 from django.http import FileResponse, Http404, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
+from django.utils import timezone
 
 from care.models import AuditEvent, Supplier, SupplierProduct
 from care.services import record_audit
-from care.suppliers import delete_supplier, save_supplier
+from care.suppliers import delete_supplier, save_supplier, supplier_flags
 from care.table_export import table_workbook
 from practices.models import CompanyMembership
 from practices.services import active_membership_for, get_active_company
 from .filter_menus import list_tools
 from .operations_views import OperationsView
 from .pagination import numbered_pagination
-from .supplier_forms import SupplierForm, SupplierSearchForm, supplier_product_forms
+from .supplier_forms import (PRODUCT_LINK_FIELDS, SupplierForm, SupplierSearchForm, require_licence, supplier_initial,
+                             supplier_product_forms)
 from .workflow_context import make_workflow_context, validate_workflow_context
 
 
@@ -82,7 +84,9 @@ class SuppliersView(OperationsView):
         return_query = {**query, 'page': page.number} if page.number > 1 else query
         return_url = supplier_url(**return_query)
         suppliers = list(page.object_list)
+        today = timezone.localdate()
         for row in suppliers:
+            row.flags = supplier_flags(row, today)
             row.link_count = len(row.display_links)
             row.edit_url = supplier_url(**return_query, edit=row.pk)
             row.delete_url = supplier_url(**return_query, delete=row.pk)
@@ -93,9 +97,7 @@ class SuppliersView(OperationsView):
                 editor_open = True
             elif data.get('delete'):
                 delete_supplier = selected_supplier(self.company, data['delete'])
-        supplier_form = form if form is not None else SupplierForm(initial={
-            name: getattr(supplier, name) for name in ('name', 'contact_name', 'email', 'phone')
-        } if supplier else None)
+        supplier_form = form if form is not None else SupplierForm(initial=supplier_initial(supplier) if supplier else None)
         product_formset = formset if formset is not None else supplier_product_forms(self.company, supplier=supplier)
         tools = list_tools(action=reverse('portal:supplier-list'), data=data, sections=[], form=search_form,
             label='Search suppliers', placeholder='Supplier, contact, product or code')
@@ -138,8 +140,10 @@ class SupplierCreateView(SuppliersView):
             intent = validate_workflow_context(request, self.company, 'supplier-create')
             valid_details, valid_products = form.is_valid(), formset.is_valid()
             if valid_details and valid_products:
+                require_licence(form, formset)
+            if valid_details and valid_products and not form.errors:
                 supplier = save_supplier(company=self.company, actor=request.user, **form.cleaned_data,
-                    products=[{key: line.cleaned_data[key] for key in ('product', 'supplier_code')}
+                    products=[{key: line.cleaned_data[key] for key in ('product', *PRODUCT_LINK_FIELDS)}
                               for line in formset if line.cleaned_data and not line.cleaned_data.get('DELETE')],
                     submission_key=intent['key'], request=request)
                 messages.success(request, f'{supplier.name} created.')
@@ -164,8 +168,10 @@ class SupplierEditView(SuppliersView):
             intent = validate_workflow_context(request, self.company, 'supplier-update', supplier, check_version=False)
             valid_details, valid_products = form.is_valid(), formset.is_valid()
             if valid_details and valid_products:
+                require_licence(form, formset)
+            if valid_details and valid_products and not form.errors:
                 supplier = save_supplier(company=self.company, actor=request.user, supplier=supplier, **form.cleaned_data,
-                    products=[{key: line.cleaned_data[key] for key in ('product', 'supplier_code')}
+                    products=[{key: line.cleaned_data[key] for key in ('product', *PRODUCT_LINK_FIELDS)}
                               for line in formset if line.cleaned_data and not line.cleaned_data.get('DELETE')],
                     submission_key=intent['key'], expected_updated=intent['updated'], request=request)
                 messages.success(request, f'{supplier.name} saved.')
@@ -216,15 +222,25 @@ class SupplierExportView(SuppliersView):
 
         def rows():
             for supplier in supplier_records(self.company, form.cleaned_data['q']).iterator(chunk_size=500):
+                details = (supplier.name, supplier.registered_name, supplier.registration_number, supplier.vat_number,
+                           ', '.join(supplier.address_lines()), supplier.email, supplier.accounts_email,
+                           supplier.contact_name, supplier.phone, supplier.payment_terms, supplier.account_number,
+                           supplier.sahpra_licence_number,
+                           supplier.sahpra_licence_expiry.isoformat() if supplier.sahpra_licence_expiry else '',
+                           'Supplier' if supplier.uses_own_order_form else 'Meridian')
                 for link in supplier.display_links or [None]:
-                    yield (supplier.name, supplier.contact_name, supplier.email, supplier.phone,
-                        link.product.name if link else '', link.product.strength if link else '',
-                        link.product.get_category_display() if link else '', link.supplier_code if link else '')
+                    yield (*details, link.product.name if link else '', link.product.strength if link else '',
+                        link.product.get_category_display() if link else '', link.supplier_code if link else '',
+                        link.description if link else '', link.pack_size if link else '',
+                        link.unit_price if link and link.unit_price is not None else '')
 
         try:
             output, count = table_workbook('Suppliers',
-                ('Supplier', 'Contact person', 'Email', 'Phone', 'Product', 'Strength', 'Category', 'Supplier product code'),
-                rows(), widths=(35, 28, 38, 22, 38, 23, 25, 28))
+                ('Supplier', 'Registered name', 'Registration number', 'VAT number', 'Address', 'Orders email',
+                 'Accounts email', 'Contact person', 'Phone', 'Payment terms', 'Our account number', 'SAHPRA licence',
+                 'Licence expiry', 'PO PDF', 'Product', 'Strength', 'Category', 'Supplier product code',
+                 'Supplier description', 'Size', 'Unit price excl. VAT'),
+                rows(), widths=(35, 35, 22, 16, 45, 34, 34, 28, 22, 26, 20, 20, 15, 12, 38, 23, 25, 28, 38, 12, 18))
         except ValidationError as error:
             return HttpResponse(' '.join(error.messages), status=400, content_type='text/plain')
         try:

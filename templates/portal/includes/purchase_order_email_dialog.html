@@ -1,9 +1,45 @@
-<dialog class="app-dialog purchasing-order-dialog" id="purchase-order-email-{{ email_order.pk }}" aria-labelledby="purchase-email-title" open data-purchase-return-url="{{ purchasing_return_url }}">
-  <div class="app-dialog__body"><header class="purchasing-order-dialog-header"><div><h2 id="purchase-email-title">Email purchase order</h2><p class="app-dialog__sub">{{ email_order.reference }} · PDF attached</p></div><button type="button" class="purchasing-dialog-close" data-dialog-close aria-label="Close email"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button></header>
-    <form method="post" action="{% url 'portal:purchase-order-email' email_order.pk %}" class="ops-form">
+{% load purchasing_ui %}<dialog class="app-dialog purchasing-order-dialog po-email" id="purchase-order-email-{{ email_order.pk }}" aria-labelledby="purchase-email-title" open data-purchase-return-url="{{ purchasing_return_url }}" data-po-email data-max-files="{{ email_attachment_limits.files }}" data-max-bytes="{{ email_attachment_limits.bytes }}" data-own-form="{{ email_own_form|yesno:'true,false' }}">
+  <form method="post" enctype="multipart/form-data" action="{% url 'portal:purchase-order-email' email_order.pk %}" class="po-email__layout" data-po-email-form novalidate>
+    <div class="po-email__main">
+      <header class="po-email__header"><div><h2 id="purchase-email-title">Email purchase order</h2><p class="app-dialog__sub">{{ email_order.reference }} · {{ email_order.supplier_name|default:'No supplier' }}</p></div><button type="button" class="purchasing-dialog-close" data-dialog-close aria-label="Close email"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button></header>
       {% csrf_token %}<input type="hidden" name="workflow_context" value="{{ purchase_email_context }}"><input type="hidden" name="view" value="{{ purchasing_view }}"><input type="hidden" name="group" value="{{ purchasing_group }}"><input type="hidden" name="q" value="{{ search }}">
-      {{ email_form.non_field_errors }}{% for field in email_form %}<div class="ops-form-field">{{ field.label_tag }}{{ field }}{{ field.errors }}</div>{% endfor %}
-      <div class="app-dialog__actions"><button type="button" class="console-button console-button--secondary" data-dialog-close>Cancel</button><button type="submit" class="console-button console-button--primary">Send email</button></div>
-    </form>
-  </div>
+      {{ email_form.non_field_errors }}
+      <div class="po-email__field">
+        <label for="{{ email_form.to.id_for_label }}">To</label>
+        <div class="po-email__recipient-row">
+          <div class="po-email__recipients" data-recipients data-orders-email="{{ email_order.supplier_email }}">{{ email_form.to }}</div>
+          <button type="button" class="po-email__pill" data-show-copy="cc" aria-controls="po-email-cc"{% if email_form.cc.value or email_form.cc.errors %} hidden{% endif %}>CC</button>
+          <button type="button" class="po-email__pill" data-show-copy="bcc" aria-controls="po-email-bcc"{% if email_form.bcc.value or email_form.bcc.errors %} hidden{% endif %}>BCC</button>
+        </div>
+        {{ email_form.to.errors }}
+      </div>
+      <div class="po-email__field" id="po-email-cc" data-copy-row="cc"{% if not email_form.cc.value and not email_form.cc.errors %} hidden{% endif %}>
+        <label for="{{ email_form.cc.id_for_label }}">CC</label><div class="po-email__recipients" data-recipients>{{ email_form.cc }}</div>{{ email_form.cc.errors }}
+      </div>
+      <div class="po-email__field" id="po-email-bcc" data-copy-row="bcc"{% if not email_form.bcc.value and not email_form.bcc.errors %} hidden{% endif %}>
+        <label for="{{ email_form.bcc.id_for_label }}">BCC</label><div class="po-email__recipients" data-recipients>{{ email_form.bcc }}</div>{{ email_form.bcc.errors }}
+      </div>
+      <div class="po-email__field"><label for="{{ email_form.subject.id_for_label }}">Subject</label>{{ email_form.subject }}{{ email_form.subject.errors }}</div>
+      <div class="po-email__field"><label for="{{ email_form.message.id_for_label }}">Message</label>{{ email_form.message }}{{ email_form.message.errors }}</div>
+      <div class="po-email__field">
+        <span class="po-email__label">Attachments (<span data-attachment-count>{{ email_own_form|yesno:'0,1' }}</span>)</span>
+        {% if email_own_form %}<div class="po-email__notice" role="note"><strong>{{ email_order.supplier_name }} uses their own order form.</strong> No Meridian PDF is attached. Upload their completed form below. You can still send without one.</div>{% endif %}
+        <div class="po-email__files" data-attachment-list>
+          {% if not email_own_form %}<div class="po-email__file po-email__file--locked"><span class="po-email__file-icon" aria-hidden="true">PDF</span><span class="po-email__file-text"><strong>purchase-order-{{ email_order.reference }}.pdf</strong><small>always attached</small></span><svg class="po-email__lock" viewBox="0 0 24 24" fill="none" aria-label="Can’t be removed" role="img"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg></div>{% endif %}
+          <label class="po-email__drop{% if email_own_form %} po-email__drop--wide{% endif %}" data-drop-zone>{{ email_form.attachments }}<span>{% if email_own_form %}<strong>+ Upload their order form</strong><small>Drop a PDF, Excel file or photo here, or click to choose</small>{% else %}<strong>+ Add files</strong>{% endif %}</span></label>
+        </div>
+        <small class="po-email__hint">Up to {{ email_attachment_limits.files }} files, 10 MB in total{% if not email_own_form %} including the purchase order PDF{% endif %}. PDF, Excel, Word, CSV, PNG or JPG.</small>
+        <p class="po-email__error" data-attachment-error role="alert" hidden></p>
+        {{ email_form.attachments.errors }}
+        {% if email_form.is_bound and email_form.errors %}<p class="po-email__reattach">Choose any files again before you send.</p>{% endif %}
+      </div>
+      <footer class="app-dialog__actions po-email__actions"><button type="button" class="console-button console-button--secondary" data-dialog-close>Cancel</button><button type="submit" class="console-button console-button--primary">Send email</button></footer>
+    </div>
+    <aside class="po-email__side" aria-label="Preview">
+      <h3>Preview</h3>
+      {% if email_own_form %}<div class="po-email__preview po-email__preview--empty" data-preview-empty>No attachment yet.<br>Their form will show here once you upload it.</div><div class="po-email__preview" data-upload-preview hidden></div>{% else %}<div class="po-email__preview"><iframe src="{{ email_pdf_url }}#toolbar=0&amp;navpanes=0&amp;view=FitH" title="Purchase order preview" loading="lazy"></iframe></div><a class="po-email__open" href="{{ email_pdf_url }}" target="_blank" rel="noopener"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M7 17 17 7M9 7h8v8"/></svg>Open PDF in new tab</a>{% endif %}
+      <dl class="po-email__details"><dt>Supplier</dt><dd>{{ email_order.supplier_name|default:'–' }}</dd><dt>Our account</dt><dd>{{ email_supplier.account_number|default:'–' }}</dd><dt>Lines</dt><dd>{{ email_line_count }} product{{ email_line_count|pluralize }} · {{ email_unit_count }} unit{{ email_unit_count|pluralize }}</dd><dt>Total incl VAT</dt><dd>{% if email_amounts %}{{ email_amounts.total|rand }}{% else %}–{% endif %}</dd></dl>
+      {% if email_reference_count %}<p class="po-email__reference-note">{{ email_reference_count }} of {{ email_line_count }} line{{ email_line_count|pluralize }} use{{ email_reference_count|pluralize:'s,' }} the catalogue reference price, not a supplier price.</p>{% endif %}
+    </aside>
+  </form>
 </dialog>

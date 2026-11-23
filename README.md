@@ -38,6 +38,8 @@ All four patients are Sam's. Nadia has the full demo history (consultations, not
 
 `seed_billing_demo` (run once, after `seed_demo`, with the sandbox payment provider) adds billing and Weekly shipping demo data. It gives each patient a subscription in a different billing state, and adds four more patients: Lerato, Ruan, Megan and Thabo (`lerato.d@`, `ruan.b@`, `megan.f@` and `thabo.n@example.co.za`, same password). The coming shipping week gets its parcels, earlier parcels go into Dispatch history, and there are creatine requests and the default email journeys (all off).
 
+Purchase orders carry supplier details, prices (the supplier's, or the catalogue reference price), VAT, bill-to and ship-to, and are emailed from a pop-up with CC/BCC and extra files. Suppliers that insist on their own order form are emailed without Meridian's PDF. See [Suppliers and purchase orders](docs/USER_GUIDE.md#suppliers-and-purchase-orders).
+
 `seed_operations_demo` adds an isolated Inventory/Operations walkthrough with stock, two doctors, ten patients and subscriptions, mixed shipment states and two non-prescription requests. It leaves existing demo records intact and preserves your testing progress on reruns. See [local test accounts and scenarios](docs/OPERATIONS_DEMO.md).
 
 ## Separate staff pages checkpoint

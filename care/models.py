@@ -109,6 +109,21 @@ class PracticeSettings(CompanyScopedModel):
     parcel_width_cm = models.PositiveSmallIntegerField('Parcel width (cm)', default=20)
     parcel_height_cm = models.PositiveSmallIntegerField('Parcel height (cm)', default=15)
     parcel_weight_kg = models.DecimalField('Parcel weight (kg)', max_digits=5, decimal_places=2, default=Decimal('2.00'))
+    # Purchase orders (care.purchasing): printed as Bill to. Ship to is the courier collection address above.
+    po_bill_to_name = models.CharField('Bill to (name of entity)', max_length=150, blank=True)
+    po_billing_street = models.CharField('Billing street address', max_length=200, blank=True)
+    po_billing_suburb = models.CharField('Billing suburb', max_length=120, blank=True)
+    po_billing_city = models.CharField('Billing city or town', max_length=120, blank=True)
+    po_billing_province = models.CharField('Billing province', max_length=3, blank=True, choices=PROVINCES)
+    po_billing_postal_code = models.CharField('Billing postal code', max_length=10, blank=True)
+    po_vat_number = models.CharField('Practice VAT number', max_length=20, blank=True,
+                                     help_text='Leave blank if the practice isn’t VAT-registered.')
+    po_pharmacy_number = models.CharField('Pharmacy Y number', max_length=20, blank=True)
+    po_accounts_email = models.EmailField('Accounts email', blank=True)
+    po_doctor = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL,
+                                  related_name='+', verbose_name='Doctor named on purchase orders',
+                                  help_text='Their name and HPCSA number are printed on every purchase order.')
+    po_delivery_instructions = models.CharField('Delivery instructions for suppliers', max_length=300, blank=True)
     # The monthly doctor activity report (care.activity_reports, Dr Czech, Nov 2026): on the 25th, each doctor's
     # consults, messages and blood results reviewed from the 25th of the month before to the 24th, at these rates.
     activity_report_email = models.EmailField(
@@ -126,6 +141,11 @@ class PracticeSettings(CompanyScopedModel):
 
     class Meta:
         constraints = [models.UniqueConstraint(fields=('company',), name='one_practice_settings_per_company')]
+
+    def po_billing_lines(self):
+        """The billing address as a purchase order prints it, a line for each part that is filled in."""
+        last = ' '.join(part for part in (self.po_billing_city, self.po_billing_postal_code) if part)
+        return [part for part in (self.po_billing_street, self.po_billing_suburb, last) if part]
 
     def retry_days(self):
         """The retry schedule as whole days, in order: '3,7' is [3, 7]. Anything unreadable is left out."""
@@ -2259,6 +2279,12 @@ class PurchaseOrder(CompanyScopedModel):
                                  related_name='purchase_orders')
     supplier_name = models.CharField(max_length=255, blank=True)
     supplier_email = models.EmailField(blank=True)
+    # Saved when the order is created (care.purchasing) so later edits never change an order already sent.
+    # Orders from before prices existed have empty details and no VAT rate.
+    supplier_details = models.JSONField(default=dict, blank=True)
+    buyer_details = models.JSONField(default=dict, blank=True)
+    vat_rate = models.DecimalField(max_digits=4, decimal_places=2, null=True, blank=True,
+                                   validators=[MinValueValidator(Decimal('0'))])
     eta = models.DateField(null=True, blank=True)
     received_at = models.DateTimeField(null=True, blank=True)
     status = models.CharField(max_length=10, choices=Status.choices, default=Status.OPEN)
@@ -2300,9 +2326,22 @@ class PurchaseOrderItem(CompanyScopedModel):
     category = models.CharField(max_length=24, choices=MedicationProduct.Category.choices)
     supplier_code = models.CharField(max_length=100, blank=True)
 
+    class PriceSource(models.TextChoices):
+        SUPPLIER = 'supplier', 'Supplier price'
+        REFERENCE = 'reference', 'Reference price'
+
+    # Excl. VAT, saved at creation: the supplier's price, or the catalogue reference price when they had none.
+    unit_price = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True,
+                                     validators=[MinValueValidator(Decimal('0'))])
+    price_source = models.CharField(max_length=10, choices=PriceSource.choices, blank=True)
+    description = models.CharField(max_length=255, blank=True)
+    pack_size = models.CharField(max_length=40, blank=True)
+
     class Meta:
         ordering = ('pk',)
         constraints = [
+            models.CheckConstraint(condition=models.Q(unit_price__isnull=True) | models.Q(unit_price__gte=0),
+                                   name='purchase_order_price_not_negative'),
             models.UniqueConstraint(fields=('purchase_order', 'product'), name='one_product_per_purchase_order'),
             models.CheckConstraint(condition=models.Q(quantity__gt=0, quantity__lte=2147483647),
                                    name='purchase_order_quantity_limit'),
@@ -2329,8 +2368,26 @@ class Supplier(CompanyScopedModel):
                                       on_delete=models.PROTECT, related_name='suppliers')
     name = models.CharField(max_length=255)
     contact_name = models.CharField(max_length=120, blank=True)
-    email = models.EmailField(blank=True)
+    email = models.EmailField('Orders email', blank=True)
     phone = models.CharField(max_length=40, blank=True)
+    # What a purchase order prints about the supplier (care.purchasing snapshots it onto each order).
+    registered_name = models.CharField('Registered company name', max_length=255, blank=True)
+    registration_number = models.CharField('Company registration number', max_length=40, blank=True)
+    vat_registered = models.BooleanField('VAT-registered', default=True)
+    vat_number = models.CharField('VAT number', max_length=20, blank=True)
+    address_street = models.CharField('Street address', max_length=200, blank=True)
+    address_suburb = models.CharField('Suburb', max_length=120, blank=True)
+    address_city = models.CharField('City or town', max_length=120, blank=True)
+    address_province = models.CharField('Province', max_length=3, blank=True, choices=PROVINCES)
+    address_postal_code = models.CharField('Postal code', max_length=10, blank=True)
+    accounts_email = models.EmailField('Accounts email', blank=True)
+    payment_terms = models.CharField('Payment terms', max_length=120, blank=True)
+    account_number = models.CharField('Our account number', max_length=40, blank=True)
+    # A Section 22C licence: required on the supplier form when they supply prescription products.
+    sahpra_licence_number = models.CharField('SAHPRA licence number', max_length=40, blank=True)
+    sahpra_licence_expiry = models.DateField('SAHPRA licence expiry', null=True, blank=True)
+    # Some suppliers only accept their own completed order form: no Meridian PDF is attached to the email.
+    uses_own_order_form = models.BooleanField('Supplier-generated PDF', default=False)
 
     class Meta:
         ordering = ('name', 'pk')
@@ -2342,6 +2399,11 @@ class Supplier(CompanyScopedModel):
     def __str__(self):
         return self.name
 
+    def address_lines(self):
+        """The address as a purchase order prints it, a line for each part that is filled in."""
+        last = ' '.join(part for part in (self.address_city, self.address_postal_code) if part)
+        return [part for part in (self.address_street, self.address_suburb, last) if part]
+
 
 class SupplierProduct(CompanyScopedModel):
     """A catalogue product and the code used for it by this supplier."""
@@ -2349,6 +2411,12 @@ class SupplierProduct(CompanyScopedModel):
     supplier = models.ForeignKey(Supplier, on_delete=models.CASCADE, related_name='product_links')
     product = models.ForeignKey(MedicationProduct, on_delete=models.PROTECT, related_name='supplier_links')
     supplier_code = models.CharField(max_length=100)
+    # The supplier's own wording and price list. A purchase order uses the catalogue reference price
+    # (MedicationProduct.price) when no unit price is set here.
+    description = models.CharField('Supplier description', max_length=255, blank=True)
+    pack_size = models.CharField('Size', max_length=40, blank=True)
+    unit_price = models.DecimalField('Unit price excl. VAT (R)', max_digits=10, decimal_places=2, null=True, blank=True,
+                                     validators=[MinValueValidator(Decimal('0'))])
 
     class Meta:
         ordering = ('pk',)
@@ -2356,6 +2424,8 @@ class SupplierProduct(CompanyScopedModel):
             models.UniqueConstraint(fields=('supplier', 'product'), name='unique_supplier_product'),
             models.UniqueConstraint(Lower('supplier_code'), 'supplier', name='unique_supplier_product_code'),
             models.CheckConstraint(condition=~models.Q(supplier_code=''), name='supplier_code_not_empty'),
+            models.CheckConstraint(condition=models.Q(unit_price__isnull=True) | models.Q(unit_price__gte=0),
+                                   name='supplier_product_price_not_negative'),
         ]
 
     def clean(self):

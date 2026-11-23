@@ -5,16 +5,19 @@ from decimal import Decimal
 from unittest.mock import patch
 from uuid import uuid4
 
+from django.contrib.auth import get_user_model
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import DataError, IntegrityError, transaction
+from django.test import SimpleTestCase
 from django.utils import timezone
 
 from practices.models import Company, CompanyMembership
 
 from .inventory import stock_rows
-from .models import (AuditEvent, MedicationProduct, PurchaseOrder, PurchaseOrderItem, Shipment,
+from .models import (AuditEvent, MedicationProduct, PracticeSettings, PurchaseOrder, PurchaseOrderItem, Shipment,
                      ShipmentItem, StockMovement, Supplier, SupplierProduct)
-from .purchasing import create_purchase_order, outstanding_order_quantities, receive_purchase_order, to_order_rows
+from .purchasing import (create_purchase_order, format_rand, order_amounts, outstanding_order_quantities,
+                         receive_purchase_order, to_order_rows)
 from .test_operations import OperationsFixture
 
 
@@ -412,3 +415,136 @@ class PurchaseOrderModelTests(PurchaseOrderFixture):
         with self.assertRaises(IntegrityError), transaction.atomic():
             PurchaseOrderItem.objects.create(company=self.company, purchase_order=order, product=self.product,
                 quantity=1, product_name='Duplicate', category=self.product.category)
+
+
+class FormatRandTests(SimpleTestCase):
+    def test_format_rand(self):
+        self.assertEqual(format_rand(Decimal('1600')), 'R 1 600.00')
+        self.assertEqual(format_rand(Decimal('44200.5')), 'R 44 200.50')
+        self.assertEqual(format_rand(Decimal('0')), 'R 0.00')
+        self.assertEqual(format_rand(Decimal('1234567.005')), 'R 1 234 567.01')
+
+
+class PurchaseOrderPricingTests(PurchaseOrderFixture):
+    """Prices, VAT and the supplier, bill-to and ship-to details are saved on the order when it is created."""
+
+    def bio_swiss_lines(self):
+        lines = []
+        for name, price, quantity in (('Tirzepatide 5mg', '1600.00', 10), ('Tirzepatide 10mg', '2500.00', 6),
+                                      ('Tirzepatide 15mg', '3300.00', 4)):
+            product = MedicationProduct.objects.create(company=self.company, name=name, price=Decimal('1.00'))
+            SupplierProduct.objects.create(company=self.company, supplier=self.supplier, product=product,
+                                           supplier_code=f'CODE-{product.pk}', unit_price=Decimal(price))
+            lines.append({'product': product, 'quantity': quantity})
+        return lines
+
+    def test_supplier_price_is_used_and_reference_price_fills_gaps(self):
+        SupplierProduct.objects.filter(supplier=self.supplier, product=self.product).update(
+            unit_price=Decimal('1600.00'), description='Tirzepatide 5mg/0,6ml PFS', pack_size='2,4ml')
+        order = self.create_order(items=[{'product': self.product, 'quantity': 10}, {'product': self.open_product, 'quantity': 2}])
+        priced = {item.product_id: (item.unit_price, item.price_source, item.description, item.pack_size)
+                  for item in order.items.all()}
+        self.assertEqual(priced[self.product.pk], (Decimal('1600.00'), 'supplier', 'Tirzepatide 5mg/0,6ml PFS', '2,4ml'))
+        self.assertEqual(priced[self.open_product.pk], (Decimal('40.00'), 'reference', '', ''))
+        items = AuditEvent.objects.get(action='purchase_order.created').metadata['items']
+        self.assertEqual({item['product_id']: (item['unit_price'], item['price_source']) for item in items},
+                         {self.product.pk: ('1600.00', 'supplier'), self.open_product.pk: ('40.00', 'reference')})
+
+    def test_amounts_match_the_bio_swiss_example(self):
+        order = self.create_order(items=self.bio_swiss_lines())
+        amounts = order_amounts(order)
+        self.assertEqual((amounts['subtotal'], amounts['vat_rate'], amounts['vat'], amounts['total']),
+                         (Decimal('44200.00'), Decimal('15.00'), Decimal('6630.00'), Decimal('50830.00')))
+        self.assertEqual(sorted(amounts['lines'].values()), [Decimal('13200.00'), Decimal('15000.00'), Decimal('16000.00')])
+
+    def test_vat_is_rounded_half_up_to_cents(self):
+        SupplierProduct.objects.filter(supplier=self.supplier, product=self.product).update(unit_price=Decimal('0.03'))
+        amounts = order_amounts(self.create_order(items=[{'product': self.product, 'quantity': 1}]))
+        self.assertEqual((amounts['vat'], amounts['total']), (Decimal('0.00'), Decimal('0.03')))
+        SupplierProduct.objects.filter(supplier=self.supplier, product=self.product).update(unit_price=Decimal('0.10'))
+        amounts = order_amounts(self.create_order(items=[{'product': self.product, 'quantity': 1}]))
+        self.assertEqual(amounts['vat'], Decimal('0.02'))  # 0.015 rounds half-up
+
+    def test_vat_rate_is_zero_for_a_supplier_that_is_not_vat_registered(self):
+        Supplier.objects.filter(pk=self.supplier.pk).update(vat_registered=False)
+        order = self.create_order()
+        self.assertEqual(order.vat_rate, Decimal('0.00'))
+        amounts = order_amounts(order)
+        self.assertEqual((amounts['vat'], amounts['total']), (Decimal('0.00'), amounts['subtotal']))
+
+    def test_supplier_snapshot_records_the_details_a_purchase_order_prints(self):
+        Supplier.objects.filter(pk=self.supplier.pk).update(
+            registered_name='Alpha Supplies (Pty) Ltd', vat_number='4350263226', address_street='1 Road',
+            address_city='Midrand', address_postal_code='1685', payment_terms='30 days', account_number='MER-1',
+            sahpra_licence_number='22C-1', sahpra_licence_expiry=self.today)
+        details = self.create_order().supplier_details
+        self.assertEqual((details['name'], details['registered_name'], details['vat_number'], details['address'],
+                          details['email'], details['payment_terms'], details['account_number'],
+                          details['sahpra_licence_expiry']),
+                         ('Alpha Supplies', 'Alpha Supplies (Pty) Ltd', '4350263226', ['1 Road', 'Midrand 1685'],
+                          'orders@alpha.test', '30 days', 'MER-1', self.today.isoformat()))
+
+    def test_buyer_snapshot_uses_bill_to_settings_doctor_and_collection_address(self):
+        get_user_model().objects.filter(pk=self.doctor.pk).update(title='DR', first_name='Sam', last_name='Example',
+                                                                   hpcsa_number='MP0000000')
+        PracticeSettings.objects.update_or_create(company=self.company, defaults=dict(
+            po_bill_to_name='Dr Sam Example', po_billing_street='6 Harfield Rd', po_billing_city='Cape Town',
+            po_billing_postal_code='7708', po_accounts_email='accounts@example.test', po_doctor=self.doctor,
+            po_delivery_instructions='Hand to reception', collection_business='Meridian Health',
+            collection_street='1 Demo Road', collection_suburb='Claremont', collection_city='Cape Town',
+            collection_postal_code='7708', collection_contact='Alison', collection_phone='0840000000'))
+        buyer = self.create_order().buyer_details
+        self.assertEqual(buyer['bill_to'], {'name': 'Dr Sam Example', 'practice': self.company.name,
+            'address': ['6 Harfield Rd', 'Cape Town 7708'], 'vat_number': '', 'pharmacy_number': '',
+            'accounts_email': 'accounts@example.test', 'doctor_name': 'Dr Sam Example', 'doctor_hpcsa': 'MP0000000'})
+        self.assertEqual(buyer['ship_to'], {'name': 'Meridian Health', 'address': ['1 Demo Road', 'Claremont', 'Cape Town 7708'],
+            'contact': 'Alison', 'phone': '0840000000', 'instructions': 'Hand to reception'})
+
+    def test_buyer_snapshot_without_settings_is_empty_but_names_the_practice(self):
+        PracticeSettings.objects.filter(company=self.company).delete()
+        buyer = self.create_order().buyer_details
+        self.assertEqual((buyer['bill_to']['name'], buyer['bill_to']['address'], buyer['ship_to']['name']),
+                         ('', [], self.company.name))
+
+    def test_snapshot_ignores_later_supplier_settings_and_price_edits(self):
+        order = self.create_order()
+        before = (order.supplier_details, order.buyer_details, order.vat_rate,
+                  list(order.items.values_list('unit_price', 'price_source')))
+        Supplier.objects.filter(pk=self.supplier.pk).update(name='Renamed', payment_terms='COD', vat_registered=False)
+        SupplierProduct.objects.filter(supplier=self.supplier).update(unit_price=Decimal('5.00'))
+        MedicationProduct.objects.filter(pk=self.product.pk).update(price=Decimal('999.00'))
+        PracticeSettings.objects.update_or_create(company=self.company, defaults={'po_bill_to_name': 'Changed'})
+        order = PurchaseOrder.objects.get(pk=order.pk)
+        self.assertEqual((order.supplier_details, order.buyer_details, order.vat_rate,
+                          list(order.items.values_list('unit_price', 'price_source'))), before)
+
+    def test_replay_after_a_price_change_returns_the_original_order(self):
+        key = uuid4()
+        first = self.create_order(key=key)
+        SupplierProduct.objects.filter(supplier=self.supplier).update(unit_price=Decimal('5.00'))
+        replay = self.create_order(key=key)
+        self.assertEqual(replay.pk, first.pk)
+        self.assertEqual(replay.items.get().unit_price, Decimal('100.00'))
+
+    def test_legacy_order_without_prices_has_no_amounts(self):
+        order = self.create_order()
+        PurchaseOrder.objects.filter(pk=order.pk).update(vat_rate=None)
+        self.assertIsNone(order_amounts(PurchaseOrder.objects.get(pk=order.pk)))
+        order = self.create_order()
+        order.items.update(unit_price=None)
+        self.assertIsNone(order_amounts(PurchaseOrder.objects.get(pk=order.pk)))
+
+    def test_prices_cannot_be_negative(self):
+        order = self.create_order()
+        with transaction.atomic(), self.assertRaises(IntegrityError):
+            order.items.update(unit_price=Decimal('-1.00'))
+
+    def test_buyer_snapshot_leaves_out_a_doctor_who_has_left_the_practice(self):
+        get_user_model().objects.filter(pk=self.doctor.pk).update(first_name='Sam', last_name='Example',
+                                                                   hpcsa_number='MP0000000')
+        PracticeSettings.objects.update_or_create(company=self.company, defaults={'po_doctor': self.doctor})
+        CompanyMembership.objects.filter(company=self.company, user=self.doctor).update(clinician_type='doctor')
+        self.assertEqual(self.create_order().buyer_details['bill_to']['doctor_hpcsa'], 'MP0000000')
+        CompanyMembership.objects.filter(company=self.company, user=self.doctor).update(is_active=False)
+        bill_to = self.create_order().buyer_details['bill_to']
+        self.assertEqual((bill_to['doctor_name'], bill_to['doctor_hpcsa']), ('', ''))

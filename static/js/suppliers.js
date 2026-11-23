@@ -27,6 +27,14 @@
     listen(container,'click',event=>{const remove=event.target.closest('[data-remove-supplier-product]');if(!remove)return;remove.closest('[data-supplier-product-row]').remove();update();});
     listen(container,'change',event=>{if(event.target.matches('select'))update();});
     update();
+    // A supplier that isn't VAT-registered has no VAT number to enter (the server clears it as well).
+    const vatRegistered = form.querySelector('[name="vat_registered"]');
+    const vatNumber = form.querySelector('[name="vat_number"]');
+    if (vatRegistered && vatNumber) {
+      const syncVat = () => { vatNumber.disabled = !vatRegistered.checked; };
+      listen(vatRegistered, 'change', syncVat);
+      syncVat();
+    }
   }
   document.querySelectorAll('#supplier-editor,#supplier-delete').forEach(dialog=>{
     listen(dialog,'close',()=>{

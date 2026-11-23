@@ -92,6 +92,16 @@ External prescribing and Zoom aren't connected. Payments run through the sandbox
 
 Invalid authorisations hold unshipped parcels, never rewrite dispatched history. Shared allowance groups combine quantities but do not imply authorisation for other products or doses.
 
+## Suppliers and purchase orders
+
+1. **Suppliers** (`/suppliers/`, Super Admins): each supplier needs its registered name, address, orders email and payment terms, and a VAT number unless *VAT-registered* is unticked. A supplier of prescription products also needs its SAHPRA licence number and expiry. Registration number, accounts email and *Our account number* are optional. The list marks suppliers with missing details (*Details incomplete*) or an expired licence (*Licence expired*). Neither blocks ordering.
+2. **Products supplied**: each linked product has the supplier's code and, optionally, their description, size and unit price excl. VAT. With no unit price, orders use the catalogue reference price.
+3. **Purchase order PDF**: *Meridian-generated* attaches Meridian's PDF when you email an order. *Supplier-generated* is for suppliers who only accept their own order form: you attach their completed form yourself. You can still send without one.
+4. **Bill to and Ship to**: Practice settings > Purchase orders holds the billing name and address, practice VAT number, pharmacy Y number, accounts email and the doctor named on orders, whose HPCSA number comes from their staff profile. Ship to is the courier collection address in Practice settings > Courier, plus the delivery instructions for suppliers.
+5. **Creating an order** (Purchasing > To order > Order): Review order shows each unit price, tagged *Reference price* when it comes from the catalogue, then line totals, the subtotal, VAT (15%, or 0% for a supplier that isn't VAT-registered) and the total. Prices and the supplier, bill-to and ship-to details are saved on the order when you create it, so later edits never change an order already sent.
+6. **The PDF** shows the order facts, the Supplier, Bill to and Ship to boxes, the lines with prices, the totals, payment terms, *Authorised by* and, for cold-chain products, a refrigeration note. Receipt progress stays in Meridian and in the Excel download.
+7. **Emailing** (the envelope icon on an order): To starts with the supplier's orders email. Add CC or BCC, edit the message and add up to 5 files (10 MB in total). The preview shows the PDF, or the order form you uploaded. Replies go to whoever sent the email. With no email server configured (`DJANGO_EMAIL_HOST`), local emails are printed in the server console. Demo orders can't be emailed.
+
 ## Administration and insight
 
 - `/leads/`: questionnaire enquiries, screening outcome, versioned consent and follow-up notes. Follow-ups can assign an administrator, set the next contact date, record booking interest or close an enquiry. They cannot create an account or change clinical screening.

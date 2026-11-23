@@ -40,6 +40,18 @@
     <button class="console-button console-button--primary" type="submit">Save settings</button>
   </form>
 </section>
+<section class="staff-page-card practice-shipping-settings" id="purchase-order-settings" aria-labelledby="purchase-order-heading">
+  <div class="staff-page-card__header"><div>
+    <h2 id="purchase-order-heading">Purchase orders</h2>
+    <p>Printed as Bill to on every purchase order. Ship to is the courier collection address above.</p>
+  </div></div>
+  <form class="console-form practice-settings-form practice-settings-form--grid" method="post">
+    {% csrf_token %}<input type="hidden" name="section" value="purchasing">
+    {{ purchasing_form.non_field_errors }}
+    {% for field in purchasing_form %}{% include 'portal/includes/form_field.html' %}{% endfor %}
+    <button class="console-button console-button--primary" type="submit">Save settings</button>
+  </form>
+</section>
 <section class="staff-page-card event-log-settings" aria-labelledby="event-log-heading">
   <div class="staff-page-card__header"><div>
     <h2 id="event-log-heading">Event log settings</h2>

@@ -1,5 +1,6 @@
 """Supplier maintenance is signed, scoped to Super Admins and separate from stock."""
 from datetime import timedelta
+from decimal import Decimal
 from io import BytesIO
 from unittest.mock import patch
 from urllib.parse import parse_qs, urlsplit
@@ -33,14 +34,18 @@ class SupplierPortalTests(OperationsPortalFixture):
     def listing(self, **params):
         return self.page('supplier-list', **params)
 
-    def supplier_data(self, *, supplier=None, products=None, token=None, name='New Supplier', client=None):
+    def supplier_data(self, *, supplier=None, products=None, token=None, name='New Supplier', client=None, **extra):
         products = products if products is not None else [(self.product, 'CODE-1'), (self.open_product, 'CODE-2')]
         if token is None:
             query = {'edit': supplier.pk} if supplier is not None else {'create': '1'}
             token = self.page('supplier-list', client=client, **query).context['supplier_context']
         data = {'workflow_context': token, 'name': name, 'contact_name': 'A Contact', 'email': 'supplier@example.test',
-                'phone': '+27 21 555 0011', 'products-TOTAL_FORMS': str(len(products)),
-                'products-INITIAL_FORMS': str(supplier.product_links.count()) if supplier else '0'}
+                'phone': '+27 21 555 0011', 'registered_name': 'New Supplier (Pty) Ltd', 'vat_registered': 'on',
+                'vat_number': '4350263226', 'address_street': '1 Road', 'address_city': 'Cape Town',
+                'address_province': 'WC', 'address_postal_code': '8000', 'payment_terms': '30 days',
+                'sahpra_licence_number': '22C-1', 'sahpra_licence_expiry': (self.today + timedelta(days=365)).isoformat(),
+                'uses_own_order_form': 'false', 'products-TOTAL_FORMS': str(len(products)),
+                'products-INITIAL_FORMS': str(supplier.product_links.count()) if supplier else '0', **extra}
         for index, (product, code) in enumerate(products):
             data[f'products-{index}-product'] = str(product.pk) if product else ''
             data[f'products-{index}-supplier_code'] = code
@@ -243,3 +248,61 @@ class SupplierPortalTests(OperationsPortalFixture):
         self.login(self.super_admin, client=client)
         csrf_data = self.supplier_data(client=client)
         self.assertEqual(self.post_supplier(csrf_data, client=client).status_code, 403)
+
+    def test_required_details_are_enforced_on_the_form(self):
+        response = self.post_supplier(self.supplier_data(registered_name='', payment_terms=''))
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('registered_name', response.context['supplier_form'].errors)
+        self.assertIn('payment_terms', response.context['supplier_form'].errors)
+        self.assertFalse(Supplier.objects.filter(name='New Supplier').exists())
+
+    def test_licence_required_only_when_a_prescription_product_is_linked(self):
+        response = self.post_supplier(self.supplier_data(sahpra_licence_number='', sahpra_licence_expiry=''))
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('sahpra_licence_number', response.context['supplier_form'].errors)
+        self.assertIn('sahpra_licence_expiry', response.context['supplier_form'].errors)
+        ok = self.supplier_data(products=[(self.open_product, 'OPEN-1')], name='Open Only',
+                                sahpra_licence_number='', sahpra_licence_expiry='')
+        self.assertEqual(self.post_supplier(ok).status_code, 302)
+
+    def test_vat_number_required_only_when_vat_registered(self):
+        response = self.post_supplier(self.supplier_data(vat_number=''))
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('vat_number', response.context['supplier_form'].errors)
+        data = self.supplier_data(name='No VAT', vat_number='')
+        del data['vat_registered']
+        self.assertEqual(self.post_supplier(data).status_code, 302)
+        self.assertFalse(Supplier.objects.get(name='No VAT').vat_registered)
+
+    def test_order_form_choice_saves_and_edit_form_shows_saved_details(self):
+        self.assertEqual(self.post_supplier(self.supplier_data(name='Own Form', uses_own_order_form='true')).status_code, 302)
+        supplier = Supplier.objects.get(name='Own Form')
+        self.assertTrue(supplier.uses_own_order_form)
+        self.assertEqual((supplier.vat_number, supplier.address_province), ('4350263226', 'WC'))
+        form = self.listing(edit=supplier.pk).context['supplier_form']
+        self.assertEqual(form.initial['registered_name'], 'New Supplier (Pty) Ltd')
+        self.assertEqual(form.initial['uses_own_order_form'], 'true')
+
+    def test_list_flags_incomplete_and_expired_suppliers(self):
+        self.assertContains(self.listing(), 'Details incomplete')
+        Supplier.objects.filter(pk=self.supplier.pk).update(sahpra_licence_expiry=self.today - timedelta(days=1))
+        self.assertContains(self.listing(), 'Licence expired')
+
+    def test_export_includes_the_new_details(self):
+        _, rows = self.export()
+        for heading in ('Registered name', 'VAT number', 'Address', 'Payment terms', 'Our account number',
+                        'SAHPRA licence', 'Licence expiry', 'PO PDF'):
+            self.assertIn(heading, rows[0])
+
+    def test_editor_posts_and_shows_prices(self):
+        data = self.supplier_data(name='Priced', **{'products-0-unit_price': '1600.00', 'products-0-pack_size': '2,4ml',
+                                                    'products-0-description': 'Tirzepatide 5mg/0,6ml PFS'})
+        self.assertEqual(self.post_supplier(data).status_code, 302)
+        link = SupplierProduct.objects.get(supplier__name='Priced', product=self.product)
+        self.assertEqual((link.unit_price, link.pack_size, link.description),
+                         (Decimal('1600.00'), '2,4ml', 'Tirzepatide 5mg/0,6ml PFS'))
+        page = self.listing(q='Priced')
+        self.assertContains(page, 'R 1 600.00')
+        self.assertContains(page, 'Reference R 40.00')
+        edit = self.listing(edit=link.supplier_id).context['product_formset']
+        self.assertEqual(edit.initial[0]['unit_price'], Decimal('1600.00'))

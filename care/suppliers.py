@@ -1,7 +1,9 @@
 """Audited, tenant-scoped supplier maintenance; this does not place purchase orders."""
 
 from collections.abc import Mapping
-from datetime import datetime
+from datetime import date, datetime
+from decimal import Decimal
+import re
 from uuid import UUID
 
 from .demo_safety import require_same_demo_data
@@ -9,12 +11,42 @@ from .demo_safety import require_same_demo_data
 from django.core.exceptions import ValidationError
 from django.db import transaction
 
-from .models import AuditEvent, MedicationProduct, Supplier, SupplierProduct
+from .models import PROVINCES, AuditEvent, MedicationProduct, Supplier, SupplierProduct
 from .operations import _lock_company
 from .services import record_audit
 
 
 _ACTIONS = ('supplier.created', 'supplier.updated', 'supplier.deleted')
+# The details a purchase order prints about a supplier, besides its name. save_supplier takes each as a keyword.
+SUPPLIER_DETAIL_FIELDS = (
+    'contact_name', 'email', 'phone', 'registered_name', 'registration_number', 'vat_registered', 'vat_number',
+    'address_street', 'address_suburb', 'address_city', 'address_province', 'address_postal_code',
+    'accounts_email', 'payment_terms', 'account_number', 'sahpra_licence_number', 'sahpra_licence_expiry',
+    'uses_own_order_form',
+)
+# The supplier form requires these (plus a VAT number while VAT-registered); a blank one marks the supplier incomplete.
+_REQUIRED_DETAILS = ('registered_name', 'address_street', 'address_city', 'address_province', 'address_postal_code',
+                     'email', 'payment_terms')
+_VAT_NUMBER = re.compile(r'4\d{9}')
+_PROVINCE_CODES = {code for code, _label in PROVINCES}
+
+
+def normalise_vat_number(value):
+    """A South African VAT number: ten digits starting with 4. Spaces are ignored; blank stays blank."""
+    if not isinstance(value, str):
+        raise ValidationError('Enter a 10-digit VAT number starting with 4.')
+    value = re.sub(r'\s+', '', value)
+    if value and not _VAT_NUMBER.fullmatch(value):
+        raise ValidationError('Enter a 10-digit VAT number starting with 4.')
+    return value
+
+
+def supplier_flags(supplier, today):
+    """What the supplier list warns about: details a purchase order needs are missing, or the licence has expired."""
+    incomplete = any(not getattr(supplier, field) for field in _REQUIRED_DETAILS) or (
+        supplier.vat_registered and not supplier.vat_number)
+    expiry = supplier.sahpra_licence_expiry
+    return {'incomplete': incomplete, 'licence_expired': expiry is not None and expiry < today}
 
 
 def _key(value):
@@ -57,27 +89,84 @@ def _previous(company, actor, key, payload):
     return previous
 
 
+def _json(value):
+    return value.isoformat() if isinstance(value, date) else value
+
+
+def _price_text(value):
+    return None if value is None else str(value)
+
+
 def _snapshot(supplier):
+    links = supplier.product_links.filter(company=supplier.company, product__company=supplier.company).order_by(
+        'product_id').values('product_id', 'supplier_code', 'description', 'pack_size', 'unit_price')
     return {
-        'name': supplier.name, 'contact_name': supplier.contact_name, 'email': supplier.email, 'phone': supplier.phone,
-        'products': list(supplier.product_links.filter(company=supplier.company,
-            product__company=supplier.company).order_by('product_id').values('product_id', 'supplier_code')),
+        'name': supplier.name, **{field: _json(getattr(supplier, field)) for field in SUPPLIER_DETAIL_FIELDS},
+        'products': [dict(link, unit_price=_price_text(link['unit_price'])) for link in links],
     }
+
+
+def _unit_price(value):
+    """A supplier's unit price excl. VAT: blank (None), or rands and cents from 0 to 99 999 999.99."""
+    if value is None:
+        return None
+    if (not isinstance(value, Decimal) or not value.is_finite() or value < 0 or value >= Decimal('100000000')
+            or value.as_tuple().exponent < -2):
+        raise ValidationError('Enter a unit price in rands and cents, from R 0.00, or leave it blank.')
+    return value.quantize(Decimal('0.01'))
+
+
+def _details(values):
+    """Type, length and format checks for the supplier's details. What is required is the supplier form's rule."""
+    fields = {
+        'contact_name': _text(values['contact_name'], 'contact name', 120),
+        'email': _text(values['email'], 'email address', 254),
+        'phone': _text(values['phone'], 'phone number', 40),
+        'registered_name': _text(values['registered_name'], 'the registered company name', 255),
+        'registration_number': _text(values['registration_number'], 'the company registration number', 40),
+        'address_street': _text(values['address_street'], 'the street address', 200),
+        'address_suburb': _text(values['address_suburb'], 'the suburb', 120),
+        'address_city': _text(values['address_city'], 'the city or town', 120),
+        'address_province': _text(values['address_province'], 'the province', 3),
+        'address_postal_code': _text(values['address_postal_code'], 'the postal code', 10),
+        'accounts_email': _text(values['accounts_email'], 'accounts email address', 254),
+        'payment_terms': _text(values['payment_terms'], 'the payment terms', 120),
+        'account_number': _text(values['account_number'], 'our account number', 40),
+        'sahpra_licence_number': _text(values['sahpra_licence_number'], 'the SAHPRA licence number', 40),
+    }
+    if fields['address_province'] and fields['address_province'] not in _PROVINCE_CODES:
+        raise ValidationError('Choose a South African province.')
+    for flag in ('vat_registered', 'uses_own_order_form'):
+        if not isinstance(values[flag], bool):
+            raise ValidationError('Choose yes or no for each supplier setting.')
+        fields[flag] = values[flag]
+    vat_number = normalise_vat_number(values['vat_number'])
+    fields['vat_number'] = vat_number if fields['vat_registered'] else ''
+    expiry = values['sahpra_licence_expiry']
+    if expiry is not None and (not isinstance(expiry, date) or isinstance(expiry, datetime)):
+        raise ValidationError('Choose a valid licence expiry date, or leave it blank.')
+    fields['sahpra_licence_expiry'] = expiry
+    return fields
 
 
 @transaction.atomic
 def save_supplier(*, company, actor, supplier=None, name, contact_name='', email='', phone='',
+                  registered_name='', registration_number='', vat_registered=True, vat_number='',
+                  address_street='', address_suburb='', address_city='', address_province='', address_postal_code='',
+                  accounts_email='', payment_terms='', account_number='', sahpra_licence_number='',
+                  sahpra_licence_expiry=None, uses_own_order_form=False,
                   products=(), submission_key, expected_updated=None, request=None):
     """Create/update a supplier and its complete product mapping atomically, once per key."""
     company = _lock_company(company, actor, catalogue=True)
     key = _key(submission_key)
     supplier_id = _supplier_id(supplier, company) if supplier is not None else None
-    fields = {
-        'name': _text(name, 'a supplier name', 255, required=True),
-        'contact_name': _text(contact_name, 'contact name', 120),
-        'email': _text(email, 'email address', 254),
-        'phone': _text(phone, 'phone number', 40),
-    }
+    fields = {'name': _text(name, 'a supplier name', 255, required=True), **_details(dict(
+        contact_name=contact_name, email=email, phone=phone, registered_name=registered_name,
+        registration_number=registration_number, vat_registered=vat_registered, vat_number=vat_number,
+        address_street=address_street, address_suburb=address_suburb, address_city=address_city,
+        address_province=address_province, address_postal_code=address_postal_code, accounts_email=accounts_email,
+        payment_terms=payment_terms, account_number=account_number, sahpra_licence_number=sahpra_licence_number,
+        sahpra_licence_expiry=sahpra_licence_expiry, uses_own_order_form=uses_own_order_form))}
     if not isinstance(products, (list, tuple)) or len(products) > 100:
         raise ValidationError('Link up to 100 products to a supplier.')
     selected, codes = {}, set()
@@ -93,10 +182,17 @@ def save_supplier(*, company, actor, supplier=None, name, contact_name='', email
         code = _text(values.get('supplier_code'), 'the supplier product code', 100, required=True)
         if code.casefold() in codes:
             raise ValidationError('Use a different supplier product code for each linked product.')
-        selected[product.pk] = code
+        selected[product.pk] = {
+            'supplier_code': code,
+            'description': _text(values.get('description', ''), 'the supplier description', 255),
+            'pack_size': _text(values.get('pack_size', ''), 'the size', 40),
+            'unit_price': _unit_price(values.get('unit_price')),
+        }
         codes.add(code.casefold())
-    product_payload = [{'product_id': pk, 'supplier_code': code} for pk, code in sorted(selected.items())]
-    payload = dict(fields, supplier_id=supplier_id, products=product_payload, operation='save')
+    product_payload = [{'product_id': pk, **line, 'unit_price': _price_text(line['unit_price'])}
+                       for pk, line in sorted(selected.items())]
+    payload = dict({field: _json(value) for field, value in fields.items()}, supplier_id=supplier_id,
+                   products=product_payload, operation='save')
     previous = _previous(company, actor, key, payload)
     if previous is not None:
         saved = Supplier.objects.filter(company=company, pk=previous.target_id).first()
@@ -125,8 +221,8 @@ def save_supplier(*, company, actor, supplier=None, name, contact_name='', email
     saved.full_clean()
     saved.save()
     saved.product_links.all().delete()
-    for product_id, code in sorted(selected.items()):
-        link = SupplierProduct(company=company, supplier=saved, product_id=product_id, supplier_code=code)
+    for product_id, line in sorted(selected.items()):
+        link = SupplierProduct(company=company, supplier=saved, product_id=product_id, **line)
         link.full_clean()
         link.save()
     record_audit(company=company, actor=actor, target=saved, request=request,

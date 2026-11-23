@@ -157,8 +157,9 @@ class PurchaseOrderPortalTests(OperationsPortalFixture):
         page = self.page('purchasing')
         choices = page.context['purchase_create_form'].fields['supplier'].queryset
         self.assertEqual(list(choices.values_list('pk', flat=True)), [self.supplier.pk])
-        self.assertEqual(page.context['purchase_supplier_products'],
-                         {str(self.supplier.pk): [self.product.pk, self.open_product.pk]})
+        self.assertEqual(page.context['purchase_supplier_products'], {str(self.supplier.pk): {'vat_rate': '15.00', 'incomplete': True, 'products': {
+            str(self.product.pk): {'price': '100.00', 'reference': True},
+            str(self.open_product.pk): {'price': '40.00', 'reference': True}}}})
         response = self.create(self.create_data(items=[(self.product, 2)]))
         self.assertEqual(response.status_code, 302)
         order = PurchaseOrder.objects.get()
@@ -488,3 +489,44 @@ class PurchaseOrderPortalTests(OperationsPortalFixture):
         self.assertEqual([(row['Purchase order'], row['Product'], row['Ordered']) for row in rows],
                          [(beta.reference, self.beta_product.name, 9)])
         self.assertEqual(self.client.get(reverse('portal:purchasing'), {'view': 'on-order', 'receive': alpha.pk}).status_code, 404)
+
+    def test_review_data_carries_supplier_and_reference_prices(self):
+        SupplierProduct.objects.filter(supplier=self.supplier, product=self.product).update(unit_price=Decimal('1600.00'))
+        data = self.page('purchasing').context['purchase_supplier_products'][str(self.supplier.pk)]
+        self.assertEqual(data['vat_rate'], '15.00')
+        self.assertEqual(data['products'][str(self.product.pk)], {'price': '1600.00', 'reference': False})
+        self.assertEqual(data['products'][str(self.open_product.pk)], {'price': '40.00', 'reference': True})
+        Supplier.objects.filter(pk=self.supplier.pk).update(vat_registered=False)
+        data = self.page('purchasing').context['purchase_supplier_products'][str(self.supplier.pk)]
+        self.assertEqual(data['vat_rate'], '0.00')
+
+    def test_review_has_price_cells_and_totals_including_after_a_server_error(self):
+        page = self.page('purchasing').content.decode()
+        self.assertIn('data-order-unit-price', page)
+        self.assertIn('data-order-totals', page)
+        data = self.create_data()
+        data['items-1-quantity'] = '0'
+        response = self.create(data)
+        self.assertEqual(response.status_code, 400)
+        html = response.content.decode()
+        self.assertEqual(html.count('data-order-line-total'), 3)  # two bound rows and the row template
+        self.assertIn('data-order-totals', html)
+
+
+    def test_review_warns_when_bill_to_is_not_set_up(self):
+        html = self.page('purchasing').content.decode()
+        self.assertIn('Bill to isn’t set up yet', html)
+        PracticeSettings.objects.update_or_create(company=self.company, defaults=dict(
+            po_bill_to_name='Dr Example', po_billing_street='1 Road', po_billing_city='Cape Town',
+            po_billing_postal_code='8000', po_doctor=self.doctor))
+        self.assertNotIn('Bill to isn’t set up yet', self.page('purchasing').content.decode())
+
+    def test_review_data_flags_a_supplier_with_incomplete_details(self):
+        data = self.page('purchasing').context['purchase_supplier_products'][str(self.supplier.pk)]
+        self.assertTrue(data['incomplete'])
+        Supplier.objects.filter(pk=self.supplier.pk).update(registered_name='Alpha (Pty) Ltd', vat_number='4350263226',
+            address_street='1 Road', address_city='Cape Town', address_province='WC', address_postal_code='8000',
+            payment_terms='COD')
+        data = self.page('purchasing').context['purchase_supplier_products'][str(self.supplier.pk)]
+        self.assertFalse(data['incomplete'])
+        self.assertIn('data-supplier-incomplete-note', self.page('purchasing').content.decode())

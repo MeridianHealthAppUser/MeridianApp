@@ -1420,7 +1420,8 @@
 .practice-settings-form .helptext { color: var(--console-muted); font-size: .76rem; line-height: 1.5; }
 .practice-settings-form > .console-button { justify-self: start; }
 /* Courier: the collection address and parcel size, two fields to a row. */
-.practice-settings-form--grid { display: grid; gap: .85rem 1rem; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.practice-settings-form--grid { display: grid; gap: .85rem 1rem; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
+.practice-settings-form--grid > .console-form__field { align-content: start; }
 .practice-settings-form--grid > .console-button, .practice-settings-form--grid > .errorlist { grid-column: 1 / -1; }
 @media (max-width: 42rem) { .practice-settings-form--grid { grid-template-columns: 1fr; } }
 
