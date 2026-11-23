@@ -20,7 +20,7 @@ from openpyxl import load_workbook
 from pypdf import PdfReader
 
 from care.models import AuditEvent, PurchaseOrder, PurchaseOrderItem, StockMovement, Supplier, SupplierProduct
-from practices.models import CompanyMembership
+from practices.models import CompanyMembership, DemoDataSet
 from .purchase_document_views import PurchaseOrderEmailForm, _email_success_message
 from .test_operations import OperationsPortalFixture
 from .workflow_context import make_workflow_context
@@ -365,6 +365,22 @@ class PurchaseDocumentTests(OperationsPortalFixture):
         PurchaseOrder.objects.filter(pk=self.order.pk).update(vat_rate=Decimal('15.00'))
         self.order.items.update(unit_price=Decimal('100.00'), price_source='reference')
         self.assertIn('1 of 1 line uses the catalogue reference price', self.email_dialog_html())
+
+    def test_dialog_opens_when_the_supplier_has_no_orders_email(self):
+        Supplier.objects.filter(pk=self.order.supplier_id).update(email='')
+        PurchaseOrder.objects.filter(pk=self.order.pk).update(supplier_email='')
+        response = self.client.get(reverse('portal:purchasing'), {'view': 'on-order', 'email': self.order.pk})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context['email_form']['to'].value(), '')
+        self.assertRegex(response.content.decode(), rf'<dialog[^>]*id="purchase-order-email-{self.order.pk}"[^>]*\bopen\b')
+
+    def test_demo_order_envelope_is_not_a_link(self):
+        demo = DemoDataSet.objects.create(company=self.company, created_by=self.super_admin)
+        PurchaseOrder.objects.filter(pk=self.order.pk).update(demo_data_set=demo)
+        html = self.client.get(reverse('portal:purchasing'), {'view': 'on-order', 'order': self.order.pk}).content.decode()
+        self.assertIn('Emails are disabled for demo orders', html)
+        # It must look unavailable, not like a working button that does nothing.
+        self.assertRegex(html, r'<span class="purchase-order-icon purchase-order-icon--disabled"[^>]*aria-disabled="true"')
 
     def test_inline_pdf_is_framable_same_origin_and_not_audited(self):
         response = self.client.get(self.url('pdf') + '?inline=1')

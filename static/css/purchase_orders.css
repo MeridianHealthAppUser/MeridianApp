@@ -33,6 +33,8 @@
 .purchase-order-icon { align-items:center; background:var(--c-ffffff); border:1px solid var(--c-dde8ec); border-radius:.5rem; box-sizing:border-box; color:var(--c-173d4d); display:inline-flex; flex:0 0 auto; height:2.25rem; justify-content:center; position:relative; text-decoration:none; width:2.25rem; }
 .purchase-order-icon:hover { background:var(--c-e4f4fa); border-color:var(--c-bfe5ef); }
 .purchase-order-icon:focus-visible { outline:2px solid var(--c-1a4457); outline-offset:2px; }
+/* Demo orders can't be emailed: the envelope looks unavailable (its tooltip says why) instead of like a dead button. */
+.purchase-order-icon--disabled, .purchase-order-icon--disabled:hover { background:var(--c-ffffff); border-color:var(--c-dde8ec); color:var(--console-muted); cursor:not-allowed; opacity:.45; }
 .purchase-order-icon svg { height:1.05rem; stroke:currentColor; stroke-linecap:round; stroke-linejoin:round; stroke-width:1.8; width:1.05rem; }
 .purchase-order-file-type { background:var(--c-ffffff); bottom:.25rem; color:var(--c-173d4d); font-size:.38rem; font-weight:800; line-height:1; padding:.05rem .1rem; position:absolute; right:.23rem; }
 .purchase-order-receive.console-button { font-size:.78rem; min-height:2.25rem; padding:.45rem .8rem; }
