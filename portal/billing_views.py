@@ -28,10 +28,11 @@ from care.billing import (
 from care.models import (
     Appointment, DebitMandate, Invoice, InvoiceLine, PatientSubscription, Payment, PharmacyOrder, SubscriptionCycle,
 )
-from care.payment_providers import HOSTED, SandboxProvider, current_provider, provider_named
+from care.payment_providers import SandboxProvider, current_provider, debit_orders_enabled, hosted_providers, provider_named
 from care.stitch import debicheck_in_use, debicheck_waiting
 from practices.models import CompanyMembership
 
+from .record_access import no_records
 from .filter_menus import TickedChoiceField, list_tools, ticked_sections, without_all
 from .operations_forms import DeliveryAddressForm
 from .operations_views import OperationsView
@@ -61,9 +62,12 @@ def _current_plan(company, patient):
 
 
 class DebitOrderForm(forms.Form):
-    method = forms.ChoiceField(label='Pay by', widget=forms.RadioSelect, initial=DebitMandate.Method.DEBICHECK, choices=(
-        (DebitMandate.Method.DEBICHECK, 'DebiCheck debit order: you approve it in your banking app'),
+    """How the patient pays their subscription: a card (the only choice while DebiCheck debit orders are hidden, so the
+    choice itself is hidden), or a DebiCheck debit order."""
+
+    method = forms.ChoiceField(label='Pay by', widget=forms.RadioSelect, initial=DebitMandate.Method.CARD, choices=(
         (DebitMandate.Method.CARD, 'Card: kept safely by our payment provider'),
+        (DebitMandate.Method.DEBICHECK, 'DebiCheck debit order: you approve it in your banking app'),
     ))
 
     def __init__(self, *args, **kwargs):
@@ -74,7 +78,7 @@ class DebitOrderForm(forms.Form):
 # The patient
 
 class PatientBillingView(PatientCarePage):
-    """Billing and payments: the debit order, what's outstanding with Pay now, and each cycle with its invoice."""
+    """Billing and payments: the patient's card, what's outstanding with Pay now, and each cycle with its invoice."""
 
     http_method_names = ('get', 'head', 'options')
 
@@ -113,8 +117,15 @@ class PatientBillingView(PatientCarePage):
                 payment.description = f'Supply request {payment.pharmacy_order_id}'
             else:
                 payment.description = payment.get_kind_display() or 'Payment'
-        context = self.context('billing', 'Billing and payments', plan=plan,
-                               summary=patient_summary(plan) if plan else None, mandate=current_mandate(plan) if plan else None,
+        summary = patient_summary(plan) if plan else None
+        if plan and plan.status == 'paused' and summary['state'] in ('paid', 'due'):
+            summary = {'state': 'paused', 'text': 'Your subscription is paused, so no payments are taken.', 'action': ''}
+        # The banner only says what the rest of the page doesn't (James, 26 Nov 2026): paid up repeats the Card and
+        # Next payment rows, and a payment that didn't go through has the Payment needed card above.
+        notice = summary if summary and (summary['state'] not in ('paid', 'due', 'retrying', 'failed')
+                                         or (summary['state'] in ('retrying', 'failed') and not due)) else None
+        context = self.context('billing', 'Billing and payments', plan=plan, notice=notice,
+                               summary=summary, mandate=current_mandate(plan) if plan else None,
                                due=due, page_obj=page, once_off=once_off, provider=current_provider(),
                                debit_form=DebitOrderForm(),
                                debit_context=make_workflow_context(request, company, 'debit-order', plan, patient=patient) if plan else '',
@@ -125,7 +136,7 @@ class PatientBillingView(PatientCarePage):
 
 
 class PatientDebitOrderView(PatientCarePage):
-    """Set up, approve again or change the debit order: then on to the provider's page to approve it."""
+    """Add, confirm again or change the card (or debit order): then on to the provider's page to enter or approve it."""
 
     http_method_names = ('post',)
 
@@ -137,7 +148,7 @@ class PatientDebitOrderView(PatientCarePage):
         try:
             validate_workflow_context(request, self.patient_company, 'debit-order', plan, patient=self.patient, check_version=False)
             if not form.is_valid():
-                raise ValidationError('Choose a DebiCheck debit order or a card.')
+                raise ValidationError('Choose how you’d like to pay.')
             _, url = start_debit_order(subscription=plan, actor=request.user, method=form.cleaned_data['method'], request=request)
             return redirect(url)
         except ValidationError as error:
@@ -146,7 +157,7 @@ class PatientDebitOrderView(PatientCarePage):
 
 
 class PatientCyclePayView(PatientCarePage):
-    """Pay a failed debit now by card."""
+    """Pay a failed subscription payment now by card."""
 
     http_method_names = ('post',)
 
@@ -260,24 +271,27 @@ class PatientPaymentReturnView(PatientCarePage):
         params = request.GET if request.method in ('GET', 'HEAD') else request.POST
         if kind == 'mandate':
             mandate = get_object_or_404(DebitMandate.objects.filter(company=self.patient_company, patient=self.patient,
-                                                                    provider__in=HOSTED), pk=pk)
+                                                                    provider__in=hosted_providers()), pk=pk)
             provider = provider_named(mandate.provider)
+            card = mandate.method == DebitMandate.Method.CARD
             try:
                 approval = provider.finish_mandate(mandate, params)
                 settle_mandate(mandate=mandate, approval=approval, actor=request.user, request=request)
                 if approval.status == 'approved':
-                    messages.success(request, 'Your debit order is approved.')
+                    messages.success(request, 'Your card is saved.' if card else 'Your debit order is approved.')
                 elif approval.status == 'declined':
-                    messages.warning(request, f'Your debit order wasn’t approved. {approval.reason}'.strip())
+                    messages.warning(request, (f'Your card wasn’t saved. {approval.reason}' if card
+                                               else f'Your debit order wasn’t approved. {approval.reason}').strip())
                 else:
-                    messages.info(request, 'Your bank is still confirming your debit order. We’ll email you if anything is needed.')
+                    messages.info(request, 'Your card is still being confirmed. We’ll email you if anything is needed.' if card
+                                  else 'Your bank is still confirming your debit order. We’ll email you if anything is needed.')
             except ValidationError as error:
                 messages.error(request, _messages(error))
             return redirect('portal:patient-billing')
         if kind != 'payment':
             raise Http404
         payment = get_object_or_404(Payment.objects.filter(company=self.patient_company, patient=self.patient,
-                                                           provider__in=HOSTED, checkout=True), pk=pk)
+                                                           provider__in=hosted_providers(), checkout=True), pk=pk)
         provider = provider_named(payment.provider)
         try:
             collection = provider.finish_checkout(payment, params)
@@ -306,11 +320,11 @@ class PatientCardFormView(PatientCarePage):
     def get(self, request, kind, pk):
         if kind == 'mandate':
             record = get_object_or_404(DebitMandate.objects.filter(company=self.patient_company, patient=self.patient,
-                                                                   provider__in=HOSTED, status=DebitMandate.Status.PENDING), pk=pk)
+                                                                   provider__in=hosted_providers(), status=DebitMandate.Status.PENDING), pk=pk)
             title, amount = 'Add your card', record.amount
         elif kind == 'payment':
             record = get_object_or_404(Payment.objects.filter(company=self.patient_company, patient=self.patient, checkout=True,
-                                                              provider__in=HOSTED, status=Payment.Status.PENDING), pk=pk)
+                                                              provider__in=hosted_providers(), status=Payment.Status.PENDING), pk=pk)
             if record.pharmacy_order_id:
                 if _payable_order(record, self.patient_company, self.patient) is None:
                     return redirect('portal:patient-order-detail', pk=record.pharmacy_order_id)
@@ -338,8 +352,9 @@ class PaymentWebhookView(View):
     http_method_names = ('post',)
 
     def post(self, request, name):
-        # Each provider has its own address, so the one being moved away from can still settle what it holds.
-        if name not in HOSTED:
+        # Each provider has its own address, so the one being moved away from can still settle what it holds. Stitch's
+        # is closed while debit orders are hidden.
+        if name not in hosted_providers():
             raise Http404
         provider = provider_named(name)
         try:
@@ -370,22 +385,26 @@ class PatientSandboxMandateView(PatientCarePage):
     def get(self, request, pk):
         mandate = self.mandate(pk)
         return render(request, 'portal/patient_billing_sandbox.html', self.context(
-            'billing', 'Approve your debit order', mandate=mandate, amount=money(mandate.amount),
+            'billing', 'Add your card' if mandate.method == DebitMandate.Method.CARD else 'Approve your debit order',
+            mandate=mandate, amount=money(mandate.amount),
             workflow_context=make_workflow_context(request, self.patient_company, 'sandbox-mandate', mandate, patient=self.patient)))
 
     def post(self, request, pk):
         mandate = self.mandate(pk)
+        card = mandate.method == DebitMandate.Method.CARD
         try:
             validate_workflow_context(request, self.patient_company, 'sandbox-mandate', mandate, patient=self.patient)
             choice = request.POST.get('choice')
             if choice == 'decline':
                 decline_mandate(mandate=mandate, reason='You declined it.', actor=request.user, request=request)
-                messages.warning(request, 'You declined the debit order. Set it up again when you’re ready.')
+                messages.warning(request, 'Your card wasn’t saved. Add it again when you’re ready.' if card
+                                 else 'You declined the debit order. Set it up again when you’re ready.')
             else:
-                label = 'Visa ···4242' if mandate.method == DebitMandate.Method.CARD else 'Sandbox Bank ···1234'
+                label = 'Visa ···4242' if card else 'Sandbox Bank ···1234'
                 approve_mandate(mandate=mandate, account_label=label, fail_debits=choice == 'fail', actor=request.user, request=request)
-                messages.success(request, 'Your debit order is approved. Your first payment has been collected.'
-                                 if choice != 'fail' else 'Your debit order is approved. (Sandbox: its debits will fail.)')
+                saved = 'Your card is saved.' if card else 'Your debit order is approved.'
+                messages.success(request, f'{saved} Your first payment has been collected.'
+                                 if choice != 'fail' else f'{saved} (Sandbox: its charges will fail.)')
         except ValidationError as error:
             messages.error(request, _messages(error))
         return redirect('portal:patient-billing')
@@ -433,7 +452,7 @@ class BillingFilterForm(forms.Form):
     q = forms.CharField(label='Search billing', required=False, max_length=100)
     state = TickedChoiceField(label='Billing', choices=(
         ('failed', 'Failed (failure queue)'), ('retrying', 'Retrying'), ('due', 'Due'), ('update', 'New amount to confirm'),
-        ('pending', 'Waiting for approval'), ('no_mandate', 'No debit order'), ('paid', 'Paid up'),
+        ('pending', 'Card not added yet'), ('no_mandate', 'No card saved'), ('paid', 'Paid up'),
     ))
 
 
@@ -441,7 +460,7 @@ def billing_listing(data, company):
     """The unpaginated, read-only billing summaries shared by the list and its download."""
     form = BillingFilterForm(without_all(data, 'state'))
     plans = PatientSubscription.objects.filter(company=company, patient__company=company, patient__demo_data_set__isnull=True).exclude(
-        status=PatientSubscription.Status.CANCELLED).select_related('patient', 'authorization__dose__pen').order_by(
+        status=PatientSubscription.Status.CANCELLED).select_related('patient', 'patient__user', 'authorization__dose__pen').order_by(
         'patient__last_name', 'patient__first_name', 'pk')
     states = []
     if form.is_valid():
@@ -493,6 +512,17 @@ class BillingListView(OperationsView):
     def get(self, request):
         form, rows = billing_listing(request.GET, self.company)
         page = Paginator(rows, 50).get_page(request.GET.get('page'))
+        # Payments: how many of each subscription's payments are settled and what's been paid, opening its payment
+        # history (moved here from Patient orders > Subscriptions: James, 26 Nov 2026).
+        from care.subscription_discounts import payment_schedule
+        from .subscription_payment_views import payment_popup
+
+        payment_popups = []
+        for plan in page.object_list:
+            plan.payment_progress = payment_schedule(plan)
+            popup = payment_popup(request, self.company, plan, schedule=plan.payment_progress)
+            popup['payment_open'] = request.GET.get('payments') == str(plan.pk)
+            payment_popups.append(popup)
         query = request.GET.copy()
         query.pop('page', None)
         super_admin = self.membership.role == CompanyMembership.Role.SUPER_ADMIN
@@ -503,6 +533,9 @@ class BillingListView(OperationsView):
                          'context': make_workflow_context(request, self.company, 'debicheck-files')}
         context = self.context(
             filter_form=form, page_obj=page, is_paginated=page.has_other_pages(), pagination_query=query.urlencode(),
+            payment_popups=payment_popups,
+            # A name opens the patient's record for those who can open records (not practice administrators).
+            patient_links=not no_records(self.membership),
             failed_count=sum(1 for plan in rows if plan.state == 'failed'), show_totals=super_admin,
             total_owed=sum((plan.owed for plan in rows), Decimal('0')), provider=provider, debicheck=debicheck,
             run_context=make_workflow_context(request, self.company, 'debit-run') if super_admin else '',
@@ -513,17 +546,17 @@ class BillingListView(OperationsView):
 
 
 class DebitRunView(OperationsView):
-    """Run today's debits now (Super Admins), as the daily `manage.py run_debits` does."""
+    """Run today's payments now (Super Admins): the repeat card charges the daily `manage.py run_debits` makes."""
 
     http_method_names = ('post',)
 
     def post(self, request):
         if self.membership.role != CompanyMembership.Role.SUPER_ADMIN:
-            raise PermissionDenied('Only a Super Admin can run the debits by hand.')
+            raise PermissionDenied('Only a Super Admin can run the payments by hand.')
         try:
             validate_workflow_context(request, self.company, 'debit-run')
             counts = run_debits(self.company)
-            messages.success(request, f'Debit run done: {counts["tried"]} tried, {counts["paid"]} paid, {counts["failed"]} failed.')
+            messages.success(request, f'Payment run done: {counts["tried"]} tried, {counts["paid"]} paid, {counts["failed"]} failed.')
         except ValidationError as error:
             messages.error(request, _messages(error))
         return redirect('portal:ops-billing')
@@ -579,14 +612,20 @@ class ManualPaymentForm(forms.Form):
     reference = forms.CharField(label='Reference', required=False, max_length=120, help_text='Such as the EFT reference.')
     note = forms.CharField(label='Note', required=False, max_length=300)
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if not debit_orders_enabled():
+            self.fields['method'].choices = [choice for choice in self.fields['method'].choices
+                                             if choice[0] != Payment.Method.DEBICHECK]
+
 
 class NextDebitForm(forms.Form):
-    day = forms.DateField(label='Next debit on', widget=forms.DateInput(attrs={'type': 'date'}))
+    day = forms.DateField(label='Next payment on', widget=forms.DateInput(attrs={'type': 'date'}))
 
 
 class BillingDetailView(OperationsView):
-    """One subscription's billing, for the practice: its debit orders, every cycle and payment attempt, and what can be
-    done: retry now, record a payment received another way, move the next debit, ask for a new debit order."""
+    """One subscription's billing, for the practice: its cards, every cycle and payment attempt, and what can be done:
+    retry now, record a payment received another way, move the next payment, ask the patient for a new card."""
 
     nav_section, page_title = 'billing', 'Billing'
 
@@ -627,11 +666,11 @@ class BillingDetailView(OperationsView):
                 if not form.is_valid():
                     return self.display(request, plan, next_form=form, status=400)
                 set_next_debit(subscription=plan, actor=request.user, day=form.cleaned_data['day'], request=request)
-                messages.success(request, f'Next debit moved to {form.cleaned_data["day"]:%-d %B %Y}.')
+                messages.success(request, f'Next payment moved to {form.cleaned_data["day"]:%-d %B %Y}.')
             elif action == 'ask':
                 validate_workflow_context(request, self.company, 'ask-debit-order', plan, check_version=False)
                 ask_for_new_debit_order(subscription=plan, actor=request.user, request=request)
-                messages.success(request, f'{plan.patient} has been emailed to set up their debit order again.')
+                messages.success(request, f'{plan.patient} has been emailed to add their card again.')
             elif action in ('retry', 'record'):
                 cycle = get_object_or_404(plan.cycles, pk=request.POST.get('cycle'))
                 validate_workflow_context(request, self.company, f'cycle-{action}', cycle, check_version=False)
@@ -640,7 +679,7 @@ class BillingDetailView(OperationsView):
                     payment.refresh_from_db()
                     (messages.success if payment.status == Payment.Status.PAID else messages.warning)(
                         request, f'{money(cycle.amount)} collected.' if payment.status == Payment.Status.PAID
-                        else f'The debit failed again: {payment.failure_reason or "no reason given"}.')
+                        else f'The payment failed again: {payment.failure_reason or "no reason given"}.')
                 else:
                     form = ManualPaymentForm(request.POST)
                     if not form.is_valid():

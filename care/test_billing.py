@@ -59,6 +59,13 @@ class BillingFixture(TestCase):
         self.plan = enroll_local_subscription(company=self.company, patient=self.patient, actor=self.patient_user,
                                               authorization=self.auth, confirm=True)
 
+    @property
+    def first_parcel(self):
+        """Paid today, the first parcel's day: the first shipping day whose order cut-off is still to come."""
+        from .parcels import first_shipping_day
+
+        return first_shipping_day(self.today, self.company)
+
     def debit_order(self, *, fail=False):
         mandate, url = start_debit_order(subscription=self.plan, actor=self.patient_user)
         self.assertTrue(url.endswith(f'/patient/billing/sandbox/mandate/{mandate.pk}/'))
@@ -71,20 +78,21 @@ class DebitOrderTests(BillingFixture):
         self.assertEqual((mandate.status, mandate.amount, mandate.interval_weeks), ('active', Decimal('3295'), 4))
         self.assertTrue(mandate.reference.startswith('MH-D'))
         cycle = SubscriptionCycle.objects.get()
-        self.assertEqual((cycle.cycle_number, cycle.status, cycle.amount, cycle.starts_on, cycle.ends_on),
-                         (1, 'paid', Decimal('3295'), self.today, self.today + timedelta(weeks=4, days=-1)))
+        # Paid today, for the four weeks from its parcel; the next payment is a week before the next parcel.
+        self.assertEqual((cycle.cycle_number, cycle.status, cycle.amount, cycle.due_on, cycle.starts_on, cycle.ends_on),
+                         (1, 'paid', Decimal('3295'), self.today, self.first_parcel, self.first_parcel + timedelta(weeks=4, days=-1)))
         self.assertEqual(Invoice.objects.get(subscription_cycle=cycle).status, 'paid')
         self.plan.refresh_from_db()
-        self.assertEqual((self.plan.cycle_number, self.plan.next_debit_on), (1, self.today + timedelta(weeks=4)))
+        self.assertEqual((self.plan.cycle_number, self.plan.next_debit_on), (1, self.first_parcel + timedelta(weeks=3)))
         payment = Payment.objects.get()
-        self.assertEqual((payment.kind, payment.method, payment.status, payment.attempt), ('subscription', 'debicheck', 'paid', 1))
+        self.assertEqual((payment.kind, payment.method, payment.status, payment.attempt), ('subscription', 'card', 'paid', 1))
         # Nothing more is due until the next debit date; the run is idempotent.
         self.assertEqual(run_debits(self.company)['tried'], 0)
         self.assertEqual(SubscriptionCycle.objects.count(), 1)
 
     def test_the_next_cycle_opens_on_its_debit_date(self):
         self.debit_order()
-        counts = run_debits(self.company, today=self.today + timedelta(weeks=4))
+        counts = run_debits(self.company, today=self.first_parcel + timedelta(weeks=3))
         self.assertEqual((counts['tried'], counts['paid']), (1, 1))
         self.assertEqual(list(SubscriptionCycle.objects.order_by('cycle_number').values_list('cycle_number', 'status')),
                          [(1, 'paid'), (2, 'paid')])
@@ -92,19 +100,27 @@ class DebitOrderTests(BillingFixture):
     def test_a_failed_debit_is_retried_then_goes_to_the_failure_queue_with_a_task_and_emails(self):
         with self.captureOnCommitCallbacks(execute=True):
             self.debit_order(fail=True)
+        from .billing import practice_settings, retry_days
+
         cycle = SubscriptionCycle.objects.get()
         self.plan.refresh_from_db()
-        self.assertEqual((cycle.status, cycle.attempts, cycle.next_attempt_on), ('pending', 1, self.today + timedelta(days=3)))
+        # Tried again on the order cut-off for its parcel (unless it's today), then 3 and 7 days after the payment date.
+        from .parcels import order_cutoff
+
+        retries = retry_days(cycle, practice_settings(self.company))
+        cut_off = (order_cutoff(self.first_parcel, self.company) - self.today).days
+        self.assertEqual(retries, sorted({3, 7} | ({cut_off} if cut_off > 0 else set())))
+        self.assertEqual((cycle.status, cycle.attempts, cycle.next_attempt_on), ('pending', 1, self.today + timedelta(days=retries[0])))
         self.assertEqual(self.plan.status, 'payment_retry')
-        self.assertEqual([message.subject for message in mail.outbox], ['We couldn’t collect your payment'])
+        self.assertEqual([message.subject for message in mail.outbox], ['We couldn’t take your payment'])
         # The email is logged against the patient.
         self.assertTrue(EmailDelivery.objects.filter(patient=self.patient, kind='payment_failed').exists())
         # Not before its retry day.
-        self.assertEqual(run_debits(self.company, today=self.today + timedelta(days=1))['tried'], 0)
-        run_debits(self.company, today=self.today + timedelta(days=3))
-        run_debits(self.company, today=self.today + timedelta(days=7))
+        self.assertEqual(run_debits(self.company, today=self.today)['tried'], 0)
+        for days in retries:
+            run_debits(self.company, today=self.today + timedelta(days=days))
         cycle.refresh_from_db()
-        self.assertEqual((cycle.status, cycle.attempts, cycle.next_attempt_on), ('failed', 3, None))
+        self.assertEqual((cycle.status, cycle.attempts, cycle.next_attempt_on), ('failed', len(retries) + 1, None))
         self.assertTrue(ClinicalTask.objects.filter(patient=self.patient, title__startswith='Debit failed').exists())
         # In the failure queue it isn't retried by the run.
         self.assertEqual(run_debits(self.company, today=self.today + timedelta(days=8))['tried'], 0)
@@ -130,8 +146,9 @@ class DebitOrderTests(BillingFixture):
         self.assertEqual((payment.kind, payment.recorded_by, cycle.status), ('manual', self.admin, 'paid'))
         self.assertTrue(AuditEvent.objects.filter(action='billing.payment_recorded').exists())
 
-    def test_by_default_any_prescription_or_price_change_asks_for_a_new_debit_order_but_a_renewal_doesnt(self):
+    def test_the_practice_can_ask_whenever_the_prescription_or_price_changes_but_a_renewal_doesnt(self):
         mandate = self.debit_order()
+        PracticeSettings.objects.filter(company=self.company).update(new_debit_order='any')
         # A renewal at the same price changes nothing.
         self.assertEqual(review_mandates(self.company, self.patient), [])
         # A changed prescription does, even at the same price.
@@ -144,9 +161,11 @@ class DebitOrderTests(BillingFixture):
         MedicationDose.objects.filter(pk=self.dose.pk).update(price='2995')
         self.assertEqual(review_mandates(self.company), [mandate])
 
-    def test_the_practice_can_ask_only_when_the_amount_goes_above_what_was_approved(self):
+    def test_by_default_only_an_amount_above_what_was_approved_asks_for_the_card_again(self):
         mandate = self.debit_order()
-        PracticeSettings.objects.filter(company=self.company).update(new_debit_order='higher')
+        self.assertEqual(PracticeSettings.objects.get(company=self.company).new_debit_order, 'higher')
+        # A changed prescription at the same price carries on with the card already saved.
+        self.assertEqual(review_mandates(self.company, self.patient, prescription_changed=True), [])
         MedicationDose.objects.filter(pk=self.dose.pk).update(price='2995')
         self.assertEqual(review_mandates(self.company, self.patient, prescription_changed=True), [])
         MedicationDose.objects.filter(pk=self.dose.pk).update(price='3495')
@@ -159,8 +178,8 @@ class DebitOrderTests(BillingFixture):
             self.assertEqual(review_mandates(self.company), [mandate])
         mandate.refresh_from_db()
         self.assertEqual(mandate.status, 'update_needed')
-        self.assertIn('Please approve your new debit order', [message.subject for message in mail.outbox])
-        run_debits(self.company, today=self.today + timedelta(weeks=4))
+        self.assertIn('Please confirm your card for the new amount', [message.subject for message in mail.outbox])
+        run_debits(self.company, today=self.first_parcel + timedelta(weeks=3))
         waiting = SubscriptionCycle.objects.get(cycle_number=2)
         self.assertEqual((waiting.status, waiting.attempts), ('pending', 0))
         self.assertIn('new amount', waiting.failure_reason)
@@ -194,7 +213,7 @@ class DebitOrderTests(BillingFixture):
         self.plan.refresh_from_db()
         change_subscription_status(subscription=self.plan, actor=self.patient_user, action='resume', confirm=True)
         self.plan.refresh_from_db()
-        self.assertEqual(self.plan.next_debit_on, self.today + timedelta(weeks=4))
+        self.assertEqual(self.plan.next_debit_on, self.first_parcel + timedelta(weeks=3))
         change_subscription_status(subscription=self.plan, actor=self.patient_user, action='cancel', confirm=True,
                                    reasons=['cost'])
         self.assertFalse(DebitMandate.objects.exclude(status='cancelled').exists())
@@ -223,20 +242,22 @@ class ParcelPaymentTests(BillingFixture):
         self.assertEqual(parcel_payment(parcel)[0], 'unpaid')
         self.debit_order()
         self.assertEqual(parcel_payment(parcel), ('paid', 'Paid'))
-        later = Shipment.objects.get(pk=self.parcel(day=self.today + timedelta(weeks=5)).pk)
+        later = Shipment.objects.get(pk=self.parcel(day=self.first_parcel + timedelta(weeks=4)).pk)  # The second parcel.
         self.assertEqual(parcel_payment(later)[0], 'due')
         no_plan = Shipment.objects.create(company=self.company, patient=self.patient, scheduled_for=self.today)
         self.assertEqual(parcel_payment(no_plan)[0], 'unpaid')
 
     def test_lock_checks_address_contact_and_payment_and_can_hold_the_rest(self):
-        good = prepare_shipment(shipment=self.parcel(), actor=self.admin)
+        # The first parcel, on the first shipping day the first payment can make; it stays ready when that is paid.
+        good = prepare_shipment(shipment=self.parcel(day=self.first_parcel), actor=self.admin)
+        week = self.first_parcel - timedelta(days=self.first_parcel.weekday())
         with self.assertRaises(ValidationError) as raised:
-            lock_week(company=self.company, actor=self.admin, week_start=self.today - timedelta(days=self.today.weekday()))
+            lock_week(company=self.company, actor=self.admin, week_start=week)
         self.assertIn('No delivery address.', ' '.join(raised.exception.messages))
         self.assertIn('Not paid', ' '.join(raised.exception.messages))
         save_delivery_address(company=self.company, patient=self.patient, actor=self.patient_user, data=ADDRESS)
         self.debit_order()
-        result = lock_week(company=self.company, actor=self.admin, week_start=self.today - timedelta(days=self.today.weekday()))
+        result = lock_week(company=self.company, actor=self.admin, week_start=week)
         self.assertEqual([parcel.pk for parcel in result['locked']], [good.pk])
 
     def test_hold_failing_holds_the_unpaid_parcel_with_its_reason(self):

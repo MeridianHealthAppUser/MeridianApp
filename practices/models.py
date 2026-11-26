@@ -96,7 +96,7 @@ class CompanyMembership(TimeStampedModel):
         ordering = ('company__name', 'user__email')
 
     def __str__(self):
-        return f'{self.user} — {self.company} ({self.get_role_display()})'
+        return f'{self.user}: {self.company} ({self.get_role_display()})'
 
     def clean(self):
         super().clean()

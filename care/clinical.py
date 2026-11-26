@@ -53,6 +53,25 @@ def _require_clinician(company, actor, owner_id=None, *, prescriber=False):
                                else 'An active clinician membership in this practice is required.')
 
 
+def is_super_admin(company, actor):
+    """Whether actor is an active Super Admin of company. They manage and renew any authorisation or prescription,
+    doctor or not (James, 26 Nov 2026)."""
+    return CompanyMembership.objects.filter(company=company, company__is_active=True, user=actor, is_active=True,
+                                            role=CompanyMembership.Role.SUPER_ADMIN).exists()
+
+
+def renewing_doctor(company, actor, previous):
+    """Who a renewal is prescribed by: the actor when they are a doctor here; else (the practice's Super Admin renewing:
+    James, 26 Nov 2026) the doctor who prescribed what it renews, as long as they still are one here."""
+    doctors = CompanyMembership.objects.filter(company=company, company__is_active=True, is_active=True,
+                                               clinician_type__in=CompanyMembership.PRESCRIBER_TYPES)
+    if doctors.filter(user=actor).exists():
+        return actor
+    if previous.prescribed_by_id and doctors.filter(user_id=previous.prescribed_by_id).exists():
+        return previous.prescribed_by
+    raise ValidationError('The doctor who prescribed this is no longer a doctor in the practice: a doctor renews it instead.')
+
+
 def _require_doctor(company, actor, owner_id=None):
     # Treatment, compounding and blood tests stay with doctors.
     _require_clinician(company, actor, owner_id, prescriber=True)

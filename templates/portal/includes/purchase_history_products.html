@@ -16,7 +16,7 @@
           <td data-label="Purchase order"><strong>{{ item.purchase_order.reference }}</strong></td>
           <td data-label="Supplier"><span>{{ item.purchase_order.supplier_name|default:'Unassigned' }}</span>{% if item.supplier_code %}<small>{{ item.supplier_code }}</small>{% endif %}</td>
           <td data-label="Created"><time datetime="{{ item.purchase_order.created_at|date:'c' }}">{{ item.purchase_order.created_at|date:'j M Y' }}</time></td>
-          <td data-label="Fully received">{% if item.purchase_order.received_at %}<time datetime="{{ item.purchase_order.received_at|date:'c' }}">{{ item.purchase_order.received_at|date:'j M Y' }}</time>{% else %}—{% endif %}</td>
+          <td data-label="Fully received">{% if item.purchase_order.received_at %}<time datetime="{{ item.purchase_order.received_at|date:'c' }}">{{ item.purchase_order.received_at|date:'j M Y' }}</time>{% else %}-{% endif %}</td>
           <td data-label="Ordered" class="purchase-order-number">{{ item.quantity }}</td>
           <td data-label="Received" class="purchase-order-number">{{ item.quantity_received }}</td>
           <td data-label="Documents"><div class="purchase-order-document-actions" role="group" aria-label="Documents for {{ item.purchase_order.reference }}">

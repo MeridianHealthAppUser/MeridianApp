@@ -42,8 +42,8 @@ class DosePriceChangeTests(BillingPageFixture):
             self.assertEqual(base, Decimal('3495') if due_on >= day else Decimal('3295'), due_on)
         mandate.refresh_from_db()
         self.assertEqual(mandate.status, 'active')
-        # Week 4 is collected at the current price.
-        run_debits(self.company, today=self.today + timedelta(weeks=4))
+        # The second payment (a week before the second parcel) is collected at the current price.
+        run_debits(self.company, today=self.first_parcel + timedelta(weeks=3))
         self.assertEqual(SubscriptionCycle.objects.get(cycle_number=2).amount, Decimal('3295'))
         # On the day the price becomes R3495, and the patient is asked to approve their debit order for it.
         with self.captureOnCommitCallbacks(execute=True):
@@ -54,9 +54,9 @@ class DosePriceChangeTests(BillingPageFixture):
         self.assertIsNotNone(change.applied_at)
         mandate.refresh_from_db()
         self.assertEqual(mandate.status, 'update_needed')
-        self.assertIn('Please approve your new debit order', [message.subject for message in mail.outbox])
-        # Week 8 is billed at the new price, and approving the new amount collects it.
-        run_debits(self.company, today=self.today + timedelta(weeks=8))
+        self.assertIn('Please confirm your card for the new amount', [message.subject for message in mail.outbox])
+        # The third is billed at the new price, and approving the new amount collects it.
+        run_debits(self.company, today=self.first_parcel + timedelta(weeks=7))
         self.assertEqual(SubscriptionCycle.objects.get(cycle_number=3).amount, Decimal('3495'))
         self.plan.refresh_from_db()
         new, _ = start_debit_order(subscription=self.plan, actor=self.patient_user)
@@ -137,6 +137,6 @@ class DosePriceChangeTests(BillingPageFixture):
 
         with self.captureOnCommitCallbacks(execute=True):
             review_mandates(self.company)
-        message = next(message for message in mail.outbox if message.subject == 'Please approve your new debit order')
+        message = next(message for message in mail.outbox if message.subject == 'Please confirm your card for the new amount')
         self.assertIn('every 5 weeks', message.body)
         self.assertEqual(DebitMandate.objects.get(pk=mandate.pk).status, 'update_needed')

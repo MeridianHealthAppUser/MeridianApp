@@ -20,7 +20,8 @@ from .models import ConsentDocument, ConsentRecord, Lead, ScreeningQuestionnaire
 from .services import record_audit
 
 
-CONSENT_KINDS = (ConsentDocument.Kind.SERVICE, ConsentDocument.Kind.TELEHEALTH)
+# The Terms and Conditions and the Privacy Policy (Dr Czech, 26 Nov 2026), accepted together with one tick.
+CONSENT_KINDS = ConsentDocument.QUESTIONNAIRE_KINDS
 DRAFT_VERSION = 'draft-demo-2026-09'
 
 
@@ -36,7 +37,7 @@ def practice_notices(company):
         elif settings.DEBUG:
             documents.append({
                 'kind': kind, 'document_id': None, 'version': DRAFT_VERSION,
-                'title': 'Draft service and privacy notice' if kind == 'service' else 'Draft telehealth consent',
+                'title': 'Draft privacy policy' if kind == 'service' else 'Draft terms and conditions',
                 'body': (
                     f'Demo notice for {company.name}: your contact details and answers are saved as an enquiry '
                     'for the authorised practice team. Submission does not create a login or patient account. '
@@ -126,11 +127,13 @@ def save_intake(*, form, submission_key, expected_notices, request=None):
         )
         for document in documents:
             # A single checked acceptance covers these two displayed notices;
-            # it never silently creates marketing consent or an account.
+            # it never silently creates marketing consent or an account. Each keeps the exact wording accepted.
             ConsentRecord.objects.get_or_create(
                 company=company, lead=lead, consent_type=document['kind'],
                 document_id=document['document_id'], document_version=document['version'], accepted=True,
                 defaults={'accepted_at': timezone.now(), 'source': 'public-questionnaire',
+                          'document_title': document['title'], 'document_text': document['body'],
+                          'document_hash': hashlib.sha256(document['body'].encode('utf-8')).hexdigest(),
                           'ip_address': (request.META.get('REMOTE_ADDR') or None) if request else None},
             )
         record_audit(company=company, actor=None, action='lead.created' if created else 'lead.updated',

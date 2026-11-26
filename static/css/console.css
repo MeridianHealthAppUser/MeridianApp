@@ -431,6 +431,13 @@
 .console-status--urgent { background: var(--c-fcedeb); color: var(--c-aa4d47); }
 /* On a clinician's patient list: patients who aren't theirs now. */
 .console-status--past { background: var(--c-fff8eb); color: var(--c-6b5217); margin-left: .35rem; }
+/* A subscription's status (the patient directory, 26 Nov 2026): Active green, Payment retry pink, Paused yellow,
+   Cancelled red, Not enrolled grey. */
+.console-status--plan-active { background: var(--c-e8f5ed); color: var(--c-288254); }
+.console-status--plan-payment_retry { background: var(--c-fdebf3); color: var(--c-962e5c); }
+.console-status--plan-paused { background: var(--c-fff4df); color: var(--c-916111); }
+.console-status--plan-cancelled { background: var(--c-fcedeb); color: var(--c-aa4d47); }
+.console-status--plan-none { background: var(--c-eef4f7); color: var(--c-556e7b); }
 .console-status--covering { background: var(--c-e6f3fb); color: var(--c-1d5f86); margin-left: .35rem; }
 .console-priority { background: var(--c-fff5df); color: var(--console-amber); }
 
@@ -564,7 +571,7 @@
   background: var(--console-teal-soft);
   border-radius: .7rem;
   color: var(--console-teal-dark);
-  content: '—';
+  content: '-';
   display: inline-flex;
   font-size: 1.1rem;
   font-weight: 800;
@@ -613,6 +620,12 @@
 .patient-table__name .console-status { margin-left: 0; }
 .patient-table__person .console-patient-avatar { background: var(--c-eff5f8); color: var(--console-teal-dark); font-size: .68rem; height: 1.9rem; width: 1.9rem; }
 .patient-table__detail { color: var(--console-muted); display: block; font-size: .67rem; font-weight: 500; margin-top: .15rem; }
+/* A patient as All patients shows them, in other tables too (includes/patient_cell.html, 26 Nov 2026): the name, a
+   link to their record, with their email below. */
+.patient-cell__link, .patient-cell__name { color: var(--c-1a4457); font-size: .8rem; font-weight: 700; }
+.patient-cell__link { text-decoration: underline; text-underline-offset: 3px; }
+.patient-cell__link:hover { color: var(--console-teal-dark); }
+.patient-cell__email { color: var(--console-muted); display: block; font-size: .72rem; font-weight: 500; margin-top: .15rem; overflow-wrap: anywhere; }
 /* Open record sits against the right edge of the row. */
 .patient-table__action-cell { text-align: right; }
 
@@ -1424,6 +1437,10 @@
 .practice-settings-form--grid > .console-form__field { align-content: start; }
 .practice-settings-form--grid > .console-button, .practice-settings-form--grid > .errorlist { grid-column: 1 / -1; }
 @media (max-width: 42rem) { .practice-settings-form--grid { grid-template-columns: 1fr; } }
+/* The order cut-off (26 Nov 2026): its day and time side by side, under one heading. */
+.practice-cutoff { border: 0; margin: 0; min-width: 0; padding: 0; }
+.practice-cutoff > legend { color: var(--console-ink); font-size: .73rem; font-weight: 750; margin-bottom: .35rem; padding: 0; }
+.practice-cutoff__inputs { display: grid; gap: .6rem; grid-template-columns: minmax(0, 1fr) minmax(0, 9rem); }
 
 /* Rev 3.11: Patient Records & Messages, one page with Messages, All patients and Team tabs. */
 .records-header { margin-bottom: 1rem; }
@@ -1434,6 +1451,9 @@
 .records-tabs a:hover, .records-tabs a:focus-visible { color: var(--console-teal-dark); outline: none; }
 .records-tabs a.is-active { border-bottom-color: var(--console-teal); color: var(--console-ink); }
 .records-header__count { color: var(--console-muted); font-size: .78rem; margin: -.4rem 0 1rem; }
+/* Patient orders' Subscriptions and Non-prescription requests, under the Records & Messages tabs (26 Nov 2026). */
+.records-subtabs { margin-top: .9rem; }
+.record-orders-subtabs { margin: 0 0 .9rem; }
 .console-nav__text { white-space: nowrap; }
 
 .read-state-icon { fill: none; flex: 0 0 auto; height: 1rem; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.8; width: 1rem; }

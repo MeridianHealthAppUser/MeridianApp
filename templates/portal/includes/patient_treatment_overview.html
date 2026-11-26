@@ -1,15 +1,15 @@
 {% load l10n %}{# The prescription in detail, for a catalogue dose: portal.patient_summary.treatment_overview. #}
 <div class="patient-course">
-  <div class="patient-course__head"><strong>{% if treatment.before_start %}Week 1 starts {{ treatment.first_week|date:"j M" }}, with your first pens{% else %}Week {{ treatment.week }} of {{ treatment.weeks }} prescribed{% endif %}</strong><span>{{ treatment.first_week|date:"j M Y" }} – {{ treatment.ends_on|date:"j M Y" }}</span></div>
+  <div class="patient-course__head"><strong>{% if treatment.not_started %}Week 1 starts with your first pens, after your first payment{% elif treatment.before_start %}Week 1 starts {{ treatment.first_week|date:"j M" }}, with your first pens{% else %}Week {{ treatment.week }} of {{ treatment.weeks }} prescribed{% endif %}</strong><span>{% if treatment.not_started %}{{ treatment.weeks }} weeks from then{% else %}{{ treatment.first_week|date:"j M Y" }} – {{ treatment.ends_on|date:"j M Y" }}{% endif %}</span></div>
   <div class="patient-course__track" aria-hidden="true"><span style="width:{{ treatment.progress|unlocalize }}%"></span></div>
 </div>
 <div class="patient-plan__note">
   <h3 class="patient-eyebrow">How your dose works</h3>
-  <p>Your dose is <strong>{{ treatment.amount }} {{ treatment.how_often }}</strong>, as your doctor prescribed. You receive <strong>{{ treatment.supply }}</strong>.{% if treatment.next_step %} From week {{ treatment.next_step.week }} ({{ treatment.next_step.week_starts_on|date:"j M" }}) your dose changes to {{ treatment.next_step.dose }}, with the pens for it.{% endif %}</p>
+  <p>Your dose is <strong>{{ treatment.amount }} {{ treatment.how_often }}</strong>, as your doctor prescribed. You receive <strong>{{ treatment.supply }}</strong>.{% if treatment.next_step %} From week {{ treatment.next_step.week }}{% if not treatment.not_started %} ({{ treatment.next_step.week_starts_on|date:"j M" }}){% endif %} your dose changes to {{ treatment.next_step.dose }}, with the pens for it.{% endif %}</p>
 </div>
 <dl class="patient-kv">
   {% if treatment.on_its_way %}<div><dt>On its way</dt><dd>Sent {{ treatment.on_its_way.date|date:"j M" }}{% if treatment.on_its_way.tracking %} · {{ treatment.on_its_way.tracking }}{% endif %}</dd></div>{% endif %}
-  <div><dt>Next shipment</dt><dd{% if not treatment.next_parcel %} class="patient-kv__quiet"{% endif %}>{% if treatment.next_parcel %}{{ treatment.next_parcel.date|date:"D j M" }} · {{ treatment.next_parcel.contents|join:", " }}{% if treatment.next_parcel.held %} · on hold{% endif %}{% else %}Planned by your care team{% endif %}</dd></div>
-  <div><dt>Prescription runs to</dt><dd class="patient-kv__amber">{{ treatment.ends_on|date:"j M Y" }}</dd></div>
-  <div><dt>Prescribing doctor</dt><dd>{{ treatment.prescribed_by.full_name }}</dd></div>
+  <div><dt>Next shipment</dt><dd{% if not treatment.next_parcel %} class="patient-kv__quiet"{% endif %}>{% if treatment.not_started %}After your first payment{% if first_pens_if_paid_today %}: {{ first_pens_if_paid_today|date:"D j M" }} if you pay today{% endif %}{% elif treatment.next_parcel %}{{ treatment.next_parcel.date|date:"D j M" }} · {{ treatment.next_parcel.contents|join:", " }}{% if treatment.waiting_for_doctor %} · once your doctor confirms your prescription{% elif treatment.next_parcel.held %} · on hold{% endif %}{% else %}Planned by your care team{% endif %}</dd></div>
+  <div><dt>Prescription runs{% if not treatment.not_started %} to{% endif %}</dt><dd class="patient-kv__amber">{% if treatment.not_started %}{{ treatment.weeks }} weeks from your first payment{% else %}{{ treatment.ends_on|date:"j M Y" }}{% if treatment.moved %}<small style="display:block;color:var(--console-muted);font-weight:400">Moved from {{ treatment.moved.from|date:"j M" }} {{ treatment.moved.because }}</small>{% endif %}{% endif %}</dd></div>
+  <div><dt>Prescribing doctor</dt><dd>{{ treatment.prescribed_by.titled_name }}</dd></div>
 </dl>

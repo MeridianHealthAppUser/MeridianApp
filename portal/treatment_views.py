@@ -7,16 +7,19 @@ from django import forms
 from django.contrib import messages
 from django.contrib.auth import get_user_model
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.core.exceptions import ValidationError
+from django.core.exceptions import PermissionDenied, ValidationError
 from django.core.paginator import Paginator
 from django.db.models import Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.decorators import method_decorator
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.views import View
 from django.views.decorators.cache import never_cache
 
+from care.billing import paid_before_pause
+from care.prescriptions import ask_to_confirm, start_check
 from care.followups import request_help
 from care.models import AuditEvent, MedicationProduct, PatientSubscription, Shipment, TreatmentAuthorization
 from care.treatment import (
@@ -30,6 +33,8 @@ from .treatment_forms import (
     AuthorizationForm, CancelSubscriptionForm, ConfirmTreatmentForm, EnrollmentForm, HelpRequestForm, make_treatment_context,
     validate_treatment_context,
 )
+from .navigation import messages_title
+from .record_access import limited_by_assignment, no_records, openable_patients
 from .views import PatientPortalRequiredMixin, StaffCompanyRequiredMixin
 from practices.models import Patient
 from .patient_action_context import patient_action_context, workspace_redirect
@@ -44,7 +49,7 @@ def _authorizations(company, patient=None):
 
 def _plans(company, patient=None):
     records = PatientSubscription.objects.for_company(company).filter(patient__company=company, patient__is_active=True).select_related(
-        'company', 'patient', 'authorization__product', 'authorization__dose__pen', 'authorization__prescribed_by',
+        'company', 'patient', 'patient__user', 'authorization__product', 'authorization__dose__pen', 'authorization__prescribed_by',
         'authorization__company', 'authorization__patient',
     ).order_by('-created_at', '-pk')
     return records.filter(patient=patient) if patient else records
@@ -56,9 +61,9 @@ def _token(request, company, patient, kind, record=None):
 
 # The toast after a patient pauses, resumes or cancels their subscription.
 STATUS_MESSAGES = {
-    'pause': 'Your subscription is paused. Nothing is debited while it’s paused.',
+    'pause': 'Your subscription is paused. Your card isn’t charged while it’s paused, and a parcel you’ve already paid for still goes out.',
     'resume': 'Your subscription is active again.',
-    'cancel': 'Your subscription is cancelled and its debit order stopped.',
+    'cancel': 'Your subscription is cancelled and your card won’t be charged for it again.',
 }
 
 
@@ -66,19 +71,27 @@ class AuthorizationListView(StaffClinicalView):
     http_method_names = ('get', 'head', 'options')
     nav_section = 'authorisations'
     page_title = 'Treatment authorisations'
-    clinician_redirect_message = 'Treatment authorisations are on each patient’s record, under Treatment.'
+    # Doctors too (James, 26 Nov 2026: a doctor's Authorisation history button led nowhere), with only the patients
+    # whose records they can open.
 
     def get(self, request):
         """The table with the standard tools at its top right (James, 20 Nov 2026): a search for patient, medicine or
         doctor, and Filters for Status, Patient, Doctor, Product, Maximum dose and Valid dates. ?patient= links from a
         patient's page still pick that patient."""
         data = without_all(request.GET, 'status')
-        form, records, ticked = authorisation_listing(data, self.company)
+        patients = (openable_patients(Patient.objects.for_company(self.company), request.user)
+                    if limited_by_assignment(self.membership) else None)
+        form, records, ticked = authorisation_listing(data, self.company, patients)
         page = Paginator(records, 20).get_page(request.GET.get('page'))
+        states = authorization_states(self.company, page)
+        for item in page:
+            item.state = states[item.pk]
         query = request.GET.copy()
         query.pop('page', None)
         count = page.paginator.count
         everyone = _authorizations(self.company)
+        if patients is not None:
+            everyone = everyone.filter(patient__in=patients)
         people = Patient.objects.for_company(self.company).filter(pk__in=everyone.values('patient')).order_by('last_name', 'first_name', 'pk')
         doctors = get_user_model().objects.filter(pk__in=everyone.values('prescribed_by')).order_by('first_name', 'last_name', 'pk')
         products = MedicationProduct.objects.for_company(self.company).filter(pk__in=everyone.values('product')).order_by('name', 'strength', 'pk')
@@ -130,11 +143,13 @@ class AuthorisationFilterForm(forms.Form):
         return data
 
 
-def authorisation_listing(data, company):
+def authorisation_listing(data, company, patients=None):
     """The filtered authorisations, and the ids ticked in Filters' Patient, Doctor and Product (any that aren't one
-    are ignored)."""
+    are ignored). patients limits them, for a doctor, to the patients whose records they can open."""
     form = AuthorisationFilterForm(data, company=company)
     records = _authorizations(company)
+    if patients is not None:
+        records = records.filter(patient__in=patients)
     ticked = {name: ticked_ids(data.getlist(name)) for name in ('patient', 'doctor', 'product')}
     if not form.is_valid():
         return form, records.none(), ticked
@@ -166,12 +181,14 @@ class AuthorizationEditorView(StaffClinicalView):
     page_title = 'Authorise treatment'
 
     def records(self, patient_pk=None, pk=None):
-        self.require_doctor()
         if pk is None:
+            self.require_doctor()
             return self.patient_for(patient_pk), None
         previous = get_object_or_404(_authorizations(self.company), pk=pk)
         self.check_record(previous.patient)
-        self.require_doctor(previous.prescribed_by_id)
+        # The prescribing doctor renews it, or the practice's Super Admin, doctor or not (James, 26 Nov 2026).
+        if not self.super_admin:
+            self.require_doctor(previous.prescribed_by_id)
         return previous.patient, previous
 
     def overview_instead(self, request, patient, previous):
@@ -224,6 +241,54 @@ class AuthorizationEditorView(StaffClinicalView):
         return self.display(request, patient, previous, form, status=400)
 
 
+def _state(authorization, replaced, revoke, today):
+    if replaced:
+        return {'key': 'replaced', 'label': 'Replaced', 'tone': 'none', 'note': None}
+    if authorization.status == TreatmentAuthorization.Status.CANCELLED:
+        if revoke is not None:
+            by = f' by {revoke.actor.titled_name}' if revoke.actor_id else ''
+            return {'key': 'revoked', 'label': 'Revoked', 'tone': 'cancelled', 'warning': True,
+                    'note': f'Revoked on {timezone.localdate(revoke.created_at):%-d %b %Y}{by}, so it is no longer valid for dispensing.'}
+        return {'key': 'cancelled', 'label': 'Cancelled', 'tone': 'cancelled', 'warning': True,
+                'note': 'Cancelled, so it is not valid for dispensing.'}
+    if authorization.expires_on < today:
+        return {'key': 'expired', 'label': 'Expired', 'tone': 'none', 'note': f'Expired on {authorization.expires_on:%-d %b %Y}.'}
+    if authorization.status == TreatmentAuthorization.Status.PAUSED:
+        return {'key': 'paused', 'label': 'Paused', 'tone': 'paused', 'warning': True,
+                'note': 'Paused, so it is not valid for dispensing and the patient’s parcels are held. Restarting treatment needs a new prescription.'}
+    if authorization.starts_on > today:
+        step = ', the next step of the starting plan' if authorization.plan_step and authorization.plan_step > 1 else ''
+        return {'key': 'scheduled', 'label': f'Starts {authorization.starts_on:%-d %b}', 'tone': '',
+                'note': f'Starts on {authorization.starts_on:%-d %b %Y}{step}.'}
+    return {'key': 'active', 'label': 'Active', 'tone': 'active', 'note': None}
+
+
+def authorization_states(company, authorizations, today=None):
+    """Where each authorisation stands (James, 26 Nov 2026), by pk: a key, a label and a tone for its pill, and a line
+    saying why it is or isn't valid for dispensing (None when it simply is). The stored status alone misleads: a dose
+    change or renewal cancels the one it replaces ("Replaced"), a revoke cancels it too ("Revoked"), and an active one
+    past its end date has "Expired"."""
+    today = today or timezone.localdate()
+    records = list(authorizations)
+    ids = [authorization.pk for authorization in records]
+    replaced = set(TreatmentAuthorization.objects.filter(company=company, replaces_id__in=ids).values_list('replaces_id', flat=True))
+    replaced.update(AuditEvent.objects.filter(company=company, action='treatment.authorized',
+                                              metadata__previous_authorization_id__in=ids).values_list(
+        'metadata__previous_authorization_id', flat=True))
+    revokes = {}
+    for event in AuditEvent.objects.filter(company=company, action='treatment.revoke', target_type='care.treatmentauthorization',
+                                           target_id__in=[str(pk) for pk in ids]).select_related('actor').order_by('created_at'):
+        revokes[int(event.target_id)] = event
+    return {authorization.pk: _state(authorization, authorization.pk in replaced, revokes.get(authorization.pk), today)
+            for authorization in records}
+
+
+def authorization_state(company, authorization, replacement=None, today=None):
+    """authorization_states for one authorisation, whose replacement (if any) the page has already found."""
+    state = authorization_states(company, [authorization], today)[authorization.pk]
+    return _state(authorization, True, None, today or timezone.localdate()) if replacement is not None else state
+
+
 class AuthorizationDetailView(StaffClinicalView):
     http_method_names = ('get', 'head', 'options')
     nav_section = 'authorisations'
@@ -236,15 +301,24 @@ class AuthorizationDetailView(StaffClinicalView):
         replacement = None
         if replacement_event:
             replacement = _authorizations(self.company).filter(pk=replacement_event.target_id, patient=authorization.patient).first()
+        if replacement is None:  # Renewed or changed from the Overview (care.prescriptions).
+            replacement = _authorizations(self.company).filter(replaces=authorization, patient=authorization.patient).order_by('starts_on', 'pk').first()
         from .patient_workspace import workspace_url
 
+        state = authorization_state(self.company, authorization, replacement)
+        # The prescribing doctor manages it, and so does the practice's Super Admin, doctor or not (James, 26 Nov 2026):
+        # renewing, pausing and revoking, only while it can still be paused or revoked.
+        can_change = self.super_admin or (self.is_doctor and authorization.prescribed_by_id == request.user.pk)
+        open_state = state['key'] in ('active', 'scheduled', 'paused')
+        # A main treatment is renewed from the Overview (James asked to drop the link to it, 26 Nov 2026); only
+        # compounded and other treatments here.
+        renewable_here = not replacement and other_treatments(self.company).filter(pk=authorization.product_id).exists()
         context = self.context(
-            authorization=authorization, patient=authorization.patient, replacement=replacement,
-            is_current=authorization_is_current(authorization),
-            # A main treatment is renewed from the Overview; only compounded and other treatments here.
-            renewable_here=other_treatments(self.company).filter(pk=authorization.product_id).exists(),
-            overview_url=workspace_url(authorization.patient),
-            can_change=self.is_doctor and authorization.prescribed_by_id == request.user.pk,
+            authorization=authorization, patient=authorization.patient, replacement=replacement, state=state,
+            is_current=authorization_is_current(authorization), renewable_here=renewable_here,
+            overview_url=workspace_url(authorization.patient), can_change=can_change, manageable=can_change and open_state,
+            # Nothing to manage (replaced, revoked, expired): no Manage card, the details take the page.
+            show_manage=(can_change and (open_state or renewable_here)) or (not can_change and open_state),
             form=form if form is not None else ConfirmTreatmentForm(),
             treatment_context=_token(request, self.company, authorization.patient, 'authorization-status', authorization),
         )
@@ -264,7 +338,8 @@ class AuthorizationStatusView(AuthorizationDetailView):
     def post(self, request, pk):
         authorization = get_object_or_404(_authorizations(self.company), pk=pk)
         self.check_record(authorization.patient)
-        self.require_doctor(authorization.prescribed_by_id)
+        if not self.super_admin:
+            self.require_doctor(authorization.prescribed_by_id)
         form = ConfirmTreatmentForm(request.POST)
         valid = form.is_valid()
         try:
@@ -286,18 +361,16 @@ class SubscriptionListView(LoginRequiredMixin, StaffCompanyRequiredMixin, View):
     def get(self, request):
         form, plans = subscription_listing(request.GET, self.company)
         page = Paginator(plans, 20).get_page(request.GET.get('page'))
-        page.object_list = list(prepare_subscription_rows(page.object_list, self.company))
-        from .subscription_payment_views import payment_popup
-        payment_popups = []
-        for plan in page.object_list:
-            popup = payment_popup(request, self.company, plan, schedule=plan.payment_progress)
-            popup['payment_open'] = request.GET.get('payments') == str(plan.pk)
-            payment_popups.append(popup)
+        # Payments moved to Shipping > Billing; each row has its weekly timeline instead (James, 26 Nov 2026).
+        page.object_list = list(prepare_subscription_rows(page.object_list, self.company, payments=False))
         query = request.GET.copy()
         query.pop('page', None)
         count = page.paginator.count
         return render(request, 'portal/treatment_subscriptions.html', dict(
-            company=self.company, active_membership=self.membership, nav_section='subscriptions', payment_popups=payment_popups,
+            company=self.company, active_membership=self.membership, nav_section='subscriptions',
+            messages_title=messages_title(self.membership),
+            # A name opens the patient's record for those who can open records (not practice administrators).
+            patient_links=not no_records(self.membership),
             can_read_clinical=self.membership.has_clinical_access, filter_form=form, page_obj=page,
             is_paginated=page.has_other_pages(), pagination_query=query.urlencode(),
             count_label=f'{count} care plan{"" if count == 1 else "s"}',
@@ -305,6 +378,37 @@ class SubscriptionListView(LoginRequiredMixin, StaffCompanyRequiredMixin, View):
                          label='Filter subscriptions', sections=ticked_sections(form, request.GET, ('status',)),
                          placeholder='Patient or plan'),
         ))
+
+
+@method_decorator(never_cache, name='dispatch')
+class SubscriptionTimelineView(LoginRequiredMixin, StaffCompanyRequiredMixin, View):
+    """A subscription's treatment week by week, as the patient sees it on My Treatment, for the practice (James,
+    26 Nov 2026): View timeline on Patient orders > Subscriptions and on the record's Treatment tab. ?fragment=1 is the
+    dialog's content alone (static/js/subscription_timeline.js); without scripts, a page with it open. Practice
+    administrators and Super Admins open any; a doctor, those of the patients whose records they can open."""
+
+    http_method_names = ('get', 'head', 'options')
+
+    def get(self, request, pk):
+        from .patient_summary import treatment_timeline
+        from .patient_workspace import workspace_url
+        from .record_access import require_record_view
+
+        plan = get_object_or_404(_plans(self.company), pk=pk)
+        if not self.membership.is_admin:
+            if not self.membership.has_clinical_access:
+                raise PermissionDenied('A subscription’s timeline is for the practice team and the patient’s doctors.')
+            require_record_view(self.membership, request.user, plan.patient)
+        back = request.GET.get('return_to', '')
+        if not back.startswith('/') or back.startswith('//') or not url_has_allowed_host_and_scheme(
+                back, allowed_hosts={request.get_host()}, require_https=request.is_secure()):
+            back = reverse('portal:treatment-subscriptions') if self.membership.is_admin else workspace_url(plan.patient, 'treatment')
+        context = dict(company=self.company, active_membership=self.membership, nav_section='subscriptions',
+                       timeline_plan=plan, timeline_return=back,
+                       timeline=treatment_timeline(self.company, plan.patient, plan.authorization) if plan.authorization_id else None)
+        if request.GET.get('fragment') == '1':
+            return render(request, 'portal/includes/staff_treatment_timeline.html', context)
+        return render(request, 'portal/subscription_timeline.html', context)
 
 
 class SubscriptionFilterForm(forms.Form):
@@ -329,16 +433,18 @@ def subscription_listing(data, company):
     return form, plans
 
 
-def prepare_subscription_rows(plans, company):
-    """Attach the current course's supply progress without creating or changing parcels."""
+def prepare_subscription_rows(plans, company, *, payments=True):
+    """Attach the current course's supply progress without creating or changing parcels, and (payments) the payment
+    schedule's progress, which the download has."""
     from care.operations import dose_run
 
     for plan in plans:
         plan.dose = dose_in_effect(plan)
-        from care.subscription_discounts import payment_schedule
-        plan.payment_progress = payment_schedule(plan)
+        if payments:
+            from care.subscription_discounts import payment_schedule
+            plan.payment_progress = payment_schedule(plan)
         plan.supply_dispatched = plan.supply_remaining = 0
-        plan.next_shipment = None
+        plan.next_shipment = plan.last_before_pause = None
         if plan.authorization_id:
             course = dose_run(plan.authorization)
             course_filter = Q(authorization_id__in=[item.pk for item in course])
@@ -355,6 +461,10 @@ def prepare_subscription_rows(plans, company):
                     plan.supply_remaining += 1
                     if plan.next_shipment is None:
                         plan.next_shipment = parcel
+                    # Paused by the patient: the parcel already paid for still goes out, the last until they resume.
+                    if (plan.status == PatientSubscription.Status.PAUSED and plan.last_before_pause is None
+                            and paid_before_pause(parcel)):
+                        plan.last_before_pause = parcel
         yield plan
 
 
@@ -380,8 +490,10 @@ def patient_treatment_context(request, company, patient, *, enrollment_form=None
     without scripts)."""
     from .patient_summary import (
         billing_tasks, current_authorization, latest_weight,
-        next_consult, patient_tasks, task_lab_requests, previous_prescriptions, treatment_overview, treatment_timeline,
+        next_consult, patient_tasks, task_lab_requests, prescription_changes, previous_prescriptions, treatment_overview,
+        treatment_timeline,
     )
+    from care.parcels import first_shipping_day
 
     from care.billing import patient_summary as billing_summary, prescription_amount
 
@@ -416,6 +528,9 @@ def patient_treatment_context(request, company, patient, *, enrollment_form=None
         current_plan=current, current_authorization=authorization,
         plan_authorization=current.authorization if current and current.authorization_id else authorization,
         can_enroll=current is None and _eligible_authorizations(company, patient).exists(),
+        # Written too long ago to start on alone: the doctor confirms it first (care.prescriptions.start_check).
+        start_check=start_check(authorization) if current is None and authorization is not None else None,
+        ask_context=make_treatment_context(request, company, patient, 'prescription-ask'),
         plan_hold_reason=subscription_hold_reason(current) if current else '',
         enrollment_form=enrollment_form if enrollment_form is not None else _enrollment_form(company, patient),
         action_form=action_form if action_form is not None else ConfirmTreatmentForm(),
@@ -432,6 +547,12 @@ def patient_treatment_context(request, company, patient, *, enrollment_form=None
         # Week by week: the dose, the pens sent and the payments due.
         timeline=treatment_timeline(company, patient, treatment_authorization),
         timeline_open=request.GET.get('timeline') == '1',
+        # The doctor's decisions and what they changed, newest first (there is no Updates page in the menu).
+        prescription_changes=prescription_changes(company, patient, treatment_authorization),
+        changes_open=request.GET.get('changes') == '1',
+        changes_selected=request.GET.get('change', '') if request.GET.get('changes') == '1' else '',
+        # Paid today, the first pens go out on this day (care.parcels.first_shipping_day: after the order cut-off).
+        first_pens_if_paid_today=first_shipping_day(timezone.localdate(), company),
         # Once-off items, below Previously prescribed: what the patient can buy without a prescription.
         **shop_context(request, company, patient),
     )
@@ -464,7 +585,7 @@ class PatientSubscriptionView(LoginRequiredMixin, PatientPortalRequiredMixin, Vi
 
 class PatientEnrollmentView(PatientSubscriptionView):
     """Start my subscription: the delivery address is saved, the subscription starts, and the patient goes on to
-    approve their debit order (or card) with the payment provider. The first debit is collected once it's approved."""
+    add their card on the payment provider's page. The first payment is taken once the card is saved."""
 
     http_method_names = ('post', 'options')
 
@@ -478,6 +599,9 @@ class PatientEnrollmentView(PatientSubscriptionView):
         try:
             token = validate_treatment_context(request, self.patient_company, self.patient, 'subscription-enroll')
             if valid:
+                if start_check(form.cleaned_data['authorization']):
+                    raise ValidationError('Your prescription needs your doctor to confirm it before you start. Ask them '
+                                          'below, and you can start once they do.')
                 save_delivery_address(company=self.patient_company, patient=self.patient, actor=request.user,
                                       data=form.address(), request=request)
                 plan = enroll_local_subscription(company=self.patient_company, patient=self.patient, actor=request.user,
@@ -491,12 +615,33 @@ class PatientEnrollmentView(PatientSubscriptionView):
                     _, url = start_debit_order(subscription=plan, actor=request.user, method=form.cleaned_data['method'],
                                                request=request)
                 except ValidationError as error:
-                    messages.error(request, f'Your subscription has started, but your debit order couldn’t be set up: {" ".join(error.messages)}')
+                    messages.error(request, f'Your subscription has started, but your card couldn’t be set up: {" ".join(error.messages)}')
                     return redirect('portal:patient-billing')
                 return redirect(url)
         except ValidationError as error:
             _error(form, error)
         return self.display(request, enrollment_form=form, status=400)
+
+
+class PatientAskConfirmView(PatientSubscriptionView):
+    """Ask the doctor to confirm a prescription written too long ago to start on alone."""
+
+    http_method_names = ('post', 'options')
+
+    def post(self, request):
+        from .patient_summary import current_authorization
+
+        # The prescription the page offered to start on.
+        authorization = current_authorization(self.patient_company, self.patient, None)
+        try:
+            validate_treatment_context(request, self.patient_company, self.patient, 'prescription-ask')
+            step = ask_to_confirm(company=self.patient_company, patient=self.patient, actor=request.user,
+                                  authorization=authorization, request=request)
+            doctor = step.prescribed_by.titled_name if step.prescribed_by_id else 'your doctor'
+            messages.success(request, f'We’ve asked {doctor} to confirm your prescription. You can start once they do.')
+        except ValidationError as error:
+            messages.error(request, ' '.join(error.messages))
+        return redirect(reverse('portal:patient-treatment') + '#treatment-plan')
 
 
 class PatientSubscriptionStatusView(PatientSubscriptionView):

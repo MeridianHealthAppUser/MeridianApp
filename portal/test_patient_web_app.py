@@ -147,6 +147,24 @@ class PatientWebAppTests(TestCase):
         self.assertFalse(any(title.startswith('Book a follow-up consult') for title in titles))
         self.assertNotIn('Log this week’s weight', titles)
 
+    def test_an_ended_authorisation_with_a_consult_booked_shows_it_instead_of_book_a_consult(self):
+        # James, 26 Nov 2026: the patient had booked, but the task still said Book a consult.
+        from django.utils.formats import date_format
+
+        from .patient_summary import patient_tasks
+
+        plan = object()  # Deliveries on any plan are held once its authorisation has ended.
+        ended = patient_tasks(authorization=None, plan=plan, consult=None, weight=None, labs=[])[0]
+        self.assertEqual((ended['title'], ended['actions'][0]['label'], ended['settled']),
+                         ('Your treatment authorisation has ended', 'Book a consult', False))
+        consult = self.book()
+        booked = patient_tasks(authorization=None, plan=plan, consult=consult, weight=None, labs=[])[0]
+        self.assertEqual((booked['title'], booked['pill'], booked['actions'], booked['settled']),
+                         ('Your treatment authorisation has ended', 'Consult booked', [], True))
+        when = timezone.localtime(consult.starts_at)
+        self.assertIn(f'{self.doctor.titled_name} can review your treatment at your consult on '
+                      f'{date_format(when, "l j F")} at {when:%H:%M}.', booked['body'])
+
     def test_my_treatment_shows_the_plan_without_history(self):
         authorization = self.authorize()
         enroll_local_subscription(company=self.company, patient=self.patient, actor=self.user,

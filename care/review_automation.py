@@ -51,7 +51,7 @@ def refresh_review_tasks(*, company, actor, within_days=30, request=None):
             stats['skipped_inactive_doctor'] += 1
             continue
         task = ClinicalTask(company=company, patient=authorization.patient, created_by=actor,
-                            assigned_to=authorization.prescribed_by, title='Treatment review due — acknowledge reminder',
+                            assigned_to=authorization.prescribed_by, title='Treatment review due: acknowledge reminder',
                             description='Arrange doctor review. Completing this task only acknowledges the reminder; it does not renew treatment, change an authorisation or record a clinical review.',
                             priority=ClinicalTask.Priority.HIGH if authorization.review_due_date <= today else ClinicalTask.Priority.NORMAL,
                             due_at=timezone.make_aware(datetime.combine(authorization.review_due_date, time(9))))

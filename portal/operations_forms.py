@@ -64,8 +64,8 @@ class DoseForm(forms.ModelForm):
     price_from = forms.DateField(
         label='New price applies from', required=False, widget=forms.DateInput(attrs={'type': 'date'}),
         help_text='Today changes the price now. A later date keeps the current price until then: billing periods that '
-                  'start on or after it use the new price, and on that day patients on this dose are asked to approve '
-                  'their debit order for the new amount.')
+                  'start on or after it use the new price, and on that day patients on this dose whose card was approved '
+                  'for less are asked to confirm it for the new amount.')
 
     class Meta:
         model = MedicationDose
@@ -240,12 +240,21 @@ class ShipmentCreateForm(forms.Form):
 
 
 class ShipmentChangeForm(forms.Form):
-    """When a parcel that isn't locked goes out, and how many pens each line has."""
+    """When a parcel that isn't locked goes out, and how many pens each line has. A prescription parcel can take
+    everything after it along (James, 25 Nov 2026): care.prescriptions.move_with_later_parcels."""
 
+    ONLY_THIS, WITH_LATER = 'this', 'later'
     scheduled_for = forms.DateField(label='Planned dispatch date', widget=forms.DateInput(attrs={'type': 'date'}))
+    move = forms.ChoiceField(
+        label='Move', widget=forms.RadioSelect, initial=ONLY_THIS,
+        choices=((ONLY_THIS, 'Only this parcel'), (WITH_LATER, 'This parcel and everything after it')),
+        help_text='Everything after it moves by the same whole weeks: the patient’s later parcels, their payments (a '
+                  'week before each parcel) and the prescription’s end. The patient sees it in Prescription changes.')
 
-    def __init__(self, *args, items=(), **kwargs):
+    def __init__(self, *args, items=(), prescription=False, **kwargs):
         super().__init__(*args, **kwargs)
+        if not prescription:
+            del self.fields['move']
         self.items = list(items)
         for item in self.items:
             self.fields[f'pens_{item.pk}'] = forms.IntegerField(
@@ -253,6 +262,9 @@ class ShipmentChangeForm(forms.Form):
 
     def quantities(self):
         return {item.pk: self.cleaned_data[f'pens_{item.pk}'] for item in self.items}
+
+    def with_later(self):
+        return self.cleaned_data.get('move') == self.WITH_LATER
 
 
 class ShipmentActionForm(forms.Form):
@@ -283,6 +295,9 @@ class ShipmentActionForm(forms.Form):
             self.fields[f'batch_{item.pk}'] = forms.CharField(
                 label=f'Batch and expiry: {item.product} (optional)', required=False, max_length=120, initial=item.batch_note,
                 help_text='Recorded with the dispatch, e.g. SG-2604, expiry 04/2027.')
+        # What to do and why first, then each line's batch, then the stock override (26 Nov 2026).
+        self.order_fields(['action', 'reason', *(f'batch_{item.pk}' for item in self.items), 'stock_override',
+                           'stock_override_reason', 'tracking_number'])
 
     def batch_notes(self):
         return {item.pk: self.cleaned_data.get(f'batch_{item.pk}', '') for item in self.items}

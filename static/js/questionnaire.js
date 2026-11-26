@@ -21,7 +21,7 @@
     const height = measure(heightInput);
     const weight = measure(weightInput);
     const bmi = weight / ((height / 100) ** 2);
-    if (bmiValue) bmiValue.textContent = height > 0 && weight > 0 && Number.isFinite(bmi) && bmi < 1000 ? `BMI ${bmi.toFixed(1)}` : 'BMI —';
+    if (bmiValue) bmiValue.textContent = height > 0 && weight > 0 && Number.isFinite(bmi) && bmi < 1000 ? `BMI ${bmi.toFixed(1)}` : 'BMI -';
   }
   function updatePracticeDocuments() {
     if (!practiceInput || !documents.length) return;
@@ -37,6 +37,29 @@
   updateProgress();
   updateBmi();
   updatePracticeDocuments();
+
+  // The Terms and Conditions and the Privacy Policy, each read in a dialog (Dr Czech, 26 Nov 2026). Inside the
+  // practice's WordPress page the frame is as tall as the form, so a centred dialog could open out of sight: it opens
+  // by its button instead, and the page scrolls to it (static/js/questionnaire_embed.js).
+  const embedded = document.documentElement.classList.contains('questionnaire-embed');
+  form.querySelectorAll('[data-consent-open]').forEach((button) => {
+    const dialog = document.getElementById(button.dataset.consentOpen);
+    if (!dialog || typeof dialog.showModal !== 'function') return;
+    button.hidden = false;
+    listen(button, 'click', () => {
+      if (embedded) {
+        const top = Math.max(12, Math.round(button.getBoundingClientRect().top + window.pageYOffset) - 160);
+        dialog.style.marginTop = `${top}px`;
+        document.dispatchEvent(new CustomEvent('questionnaire:scroll-to', { detail: top }));
+      }
+      dialog.showModal();
+    });
+    listen(dialog, 'click', (event) => {
+      // The close button, or a click on the shade around the dialog.
+      if (event.target.closest('[data-consent-close]') || event.target === dialog) dialog.close();
+    });
+    listen(dialog, 'close', () => button.focus());
+  });
 })();
 
 });

@@ -44,6 +44,27 @@
 .questionnaire-consent-documents { margin: 1.1rem 0 1.5rem; }
 .questionnaire-practice-consent h3 { color: var(--c-52747d); font-size: .9rem; margin: 0 0 .75rem; }
 .questionnaire-practice-consent[hidden] { display: none; }
+/* Each document opens in a dialog (Dr Czech, 26 Nov 2026); without scripts it opens in place. */
+.questionnaire-consent-list { display: flex; flex-wrap: wrap; gap: .6rem; list-style: none; margin: 0; padding: 0; }
+.questionnaire-consent-open { align-items: center; background: var(--c-ffffff); border: 1px solid var(--c-cfdfe5); border-radius: .65rem; color: var(--c-1e3b49); cursor: pointer; display: inline-flex; font: inherit; font-size: .9rem; font-weight: 650; gap: .5rem; line-height: 1.4; padding: .65rem 1rem; }
+.questionnaire-consent-open[hidden] { display: none; }
+.questionnaire-consent-open svg { fill: none; flex: 0 0 auto; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.7; }
+.questionnaire-consent-open:hover { background: var(--c-e7f4fa); border-color: var(--c-a9d6e1); }
+.questionnaire-consent-open:focus-visible { outline: 3px solid var(--c-183f50); outline-offset: 3px; }
+.questionnaire-dialog { background: var(--c-ffffff); border: 0; border-radius: 1rem; box-shadow: 0 24px 60px var(--c-183643-220); color: var(--c-1e3b49); max-height: calc(100vh - 2rem); max-width: min(48rem, calc(100vw - 2rem)); padding: 0; width: 100%; }
+.questionnaire-dialog::backdrop { background: var(--c-183643-350); }
+.questionnaire-dialog__body { display: flex; flex-direction: column; max-height: calc(100vh - 2rem); padding: 1.4rem 1.5rem 1.25rem; }
+.questionnaire-dialog h2 { color: var(--c-193b43); font-size: 1.15rem; font-weight: 700; margin: 0; }
+.questionnaire-dialog__sub { color: var(--c-77909a); font-size: .85rem; margin: .25rem 0 .9rem; }
+.questionnaire-dialog__text { border: 1px solid var(--c-dde8ed); border-radius: .7rem; color: var(--c-587780); flex: 1 1 auto; font-size: .9rem; line-height: 1.65; min-height: 8rem; overflow: auto; overflow-wrap: anywhere; padding: .9rem 1.05rem; }
+.questionnaire-dialog__text > p:first-child { margin-top: 0; }
+.questionnaire-dialog__text > p:last-child { margin-bottom: 0; }
+.questionnaire-dialog__text:focus-visible { outline: 3px solid var(--c-183f50); outline-offset: 2px; }
+.questionnaire-dialog__actions { display: flex; justify-content: flex-end; margin-top: 1rem; }
+/* Inside the WordPress page the frame is as tall as the form: the dialog opens by its button, at a height a phone
+   shows below the site's header (static/js/questionnaire.js). */
+html.questionnaire-embed .questionnaire-dialog { margin-bottom: auto; }
+html.questionnaire-embed .questionnaire-dialog, html.questionnaire-embed .questionnaire-dialog__body { max-height: 30rem; }
 .questionnaire-consent-document { border-bottom: 1px solid var(--c-dde8ed); margin-bottom: .5rem; padding-bottom: .7rem; }
 .questionnaire-consent-document summary { color: var(--c-122933); cursor: pointer; font-size: .87rem; font-weight: 650; line-height: 1.5; }
 .questionnaire-consent-document summary span { color: var(--c-77909a); font-size: .78rem; font-weight: 400; }

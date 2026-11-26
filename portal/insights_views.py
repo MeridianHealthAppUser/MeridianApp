@@ -1,6 +1,7 @@
 """Insights and Cohorts, for the practice's Super Admin (care.insights; Dr Czech, Nov 2026). Insights has a chart for
 each of his measures over all time or a chosen period; Cohorts has the retention views from his notes. Both carry the
-practice's dated notes (InsightNote) as markers. Historical data holds the monthly figures from before the app."""
+practice's dated notes (InsightNote) as markers, each on the chart it was added to: every chart over time has its own
+Notes button (Dr Czech, 26 Nov 2026). Historical data holds the monthly figures from before the app."""
 
 from datetime import date, timedelta
 
@@ -68,8 +69,7 @@ class InsightsPeriodForm(forms.Form):
 class InsightNoteForm(forms.ModelForm):
     class Meta:
         model = InsightNote
-        fields = ('on', 'label')
-        widgets = {'on': forms.DateInput(attrs={'type': 'date'}), 'label': forms.TextInput(attrs={'placeholder': 'Decreased price to R1000'})}
+        fields = ('chart', 'on', 'label')
 
 
 @method_decorator(never_cache, name='dispatch')
@@ -86,10 +86,15 @@ class InsightsBase(LoginRequiredMixin, StaffCompanyRequiredMixin, View):
     def context(self, **kwargs):
         return dict(company=self.company, active_membership=self.membership, nav_section=self.nav_section, **kwargs)
 
-    def notes_context(self, request):
-        return dict(note_form=InsightNoteForm(initial={'on': reporting_today()}, auto_id='note_%s'),
+    def notes_context(self, request, charts):
+        """Each chart's notes, newest first, for its Notes button (with their count) and its dialog."""
+        titles = dict(InsightNote.Chart.choices)
+        by_chart = {chart: [] for chart in charts}
+        for note in InsightNote.objects.for_company(self.company).filter(chart__in=charts).order_by('-on', '-pk'):
+            by_chart[note.chart].append(note)
+        return dict(note_charts=[{'key': chart, 'title': titles[chart], 'notes': by_chart[chart]} for chart in charts],
+                    note_counts={chart: len(by_chart[chart]) for chart in charts}, note_today=reporting_today(),
                     note_context=make_workflow_context(request, self.company, 'insight-note'),
-                    notes=InsightNote.objects.for_company(self.company).order_by('-on', '-pk'),
                     next_url=request.get_full_path())
 
 
@@ -97,27 +102,61 @@ def series(key, label, values, tone):
     return {'key': key, 'label': label, 'values': list(values), 'tone': tone}
 
 
+# The charts on Insights that take notes, in page order; Cohorts' fixed-month trends share one (retention).
+INSIGHTS_NOTE_CHARTS = ('bookings', 'sources', 'signups', 'mrr', 'dropouts', 'churn', 'doctors')
+COHORTS_NOTE_CHARTS = ('retention',)
+
+
+def ratio(top, bottom):
+    """top ÷ bottom to two places, or None (a gap in the line) when there is nothing to divide by."""
+    return round(top / bottom, 2) if bottom else None
+
+
+def doctor_charts(data, x):
+    """Each doctor, per month, three ways (Dr Czech, 26 Nov 2026), one colour per doctor in all three: consults (solid)
+    and signups (dashed); consults per signup; and Semaglutide signups per Tirzepatide signup. A month a doctor had
+    nothing to divide by is a gap. All three take the doctors chart's notes."""
+    doctors = list(enumerate(data['doctors'][:8], start=1))
+    signups = {doctor['id']: data['doctor_signups'][doctor['id']] for _, doctor in doctors}
+    total = {key: [sum(values) for values in zip(*months.values())] for key, months in signups.items()}
+    both = []
+    for position, doctor in doctors:
+        both += [series(f'doctor-{doctor["id"]}-consults', f'{doctor["name"]}: consults', data['doctor_consults'][doctor['id']], position),
+                 {**series(f'doctor-{doctor["id"]}-signups', f'{doctor["name"]}: signups', total[doctor['id']], position), 'dash': True}]
+    legend = [*({'label': doctor['name'], 'tone': position} for position, doctor in doctors),
+              {'label': 'Consults', 'tone': 'total'}, {'label': 'Signups', 'tone': 'total', 'dash': True}]
+    return {
+        'doctors': {'kind': 'line', 'x': x, 'format': 'int', 'notes': 'doctors', 'legend': legend, 'series': both},
+        'doctors-ratio': {'kind': 'line', 'x': x, 'format': 'ratio', 'notes': 'doctors', 'series': [
+            series(f'doctor-{doctor["id"]}', doctor['name'],
+                   [ratio(consults, signed) for consults, signed in zip(data['doctor_consults'][doctor['id']], total[doctor['id']])], position)
+            for position, doctor in doctors]},
+        'doctors-mix': {'kind': 'line', 'x': x, 'format': 'ratio', 'notes': 'doctors', 'series': [
+            series(f'doctor-{doctor["id"]}', doctor['name'],
+                   [ratio(sema, tirz) for sema, tirz in zip(signups[doctor['id']]['semaglutide'], signups[doctor['id']]['tirzepatide'])], position)
+            for position, doctor in doctors]},
+    }
+
+
 def overview_charts(data):
-    """What static/js/insights_charts.js draws, chart by chart. Semaglutide and Tirzepatide keep the same colours
-    everywhere; an All line is the neutral ink."""
+    """What static/js/insights_charts.js draws, chart by chart, each with the chart its notes are for. Semaglutide and
+    Tirzepatide keep the same colours everywhere; an All line is the neutral ink."""
     x = data['keys']
-    doctors = data['doctors']
     medicines = [series(key, label, data['signups'][key], position) for position, (key, label) in enumerate(MEDICINES, start=1)]
     weight = data['weight_by_month']
     return {
-        'bookings': {'kind': 'line', 'x': x, 'format': 'int', 'notes': True, 'series': [
+        'bookings': {'kind': 'line', 'x': x, 'format': 'int', 'notes': 'bookings', 'series': [
             series('all', 'All bookings', data['bookings']['all'], 'total'),
             series('new', 'New', data['bookings']['new'], 1), series('follow_up', 'Follow-up', data['bookings']['follow_up'], 2)]},
-        'sources': {'kind': 'stacked', 'x': x, 'format': 'int', 'notes': True, 'series': [
+        # A line a source (Dr Czech, 26 Nov 2026): a patient can tick more than one, so they don't add up to a whole.
+        'sources': {'kind': 'line', 'x': x, 'format': 'int', 'notes': 'sources', 'series': [
             series(key, label, data['sources'][key], position) for position, (key, label) in enumerate(SOURCES, start=1)]},
-        'signups': {'kind': 'line', 'x': x, 'format': 'int', 'notes': True, 'series': [
+        'signups': {'kind': 'line', 'x': x, 'format': 'int', 'notes': 'signups', 'series': [
             series('all', 'All new subscriptions', data['signups']['all'], 'total'), *medicines]},
-        'mrr': {'kind': 'line', 'x': x, 'format': 'rand', 'notes': True, 'series': [series('mrr', 'Monthly recurring revenue', data['mrr'], 1)]},
-        'dropouts': {'kind': 'bars', 'x': x, 'format': 'int', 'notes': True, 'series': [series('dropouts', 'Dropouts', data['dropouts'], 1)]},
-        'churn': {'kind': 'line', 'x': x, 'format': 'pct', 'notes': True, 'series': [series('churn', 'Churn', data['churn'], 1)]},
-        'doctors': {'kind': 'line', 'x': x, 'format': 'int', 'notes': True, 'series': [
-            series(f'doctor-{doctor["id"]}', doctor['name'], data['doctor_consults'][doctor['id']], position)
-            for position, doctor in enumerate(doctors[:8], start=1)]},
+        'mrr': {'kind': 'line', 'x': x, 'format': 'rand', 'notes': 'mrr', 'series': [series('mrr', 'Monthly recurring revenue', data['mrr'], 1)]},
+        'dropouts': {'kind': 'bars', 'x': x, 'format': 'int', 'notes': 'dropouts', 'series': [series('dropouts', 'Dropouts', data['dropouts'], 1)]},
+        'churn': {'kind': 'line', 'x': x, 'format': 'pct', 'notes': 'churn', 'series': [series('churn', 'Churn', data['churn'], 1)]},
+        **doctor_charts(data, x),
         'weight': {'kind': 'line', 'x': [f'M{month}' for month in range(13)], 'axis': 'months', 'format': 'kg', 'series': [
             {**series(key, MEDICINE_LABELS[key], [value for value, _ in points], position),
              'counts': [count for _, count in points]} for position, (key, points) in enumerate(weight, start=1)]},
@@ -150,7 +189,7 @@ class InsightsView(InsightsBase):
             chart_notes=data['notes'], sources=SOURCES, medicines=MEDICINES,
             figure_columns=FIGURE_COLUMNS, figure_rows=figure_rows,
             figures_context=make_workflow_context(request, self.company, 'insight-figures'),
-            export_query=request.GET.urlencode(), **self.notes_context(request)))
+            export_query=request.GET.urlencode(), **self.notes_context(request, INSIGHTS_NOTE_CHARTS)))
 
     def xlsx(self, request, data, shown):
         """The months on the page as an Excel sheet, one row a month."""
@@ -213,14 +252,14 @@ class CohortsView(InsightsBase):
                 for item in data['years']]},
         }
         for milestone in data['milestones']:
-            charts[f"m{milestone['months']}"] = {'kind': 'line', 'x': data.get('keys', []), 'format': 'pct', 'notes': True, 'max': 100,
+            charts[f"m{milestone['months']}"] = {'kind': 'line', 'x': data.get('keys', []), 'format': 'pct', 'notes': 'retention', 'max': 100,
                                                  'series': [series(f"m{milestone['months']}", f"Month {milestone['months']}", milestone['values'], 1)]}
         return render(request, 'portal/insights_cohorts.html', self.context(
             data=data, rows=rows, horizon_range=range(shown + 1), grouping=grouping, years=years, year=year,
             medicine=medicine, medicines=MEDICINES, medicine_label=MEDICINE_LABELS.get(medicine, 'All patients'),
             charts=charts, chart_notes=data['notes'], milestones=[(m['months'], f"m{m['months']}", f"Month {m['months']}") for m in data['milestones']],
             kpi_rows=[(months, *data['kpis'][months]) for months in (1, 3, 6, 12)] if data['kpis'] else [],
-            **self.notes_context(request)))
+            **self.notes_context(request, COHORTS_NOTE_CHARTS)))
 
 
 def heat_step(value):
@@ -254,20 +293,21 @@ class InsightNoteView(InsightsBase):
         if pk is not None:
             note = get_object_or_404(InsightNote.objects.for_company(self.company), pk=pk)
             record_audit(company=self.company, actor=request.user, action='insight_note.deleted', target=note, request=request,
-                         metadata={'on': note.on.isoformat(), 'label': note.label})
+                         metadata={'chart': note.chart, 'on': note.on.isoformat(), 'label': note.label})
             note.delete()
             messages.success(request, 'Note removed.')
             return back_to(request)
         form = InsightNoteForm(request.POST)
         if not form.is_valid():
-            messages.error(request, 'Add a date and a note of up to 160 characters.')
+            messages.error(request, 'Add a date and a note of up to 160 characters.' if form.cleaned_data.get('chart')
+                           else 'Add the note from the chart it is for.')
             return back_to(request)
         note = form.save(commit=False)
         note.company, note.created_by = self.company, request.user
         note.full_clean()
         note.save()
         record_audit(company=self.company, actor=request.user, action='insight_note.created', target=note, request=request)
-        messages.success(request, f'Note added for {note.on:%-d %b %Y}.')
+        messages.success(request, f'Note added to {note.get_chart_display()} for {note.on:%-d %b %Y}.')
         return back_to(request)
 
 

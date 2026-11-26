@@ -230,13 +230,13 @@ class DispatchHistoryTests(OperationsPortalFixture):
         self.address.save()
         response = self.history()
         self.assertEqual(HistoryLinks(response).headers,
-                         ['Patient', 'Doctor', 'Delivered to', 'Parcel', 'Dispatched', 'Status', 'Note', 'Actions'])
+                         ['Patient', 'Delivered to', 'Parcel', 'Dispatched', 'Status', 'Note', 'Actions'])
         self.assertNotContains(response, '<th scope="col">Patient at dispatch</th>', html=True)
         self.assertContains(response, 'Original patient at dispatch')
         self.assertContains(response, 'Original medicine')
         self.assertContains(response, 'Original address, Original city')
         self.assertContains(response, 'ORIGINAL-PHONE')
-        self.assertContains(response, 'Original recipient')
+        self.assertNotContains(response, 'Original recipient')  # The Patient column has the name (26 Nov 2026).
         self.assertNotContains(response, 'Changed patient')
         self.assertNotContains(response, 'Changed medicine')
         for changed in ('Changed address', 'CHANGED-PHONE', 'Changed recipient', 'Older booked address', 'BOOKED-PHONE'):
@@ -281,7 +281,8 @@ class DispatchHistoryTests(OperationsPortalFixture):
         response = self.history()
         self.assertContains(response, 'Booked street, Booked city')
         self.assertContains(response, 'BOOKED-PHONE')
-        self.assertContains(response, 'Booked recipient')
+        # Not the recipient's name again (James, 26 Nov 2026): the Patient column has it.
+        self.assertNotContains(response, 'Booked recipient')
         self.assertNotContains(response, 'Changed current address')
         self.assertNotContains(response, 'CHANGED-PHONE')
         _, workbook = self.workbook()

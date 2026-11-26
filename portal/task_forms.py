@@ -28,7 +28,7 @@ class TaskEditorForm(TagFieldsMixin, CompanyBoundModelForm):
         self.fields['description'].widget.attrs['maxlength'] = 10000
         self.fields['patient'].queryset = Patient.objects.for_company(company).filter(is_active=True)
         self.fields['patient'].required = False
-        self.fields['patient'].empty_label = 'General practice — no patient'
+        self.fields['patient'].empty_label = 'General practice: No patient'
         self.fields['assigned_to'].queryset = get_user_model().objects.filter(
             is_active=True, company_memberships__company=company, company_memberships__is_active=True,
         ).distinct().order_by('first_name', 'last_name', 'email')

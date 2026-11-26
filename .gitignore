@@ -20,3 +20,4 @@ staticfiles/
 *.key
 *.p12
 *.pfx
+/.playwright-cli

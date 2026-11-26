@@ -270,13 +270,13 @@ class PatientStandalonePagesTests(TestCase):
 
     def test_message_history_opens_latest_page_and_preserves_older_messages(self):
         entries = [
-            self.message(body=f'History message {number:03d} — complete clinical conversation text.')
+            self.message(body=f'History message {number:03d}: Complete clinical conversation text.')
             for number in range(55)
         ]
         self.login()
         response = self.page('patient-messages', thread=self.thread.pk)
-        self.assertContains(response, 'History message 054 — complete clinical conversation text.')
-        self.assertNotContains(response, 'History message 000 — complete clinical conversation text.')
+        self.assertContains(response, 'History message 054: Complete clinical conversation text.')
+        self.assertNotContains(response, 'History message 000: Complete clinical conversation text.')
         history_page = response.context['message_page_obj']
         self.assertEqual(history_page.paginator.per_page, 50)
         self.assertEqual(len(history_page), 50)
@@ -285,7 +285,7 @@ class PatientStandalonePagesTests(TestCase):
         self.assertIsNone(entries[0].read_at)
         self.assertIsNotNone(entries[-1].read_at)
         response = self.client.get(response.context['older_messages_url'])
-        self.assertContains(response, 'History message 000 — complete clinical conversation text.')
+        self.assertContains(response, 'History message 000: Complete clinical conversation text.')
         # The thread list may still preview its latest message; only the open
         # conversation's paginated history should switch to the older entries.
         visible_ids = {item.pk for item in response.context['selected_thread'].conversation_messages}

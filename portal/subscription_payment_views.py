@@ -53,10 +53,15 @@ class SubscriptionDiscountForm(forms.Form):
         return data
 
 
+# The list a subscription's payments open from: Shipping > Billing's Payments column (James, 26 Nov 2026: moved there
+# from Patient orders > Subscriptions).
+PAYMENTS_LIST = 'ops-billing'
+
+
 def payment_popup(request, company, plan, *, form=None, schedule=None):
     schedule = schedule or payment_schedule(plan)
-    base = reverse('portal:treatment-subscriptions')
-    candidate = (request.get_full_path() if request.resolver_match.url_name == 'treatment-subscriptions'
+    base = reverse(f'portal:{PAYMENTS_LIST}')
+    candidate = (request.get_full_path() if request.resolver_match.url_name == PAYMENTS_LIST
                  else request.POST.get('return_to') or request.GET.get('return_to') or base)
     parts = urlsplit(candidate)
     query = [(key, value) for key, value in parse_qsl(parts.query) if key != 'payments']
@@ -92,7 +97,7 @@ class SubscriptionPaymentsView(LoginRequiredMixin, StaffCompanyRequiredMixin, Vi
 
     def display(self, request, plan, *, form=None, schedule=None, status=200):
         return render(request, 'portal/subscription_payments.html', dict(company=self.company,
-            active_membership=self.membership, nav_section='subscriptions', payment_open=True,
+            active_membership=self.membership, nav_section='billing', payment_open=True,
             **payment_popup(request, self.company, plan, form=form, schedule=schedule)), status=status)
 
     def get(self, request, pk):
@@ -123,7 +128,7 @@ class SubscriptionPaymentsView(LoginRequiredMixin, StaffCompanyRequiredMixin, Vi
                     (f' {skipped} payment(s) already processing were left unchanged.' if skipped else ''))
                 target = request.POST.get('return_to', '')
                 parts = urlsplit(target)
-                if parts.scheme or parts.netloc or parts.path != reverse('portal:treatment-subscriptions'):
+                if parts.scheme or parts.netloc or parts.path != reverse(f'portal:{PAYMENTS_LIST}'):
                     return redirect('portal:subscription-payments', pk=plan.pk)
                 query = [(key, value) for key, value in parse_qsl(parts.query) if key != 'payments']
                 query.append(('payments', str(plan.pk)))

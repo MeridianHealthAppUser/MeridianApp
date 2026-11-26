@@ -141,7 +141,8 @@ class ShipmentConfirmationTests(OperationsFixture):
                              locked_at=timezone.now() - timedelta(days=2), waybill='existing-waybill')
         before = Shipment.objects.filter(pk=held.pk).values().get()
         for gate in ('clinical', 'address', 'payment'):
-            self.plan.status = 'paused' if gate == 'clinical' else 'active'
+            # A cancelled plan blocks every parcel (a paused one lets through a parcel already paid for).
+            self.plan.status = 'cancelled' if gate == 'clinical' else 'active'
             self.plan.save(update_fields=('status',))
             self.address.phone = '' if gate == 'address' else '082 555 0114'
             self.address.save(update_fields=('phone',))

@@ -47,7 +47,10 @@ class SubscriptionDiscountTests(BillingFixture):
         self.assertEqual((first.amount, second.amount), (Decimal('2795'), Decimal('3295')))
 
     def test_effective_date_and_future_uncreated_cycles_use_discounted_amount(self):
-        effective = self.today + timedelta(weeks=4)
+        from .parcels import first_shipping_day
+
+        # From the second payment's day: a week before the second parcel.
+        effective = first_shipping_day(self.today, self.company) + timedelta(weeks=3)
         apply_discount(subscription=self.plan, actor=self.admin, kind='percent', value=Decimal('10'), effective_on=effective)
         self.plan.next_debit_on = self.today
         self.plan.save(update_fields=['next_debit_on'])

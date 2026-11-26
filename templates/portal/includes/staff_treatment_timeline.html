@@ -1,0 +1,23 @@
+{% comment %}A subscription's treatment timeline for the practice (James, 26 Nov 2026): the weeks the patient sees on My
+  Treatment, in the practice's words. The content of the #subscription-timeline dialog on Patient orders > Subscriptions
+  and the record's Treatment tab (loaded by static/js/subscription_timeline.js), or of the page that opens it without
+  scripts (portal/subscription_timeline.html).{% endcomment %}
+<div class="app-dialog__body">
+  <h2 id="subscription-timeline-heading">Treatment timeline</h2>
+  <p class="app-dialog__sub">{{ timeline_plan.patient }} · {{ timeline_plan.plan_name }}. Week by week: the doctor’s decisions, the pens sent, the dose and the payments.</p>
+  {% if not timeline %}<p class="app-dialog__sub">No weekly timeline: this subscription isn’t for a dose in the catalogue.</p>
+  {% else %}
+    {% if timeline.not_started %}<p class="app-dialog__sub"><strong>Not started: treatment starts with the first payment.</strong> These dates assume it is paid today.</p>
+    {% elif timeline.waiting_for_doctor %}<p class="app-dialog__sub"><strong>Waiting for the doctor to confirm the prescription.</strong> The first pens go out once they have.</p>{% endif %}
+    <div class="patient-timeline__tools">
+      <ul class="patient-timeline__key" aria-label="Key">
+        <li class="patient-timeline__chip patient-timeline__chip--event">Prescription</li>
+        <li class="patient-timeline__chip patient-timeline__chip--parcel">Shipment</li>
+        <li class="patient-timeline__chip patient-timeline__chip--dose">Dosage</li>
+        <li class="patient-timeline__chip patient-timeline__chip--payment">Payment</li>
+      </ul>
+    </div>
+    {% include 'portal/includes/treatment_timeline_weeks.html' with staff=True %}
+  {% endif %}
+  <div class="app-dialog__actions"><a class="console-button console-button--secondary" href="{{ timeline_return }}" data-dialog-close>Close</a></div>
+</div>

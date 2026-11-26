@@ -48,7 +48,8 @@ class ReportingPortalFixture(ReportingFixture):
         return response.context['workflow_context']
 
     def prepare(self, **extra):
-        data = dict(doctor=self.doctor.pk, start=self.start, end=self.end, confirm='on', **RATES)
+        # No tick box to confirm the rates (Dr Czech, 26 Nov 2026).
+        data = dict(doctor=self.doctor.pk, start=self.start, end=self.end, **RATES)
         data.update(extra)
         data.setdefault('workflow_context', self.token('activity-statement-create'))
         return self.client.post(self.url('activity-statement-create'), data)
@@ -115,7 +116,7 @@ class StatementPortalTests(ReportingPortalFixture):
         response = client.get(self.url('activity-statement-create'))
         self.assertEqual(client.post(self.url('activity-statement-create'), {
             'workflow_context': response.context['workflow_context'], 'doctor': self.doctor.pk,
-            'start': self.start, 'end': self.end, 'confirm': 'on', **RATES}).status_code, 403)
+            'start': self.start, 'end': self.end, **RATES}).status_code, 403)
         statement = self.statement()
         response = client.get(self.url('activity-statement-detail', statement))
         self.assertEqual(client.post(self.url('activity-statement-detail', statement), {
@@ -123,8 +124,8 @@ class StatementPortalTests(ReportingPortalFixture):
         statement.refresh_from_db()
         self.assertIsNone(statement.approved_at)
 
-    def test_validation_requires_confirmation_rates_and_nonoverlapping_past_period(self):
-        for extra in ({'confirm': ''}, {'initial': ''}, {'initial': '-1'}, {'messages': 'NaN'},
+    def test_validation_requires_rates_and_nonoverlapping_past_period(self):
+        for extra in ({'initial': ''}, {'initial': '-1'}, {'messages': 'NaN'},
                       {'end': self.today}, {'doctor': self.beta_admin.pk}, {'end': '9999-12-31'}):
             with self.subTest(extra=extra):
                 self.assertEqual(self.prepare(**extra).status_code, 400)

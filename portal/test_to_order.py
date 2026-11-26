@@ -128,7 +128,7 @@ class ToOrderPageTests(OperationsPortalFixture):
         self.assertEqual(parse_qs(urlsplit(setup_links[0]['href']).query)['lead-time'], [str(self.open_product.pk)])
         lead_cells = [cell['text'] for cell in markup.cells if cell['label'] == 'Lead time (weeks)']
         self.assertEqual(lead_cells.count('0'), 2)
-        self.assertEqual(lead_cells.count('—'), 1)
+        self.assertEqual(lead_cells.count('-'), 1)
         self.assertNotContains(response, self.beta_product.name)
         self.assertNotContains(response, 'Inactive private product')
         self.assertNotContains(response, 'purchasing-placeholder')

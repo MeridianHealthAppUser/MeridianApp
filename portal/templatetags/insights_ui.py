@@ -8,7 +8,7 @@ register = template.Library()
 @register.filter
 def grouped(value):
     if value is None or value == '':
-        return '—'
+        return '-'
     try:
         number = float(value)
     except (TypeError, ValueError):
@@ -21,8 +21,14 @@ def grouped(value):
 @register.filter
 def rand(value):
     if value is None or value == '':
-        return '—'
+        return '-'
     try:
         return f'R{round(float(value)):,}'.replace(',', ' ')
     except (TypeError, ValueError):
         return value
+
+
+@register.filter
+def of(mapping, key):
+    """mapping[key] in a template, for a key held in a variable: a chart's notes count."""
+    return (mapping or {}).get(key)

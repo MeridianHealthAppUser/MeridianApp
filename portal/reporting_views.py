@@ -42,7 +42,6 @@ class StatementCreateForm(forms.Form):
     follow_up = forms.DecimalField(label='Per follow-up consult (R)', min_value=0, max_value=100000, decimal_places=2)
     messages = forms.DecimalField(label='Per message answered (R)', min_value=0, max_value=100000, decimal_places=2)
     review = forms.DecimalField(label='Per blood result reviewed (R)', min_value=0, max_value=100000, decimal_places=2)
-    confirm = forms.BooleanField(label='I have checked these explicit rates. This creates a local draft statement only.')
 
     def __init__(self, *args, company, **kwargs):
         super().__init__(*args, **kwargs)
@@ -311,7 +310,7 @@ class StatementDetailView(StatementView):
         if self.export:
             return _csv_response(f'activity-statement-{record.pk}.csv', ('Activity', 'Count', 'Rate (ZAR)', 'Reference amount (ZAR)'),
                 [(f'{self.company.name} | {record.doctor.full_name} | {record.period_start} to {record.period_end}', '', '', ''),
-                 ('Approved snapshot — no payment made' if record.approved_at else 'Draft — no payment made', '', '', ''), *rows, ('Total', '', '', record.amount)])
+                 ('Approved snapshot: No payment made' if record.approved_at else 'Draft: No payment made', '', '', ''), *rows, ('Total', '', '', record.amount)])
         return self.display(request, record)
 
     @transaction.atomic

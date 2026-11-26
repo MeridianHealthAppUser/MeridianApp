@@ -63,6 +63,8 @@ class InsightsMeasureTests(InsightsFixture):
         book('follow_up', date(2026, 10, 12))
         book('initial', date(2026, 10, 14), status='cancelled')  # Not a booking.
         book('review', date(2026, 11, 3))
+        # A month with historical data has no follow-ups: the app's bookings then were tests (Dr Czech, 26 Nov 2026).
+        book('follow_up', date(2026, 9, 21))
         InsightFigure.objects.create(company=self.company, month=date(2026, 9, 1), metric='new_bookings', value=40)
         InsightFigure.objects.create(company=self.company, month=date(2026, 9, 1), metric='source_google', value=31)
         self.screened(self.person('Booked'), heard_from=['google', 'facebook'], submitted=date(2026, 10, 2))
@@ -111,6 +113,50 @@ class InsightsMeasureTests(InsightsFixture):
         self.assertEqual(july['cells'][by_doctor[self.doctor.pk]], {'consults': 0, 'semaglutide': 1, 'tirzepatide': 0})
         august = next(row for row in data['doctor_months'] if row['month'] == date(2026, 8, 1))
         self.assertEqual(august['cells'][by_doctor[self.colleague.pk]], {'consults': 0, 'semaglutide': 0, 'tirzepatide': 1})
+
+    def test_each_doctor_three_ways(self):
+        from portal.insights_views import overview_charts
+
+        def consult(doctor, day):
+            Appointment.objects.create(company=self.company, patient=self.patient, clinician=doctor, appointment_type='initial',
+                                       starts_at=at(day), duration_minutes=15, status='completed')
+        for day in (2, 9, 16):
+            consult(self.doctor, date(2026, 9, day))
+        consult(self.colleague, date(2026, 10, 7))
+        self.subscribe(self.person('One'), self.sema, date(2026, 9, 3), paid=1)
+        self.subscribe(self.person('Two'), self.tirz, date(2026, 9, 10), paid=1)
+        self.subscribe(self.person('Three'), self.sema, date(2026, 10, 1), paid=1, doctor=self.colleague)
+        data = overview(self.company, start=date(2026, 9, 1), end=date(2026, 10, 31), today=TODAY)
+        charts = overview_charts(data)
+        mine, theirs = (f'doctor-{doctor.pk}' for doctor in (self.doctor, self.colleague))
+        lines = {line['key']: line for line in charts['doctors']['series']}
+        # Consults and signups: a solid line and a dashed one a doctor, in the doctor's colour.
+        self.assertEqual((lines[f'{mine}-consults']['values'], lines[f'{mine}-signups']['values']), ([3, 0], [2, 0]))
+        self.assertTrue(lines[f'{mine}-signups']['dash'])
+        self.assertEqual(lines[f'{mine}-consults']['tone'], lines[f'{mine}-signups']['tone'])
+        self.assertEqual([key['label'] for key in charts['doctors']['legend']][-2:], ['Consults', 'Signups'])
+        # Consults per signup, and Semaglutide per Tirzepatide signup: a gap where there's nothing to divide by.
+        ratio = {line['key']: line['values'] for line in charts['doctors-ratio']['series']}
+        self.assertEqual((ratio[mine], ratio[theirs]), ([1.5, None], [None, 1.0]))
+        mix = {line['key']: line['values'] for line in charts['doctors-mix']['series']}
+        self.assertEqual((mix[mine], mix[theirs]), ([1.0, None], [None, None]))
+        self.assertEqual({charts[key]['notes'] for key in ('doctors', 'doctors-ratio', 'doctors-mix')}, {'doctors'})
+        # Sources of bookings is a line a source.
+        self.assertEqual(charts['sources']['kind'], 'line')
+
+    def test_the_demo_seed_has_the_historical_data_and_keeps_changed_figures(self):
+        from care.demo import seed_insight_figures
+
+        InsightFigure.objects.create(company=self.company, month=date(2026, 4, 1), metric='new_bookings', value=99)
+        added = seed_insight_figures(self.company)
+        figures = {(figure.month, figure.metric): figure.value for figure in InsightFigure.objects.filter(company=self.company)}
+        self.assertEqual(figures[(date(2024, 12, 1), 'new_bookings')], 7)
+        self.assertEqual(figures[(date(2026, 4, 1), 'source_instagram')], 17)
+        self.assertEqual(figures[(date(2026, 4, 1), 'new_bookings')], 99)  # Changed in the app: kept.
+        self.assertNotIn((date(2025, 8, 1), 'source_facebook'), figures)  # An empty cell.
+        self.assertFalse(any(metric == 'source_ai_overview' for _, metric in figures))
+        self.assertEqual(seed_insight_figures(self.company), 0)
+        self.assertEqual(added, len(figures) - 1)
 
     def test_weight_lost_from_the_screening_form_or_the_first_weight_to_the_latest(self):
         screened = self.person('Screened')
@@ -243,15 +289,36 @@ class InsightsPageTests(InsightsFixture):
         self.login(self.super_admin)
         page = self.client.get(reverse('portal:metrics'))
         next_url = reverse('portal:metrics') + '?start=2026-01-01'
+        # Dr Czech, 26 Nov 2026: the KPI's name, Sources' line, and Each doctor's three views.
+        self.assertContains(page, '<h2>Average subscription duration</h2>', html=False)
+        self.assertContains(page, 'As selected on the screening form, for patients who went on to book.')
+        for view in ('both', 'ratio', 'mix'):
+            self.assertContains(page, f'aria-controls="doctors-view-{view}"', html=False)
+        # A note belongs to the chart it was added from, and marks that chart only.
+        self.assertContains(page, 'data-modal-open="insight-notes-sources"', html=False)
+        self.assertContains(page, 'id="insight-notes-doctors"', html=False)
+        self.assertNotContains(page, 'data-modal-open="insight-notes"', html=False)
+        refused = self.client.post(reverse('portal:insight-notes'), {
+            'workflow_context': page.context['note_context'], 'next': next_url, 'on': '2026-11-03', 'label': 'No chart'})
+        self.assertRedirects(refused, next_url, fetch_redirect_response=False)
+        self.assertFalse(InsightNote.objects.exists())
         added = self.client.post(reverse('portal:insight-notes'), {
-            'workflow_context': page.context['note_context'], 'next': next_url, 'on': '2026-11-03', 'label': 'Decreased price to R1000'})
+            'workflow_context': page.context['note_context'], 'next': next_url, 'chart': 'signups', 'on': '2026-11-03',
+            'label': 'Decreased price to R1000'})
         self.assertRedirects(added, next_url, fetch_redirect_response=False)
         note = InsightNote.objects.get(company=self.company)
-        self.assertEqual((note.on, note.label, note.created_by), (date(2026, 11, 3), 'Decreased price to R1000', self.super_admin))
+        self.assertEqual((note.chart, note.on, note.label, note.created_by),
+                         ('signups', date(2026, 11, 3), 'Decreased price to R1000', self.super_admin))
         page = self.client.get(reverse('portal:metrics'))
         self.assertContains(page, 'Decreased price to R1000')
-        self.assertIn({'id': note.pk, 'month': '2026-11', 'on': '2026-11-03', 'label': 'Decreased price to R1000'},
+        self.assertIn({'id': note.pk, 'chart': 'signups', 'month': '2026-11', 'on': '2026-11-03', 'label': 'Decreased price to R1000'},
                       page.context['chart_notes'])
+        self.assertEqual(page.context['charts']['signups']['notes'], 'signups')
+        self.assertEqual(page.context['note_counts'], {**{chart: 0 for chart in page.context['note_counts']}, 'signups': 1})
+        self.assertContains(page, 'aria-label="Notes on New subscriptions per month, 1"', html=False)
+        # Cohorts has the fixed-month trends' notes only.
+        cohorts = self.client.get(reverse('portal:insights-cohorts'))
+        self.assertEqual([chart['key'] for chart in cohorts.context['note_charts']], ['retention'])
         # Elsewhere than Insights isn't somewhere to go back to.
         removed = self.client.post(reverse('portal:insight-note-delete', args=[note.pk]), {
             'workflow_context': page.context['note_context'], 'next': 'https://example.test/'})

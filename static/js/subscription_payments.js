@@ -61,18 +61,8 @@
     listen(form, 'input', preview);
     listen(form, 'change', preview);
   });
-  listen(document, 'click', event => {
-    const trigger = event.target.closest('[data-line-discount-open], [data-line-discount-cancel]');
-    if (!trigger || event.defaultPrevented || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) return;
-    const id = trigger.dataset.lineDiscountOpen || trigger.dataset.lineDiscountCancel;
-    const row = document.getElementById(id);
-    if (!row) return;
-    event.preventDefault();
-    const opening = Boolean(trigger.dataset.lineDiscountOpen) && row.hidden;
-    row.hidden = !opening;
-    const opener = row.closest('dialog').querySelector(`[data-line-discount-open="${id}"]`);
-    if (opener) opener.setAttribute('aria-expanded', String(opening));
-    if (opening) row.querySelector('input[name="value"]').focus();
-    else opener?.focus();
+  // A payment's discount opens in a dialog of its own (dialogs.js): straight to its amount.
+  document.querySelectorAll('dialog.subscription-line-dialog').forEach(dialog => {
+    listen(dialog, 'dialog:open', () => dialog.querySelector('input[name="value"]')?.focus());
   });
 });

@@ -31,6 +31,7 @@
 .staff-lead-consents { list-style: none; margin: 0; padding: 0 1.2rem; }
 .staff-lead-consents li { border-bottom: 1px solid var(--c-e6eef1); display: grid; gap: .35rem; padding: 1rem 0; }
 .staff-lead-consents li:last-child { border-bottom: 0; }
+.staff-lead-consents__read { justify-self: start; margin-top: .25rem; }
 .staff-lead-consents strong { color: var(--c-385a63); font-size: .84rem; line-height: 1.5; }
 .staff-lead-consents span, .staff-lead-consents time, .staff-lead-consents small { color: var(--c-7b949f); font-size: .77rem; line-height: 1.5; overflow-wrap: anywhere; }
 .staff-lead-screening-reasons { color: var(--c-6b858f); font-size: .85rem; line-height: 1.6; margin: 0; padding: 1.2rem 1.2rem 1.2rem 2.4rem; }

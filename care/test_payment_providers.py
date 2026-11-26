@@ -1,5 +1,6 @@
 """The payment providers' adapters: Peach Payments (cards) and Stitch (DebiCheck, cards, once-off payments), with each
-provider's HTTP calls stood in for. (care/peach.py was also run against Peach's public sandbox.)"""
+provider's HTTP calls stood in for. (care/peach.py was also run against Peach's public sandbox.) Stitch and DebiCheck are
+hidden while patients pay by card (DEBIT_ORDERS_ENABLED off), so its tests switch them back on."""
 
 import base64
 import hashlib
@@ -10,14 +11,16 @@ from datetime import timedelta
 from decimal import Decimal
 from unittest.mock import patch
 
-from django.core.exceptions import ValidationError
+from django.core.exceptions import ImproperlyConfigured, ValidationError
 from django.test import RequestFactory, override_settings
 from django.utils import timezone
 
 from . import stitch
 from .billing import apply_notice, collect_cycle, run_debits, start_debit_order, start_order_payment
 from .models import AuditEvent, ClinicalTask, DebitMandate, Payment, PharmacyOrder, SubscriptionCycle
-from .payment_providers import ProviderUnavailable, current_provider
+from .payment_providers import (
+    ProviderUnavailable, SandboxProvider, current_provider, hosted_providers, offered_methods, provider_named,
+)
 from .peach import PeachProvider, outcome
 from .test_billing import BillingFixture
 
@@ -27,7 +30,8 @@ PEACH = dict(PAYMENT_PROVIDER='peach', PEACH_API_URL='https://peach.test', PEACH
              PAYMENT_WEBHOOK_SECRET='00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff')
 STITCH_SECRET = 'whsec_' + base64.b64encode(b'stitch-test-signing-key').decode()
 STITCH = dict(PAYMENT_PROVIDER='stitch', STITCH_CLIENT_ID='test-client', STITCH_CLIENT_SECRET='secret',
-              STITCH_FILES_CLIENT_ID='test-client', SITE_URL='https://meridian.test', PAYMENT_WEBHOOK_SECRET=STITCH_SECRET)
+              STITCH_FILES_CLIENT_ID='test-client', SITE_URL='https://meridian.test', PAYMENT_WEBHOOK_SECRET=STITCH_SECRET,
+              DEBIT_ORDERS_ENABLED=True)
 
 
 class FakePeach:
@@ -70,7 +74,7 @@ class PeachTests(BillingFixture):
             self.assertEqual(outcome(code), state, code)
 
     def test_peach_takes_cards_only(self):
-        with self.assertRaisesMessage(ValidationError, 'card only'):
+        with self.assertRaisesMessage(ValidationError, 'Pay by card.'):
             start_debit_order(subscription=self.plan, actor=self.patient_user, method='debicheck')
 
     def test_the_card_form_keeps_a_card_or_pays_once_with_the_payment_reference(self):
@@ -107,7 +111,7 @@ class PeachTests(BillingFixture):
                           'standingInstruction.recurringType': 'STANDING_ORDER'})
         self.assertEqual(SubscriptionCycle.objects.get().status, 'paid')
         with patch('care.peach.http_call', fake):
-            run_debits(self.company, today=self.today + timedelta(weeks=4))
+            run_debits(self.company, today=self.first_parcel + timedelta(weeks=3))
         later = fake.calls[-1]
         self.assertEqual((later['form']['standingInstruction.mode'], later['form']['standingInstruction.source'],
                           later['form']['entityId'], later['headers']['Authorization']),
@@ -117,17 +121,17 @@ class PeachTests(BillingFixture):
         self.approve_card()
         decline = (400, {'id': 'peach-x', 'result': {'code': '800.100.155', 'description': 'transaction declined (amount exceeds credit)'}})
         with patch('care.peach.http_call', FakePeach(registrations=decline)):
-            run_debits(self.company, today=self.today + timedelta(weeks=4))
+            run_debits(self.company, today=self.first_parcel + timedelta(weeks=3))
         cycle = SubscriptionCycle.objects.get(cycle_number=2)
-        self.assertEqual((cycle.status, cycle.attempts, cycle.next_attempt_on), ('pending', 1, cycle.due_on + timedelta(days=3)))
+        self.assertEqual((cycle.status, cycle.attempts, cycle.next_attempt_on), ('pending', 1, cycle.due_on + timedelta(days=3)))  # The first retry day; the cut-off (Monday) comes after.
         self.assertIn('amount exceeds credit', cycle.failure_reason)
 
     def test_an_unanswered_charge_waits_for_the_webhook_and_isnt_sent_twice(self):
         self.approve_card()
         unreachable = FakePeach(registrations=ProviderUnavailable('timed out'))
         with patch('care.peach.http_call', unreachable):
-            run_debits(self.company, today=self.today + timedelta(weeks=4))
-            run_debits(self.company, today=self.today + timedelta(weeks=4, days=1))
+            run_debits(self.company, today=self.first_parcel + timedelta(weeks=3))
+            run_debits(self.company, today=self.first_parcel + timedelta(weeks=3, days=1))
         self.assertEqual(len([call for call in unreachable.calls if 'registrations' in call['url']]), 1)
         payment = Payment.objects.get(subscription_cycle__cycle_number=2)
         self.assertEqual(payment.status, 'pending')
@@ -157,17 +161,17 @@ class PeachTests(BillingFixture):
     def test_a_charge_peach_never_answered_is_looked_up_the_next_day(self):
         self.approve_card()
         with patch('care.peach.http_call', FakePeach(registrations=ProviderUnavailable('timed out'))):
-            run_debits(self.company, today=self.today + timedelta(weeks=4))
+            run_debits(self.company, today=self.first_parcel + timedelta(weeks=3))
         payment = Payment.objects.get(subscription_cycle__cycle_number=2)
         Payment.objects.filter(pk=payment.pk).update(created_at=timezone.now() - timedelta(days=2))
         lookup = FakePeach(v3_query=(200, {'result': {'code': '000.000.100'}, 'records': []}))
         with patch('care.peach.http_call', lookup):
-            run_debits(self.company, today=self.today + timedelta(weeks=4, days=1))
+            run_debits(self.company, today=self.first_parcel + timedelta(weeks=3, days=1))
         self.assertIn(f'merchantTransactionId=MHP{payment.pk:07d}', lookup.calls[0]['url'])
         payment.refresh_from_db()
         self.assertEqual((payment.status, payment.failure_reason), ('failed', 'Peach has no record of this charge, so it wasn’t taken.'))
         cycle = SubscriptionCycle.objects.get(cycle_number=2)
-        self.assertEqual((cycle.attempts, cycle.next_attempt_on), (1, cycle.due_on + timedelta(days=3)))
+        self.assertEqual((cycle.attempts, cycle.next_attempt_on), (1, cycle.due_on + timedelta(days=3)))  # The first retry day; the cut-off (Monday) comes after.
 
     def test_cancelling_the_subscription_asks_peach_to_forget_the_card(self):
         from .treatment import change_subscription_status
@@ -190,7 +194,7 @@ class MovingProviderTests(BillingFixture):
             self.assertEqual(current_provider().name, 'stitch')
             fake = FakePeach()
             with patch('care.peach.http_call', fake):
-                run_debits(self.company, today=self.today + timedelta(weeks=4))
+                run_debits(self.company, today=self.first_parcel + timedelta(weeks=3))
             self.assertEqual(fake.calls[-1]['url'], 'https://peach.test/v1/registrations/reg-1/payments')
             payment = Payment.objects.get(subscription_cycle__cycle_number=2)
             self.assertEqual((payment.provider, payment.status), ('peach', 'paid'))
@@ -213,10 +217,34 @@ class MovingProviderTests(BillingFixture):
 
             approve_mandate(mandate=mandate, actor=self.patient_user)
         with override_settings(**PEACH), patch('care.peach.http_call', FakePeach()):
-            run_debits(self.company, today=self.today + timedelta(weeks=4))
+            run_debits(self.company, today=self.first_parcel + timedelta(weeks=3))
         cycle = SubscriptionCycle.objects.get(cycle_number=2)
         self.assertFalse(Payment.objects.filter(subscription_cycle=cycle).exists())
-        self.assertEqual(cycle.failure_reason, 'The payment provider that holds this debit order isn’t connected.')
+        self.assertEqual(cycle.failure_reason, 'The payment provider that holds this card isn’t connected.')
+
+
+class CardOnlyTests(BillingFixture):
+    """Patients pay by card, to start: DebiCheck debit orders and Stitch are hidden until DEBIT_ORDERS_ENABLED is on."""
+
+    def test_only_a_card_is_offered_and_a_debicheck_debit_order_is_refused(self):
+        self.assertEqual(offered_methods(SandboxProvider()), ('card',))
+        with self.assertRaisesMessage(ValidationError, 'Pay by card.'):
+            start_debit_order(subscription=self.plan, actor=self.patient_user, method='debicheck')
+        mandate, _ = start_debit_order(subscription=self.plan, actor=self.patient_user)
+        self.assertEqual(mandate.method, 'card')
+        with override_settings(DEBIT_ORDERS_ENABLED=True):
+            self.assertEqual(offered_methods(SandboxProvider()), ('debicheck', 'card'))
+
+    def test_stitch_is_switched_off(self):
+        self.assertEqual(hosted_providers(), ('peach',))
+        self.assertIsNone(provider_named('stitch'))
+        with override_settings(PAYMENT_PROVIDER='stitch'), self.assertRaises(ImproperlyConfigured):
+            current_provider()
+        self.assertFalse(stitch.debicheck_in_use(self.company))
+        self.assertEqual(self.client.post('/billing/webhooks/stitch/').status_code, 404)
+        with override_settings(DEBIT_ORDERS_ENABLED=True):
+            self.assertEqual(hosted_providers(), ('peach', 'stitch'))
+            self.assertEqual(provider_named('stitch').name, 'stitch')
 
 
 def signed(body, *, secret=STITCH_SECRET, stamp=None):
@@ -360,7 +388,7 @@ class StitchTests(BillingFixture):
         declined = {'initiateTransaction': {'id': 'txn-2', 'state': {'__typename': 'TransactionFailure', 'reason': 'insufficientFunds'}}}
         fake = FakeStitch(Charge=declined)
         with patch('care.stitch.http_call', fake):
-            run_debits(self.company, today=self.today + timedelta(weeks=4))
+            run_debits(self.company, today=self.first_parcel + timedelta(weeks=3))
         sent = fake.calls[-1]['body']['variables']['input']
         self.assertEqual((sent['token'], sent['paymentMethods']['card']['recurringPayment']['source']), ('consent-1', 'merchant'))
         self.assertEqual(fake.calls[-1]['headers']['Idempotency-Key'], sent['nonce'])

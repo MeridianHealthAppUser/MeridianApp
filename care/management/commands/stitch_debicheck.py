@@ -3,6 +3,7 @@ from pathlib import Path
 from django.core.exceptions import ValidationError
 from django.core.management.base import BaseCommand, CommandError
 
+from care.payment_providers import debit_orders_enabled
 from care.stitch import apply_results_file, collection_file, debicheck_in_use
 from practices.tenancy import enabled_companies
 
@@ -19,6 +20,9 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         if not (options['write'] or options['read']):
             raise CommandError('Give --write DIR or --read FILE.')
+        if not debit_orders_enabled():
+            self.stdout.write('DebiCheck debit orders are switched off (card payments only): nothing to send or read.')
+            return
         for company in enabled_companies():
             if not debicheck_in_use(company):
                 self.stdout.write(f'{company.name}: Stitch holds no DebiCheck debit orders.')

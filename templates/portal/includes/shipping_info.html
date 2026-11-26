@@ -1,1 +1,1 @@
-{% if shipment.waybill_context %}{% include 'portal/includes/shipment_waybill_trigger.html' %}{% else %}<span class="shipping-waybill">{% firstof shipment.waybill shipment.tracking_number '—' %}</span>{% endif %}
+{% if shipment.waybill_context %}{% include 'portal/includes/shipment_waybill_trigger.html' %}{% else %}<span class="shipping-waybill">{% firstof shipment.waybill shipment.tracking_number '-' %}</span>{% endif %}

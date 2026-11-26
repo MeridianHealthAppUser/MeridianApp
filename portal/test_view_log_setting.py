@@ -1,5 +1,7 @@
 """View events are stored only when a Super Admin turns on the view log, and are never shown in the app."""
 
+from datetime import time
+
 from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
 from django.urls import reverse
@@ -59,13 +61,40 @@ class ViewLogSettingTests(TestCase):
     def test_the_shipping_day_is_saved_on_its_own(self):
         url = reverse('portal:practice-settings')
         self.login(self.super_admin)
-        self.assertContains(self.client.get(url), 'Parcels go out on')
-        self.assertEqual(self.client.post(url, {'section': 'shipping', 'shipping_weekday': '9'}).status_code, 400)
-        self.assertRedirects(self.client.post(url, {'section': 'shipping', 'shipping_weekday': '4'}), url,
-                             fetch_redirect_response=False)
+        page = self.client.get(url)
+        self.assertContains(page, 'Parcels go out on')
+        self.assertContains(page, '<legend>Order cut-off</legend>', html=False)
+        # Dr Czech, 26 Nov 2026: no description, and no setting for doctors shipping or parcels waiting for payment.
+        self.assertNotContains(page, 'Parcels are drafted from prescriptions for this day each week.')
+        self.assertNotContains(page, 'Doctors can set up and ship parcels')
+        self.assertNotContains(page, 'Parcels need payment before they go out')
+        shipping = {'section': 'shipping', 'order_cutoff_weekday': '0', 'order_cutoff_time': '15:00'}
+        self.assertEqual(self.client.post(url, {**shipping, 'shipping_weekday': '9'}).status_code, 400)
+        self.assertRedirects(self.client.post(url, {**shipping, 'shipping_weekday': '4'}), url, fetch_redirect_response=False)
         settings_row = PracticeSettings.objects.get(company=self.company)
-        self.assertEqual((settings_row.shipping_weekday, settings_row.store_view_log), (4, False))
+        self.assertEqual((settings_row.shipping_weekday, settings_row.order_cutoff_weekday, settings_row.store_view_log), (4, 0, False))
         self.assertEqual(AuditEvent.objects.get(action='practice.settings_updated').metadata, {'shipping_weekday': 4})
+
+    def test_the_order_cut_off_is_a_day_and_a_time_a_super_admin_sets(self):
+        """Pens are ordered at the cut-off: Monday at 15:00 by default (Dr Czech, 26 Nov 2026), on a quarter hour. A
+        Super Admin can move it; a practice administrator can't."""
+        url = reverse('portal:practice-settings')
+        self.login(self.super_admin)
+        page = self.client.get(url)
+        self.assertEqual((page.context['shipping_form']['order_cutoff_weekday'].value(),
+                          page.context['shipping_form']['order_cutoff_time'].value()), (0, time(15, 0)))
+        self.assertContains(page, '<option value="15:00" selected>15:00</option>', html=False)
+        self.assertContains(page, 'Payments received by then go out on the next shipping day.')
+        cutoff = {'section': 'shipping', 'shipping_weekday': '1'}
+        self.assertEqual(self.client.post(url, {**cutoff, 'order_cutoff_weekday': '3', 'order_cutoff_time': '17:10'}).status_code, 400)
+        self.client.post(url, {**cutoff, 'order_cutoff_weekday': '3', 'order_cutoff_time': '17:30'})
+        row = PracticeSettings.objects.get(company=self.company)
+        self.assertEqual((row.order_cutoff_weekday, row.order_cutoff_time), (3, time(17, 30)))
+        self.assertEqual(AuditEvent.objects.get(action='practice.settings_updated').metadata,
+                         {'order_cutoff_weekday': 3, 'order_cutoff_time': '17:30:00'})
+        self.login(self.admin)
+        self.assertEqual(self.client.post(url, {**cutoff, 'order_cutoff_weekday': '2', 'order_cutoff_time': '09:00'}).status_code, 403)
+        self.assertEqual(PracticeSettings.objects.get(company=self.company).order_cutoff_weekday, 3)
 
     def test_stored_view_events_are_never_shown_in_the_app(self):
         PracticeSettings.objects.create(company=self.company, store_view_log=True)

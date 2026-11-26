@@ -13,7 +13,14 @@
 .subscription-payment-progress-link:is(:hover, :focus-visible) .subscription-payments-icon::after { opacity: 1; }
 .subscription-payment-progress-link:hover .subscription-payments-icon { border-color: var(--console-teal-dark); }
 .subscription-payment-progress-link:focus-visible, .subscription-line-discount-toggle:focus-visible { outline: 2px solid var(--console-teal-dark); outline-offset: 3px; border-radius: .4rem; }
-.subscription-line-discount-toggle { color: var(--console-teal-dark); display: inline-flex; align-items: center; font-size: .82rem; font-weight: 600; min-height: 2.75rem; text-underline-offset: .2rem; white-space: nowrap; }
+/* Discount (26 Nov 2026): a secondary button at the right of every row, off where the payment can't change. */
+.subscription-payment-table td.subscription-payment-actions { text-align: right; }
+.subscription-line-discount-toggle { white-space: nowrap; }
+.subscription-line-discount-toggle:disabled { cursor: not-allowed; opacity: .45; }
+.subscription-payment-table .ops-paid { border-radius: 99rem; display: inline-block; font-size: .72rem; font-weight: 750; padding: .15rem .55rem; white-space: nowrap; }
+/* The title and its patient on the left, Bulk discount on the right, above how many are settled. */
+.subscription-payments-head { align-items: flex-start; display: flex; gap: .75rem 1.5rem; justify-content: space-between; }
+.subscription-payments-head > .console-button { flex: 0 0 auto; width: auto; }
 .subscription-payment-table .subscription-line-editor[hidden] { display: none; }
 .subscription-payment-table .subscription-line-editor > td { background: var(--console-canvas); padding: 1rem 1.25rem 1.25rem; }
 .subscription-line-editor__heading { align-items: baseline; display: flex; flex-wrap: wrap; gap: .5rem 1.5rem; margin-bottom: .85rem; }
@@ -34,6 +41,12 @@
 .subscription-payments-toolbar > p { flex: 1 1 20rem; margin: 0; }
 .subscription-payments-toolbar > .console-button { flex: 0 0 auto; margin-left: auto; width: auto; }
 .subscription-bulk-dialog .subscription-discount-form { max-width: none; }
+/* A payment's discount (26 Nov 2026): a small dialog, its three fields one above another. */
+.subscription-line-dialog { max-width: min(26rem, calc(100vw - 2rem)); }
+.subscription-line-dialog .subscription-discount-form { max-width: none; }
+.subscription-line-dialog .subscription-discount-fields { grid-template-columns: minmax(0, 1fr); }
+.subscription-line-dialog__preview { color: var(--console-ink); font-size: .88rem; font-variant-numeric: tabular-nums; font-weight: 650; }
+.subscription-line-dialog .app-dialog__actions { margin-top: .2rem; }
 .subscription-bulk-dialog .subscription-discount-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .subscription-bulk-dialog .subscription-discount-reason { grid-column: 1 / -1; }
 .subscription-bulk-dialog .app-dialog__actions { margin-top: .35rem; }

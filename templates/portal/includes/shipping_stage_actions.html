@@ -14,7 +14,7 @@
           <li>The correct medication, dose and permitted quantity.</li>
           <li>A complete delivery address and contact number.</li>
           <li>Confirmed payment, where required.</li>
-          <li>A stock check—shortages show a warning but can still be reserved.</li>
+          <li>A stock check: shortages show a warning but can still be reserved.</li>
         </ul>
         {% if week_order.held %}<p>{{ week_order.held }} held parcel{{ week_order.held|pluralize }} need{{ week_order.held|pluralize:"s," }} review.</p>{% endif %}
       </div>

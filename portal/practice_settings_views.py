@@ -14,6 +14,7 @@ from care.models import PROVINCES, PracticeSettings
 from care.purchasing import person_name, po_doctors
 from care.services import record_audit
 from care.suppliers import normalise_vat_number
+from care.widgets import QuarterHourTimeField
 from practices.models import CompanyMembership
 from .views import StaffCompanyRequiredMixin
 
@@ -46,9 +47,9 @@ EVENT_LOG_SECTIONS = (
         ('Delivery addresses added or changed', True), ('Waybills booked with The Courier Guy', False),
     )),
     ('Billing', (
-        ('Debit orders set up, approved, declined or needing a new amount', True),
-        ('Debits collected, failed and retried', True), ('Payments recorded by the practice', False),
-        ('Next debit dates moved', False),
+        ('Cards added, declined or needing a new amount', True),
+        ('Card payments collected, failed and retried', True), ('Payments recorded by the practice', False),
+        ('Next payment dates moved', False),
     )),
     ('Messaging', (
         ('Messages sent to patients and colleagues', False), ('Conversations closed or reopened', False),
@@ -76,24 +77,35 @@ class PracticeSettingsForm(forms.ModelForm):
 
 
 class ShippingSettingsForm(forms.ModelForm):
+    """The shipping day and the order cut-off before it: a day and a quarter-hour time (Dr Czech, 26 Nov 2026). Whether
+    doctors ship is no longer offered here (off: shipping is administrative work)."""
+
+    order_cutoff_time = QuarterHourTimeField(label='Time')
+
     class Meta:
         model = PracticeSettings
-        fields = ('shipping_weekday', 'doctors_ship')
+        fields = ('shipping_weekday', 'order_cutoff_weekday', 'order_cutoff_time')
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['order_cutoff_weekday'].label = 'Day'
+        self.fields['order_cutoff_weekday'].help_text = ''
 
 
 class BillingSettingsForm(forms.ModelForm):
-    """What a first consultation costs, whether parcels wait for payment, and when a failed debit is tried again."""
+    """What a first consultation costs and when a failed payment is tried again. Parcels always wait for payment
+    (Dr Czech, 26 Nov 2026: the setting is no longer offered)."""
 
     class Meta:
         model = PracticeSettings
-        fields = ('initial_consult_fee', 'require_payment', 'payment_retry_days', 'new_debit_order')
+        fields = ('initial_consult_fee', 'payment_retry_days', 'new_debit_order')
         labels = {'initial_consult_fee': 'Initial consultation fee (R)'}
 
     def clean_payment_retry_days(self):
         value = self.cleaned_data['payment_retry_days']
         parts = [part.strip() for part in value.split(',') if part.strip()]
         if not parts or any(not part.isdigit() or not 0 < int(part) <= 60 for part in parts):
-            raise forms.ValidationError('Give days after the debit date between 1 and 60, separated by commas, such as 3,7.')
+            raise forms.ValidationError('Give days after the payment date between 1 and 60, separated by commas, such as 3,7.')
         return ','.join(str(day) for day in sorted({int(part) for part in parts}))
 
 
@@ -165,7 +177,8 @@ class PracticeSettingsView(LoginRequiredMixin, StaffCompanyRequiredMixin, View):
         context = dict(
             company=self.company, active_membership=self.membership, nav_section='practice_settings',
             page_title='Practice settings', event_log_sections=EVENT_LOG_SECTIONS, courier_enabled=courier_enabled(),
-            payment_provider=current_provider(), form=forms.get('form') or PracticeSettingsForm(instance=row))
+            payment_provider=current_provider(), form=forms.get('form') or PracticeSettingsForm(instance=row),
+            cutoff_help=PracticeSettings._meta.get_field('order_cutoff_weekday').help_text)
         for section, form_class in SECTION_FORMS.items():
             context[f'{section}_form'] = forms.get(f'{section}_form') or _section_form(form_class, self.company, instance=row)
         return render(request, 'portal/practice_settings.html', context, status=status)

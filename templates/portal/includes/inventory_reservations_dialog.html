@@ -16,7 +16,7 @@
       <thead><tr><th>Customer</th><th>Doctor</th><th>Quantity</th><th>Due date</th><th>Payment</th><th>Shipment</th><th><span class="sr-only">Actions</span></th></tr></thead>
       <tbody>{% for item in row.reservations %}<tr>
         <td data-label="Customer"><div><strong>{{ item.shipment.patient }}</strong>{% if item.shipment.subscription_id %}<small>{{ item.shipment.subscription.plan_name }}</small>{% endif %}</div></td>
-        <td data-label="Doctor">{{ item.reservation_doctor.titled_name|default:'—' }}</td>
+        <td data-label="Doctor">{{ item.reservation_doctor.titled_name|default:'-' }}</td>
         <td data-label="Quantity"><div><strong>{{ item.quantity }}</strong>{% if item.dose %}<small>{{ item.dose }}</small>{% endif %}</div></td>
         <td data-label="Due date">{{ item.shipment.scheduled_for|date:'D j M Y' }}</td>
         <td data-label="Payment"><div><span class="ops-paid ops-paid--{{ item.reservation_payment_state }}">{% if item.reservation_payment_state == 'paid' %}Paid{% elif item.reservation_payment_state == 'due' %}Due{% elif item.reservation_payment_state == 'retrying' %}Retrying{% elif item.reservation_payment_state == 'failed' %}Failed{% else %}Not paid{% endif %}</span>{% if item.reservation_payment_text != 'Paid' %}<small>{{ item.reservation_payment_text }}</small>{% endif %}</div></td>

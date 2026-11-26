@@ -121,7 +121,7 @@ class WorkspacePresentationTests(TestCase):
             self.assertContains(response, f'</svg>{group}</span>')
         # Inventory, Shipping, Leads and dropouts, Insights and Settings are one page each: the row opens it in one
         # click, and its tabs are listed for the menu to open beside it on hover.
-        for group, key, page in (('Inventory', 'inventory', 'inventory'), ('Shipping', 'operations', 'treatment-subscriptions'),
+        for group, key, page in (('Inventory', 'inventory', 'inventory'), ('Shipping', 'operations', 'ops-shipping'),
                                  ('Leads and dropouts', 'administration', 'staff-leads'),
                                  ('Insights', 'insights', 'metrics'), ('Settings', 'settings', 'treatment-review-rules')):
             self.assertNotContains(response, f'data-navigation-group="{key}"')
@@ -130,8 +130,9 @@ class WorkspacePresentationTests(TestCase):
         for name in ('inventory-consumption', 'ops-catalogue', 'ops-shipping', 'ops-history', 'ops-billing', 'dropouts', 'email-log'):
             self.assertContains(response, f'href="{reverse(f"portal:{name}")}"')
         paths = actionable_paths(response)
-        for name in ('staff-tasks', 'staff-schedule', 'purchasing', 'inventory', 'policy-list', 'management-users', 'metrics', 'staff-data-requests'):
+        for name in ('staff-tasks', 'staff-schedule', 'purchasing', 'inventory', 'policy-list', 'management-users', 'metrics'):
             self.assertIn(reverse(f'portal:{name}'), paths)
+        self.assertNotIn(reverse('portal:staff-data-requests'), paths)  # No Data requests tab (Dr Czech, 26 Nov 2026).
         self.login(self.doctor)
         response = self.page('desktop-dashboard')
         paths = actionable_paths(response)

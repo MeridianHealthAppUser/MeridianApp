@@ -502,12 +502,12 @@ class RecordsAndMessagesTests(TestCase):
         self.login(self.doctor)
         page = self.client.get(reverse('portal:patient-list'))
         self.assertNotContains(page, '<th scope="col">Cycle</th>', html=True)
-        self.assertNotContains(page, '<th scope="col">Next debit</th>', html=True)
+        self.assertNotContains(page, '<th scope="col">Next payment</th>', html=True)
         CompanyMembership.objects.filter(user=self.admin).update(role=CompanyMembership.Role.SUPER_ADMIN)
         self.login(self.admin)
         page = self.client.get(reverse('portal:patient-list'))
         self.assertContains(page, '<th scope="col">Cycle</th>', html=True)
-        self.assertContains(page, '<th scope="col">Next debit</th>', html=True)
+        self.assertContains(page, '<th scope="col">Next payment</th>', html=True)
 
 
 class StaffReadStateSeedTests(TestCase):

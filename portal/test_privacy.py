@@ -469,8 +469,6 @@ class PrivacyTests(TestCase):
         question = PatientDataRequest.objects.get(description='Who reads my notes?')
         self.assertEqual((record.task.assigned_to, question.task.assigned_to), (self.doctor, self.doctor))
         self.assertIn('Summary data', record.task.description)
-        self.login(self.super_admin)
-        self.assertContains(self.get('staff-tasks'), ', 4 open data requests')
         self.login(self.doctor)
         listed = {row.pk: row for row in self.get('staff-tasks').context['tasks']}
         # Clinicians can't open Data requests, so they get the task itself.
@@ -483,11 +481,10 @@ class PrivacyTests(TestCase):
         self.assertEqual((record.task.status, record.status), ('done', 'resolved'))
         reply = record.replies.get()
         self.assertEqual((reply.author, reply.status, reply.body), (self.doctor, 'resolved', 'Dr Marchant has marked your request as complete.'))
-        # Gone from everyone's open tasks and from the count.
+        # Gone from everyone's open tasks.
         for actor in (self.doctor, self.admin, self.super_admin):
             self.login(actor)
             self.assertNotIn(record.task.pk, [row.pk for row in self.get('staff-tasks').context['tasks']])
-        self.assertContains(self.get('staff-tasks'), ', 3 open data requests')
         self.login()
         self.assertContains(self.get('patient-data-request-detail', record.pk), 'Dr Marchant has marked your request as complete.')
 
@@ -561,25 +558,18 @@ class PrivacyTests(TestCase):
         data = self.form_data('staff-data-request-detail', self.request_record.pk, status='open', body='Still waiting.')
         self.assertTrue(self.post('staff-data-request-detail', data, self.request_record.pk).context['form'].errors)
 
-    def test_data_requests_menu_counts_requests_waiting_on_the_practice(self):
-        self.login(self.super_admin)
-        self.assertContains(self.get('staff-tasks'), ', 2 open data requests')
-        PatientDataRequest.objects.filter(pk=self.other_request.pk).update(status='in_review')
-        self.assertContains(self.get('staff-tasks'), ', 2 open data requests')
-        PatientDataRequest.objects.filter(pk=self.other_request.pk).update(status='resolved')
-        self.assertContains(self.get('staff-tasks'), ', 1 open data request<')
-        # The Data requests tab carries it, and the Administration section page.
-        tabs = self.get('staff-data-requests')
-        self.assertContains(tabs, f'<a href="{self.url("staff-data-requests")}" class="is-active" aria-current="page">Data requests'
-                                  '<span class="nav-badge" aria-hidden="true">1</span>')
-        self.assertContains(self.client.get(reverse('portal:staff-menu-section', args=['administration'])), ', 1 open data request<')
-        # Practice administrators and clinicians get neither the count nor the tab (Dr Czech, 4 Nov 2026).
-        for user in (self.admin, self.doctor):
+    def test_no_data_requests_tab_or_count(self):
+        # Dr Czech, 26 Nov 2026: no Data requests tab under Administration, for anyone, and no count of open requests
+        # on the menu. Earlier requests stay at their address for a Super Admin.
+        for user in (self.super_admin, self.admin, self.doctor):
             self.login(user)
-            self.assertNotContains(self.get('staff-tasks'), 'open data request')
-        self.login(self.admin)
-        self.assertNotContains(self.get('staff-leads'), f'href="{self.url("staff-data-requests")}"')
-        self.assertNotContains(self.get('staff-leads'), '<span class="console-nav__text">Administration</span><span class="nav-badge"')
+            page = self.get('staff-tasks')
+            self.assertNotContains(page, 'open data request')
+            self.assertNotContains(page, f'href="{self.url("staff-data-requests")}"')
+        self.login(self.super_admin)
+        self.assertNotContains(self.get('staff-leads'), '>Data requests<')
+        self.assertNotContains(self.client.get(reverse('portal:staff-menu-section', args=['administration'])), 'open data request')
+        self.assertEqual(self.get('staff-data-requests').status_code, 200)
 
     def test_staff_request_head_does_not_audit_and_get_does(self):
         PracticeSettings.objects.update_or_create(company=self.alpha, defaults={'store_view_log': True})
@@ -678,7 +668,7 @@ class PrivacyTests(TestCase):
         self.assertNotContains(response, '192.0.2.45')
 
     def policy_data(self, **changes):
-        values = dict(kind='service', version='v2', title='Approved updated notice', body='Actual approved updated text.',
+        values = dict(kind='service', body='Actual approved updated text.',
                       effective_from=timezone.localdate().isoformat(), confirm_publication='on')
         values.update(changes)
         return self.form_data('policy-create', **values)
@@ -695,30 +685,53 @@ class PrivacyTests(TestCase):
         self.login(self.super_admin)
         before = list(ConsentRecord.objects.values())
         data = self.policy_data()
-        self.assertEqual(self.post('policy-create', data).status_code, 302)
-        document = ConsentDocument.objects.get(company=self.alpha, kind='service', version='v2')
+        response = self.post('policy-create', data)
+        self.assertEqual(response.status_code, 302)
+        # Numbered after the kind's last version and titled as its kind (Dr Czech, 26 Nov 2026).
+        document = ConsentDocument.objects.get(company=self.alpha, kind='service', version='2')
+        self.assertEqual(document.title, 'Privacy Policy')
         self.assertEqual(document.content_hash, hashlib.sha256(data['body'].encode()).hexdigest())
         self.assertEqual(list(ConsentRecord.objects.values()), before)
         self.document.refresh_from_db()
         self.assertIn('Alpha actual policy text', self.document.body)
+        # The list: the new version is Active and the first Replaced; Read version opens each one's text.
+        page = self.get('policy-list')
+        self.assertEqual({row.pk: row.status for row in page.context['page_obj']}, {document.pk: 'Active', self.document.pk: 'Replaced'})
+        self.assertContains(page, f'data-modal-open="policy-text-{document.pk}"', html=False)
+        self.assertContains(page, '<div class="privacy-document" tabindex="0" role="region" aria-label="Privacy Policy, version 2">Actual approved updated text.</div>', html=False)
+        self.assertNotContains(page, 'View the current public notice')
+        self.assertNotContains(page, 'Public pages use the most recent')
+        # The next is version 3, of the Terms and Conditions too only once it has one.
+        self.post('policy-create', self.policy_data(kind='telehealth', body='Approved terms.'))
+        self.assertEqual(ConsentDocument.objects.get(company=self.alpha, kind='telehealth', body='Approved terms.').version, '1')
 
-    def test_policy_repeat_is_idempotent_but_changed_historical_version_rejected(self):
+    def test_policy_types_are_the_terms_and_the_privacy_policy(self):
+        self.login(self.super_admin)
+        form = self.get('policy-create').context['form']
+        self.assertEqual(list(form.fields), ['kind', 'body', 'effective_from', 'confirm_publication'])
+        self.assertEqual(form.fields['kind'].choices, [('telehealth', 'Terms and Conditions'), ('service', 'Privacy Policy')])
+        response = self.post('policy-create', self.policy_data(kind='marketing'))
+        self.assertTrue(response.context['form'].errors)
+        self.assertFalse(ConsentDocument.objects.filter(kind='marketing').exists())
+
+    def test_policy_repeat_is_idempotent(self):
         self.login(self.super_admin)
         data = self.policy_data()
         self.post('policy-create', data)
         before = (ConsentDocument.objects.count(), AuditEvent.objects.count())
         self.post('policy-create', data)
         self.assertEqual((ConsentDocument.objects.count(), AuditEvent.objects.count()), before)
-        response = self.post('policy-create', {**data, 'body': 'Overwrite existing version'})
-        self.assertTrue(response.context['form'].non_field_errors())
-        self.assertEqual(ConsentDocument.objects.get(version='v2').body, data['body'])
+        # New wording is the next version; the earlier ones never change.
+        self.post('policy-create', {**data, 'body': 'Newer wording'})
+        self.assertEqual(ConsentDocument.objects.get(company=self.alpha, kind='service', version='2').body, data['body'])
+        self.assertEqual(ConsentDocument.objects.get(company=self.alpha, kind='service', version='3').body, 'Newer wording')
 
     def test_policy_publish_requires_confirmation_and_valid_date(self):
         self.login(self.super_admin)
         for changes in ({'confirm_publication': ''}, {'effective_from': '9999-12-31'}):
             response = self.post('policy-create', self.policy_data(**changes))
             self.assertTrue(response.context['form'].errors)
-        self.assertFalse(ConsentDocument.objects.filter(version='v2').exists())
+        self.assertFalse(ConsentDocument.objects.filter(version='2').exists())
 
     def test_policy_stale_practice_does_not_publish_elsewhere(self):
         self.login(self.super_admin)
@@ -726,7 +739,7 @@ class PrivacyTests(TestCase):
         self.login(self.super_admin, self.beta)
         response = self.post('policy-create', data)
         self.assertTrue(response.context['form'].non_field_errors())
-        self.assertFalse(ConsentDocument.objects.filter(version='v2').exists())
+        self.assertFalse(ConsentDocument.objects.filter(version='2').exists())
 
     def test_public_policy_displays_actual_escaped_current_practice_document(self):
         for name in ('public-terms', 'public-privacy'):
@@ -784,11 +797,16 @@ class PrivacyTests(TestCase):
 
     def test_policy_service_rechecks_role_and_cannot_replace_accepted_document(self):
         with self.assertRaises(PermissionDenied):
-            publish_policy_version(actor=self.admin, company=self.alpha, kind='service', version='v2', title='No', body='No',
+            publish_policy_version(actor=self.admin, company=self.alpha, kind='service', body='No',
                 effective_from=timezone.localdate(), confirmed=True)
         with self.assertRaises(ValidationError):
-            publish_policy_version(actor=self.super_admin, company=self.alpha, kind='service', version='v1', title='Overwrite', body='Overwrite',
-                effective_from=timezone.localdate(), confirmed=True)
+            publish_policy_version(actor=self.super_admin, company=self.alpha, kind='service', body='Not approved',
+                effective_from=timezone.localdate(), confirmed=False)
+        publish_policy_version(actor=self.super_admin, company=self.alpha, kind='service', body='Overwrite',
+            effective_from=timezone.localdate(), confirmed=True)
+        self.document.refresh_from_db()
+        self.assertEqual(self.document.version, 'v1')
+        self.assertIn('Alpha actual policy text.', self.document.body)
         self.assertEqual(ConsentRecord.objects.get(pk=self.consent.pk).document_id, self.document.pk)
 
     def test_csrf_required_for_all_mutating_privacy_forms(self):

@@ -2,7 +2,7 @@
 {% load static workspace_ui %}
 
 {% block title %}{{ active_company.name }} | Meridian{% endblock %}
-{% block extra_css %}<link rel="stylesheet" href="{% static 'css/console.css' %}?v=20261123a"><link rel="stylesheet" href="{% static 'css/person_tags.css' %}?v=20261104a">{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{% static 'css/console.css' %}?v=20261126e"><link rel="stylesheet" href="{% static 'css/person_tags.css' %}?v=20261104a">{% endblock %}
 {% block content %}
   <div class="meridian-console console-desktop workspace-overview">
     <div class="console-shell">
@@ -129,7 +129,7 @@
                         </div>
                       </td>
                       <td data-label="Record">{{ listed_patient.medical_record_number|default:"Record pending" }}</td>
-                      <td data-label="Prescribing doctor">{% if listed_patient.assigned_doctor %}{{ listed_patient.assigned_doctor.full_name }}{% else %}Unassigned{% endif %}</td>
+                      <td data-label="Prescribing doctor">{% if listed_patient.assigned_doctor %}{{ listed_patient.assigned_doctor.titled_name }}{% else %}Unassigned{% endif %}</td>
                       <td data-label="Status">{% if listed_patient.is_active %}<span class="console-status console-status--active">Active</span>{% else %}<span class="console-status">Inactive</span>{% endif %}</td>
                       <td data-label="Open patient" class="patient-table__action-cell"><a class="console-button console-button--secondary" href="{% url 'portal:patient-detail' listed_patient.pk %}">Open record<span class="sr-only"> for {{ listed_patient }}</span></a></td>
                     </tr>

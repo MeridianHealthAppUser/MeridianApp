@@ -47,3 +47,7 @@
   .privacy-form > .console-button { white-space:normal; }
   .privacy-public { padding:1.5rem 1rem 3rem; }
 }
+/* Read version (Dr Czech, 26 Nov 2026): the whole text in a large dialog that scrolls. */
+.privacy-document-dialog { max-width: min(60rem, calc(100vw - 2rem)); }
+.privacy-document { border: 1px solid var(--console-soft-line, var(--c-edf3f5)); border-radius: .7rem; color: var(--console-ink, var(--privacy-ink)); font-size: .86rem; line-height: 1.65; margin-bottom: 1rem; max-height: min(68vh, 46rem); overflow: auto; overflow-wrap: anywhere; padding: 1rem 1.1rem; white-space: pre-wrap; }
+.privacy-document:focus-visible { outline: 2px solid var(--c-1d4a5f); outline-offset: 2px; }

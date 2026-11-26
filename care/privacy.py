@@ -230,26 +230,36 @@ def finish_request_with_task(*, task, actor, request=None):
 
 
 @transaction.atomic
-def publish_policy_version(*, actor, company, kind, version, title, body, effective_from, confirmed, request=None):
+def policy_title(kind):
+    """A policy version's title: its kind (Terms and Conditions, Privacy Policy)."""
+    return ConsentDocument.Kind(kind).label
+
+
+def publish_policy_version(*, actor, company, kind, body, effective_from, confirmed, request=None):
+    """Publish the next version of a policy: numbered after the kind's last one (1, 2, 3) and titled as its kind
+    (Dr Czech, 26 Nov 2026). Earlier versions are never changed. The same text and date as the latest version
+    publishes nothing (returns it, False)."""
     company = Company.objects.select_for_update().get(pk=company.pk)
     require_privacy_admin(actor, company, policies=True)
     if confirmed is not True:
         raise ValidationError('Confirm this version is approved for publication.')
-    if not all(isinstance(value, str) for value in (body, version, title)):
-        raise ValidationError('Supply a version, title and approved document text.')
-    body, version, title = body.strip(), version.strip(), title.strip()
-    if kind not in ConsentDocument.Kind.values or not version or not title or not body or len(body) > 100000:
-        raise ValidationError('Supply a type, unique version, title and approved document text.')
+    if not isinstance(body, str):
+        raise ValidationError('Supply the approved document text.')
+    body = body.strip()
+    if kind not in ConsentDocument.QUESTIONNAIRE_KINDS or not body or len(body) > 100000:
+        raise ValidationError('Choose the Terms and Conditions or the Privacy Policy, and supply the approved text.')
+    versions = ConsentDocument.objects.filter(company=company, kind=kind)
+    latest = versions.order_by('-created_at', '-pk').first()
+    if latest and latest.body == body and latest.effective_from == effective_from and latest.is_active:
+        return latest, False
+    # After the highest number, and never fewer than the versions there are (one from before numbering isn't a number).
+    numbers = [int(version) for version in versions.values_list('version', flat=True) if version.isdigit()]
+    number = max([versions.count(), *numbers]) + 1
     digest = hashlib.sha256(body.encode('utf-8')).hexdigest()
-    existing = ConsentDocument.objects.filter(company=company, kind=kind, version=version).first()
-    if existing:
-        if existing.body == body and existing.title == title and existing.effective_from == effective_from and existing.is_active:
-            return existing, False
-        raise ValidationError('This version already exists. Publish a new version; historical documents cannot be overwritten.')
-    document = ConsentDocument(company=company, kind=kind, version=version, title=title, body=body,
+    document = ConsentDocument(company=company, kind=kind, version=str(number), title=policy_title(kind), body=body,
                                content_hash=digest, effective_from=effective_from, is_active=True)
     document.full_clean()
     document.save()
     record_audit(company=company, actor=actor, target=document, action='privacy.policy_published', request=request,
-                 metadata={'kind': kind, 'document_id': document.pk})
+                 metadata={'kind': kind, 'document_id': document.pk, 'version': document.version})
     return document, True

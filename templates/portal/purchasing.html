@@ -29,11 +29,11 @@
           <td data-label="Product"><div><strong>{{ row.product.name }}</strong><small>{{ row.product.strength }}</small></div></td>
           <td data-label="Category">{{ row.product.get_category_display }}</td>
           <td data-label="AWC"><span title="{% if row.awc_source == 'starting' %}Starting AWC set by a super admin{% else %}Average from eight completed weeks of dispatches{% endif %}">{{ row.awc|floatformat:2 }}</span></td>
-          <td data-label="Lead time (weeks)">{{ row.lead_time_weeks|floatformat:'-2'|default:'—' }}</td>
-          <td data-label="Safety stock">{{ row.safety_stock|default_if_none:'—' }}</td>
+          <td data-label="Lead time (weeks)">{{ row.lead_time_weeks|floatformat:'-2'|default:'-' }}</td>
+          <td data-label="Safety stock">{{ row.safety_stock|default_if_none:'-' }}</td>
           <td data-label="On hand">{{ row.on_hand }}</td>
           <td data-label="On order">{{ row.on_order }}</td>
-          <td data-label="To order">{% if row.status == 'setup' %}<a class="purchasing-setup-link" href="{{ row.settings_url }}" title="Set {{ row.missing_fields|join:' and ' }} in Inventory" aria-label="Set {{ row.missing_fields|join:' and ' }} for {{ row.product }}"><span>—</span><svg viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false"><path d="m12 3 10 18H2Z"/><path d="M12 9v5M12 17h.01"/></svg></a>{% elif row.order_quantity %}<span class="purchasing-order-quantity">{{ row.order_quantity }}</span>{% else %}<span class="purchasing-order-zero">0</span>{% endif %}</td>
+          <td data-label="To order">{% if row.status == 'setup' %}<a class="purchasing-setup-link" href="{{ row.settings_url }}" title="Set {{ row.missing_fields|join:' and ' }} in Inventory" aria-label="Set {{ row.missing_fields|join:' and ' }} for {{ row.product }}"><span>-</span><svg viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false"><path d="m12 3 10 18H2Z"/><path d="M12 9v5M12 17h.01"/></svg></a>{% elif row.order_quantity %}<span class="purchasing-order-quantity">{{ row.order_quantity }}</span>{% else %}<span class="purchasing-order-zero">0</span>{% endif %}</td>
         </tr>{% empty %}<tr><td class="ops-empty" colspan="9">No products match these filters.</td></tr>{% endfor %}</tbody>
       </table></div>
     {% endif %}</div>

@@ -15,7 +15,8 @@ from . import test_workflows
 from .patient_workspace import TABS, workspace_tab_context
 
 # The tabs a doctor in the Clinician role sees on their own patient's record.
-DOCTOR_TABS = [('overview', 'Overview'), ('blood-tests', 'Blood results'), ('messages', 'Messages')]
+# Treatment since 26 Nov 2026 (James): the patient's subscriptions and non-prescription orders.
+DOCTOR_TABS = [('overview', 'Overview'), ('blood-tests', 'Blood results'), ('messages', 'Messages'), ('treatment', 'Treatment')]
 
 
 @override_settings(MULTI_PRACTICE_ENABLED=True)

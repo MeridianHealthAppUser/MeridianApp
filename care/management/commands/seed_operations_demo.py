@@ -17,7 +17,7 @@ from care.models import (
 )
 from care.notifications import paused
 from care.operations import lock_reasons, prepare_shipment
-from care.parcels import schedule_parcels, shipping_day_from, shipping_weekday
+from care.parcels import PAYMENT_LEAD, first_shipping_day, order_cutoff, schedule_parcels, shipping_day_from, shipping_weekday
 from care.pharmacy import accept_order, set_basket_quantity, submit_basket
 from care.prescriptions import change_prescription
 from care.services import record_audit
@@ -123,7 +123,9 @@ class Command(BaseCommand):
             dose=dose, weeks=24, reason='Local demo scenario; fictional patient.')
         # Backdate only this new test course, then replace only its new drafts with the historical schedule.
         historical = scenario in ('delivered', 'transit')
-        started = self.today - timedelta(weeks=5 if historical else 4)
+        # Paid the day before the order cut-off for the shipping day four (or five) weeks before the coming one, so
+        # that was its first parcel and the coming week has one.
+        started = order_cutoff(self.ship_day - timedelta(weeks=5 if historical else 4), self.company) - timedelta(days=1)
         authorization.starts_on, authorization.expires_on = started, started + timedelta(weeks=24)
         authorization.save(update_fields=('starts_on', 'expires_on', 'updated_at'))
         ShipmentItem.objects.filter(shipment__authorization=authorization).delete()
@@ -139,13 +141,15 @@ class Command(BaseCommand):
             method='card', status='active', amount=dose.price, interval_weeks=4, provider='sandbox',
             reference=f'OPS-DEMO-{index:02}', provider_reference=f'sandbox-{ "decline-" if scenario == "unpaid" else ""}ops-demo-{index}',
             account_label='Demo card ···4242', approved_at=timezone.now(), created_by=user)
-        cycle_start, number = started, 1
-        while cycle_start <= self.today:
+        # Each payment pays for the four weeks from its parcel: the first on the day it started, then a week before
+        # each parcel (care.billing).
+        cycle_start, due, number = first_shipping_day(started, self.company), started, 1
+        while due <= self.today:
             end = cycle_start + timedelta(days=27)
             cycle = SubscriptionCycle.objects.create(company=self.company, patient=patient, subscription=plan,
-                cycle_number=number, starts_on=cycle_start, ends_on=end, due_on=cycle_start, amount=dose.price, mandate=mandate)
+                cycle_number=number, starts_on=cycle_start, ends_on=end, due_on=due, amount=dose.price, mandate=mandate)
             Invoice.objects.create(company=self.company, patient=patient, subscription_cycle=cycle,
-                invoice_number=f'OPS-DEMO-{index:02}-{number}', issued_on=cycle_start, due_on=cycle_start,
+                invoice_number=f'OPS-DEMO-{index:02}-{number}', issued_on=due, due_on=due,
                 subtotal=dose.price, total=dose.price, status='issued', billed_to=billed_to(patient))
             if scenario == 'unpaid' and end >= self.today:
                 collect_cycle(cycle, today=self.today, actor=self.admin)
@@ -153,10 +157,11 @@ class Command(BaseCommand):
                 record_manual_payment(company=self.company, actor=self.admin, amount=dose.price, method='eft',
                     reference=f'OPS-DEMO-{index:02}-{number}', note='Fictional local demo payment', cycle=cycle)
             cycle_start += timedelta(weeks=4)
+            due = cycle_start - PAYMENT_LEAD
             number += 1
-        plan.next_debit_on = cycle_start
+        plan.next_debit_on = due
         plan.save(update_fields=('next_debit_on', 'updated_at'))
-        first_day = shipping_day_from(started, shipping_weekday(self.company))
+        first_day = first_shipping_day(started, self.company)
         self.history(patient, authorization, plan, first_day, index, 'delivered')
         if historical:
             self.history(patient, authorization, plan, first_day + timedelta(weeks=4), index,

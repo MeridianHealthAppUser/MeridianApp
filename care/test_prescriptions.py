@@ -116,12 +116,17 @@ class PrescriptionTests(PrescriptionTestData, TestCase):
         previous = self.prescribe()
         for actor in (self.dietitian, self.admin, self.super_admin, self.outsider):
             with self.subTest(actor=actor.email):
-                with self.assertRaises(PermissionDenied):
-                    renew_prescription(company=self.company, patient=self.patient, actor=actor, current=previous, weeks=24)
+                if actor != self.super_admin:
+                    with self.assertRaises(PermissionDenied):
+                        renew_prescription(company=self.company, patient=self.patient, actor=actor, current=previous, weeks=24)
                 with self.assertRaises(PermissionDenied):
                     change_prescription(company=self.company, patient=self.patient, actor=actor, current=previous,
                                         dose=self.tirz, weeks=24)
         self.assertEqual(TreatmentAuthorization.objects.count(), 1)
+        # The Super Admin renews, doctor or not (James, 26 Nov 2026): for the doctor who prescribed it.
+        renewal = renew_prescription(company=self.company, patient=self.patient, actor=self.super_admin, current=previous, weeks=24)
+        self.assertEqual(renewal.prescribed_by, previous.prescribed_by)
+        self.assertIn('(Super Admin).', renewal.log_text)
 
     def test_a_stale_form_and_out_of_range_weeks_change_nothing(self):
         previous = self.prescribe()
@@ -142,8 +147,11 @@ class PrescriptionTests(PrescriptionTestData, TestCase):
                                          scheduled_for=today + timedelta(days=3), status=Shipment.Status.READY)
         changed = change_prescription(company=self.company, patient=self.patient, actor=self.doctor, current=previous,
                                       dose=self.tirz, weeks=24, reason='Side effects – nausea, vomiting')
+        # Valid from today; its 24 weeks run from its first pens, after the order cut-off (25 Nov 2026).
+        from .parcels import first_shipping_day
+
         self.assertEqual((changed.product_id, changed.dose, changed.max_dose, changed.starts_on, changed.expires_on, changed.replaces_id),
-                         (self.tirz.pen_id, self.tirz, '5 mg weekly', today, add_weeks(today, 24), previous.pk))
+                         (self.tirz.pen_id, self.tirz, '5 mg weekly', today, add_weeks(first_shipping_day(today, self.company), 24), previous.pk))
         # What is sent per parcel comes from the dose.
         self.assertEqual(changed.quantity_per_cycle, self.tirz.pens_per_dispatch)
         self.assertEqual(changed.log_text, 'Side effects – nausea, vomiting. Prescription changed from Semaglutide 0.25 mg weekly '

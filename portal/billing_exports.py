@@ -14,7 +14,7 @@ from .treatment_views import prepare_subscription_rows, subscription_listing
 TABLES = frozenset(('subscriptions', 'billing', 'billing-cycles', 'billing-payments'))
 SAST = ZoneInfo('Africa/Johannesburg')
 BILLING_LABELS = {'paid': 'Paid up', 'failed': 'Failed', 'retrying': 'Retrying', 'due': 'Due',
-                  'update': 'New amount', 'pending': 'Awaiting approval', 'no_mandate': 'No debit order'}
+                  'update': 'New amount', 'pending': 'Card not added', 'no_mandate': 'No card'}
 
 
 def billing_table(table, request, company, membership):
@@ -73,14 +73,14 @@ def _billing(request, company):
         for plan in plans:
             mandate, paid = plan.mandate, plan.last_paid
             yield (str(plan.patient), plan.get_status_display(), BILLING_LABELS.get(plan.state, plan.state), plan.state_text,
-                   mandate.get_method_display() if mandate else '', mandate.get_status_display() if mandate else '',
+                   mandate.get_method_display() if mandate else '', mandate.status_text if mandate else '',
                    mandate.account_label if mandate else '', mandate.amount if mandate else None,
                    paid.amount if paid else None, _date(paid.paid_at) if paid else None,
-                   plan.next_debit_on, plan.owed)
+                   plan.next_payment_on, plan.owed)
 
     return ExportTable('Billing',
-        ('Patient', 'Subscription status', 'Billing', 'Billing detail', 'Debit order', 'Debit order status',
-         'Account', 'Debit order limit', 'Last paid', 'Last paid date', 'Next debit', 'Outstanding'), rows(),
+        ('Patient', 'Subscription status', 'Billing', 'Billing detail', 'Payment method', 'Card status',
+         'Card', 'Charge limit', 'Last paid', 'Last paid date', 'Next payment', 'Outstanding'), rows(),
         widths=(30, 22, 24, 42, 28, 28, 30, 22, 18, 20, 20, 20))
 
 

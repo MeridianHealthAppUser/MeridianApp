@@ -63,7 +63,7 @@ STAFF_PAGES = {
     'ops-catalogue': Page('Catalogue', 'catalogue', 'admin'),
     'ops-shipping': Page('Weekly shipping', 'shipping', 'shipping'),
     'ops-history': Page('Dispatch history', 'history', 'shipping'),
-    'ops-orders': Page('Non-prescription requests', 'orders', 'admin'),
+    'ops-orders': Page('Non-prescriptions', 'orders', 'admin'),
     'staff-leads': Page('Leads and enquiries', 'leads', 'admin'),
     'staff-lead-history': Page('Lead history', 'leads', 'admin'),
     'dropouts': Page('Dropouts', 'dropouts', 'admin'),
@@ -161,6 +161,9 @@ NATIVE_GET_ROUTES = frozenset((
     # a content request must be rejected before either view runs.
     'patient-card-form', 'patient-payment-return',
     'patient-invoice-download',
+    # A subscription's weekly timeline: fetched into a dialog by static/js/subscription_timeline.js (?fragment=1), and
+    # opened as an ordinary page without scripts, never as navigation content.
+    'subscription-timeline',
 ))
 
 
@@ -392,7 +395,6 @@ def maybe_navigation_shell(view, request):
     # Shell navigation renders identity and permitted links; dynamic badges catch
     # up through the existing authorized status endpoint after the page loads.
     request._staff_message_counts = {'patient_unread_total': 0, 'team_unread_total': 0}
-    request._open_data_requests = 0
     company = request._page_navigation_company
     membership = request._page_navigation_membership
     patient = request._page_navigation_patient

@@ -25,8 +25,9 @@ from practices.services import ACTIVE_COMPANY_SESSION_KEY, ACTIVE_PATIENT_COMPAN
 
 
 def doctor_section(tab):
-    """A doctor (the Clinician role) sees the Overview and Blood results: a page under any other tab sits under the Overview."""
-    return tab if tab in ('overview', 'blood-tests') else 'overview'
+    """A doctor (the Clinician role) sees the Overview, Blood results and Treatment (26 Nov 2026): a page under any other
+    tab sits under the Overview."""
+    return tab if tab in ('overview', 'blood-tests', 'treatment') else 'overview'
 
 
 @override_settings(MULTI_PRACTICE_ENABLED=True)
@@ -227,10 +228,10 @@ class SharedPatientActionTests(TestCase):
         self.assertContains(page, reverse('portal:compounding-create', args=[self.authorization.pk]) + '?workspace=patient')
         status_url = reverse('portal:treatment-authorisation-status', args=[self.authorization.pk])
         rejected = self.client.post(status_url, {'workspace': 'patient', 'action': 'pause'})
-        self.assertWorkspace(rejected, 'treatment', status=400, active='overview')
+        self.assertWorkspace(rejected, 'treatment', status=400, active='treatment')
         response = self.client.post(status_url, {'workspace': 'patient', 'treatment_context': page.context['treatment_context'],
             'action': 'pause', 'confirm': 'on'}, follow=True)
-        self.assertWorkspace(response, 'treatment', active='overview')
+        self.assertWorkspace(response, 'treatment', active='treatment')
         self.assertEqual(response.redirect_chain, [(url + '?workspace=patient', 302)])
 
     def test_operations_permissions_and_redirects_remain_unchanged(self):
@@ -271,7 +272,7 @@ class SharedPatientActionTests(TestCase):
         self.assertContains(page, reverse('portal:treatment-authorisation-detail', args=[self.authorization.pk]) + '?workspace=patient')
         response = self.client.post(url, {'workspace': 'patient', 'clinical_context': page.context['clinical_context'],
             'action': 'save', 'preparation_note': 'Updated manual tracking note.'}, follow=True)
-        self.assertWorkspace(response, 'treatment', active='overview')
+        self.assertWorkspace(response, 'treatment', active='treatment')
         self.assertEqual(response.redirect_chain, [(url + '?workspace=patient', 302)])
 
     def test_marker_never_bypasses_practice_or_clinical_permissions(self):

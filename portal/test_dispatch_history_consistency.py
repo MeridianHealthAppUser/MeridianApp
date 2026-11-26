@@ -28,7 +28,7 @@ class DispatchHistoryConsistencyTests(OperationsPortalFixture):
             self.assertTemplateUsed(response, 'portal/includes/dispatch_history_table.html')
             headers = TableHeaders()
             headers.feed(response.content.decode())
-            self.assertEqual(headers.headers, ['Patient', 'Doctor', 'Delivered to', 'Parcel', 'Dispatched', 'Status', 'Note', 'Actions'])
+            self.assertEqual(headers.headers, ['Patient', 'Delivered to', 'Parcel', 'Dispatched', 'Status', 'Note', 'Actions'])
             for text in ('Patient name at dispatch', 'Original delivery address', 'Product at dispatch', 'Recorded dose', 'Sent with cold packaging'):
                 self.assertContains(response, text)
             self.assertNotContains(response, 'FUTURE_PARCEL')

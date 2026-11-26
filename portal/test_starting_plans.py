@@ -102,9 +102,13 @@ class StartingPlanTests(TestCase):
         self.assertEqual([(step.dose, step.product, step.max_dose) for step in (first, second, last)],
                          [(self.quarter, self.quarter.pen, '0.25 mg weekly'), (self.half, self.half.pen, '0.5 mg weekly'),
                           (self.one, self.one.pen, '1 mg weekly')])
-        self.assertEqual((first.starts_on, first.expires_on), (self.today, add_weeks(self.today, 4) - timedelta(days=1)))
-        self.assertEqual(second.starts_on, add_weeks(self.today, 4))
-        self.assertEqual((last.starts_on, last.expires_on), (add_weeks(self.today, 8), add_weeks(self.today, 16)))
+        # Valid from today; each step's weeks run from the plan's first pens, after the order cut-off (25 Nov 2026).
+        from care.parcels import first_shipping_day
+
+        pens = first_shipping_day(self.today, self.company)
+        self.assertEqual((first.starts_on, first.expires_on), (self.today, add_weeks(pens, 4) - timedelta(days=1)))
+        self.assertEqual(second.starts_on, add_weeks(pens, 4))
+        self.assertEqual((last.starts_on, last.expires_on), (add_weeks(pens, 8), add_weeks(pens, 16)))
         self.assertEqual((first.replaces, second.replaces), (old, None))
         # The current prescription is the step in effect; it ends when the plan does.
         current = current_prescription(self.company, self.patient)
@@ -133,13 +137,17 @@ class StartingPlanTests(TestCase):
                                                   'for 4 weeks, then 1 mg weekly, 16 weeks in all, valid to '))
 
     def drafted(self):
-        """The parcels drafted from the prescription, each checked and marked ready: [(week, dose, pens, pen)]."""
+        """The parcels drafted from the prescription, each checked and marked ready: [(week, dose, pens, pen)], week 1
+        being the week of the first pens (on the first shipping day whose order cut-off is still to come)."""
+        from care.parcels import first_shipping_day
+
+        pens = first_shipping_day(self.today, self.company)
         parcels = []
         for parcel in Shipment.objects.filter(patient=self.patient).order_by('scheduled_for', 'pk'):
             self.assertEqual((parcel.status, parcel.scheduled_for.weekday()), ('draft', 1))
             prepare_shipment(shipment=parcel, actor=self.owner)
             item = parcel.items.get()
-            parcels.append(((parcel.scheduled_for - self.today).days // 7 + 1, item.dose, item.quantity, item.product.strength))
+            parcels.append(((parcel.scheduled_for - pens).days // 7 + 1, item.dose, item.quantity, item.product.strength))
         return parcels
 
     def test_a_semaglutide_course_drafts_one_pen_of_its_strength_every_4_weeks(self):
@@ -190,7 +198,10 @@ class StartingPlanTests(TestCase):
         self.assertEqual(self.steps(), [])
         self.assertEqual(TreatmentAuthorization.objects.filter(pk__in=(first.pk, second.pk, last.pk), status='cancelled').count(), 3)
         current = current_prescription(self.company, self.patient)
-        self.assertEqual((current.dose, current.plan_key, current.ends_on), (self.one, None, add_weeks(self.today, 12)))
+        from care.parcels import first_shipping_day
+
+        self.assertEqual((current.dose, current.plan_key, current.ends_on),
+                         (self.one, None, add_weeks(first_shipping_day(self.today, self.company), 12)))
 
     def test_super_admins_keep_the_plans_in_the_pharmacy_catalogue(self):
         create = reverse('portal:ops-starting-plan-create')

@@ -6,9 +6,11 @@
 .patient-address-fields select, .patient-address-fields input, .patient-address-fields textarea { width: 100%; box-sizing: border-box; }
 .patient-optional { color: var(--c-6d808a); font-weight: 400; }
 .patient-start-form { display: grid; gap: 1rem; }
-.billing-state { border-radius: .7rem; font-weight: 600; margin: 0 0 .9rem; padding: .65rem .85rem; }
+/* Billing and payments: the banner sits under the card's label; the note and button sit at the foot of the card, so both cards'
+   buttons line up. */
+.billing-state { border-radius: .7rem; font-size: .86rem; font-weight: 600; line-height: 1.45; margin: .75rem 0 .15rem; padding: .6rem .85rem; }
 .billing-state--paid, .billing-state--due { background: var(--c-e4f4fa); color: var(--c-153b4b); }
-.billing-state--retrying, .billing-state--pending, .billing-state--update, .billing-state--no_mandate { background: var(--c-fff6e4); color: var(--c-7a5410); }
+.billing-state--retrying, .billing-state--pending, .billing-state--update, .billing-state--no_mandate, .billing-state--paused { background: var(--c-fff6e4); color: var(--c-7a5410); }
 .billing-state--failed { background: var(--c-fcedeb); color: var(--c-aa4d47); }
 .billing-due { border-color: var(--c-f0d9a8); margin-bottom: 1.25rem; }
 .billing-invoice-link { white-space: nowrap; }
@@ -20,8 +22,11 @@
 .billing-pill--paid { background: var(--c-e3f4fb); color: var(--c-173d4d); }
 .billing-pill--retrying { background: var(--c-fff6e4); color: var(--c-7a5410); }
 .billing-pill--failed { background: var(--c-fcedeb); color: var(--c-aa4d47); }
-.billing-address { font-style: normal; line-height: 1.6; margin: 0 0 .5rem; }
-.billing-method { margin-top: .5rem; }
+.billing-address dd { line-height: 1.55; }
+.patient-kv > div.is-long dd.billing-instructions { align-items: flex-start; display: flex; gap: .45rem; }
+.billing-instructions__icon { fill: none; flex: none; height: 1rem; margin-top: .18rem; stroke: var(--console-muted); stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.8; width: 1rem; }
+.billing-note { margin-top: .9rem; }
+.billing-method { margin-top: auto; }
 .billing-sandbox, .billing-card-form { max-width: 38rem; }
 /* Peach's card form keeps its own light card in dark mode too, so its labels stay dark (a colour with no dark value). */
 .billing-card-form__widget { color: var(--c-1f2933); color-scheme: light; margin: 1rem 0; }

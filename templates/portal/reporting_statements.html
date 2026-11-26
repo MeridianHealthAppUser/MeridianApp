@@ -1,5 +1,5 @@
 {% extends 'portal/staff_page_base.html' %}{% load static workspace_ui %}
-{% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/backoffice.css' %}?v=20261120c">{% if monthly %}<link rel="stylesheet" href="{% static 'css/dialogs.css' %}?v=20261115a"><script src="{% static 'js/dialogs.js' %}?v=20261115b" defer></script>{% endif %}{% endblock %}
+{% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/backoffice.css' %}?v=20261126a">{% if monthly %}<link rel="stylesheet" href="{% static 'css/dialogs.css' %}?v=20261115a"><script src="{% static 'js/dialogs.js' %}?v=20261115b" defer></script>{% endif %}{% endblock %}
 {% block breadcrumbs %}{% if active_membership.role == 'super_admin' %}{% breadcrumbs 'Insights' %}{% else %}{% breadcrumbs 'Activity statements' %}{% endif %}{% endblock %}
 {% block page_heading %}<header class="staff-page-header"><div><h1>{% if active_membership.role == 'super_admin' %}Insights{% else %}Activity statements{% endif %}</h1><p>Each doctor’s consults, messages answered and blood results reviewed, at the practice’s rates. Nothing is paid from here.</p></div>{% if can_edit %}<a class="console-button console-button--primary" href="{% url 'portal:activity-statement-create' %}">Prepare statement</a>{% endif %}</header>{% page_tabs %}{% endblock %}
 {% block page_content %}<div class="backoffice">
@@ -20,7 +20,7 @@
       <thead><tr><th scope="col">Period</th><th scope="col">Sent to</th><th scope="col">Sent</th><th scope="col">Total payout</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead>
       <tbody>{% for report in monthly.reports %}<tr>
         <td data-label="Period"><a href="{% url 'portal:activity-report-detail' report.pk %}">{{ report.period_start|date:'j M Y' }} – {{ report.period_end|date:'j M Y' }}</a></td>
-        <td data-label="Sent to">{{ report.sent_to|default:'—' }}</td>
+        <td data-label="Sent to">{{ report.sent_to|default:'-' }}</td>
         <td data-label="Sent">{% if report.sent_at %}{{ report.sent_at|date:'j M Y, H:i' }}<br><small class="backoffice-muted">{% if report.created_by %}By {{ report.created_by.full_name }}{% else %}Automatically{% endif %}</small>{% else %}Not sent{% endif %}</td>
         <td data-label="Total payout">{{ report.total_text }}</td>
         <td data-label="Actions"><div class="backoffice-actions"><a class="console-button console-button--secondary" href="{% url 'portal:activity-report-detail' report.pk %}">Open report</a><a class="console-button console-button--secondary" data-no-loader href="{% url 'portal:activity-report-export' report.pk %}">Download CSV</a></div></td>

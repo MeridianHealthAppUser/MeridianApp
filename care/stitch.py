@@ -348,9 +348,12 @@ def verify_signature(body, headers, secret, *, now=None):
 
 def debicheck_in_use(company):
     """Whether the practice has DebiCheck collection files to exchange with Stitch: Stitch takes new debit orders, or
-    still holds some from before a move to another provider."""
+    still holds some from before a move to another provider. Never while debit orders are hidden (card payments only)."""
     from .models import DebitMandate
+    from .payment_providers import debit_orders_enabled
 
+    if not debit_orders_enabled():
+        return False
     return settings.PAYMENT_PROVIDER == StitchProvider.name or DebitMandate.objects.filter(
         company=company, patient__demo_data_set__isnull=True, provider=StitchProvider.name, method=DebitMandate.Method.DEBICHECK).exclude(
         status__in=(DebitMandate.Status.CANCELLED, DebitMandate.Status.FAILED)).exists() or debicheck_waiting(company).exists()

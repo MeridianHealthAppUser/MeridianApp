@@ -160,7 +160,12 @@ def initiate_prescription(*, company, patient, actor, current, plan, weeks, reas
     reason = ' '.join(reason.split())
     flags = _check_flags(company, patient, acknowledge_flags)
     key = uuid.uuid4()
-    schedule = plan_schedule(plan, weeks)
+    # Valid from today; its weeks, and each step's, run from its first pens (care.prescriptions.weeks_from).
+    from .prescriptions import weeks_from
+
+    today = timezone.localdate()
+    schedule = plan_schedule(plan, weeks, today=weeks_from(company, today))
+    schedule[0] = (schedule[0][0], today, schedule[0][2])
     require_same_demo_data(patient, *(dose.pen for dose, _, _ in schedule))
     steps = []
     for position, (dose, starts_on, expires_on) in enumerate(schedule, start=1):
@@ -188,7 +193,7 @@ def initiate_prescription(*, company, patient, actor, current, plan, weeks, reas
                                             'previous_authorization_id': previous.pk if previous else None,
                                             'steps': [step.pk for step in steps], 'safety_flags_acknowledged': bool(flags)})
     _event(steps[0], 'Treatment authorised', 'Your doctor recorded a treatment decision. Open your treatment page to see its details.')
-    from .billing import review_mandates
+    from .prescriptions import _review_debit_orders
 
-    review_mandates(company, patient, prescription_changed=True)
+    _review_debit_orders(company, patient, changed=True, prescription=steps[0])
     return steps[0]

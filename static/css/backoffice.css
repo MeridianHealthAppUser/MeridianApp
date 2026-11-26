@@ -2,6 +2,10 @@
 .backoffice-panel { padding: 1.5rem; min-width: 0; }
 .backoffice-grid { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 1.2rem; align-items: start; }
 .backoffice-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; }
+/* A new activity statement (26 Nov 2026): the doctor and the dates on one line, the four rates on the next. */
+.backoffice-fields--three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.backoffice-fields--four { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+@media (max-width: 52rem) { .backoffice-fields--three, .backoffice-fields--four { grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); } }
 .backoffice .console-form textarea { width: 100%; resize: vertical; }
 .backoffice table { width: 100%; border-collapse: collapse; text-align: left; }
 .backoffice th, .backoffice td { padding: 1rem; border-bottom: 1px solid var(--border, var(--c-e3ecef)); vertical-align: top; }

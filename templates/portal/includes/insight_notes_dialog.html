@@ -1,15 +1,16 @@
-{% comment %}Notes on Insights and Cohorts (InsightNote): a change worth seeing on the charts, such as a price change,
-  shown as a marker at its month. Added and removed here.{% endcomment %}
-<dialog class="app-dialog" id="insight-notes" aria-labelledby="insight-notes-title">
+{% comment %}Notes on Insights and Cohorts (InsightNote), one dialog a chart (Dr Czech, 26 Nov 2026): a change worth seeing
+  on that chart, such as a price change, shown as a marker at its month on it alone. Added and removed here; opened
+  from the chart's Notes button (includes/insight_notes_button.html).{% endcomment %}{% for chart in note_charts %}
+<dialog class="app-dialog" id="insight-notes-{{ chart.key }}" aria-labelledby="insight-notes-{{ chart.key }}-title">
   <div class="app-dialog__body">
-    <h2 id="insight-notes-title">Notes</h2>
-    <p class="app-dialog__sub">Mark a change, such as a new price or an email series, so its effect can be seen. Each note shows as a marker at its month on the charts over time and on the cohort trends.</p>
-    <form method="post" action="{% url 'portal:insight-notes' %}" class="console-form insights-note-form">{% csrf_token %}<input type="hidden" name="workflow_context" value="{{ note_context }}"><input type="hidden" name="next" value="{{ next_url }}">
-      <div class="console-form__field"><label for="{{ note_form.on.id_for_label }}">Date</label>{{ note_form.on }}</div>
-      <div class="console-form__field"><label for="{{ note_form.label.id_for_label }}">Note</label>{{ note_form.label }}</div>
+    <h2 id="insight-notes-{{ chart.key }}-title">Notes on {{ chart.title }}</h2>
+    <p class="app-dialog__sub">Mark a change, such as a new price or an email series, so its effect can be seen. Each note shows as a marker at its month on this chart only.</p>
+    <form method="post" action="{% url 'portal:insight-notes' %}" class="console-form insights-note-form">{% csrf_token %}<input type="hidden" name="workflow_context" value="{{ note_context }}"><input type="hidden" name="next" value="{{ next_url }}"><input type="hidden" name="chart" value="{{ chart.key }}">
+      <div class="console-form__field"><label for="note-{{ chart.key }}-on">Date</label><input type="date" name="on" id="note-{{ chart.key }}-on" value="{{ note_today|date:'Y-m-d' }}" required></div>
+      <div class="console-form__field"><label for="note-{{ chart.key }}-label">Note</label><input type="text" name="label" id="note-{{ chart.key }}-label" maxlength="160" placeholder="Decreased price to R1000" required></div>
       <button class="console-button console-button--primary" type="submit">Add note</button>
     </form>
-    {% if notes %}<ul class="insights-note-list">{% for note in notes %}<li><span><time datetime="{{ note.on|date:'Y-m-d' }}">{{ note.on|date:'j M Y' }}</time> {{ note.label }}</span><form method="post" action="{% url 'portal:insight-note-delete' note.pk %}">{% csrf_token %}<input type="hidden" name="workflow_context" value="{{ note_context }}"><input type="hidden" name="next" value="{{ next_url }}"><button class="console-button console-button--secondary console-button--cancel" type="submit">Remove<span class="sr-only"> the note for {{ note.on|date:'j M Y' }}</span></button></form></li>{% endfor %}</ul>{% else %}<p class="insights-empty">No notes yet.</p>{% endif %}
+    {% if chart.notes %}<ul class="insights-note-list">{% for note in chart.notes %}<li><span><time datetime="{{ note.on|date:'Y-m-d' }}">{{ note.on|date:'j M Y' }}</time> {{ note.label }}</span><form method="post" action="{% url 'portal:insight-note-delete' note.pk %}">{% csrf_token %}<input type="hidden" name="workflow_context" value="{{ note_context }}"><input type="hidden" name="next" value="{{ next_url }}"><button class="console-button console-button--secondary console-button--cancel" type="submit">Remove<span class="sr-only"> the note for {{ note.on|date:'j M Y' }}</span></button></form></li>{% endfor %}</ul>{% else %}<p class="insights-empty">No notes on this chart yet.</p>{% endif %}
     <div class="app-dialog__actions"><button class="console-button console-button--secondary" type="button" data-dialog-close>Close</button></div>
   </div>
-</dialog>
+</dialog>{% endfor %}

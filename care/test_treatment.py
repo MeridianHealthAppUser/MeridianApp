@@ -130,12 +130,26 @@ class TreatmentLifecycleTests(TestCase):
 
     def test_only_prescriber_can_pause_revoke_or_renew(self):
         old = self.authorization()
-        for actor in (self.colleague, self.super_admin, self.admin, self.patient_user):
+        for actor in (self.colleague, self.admin, self.patient_user):
             with self.subTest(actor=actor.email):
                 with self.assertRaises(PermissionDenied):
                     change_authorization_status(authorization=old, actor=actor, action='pause')
                 with self.assertRaises(PermissionDenied):
                     self.authorization(renews=old, actor=actor)
+
+    def test_the_super_admin_manages_and_renews_any_authorisation(self):
+        # James, 26 Nov 2026: the Super Admin pauses, revokes and renews any authorisation, doctor or not; they still
+        # can't authorise a new treatment unless they are a doctor.
+        old = self.authorization()
+        paused = change_authorization_status(authorization=old, actor=self.super_admin, action='pause')
+        self.assertEqual(paused.status, 'paused')
+        self.assertTrue(AuditEvent.objects.filter(action='treatment.pause', actor=self.super_admin).exists())
+        # Not a doctor: renewed for the doctor who prescribed it, the Super Admin the one who did it.
+        renewed = self.authorization(renews=old, actor=self.super_admin)
+        self.assertEqual(renewed.prescribed_by, self.doctor)
+        self.assertTrue(AuditEvent.objects.filter(action='treatment.authorized', actor=self.super_admin, target_id=str(renewed.pk)).exists())
+        with self.assertRaises(PermissionDenied):
+            self.authorization(actor=self.super_admin)
 
     def test_revocation_pauses_related_plans_only_and_is_audited_once(self):
         auth = self.authorization()
@@ -195,15 +209,22 @@ class TreatmentLifecycleTests(TestCase):
             change_subscription_status(subscription=cancelled, actor=self.patient_user, action='resume', confirm=True)
         self.assertEqual(PatientSubscription.objects.count(), 1)
 
-    def test_resume_requires_current_authorization_and_never_releases_held_shipments(self):
+    def test_resume_requires_current_authorization_and_releases_only_what_the_pause_held(self):
         auth = self.authorization()
         plan = self.enroll(auth)
         shipment = self.shipment(plan)
         paused = change_subscription_status(subscription=plan, actor=self.patient_user, action='pause', confirm=True)
+        shipment.refresh_from_db()
+        self.assertEqual((shipment.status, shipment.hold_reason), ('held', 'Subscription paused or cancelled by the patient.'))
+        # Held for something else, it stays held.
+        other = self.shipment(plan)
+        Shipment.objects.filter(pk=other.pk).update(status='held', hold_reason='Prescription changed. Dispensing review is required before dispatch.')
         resumed = change_subscription_status(subscription=paused, actor=self.patient_user, action='resume', confirm=True)
         shipment.refresh_from_db()
+        other.refresh_from_db()
         self.assertEqual(resumed.status, 'active')
-        self.assertEqual(shipment.status, 'held')
+        self.assertEqual((shipment.status, shipment.hold_reason), ('draft', ''))
+        self.assertEqual(other.status, 'held')
         paused = change_subscription_status(subscription=resumed, actor=self.patient_user, action='pause', confirm=True)
         TreatmentAuthorization.objects.filter(pk=auth.pk).update(expires_on=timezone.localdate() - timedelta(days=1))
         with self.assertRaises(ValidationError):

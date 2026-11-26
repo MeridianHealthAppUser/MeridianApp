@@ -1,7 +1,7 @@
 """The default deployment keeps all data but exposes only Meridian Health."""
 
 from io import StringIO
-from datetime import date
+from datetime import date, timedelta
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
@@ -189,7 +189,74 @@ class BillingDemoSeedTests(TestCase):
         self.assertTrue(ClinicalTask.objects.filter(title__startswith='Debit failed: follow up with Zanele').exists())
         week = Shipment.objects.filter(status=Shipment.Status.READY).select_related('patient')
         clear = sorted(parcel.patient.first_name for parcel in week if not lock_reasons(parcel) and parcel.patient.first_name != 'Nadia')
-        self.assertEqual(clear, ['Ayesha', 'Lerato', 'Ruan'])
+        # Seeded on a Tuesday, the shipping day: its pens were ordered by last Thursday's cut-off, so what was paid for
+        # by then goes out (Busi paused after paying, so hers still does; Ruan paid by EFT). Everything decided today
+        # goes out next Tuesday: Ashleigh's and Kagiso's first payments, Sipho's and James's dose changes, Mark's late
+        # payment (25 Nov 2026).
+        self.assertEqual(clear, ['Ayesha', 'Busi', 'Lerato', 'Ruan'])
+        for name in ('Ashleigh', 'Kagiso', 'Sipho', 'James', 'Mark'):
+            following = Shipment.objects.filter(patient__first_name=name, status__in=('draft', 'ready'),
+                                                scheduled_for__gte=date(2026, 11, 3)).order_by('scheduled_for').first()
+            self.assertEqual(following.scheduled_for, date(2026, 11, 10), name)
         self.assertTrue(Shipment.objects.filter(status=Shipment.Status.DELIVERED).exists())
+        # Card payments only (22 Nov 2026): no DebiCheck; Sipho's same-price dose change left the card alone; Kagiso's
+        # and Precious's courses start on their first payment; Johan (who asked) and Precious (who paid late) wait for
+        # the doctor; Naledi can't start without the doctor.
+        from care.billing import paid_before_pause
+        from care.models import AuditEvent, DebitMandate, SubscriptionCycle, TreatmentAuthorization
+        from care.prescriptions import start_check
+
+        self.assertFalse(DebitMandate.objects.exclude(method='card').exists())
+        self.assertEqual({name: states.get(name) for name in ('Sipho', 'Kagiso', 'Precious', 'Busi')},
+                         {'Sipho': 'paid', 'Kagiso': 'paid', 'Precious': 'paid', 'Busi': 'paid'})
+        # Each course's weeks run from its first pens; only those paid for after a later order cut-off than they were
+        # written move, and tell the patient.
+        from care.models import PatientEvent
+
+        self.assertEqual(set(AuditEvent.objects.filter(action='prescription.start_moved').values_list('patient__first_name', flat=True)),
+                         {'Kagiso', 'Precious'})
+        self.assertEqual(set(PatientEvent.objects.filter(title='Treatment start moved').values_list('patient__first_name', flat=True)),
+                         {'Kagiso', 'Precious'})
+        self.assertEqual(set(TreatmentAuthorization.objects.filter(needs_confirmation=True).values_list('patient__first_name', flat=True)),
+                         {'Johan', 'Precious'})
+        naledi = TreatmentAuthorization.objects.get(patient__first_name='Naledi')
+        self.assertFalse(start_check(naledi)['asked'])
+        self.assertTrue(any(paid_before_pause(parcel) for parcel in Shipment.objects.filter(patient__first_name='Busi')))
+        # Treatment starts on the first payment: each paying patient's prescription is valid from the day they first
+        # paid, and that payment's period from its parcel; a parcel whose payment didn't go through was missed (held,
+        # unpaid): Zanele's.
+        from care.parcels import first_shipping_day
+
+        for name in ('Ayesha', 'Pieter', 'Zanele', 'Lerato', 'Megan', 'Sipho', 'Busi', 'Kagiso'):
+            first_paid = SubscriptionCycle.objects.filter(patient__first_name=name).order_by('cycle_number').first()
+            started = TreatmentAuthorization.objects.filter(patient__first_name=name).order_by('starts_on').first()
+            self.assertEqual((started.starts_on, first_paid.starts_on),
+                             (first_paid.due_on, first_shipping_day(first_paid.due_on, first_paid.company)), name)
+        self.assertTrue(Shipment.objects.filter(patient__first_name='Zanele', status=Shipment.Status.HELD,
+                                                hold_reason__startswith='Not paid').exists())
+        # Tirzepatide at different points: Ashleigh starting the plan, Pierre stepping up to 5 mg, James moved to 7.5 mg
+        # in week 9 (a 5-week period) and to 10 mg today in week 14 (4-weekly again), Andre every 5 weeks, Mark carried
+        # on after a late payment.
+        from care.billing import billing_weeks
+        from care.prescriptions import moved_note
+
+        plans = {plan.patient.first_name: plan for plan in PatientSubscription.objects.exclude(status='cancelled').filter(
+            patient__first_name__in=('Ashleigh', 'Pierre', 'James', 'Andre', 'Mark')).select_related('patient', 'authorization')}
+        self.assertEqual({name: billing_state(plan)[0] for name, plan in plans.items()},
+                         {'Ashleigh': 'paid', 'Pierre': 'paid', 'James': 'paid', 'Andre': 'paid', 'Mark': 'paid'})
+        self.assertEqual(TreatmentAuthorization.objects.filter(patient__first_name='Ashleigh').count(), 2)  # Plan steps.
+        james = plans['James']
+        self.assertEqual([(cycle.ends_on - cycle.starts_on).days + 1 for cycle in james.cycles.order_by('cycle_number')],
+                         [28, 28, 35, 28])
+        # The next payment a week before the next 10 mg parcel.
+        self.assertEqual(james.next_debit_on, james.cycles.order_by('cycle_number').last().ends_on + timedelta(days=1 - 7))
+        self.assertEqual(billing_weeks(james, james.next_debit_on + timedelta(weeks=1)), 4)
+        self.assertEqual(list(TreatmentAuthorization.objects.filter(patient__first_name='James', replaces__isnull=False)
+                              .order_by('starts_on').values_list('max_dose', flat=True)), ['7.5 mg weekly', '10 mg weekly'])
+        self.assertEqual(james.authorization.max_dose, '10 mg weekly')
+        andre = list(plans['Andre'].cycles.order_by('cycle_number').values_list('starts_on', flat=True))
+        self.assertEqual({(later - earlier).days for earlier, later in zip(andre, andre[1:])}, {35})
+        self.assertEqual(moved_note(plans['Mark'].authorization)['because'], 'after a missed payment')
+        self.assertTrue(Shipment.objects.filter(patient__first_name='Mark', hold_reason__startswith='Missed: ').exists())
         with self.assertRaisesMessage(Exception, 'already seeded'):
             call_command('seed_billing_demo', stdout=StringIO())

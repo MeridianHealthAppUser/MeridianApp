@@ -54,9 +54,21 @@ def waive_cycle(cycle, actor=None):
     return payment
 
 
+def _tone(cycle, in_flight):
+    """A payment's status colour, as Billing's pills have them (James, 26 Nov 2026): paid, failed, retrying (being
+    collected or tried again) or due (to come, or no longer due)."""
+    if cycle.status == SubscriptionCycle.Status.PAID:
+        return 'paid'
+    if cycle.status == SubscriptionCycle.Status.FAILED:
+        return 'failed'
+    if in_flight or (cycle.status == SubscriptionCycle.Status.PENDING and cycle.attempts):
+        return 'retrying'
+    return 'due'
+
+
 def payment_schedule(subscription):
     """Actual cycles plus future estimates through the prescribed course; viewing creates no bills."""
-    from .billing import billing_weeks, price_on
+    from .billing import billing_weeks, payment_day_for, period_start, prescription_ends_on, price_on
     cycles = list(subscription.cycles.filter(company_id=subscription.company_id, patient_id=subscription.patient_id)
                   .select_related('discount').prefetch_related('payments').order_by('due_on', 'pk'))
     rules = list(subscription.discounts.filter(company_id=subscription.company_id, patient_id=subscription.patient_id).order_by('-pk'))
@@ -70,26 +82,33 @@ def payment_schedule(subscription):
             amount=cycle.amount, discount_amount=cycle.discount_amount, discount=cycle.discount,
             key=f'cycle:{cycle.pk}', status=('Covered by discount' if cycle.status == cycle.Status.PAID and cycle.amount == 0 else
                     'Processing' if in_flight else cycle.get_status_display()),
-            editable=subscription.status != PatientSubscription.Status.CANCELLED and cycle.status in OPEN and not in_flight and not any(payment.status == Payment.Status.PAID for payment in payments), paid_at=cycle.paid_at, projected=False))
-    auth = subscription.authorization
-    end = auth.expires_on if auth else subscription.review_due_on
-    if auth and auth.plan_key:
-        end = TreatmentAuthorization.objects.filter(company_id=subscription.company_id, patient_id=subscription.patient_id,
-            plan_key=auth.plan_key).exclude(status=TreatmentAuthorization.Status.CANCELLED).order_by('-expires_on').values_list('expires_on', flat=True).first() or end
-    last = max(cycles, key=lambda cycle: cycle.starts_on) if cycles else None
-    day = subscription.next_debit_on or ((last.ends_on + timedelta(days=1) if last.ends_on else
-          last.starts_on + timedelta(weeks=billing_weeks(subscription, last.starts_on))) if last else subscription.starts_on)
-    existing_dates = {cycle.starts_on for cycle in cycles}
+            editable=subscription.status != PatientSubscription.Status.CANCELLED and cycle.status in OPEN and not in_flight and not any(payment.status == Payment.Status.PAID for payment in payments), paid_at=cycle.paid_at, projected=False,
+            starts_on=cycle.starts_on, tone=_tone(cycle, in_flight)))
+    end = prescription_ends_on(subscription)
+    live = [cycle for cycle in cycles if cycle.status != SubscriptionCycle.Status.CANCELLED]
+    last = max(live, key=lambda cycle: cycle.cycle_number) if live else None
+    after = (last.ends_on or last.starts_on + timedelta(weeks=billing_weeks(subscription, last.starts_on), days=-1)) if last else None
+    day = subscription.next_debit_on or (payment_day_for(after + timedelta(days=1)) if after else subscription.starts_on)
+    existing_dates = {cycle.due_on for cycle in cycles}
     projected = 0
-    while end and day <= end and subscription.status != PatientSubscription.Status.CANCELLED and projected < 520:
+    # Each payment pays for the period from its parcel, a week later (care.billing.period_start); the last is the one
+    # whose parcel still goes out before the prescription ends.
+    # Nothing more is planned once the prescription is revoked (James, 26 Nov 2026): only what was paid or tried.
+    revoked = subscription.authorization_id and subscription.authorization.status == TreatmentAuthorization.Status.CANCELLED
+    while end and not revoked and day <= end and subscription.status != PatientSubscription.Status.CANCELLED and projected < 520:
+        starts = period_start(subscription, day, after=after)
+        if starts >= end:
+            break
+        weeks = billing_weeks(subscription, starts)
         if day not in existing_dates:
-            base = price_on(subscription, day)
+            base = price_on(subscription, starts)
             amount, rule = discounted_price(subscription, day, base, rules=rules)
             rows.append(dict(cycle=None, due_on=day, base=base, amount=amount,
                 discount_amount=base - amount if base is not None else Decimal('0'), discount=rule,
                 key=f'date:{day.isoformat()}', status='Planned · paused' if subscription.status == PatientSubscription.Status.PAUSED else 'Planned',
-                editable=base is not None, paid_at=None, projected=True))
-        day += timedelta(weeks=billing_weeks(subscription, day))
+                editable=base is not None, paid_at=None, projected=True, starts_on=starts, tone='due'))
+        after = starts + timedelta(weeks=weeks, days=-1)
+        day = payment_day_for(after + timedelta(days=1))
         projected += 1
     rows.sort(key=lambda row: row['due_on'])
     relevant = [row for row in rows if not row['cycle'] or row['cycle'].status != SubscriptionCycle.Status.CANCELLED]

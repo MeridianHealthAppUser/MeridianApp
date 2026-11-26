@@ -2,7 +2,7 @@
 {% load static %}
 
 {% block title %}Start your questionnaire | Meridian Health{% endblock %}
-{% block extra_css %}<link rel="stylesheet" href="{% static 'css/questionnaire.css' %}?v=20261104a"><link rel="stylesheet" href="{% static 'css/theme_switch.css' %}?v=20261113b">{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{% static 'css/questionnaire.css' %}?v=20261126a"><link rel="stylesheet" href="{% static 'css/theme_switch.css' %}?v=20261113b">{% endblock %}
 {% block public_header_actions %}<div class="header-actions">{% include 'includes/theme_switch.html' %}</div>{% endblock %}
 
 {% block content %}
@@ -30,7 +30,7 @@
       </section>{% else %}{{ form.practice }}{% if form.practice.errors %}<div class="form-errors" role="alert">This questionnaire is not available for that practice. Please reload the page.</div>{% endif %}{% endif %}
       <section class="questionnaire-card" aria-labelledby="identity-heading">
         <h2 id="identity-heading">Who you are</h2>
-        <p>We need this to contact you about your enquiry. Submitting the questionnaire records you as a lead, nothing more — an account with a login is only created after a successful consultation payment. Online payment is not connected yet.</p>
+        <p>We need this to contact you about your enquiry. Submitting the questionnaire records you as a lead, nothing more. An account with a login is only created after a successful consultation payment. Online payment is not connected yet.</p>
         <div class="form-grid">
           <div class="question-field">{{ form.first_name.label_tag }}{{ form.first_name }}{% for error in form.first_name.errors %}<small class="field-error">{{ error }}</small>{% endfor %}</div>
           <div class="question-field">{{ form.last_name.label_tag }}{{ form.last_name }}{% for error in form.last_name.errors %}<small class="field-error">{{ error }}</small>{% endfor %}</div>
@@ -47,7 +47,7 @@
           <div class="question-field">{{ form.height_cm.label_tag }}{{ form.height_cm }}{% for error in form.height_cm.errors %}<small class="field-error">{{ error }}</small>{% endfor %}</div>
           <div class="question-field">{{ form.weight_kg.label_tag }}{{ form.weight_kg }}{% for error in form.weight_kg.errors %}<small class="field-error">{{ error }}</small>{% endfor %}</div>
         </div>
-        <p class="questionnaire-bmi" id="bmi-summary" aria-live="polite"><span class="questionnaire-badge questionnaire-badge--blue" id="bmi-value">BMI —</span><span>BMI alone does not determine whether treatment is right for you.</span></p>
+        <p class="questionnaire-bmi" id="bmi-summary" aria-live="polite"><span class="questionnaire-badge questionnaire-badge--blue" id="bmi-value">BMI -</span><span>BMI alone does not determine whether treatment is right for you.</span></p>
       </section>
       <fieldset class="questionnaire-card questionnaire-question" data-screening-question="adult">
         <legend>Are you 18 or older?</legend>
@@ -85,25 +85,28 @@
         <p>Optional. Tick all that apply.</p>
         <div class="questionnaire-options">{% for option in form.heard_from %}<label>{{ option.tag }}<span>{{ option.choice_label }}</span></label>{% endfor %}</div>
       </fieldset>
+      {% comment %}The Terms and Conditions and the Privacy Policy (Settings > Policy versions; Dr Czech, 26 Nov 2026), each
+        read in a dialog, then accepted together with one required tick. The acceptance keeps their exact wording
+        (care.intake.save_intake). They are the app's own, not the website's.{% endcomment %}
       <section class="questionnaire-card questionnaire-card--consent" aria-labelledby="consent-heading">
         <h2 id="consent-heading">Before you submit</h2>
-        <p>Please read the{% if multi_practice_enabled %} selected{% endif %} practice’s service, privacy and telehealth information before accepting. This acceptance does not opt you into marketing emails.</p>
+        <p>Please read the Terms and Conditions and the Privacy Policy before accepting them. Accepting them doesn’t sign you up for marketing emails.</p>
         <div class="questionnaire-consent-documents" id="practice-consent-documents">
           {% for practice_documents in consent_documents_by_practice %}
             <div class="questionnaire-practice-consent" data-practice-id="{{ practice_documents.practice_id }}">
-              <h3>{{ practice_documents.name }}</h3>
-              {% for document in practice_documents.documents %}<details class="questionnaire-consent-document"><summary>{{ document.title }} <span>· {{ document.version }}</span></summary><div>{{ document.body|linebreaks }}</div></details>{% empty %}<p>Consent documents are not available for this practice. Submission is unavailable until they are configured.</p>{% endfor %}
+              {% if multi_practice_enabled %}<h3>{{ practice_documents.name }}</h3>{% endif %}
+              {% include 'portal/includes/questionnaire_consent_documents.html' with documents=practice_documents.documents prefix=practice_documents.practice_id %}
             </div>
           {% empty %}
-            {% for document in consent_documents %}<details class="questionnaire-consent-document"><summary>{{ document.title }} <span>· {{ document.version }}</span></summary><div>{{ document.body|linebreaks }}</div></details>{% empty %}<p>The practice’s consent information must be available before you submit.</p>{% endfor %}
+            {% include 'portal/includes/questionnaire_consent_documents.html' with documents=consent_documents prefix='practice' %}
           {% endfor %}
         </div>
-        <div class="question-check">{{ form.service_consent }}<div><label for="{{ form.service_consent.id_for_label }}">I accept the{% if multi_practice_enabled %} selected{% endif %} practice’s service terms, privacy notice and telehealth information.</label><p>My acceptance is recorded against this enquiry with the document versions, time and source. A consultation does not guarantee a prescription.</p></div></div>
+        <div class="question-check">{{ form.service_consent }}<div><label for="{{ form.service_consent.id_for_label }}">I accept the Terms and Conditions and the Privacy Policy.</label><p>My acceptance is recorded with this enquiry, with the wording I accepted and when. A consultation does not guarantee a prescription.</p></div></div>
         {% for error in form.service_consent.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
       </section>
       <footer class="questionnaire-submit-row"><span class="questionnaire-progress" id="screening-progress" aria-live="polite">0 of 5 answered</span><button class="questionnaire-button" type="submit">{% if editing %}Update my answers{% else %}Check my eligibility{% endif %}</button></footer>
       <p class="questionnaire-legal">This is an enquiry, not an account registration or a treatment decision. No payment is taken when you submit.</p>
     </form>
   </section>
-  <script src="{% static 'js/questionnaire.js' %}?v=20261115a" defer></script>
+  <script src="{% static 'js/questionnaire.js' %}?v=20261126a" defer></script>
 {% endblock %}

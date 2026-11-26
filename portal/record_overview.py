@@ -17,12 +17,12 @@ from care.clinical_summary import (
     ANSWER_LABELS, FIELDS, FLAG_CHOICES, flag_level, get_summary, screening, summary_safety_flags,
 )
 from care.models import (
-    BloodResult, ClinicalEncounter, ClinicalNote, LabRequest, MedicationDose, MedicationProduct, PatientSummaryEdit,
+    AuditEvent, BloodResult, ClinicalEncounter, ClinicalNote, LabRequest, MedicationDose, MedicationProduct, PatientSummaryEdit,
     Shipment, TreatmentAuthorization, WeightEntry,
 )
 from care.prescriptions import (
-    DEFAULT_WEEKS, WEEK_CHOICES, current_prescription, dose_mg, expiry_preview, prescription_label, prescription_options,
-    prescription_state, renewal_expiry,
+    DEFAULT_WEEKS, WEEK_CHOICES, current_prescription, dose_mg, expiry_preview, moved_note, prescription_label,
+    prescription_options, prescription_state, renewal_expiry, revoked_prescription,
 )
 
 from .record_chart import doctor_weight_chart
@@ -81,6 +81,22 @@ def clinical_log(company, patient, membership=None, viewer=None):
             f'Prescription recorded: {prescription_label(authorization)}, valid to {authorization.expires_on:%-d %b %Y}.')
         entries.append({'id': f'prescription-{authorization.pk}', 'kind': 'prescription', 'at': authorization.created_at,
                         'by': authorization.prescribed_by.titled_name, 'tag': 'Prescription', 'text': text})
+    # A prescription paused or revoked (James, 26 Nov 2026), from the audit trail: when, and by whom.
+    events = list(AuditEvent.objects.for_company(company).filter(
+        patient=patient, action__in=('treatment.pause', 'treatment.revoke'), target_type='care.treatmentauthorization',
+    ).select_related('actor').order_by('-created_at', '-pk')[:LOG_LIMIT])
+    stopped = {authorization.pk: authorization for authorization in TreatmentAuthorization.objects.for_company(company).filter(
+        patient=patient, pk__in=[int(event.target_id) for event in events if event.target_id.isdigit()]).select_related('product', 'dose__pen')}
+    for event in events:
+        authorization = stopped.get(int(event.target_id)) if event.target_id.isdigit() else None
+        if authorization is None:
+            continue
+        revoked = event.action == 'treatment.revoke'
+        entries.append({'id': f'stopped-{event.pk}', 'kind': 'prescription', 'at': event.created_at,
+                        'by': event.actor.titled_name if event.actor_id else '', 'tag': 'Prescription',
+                        'text': f'Prescription {"revoked" if revoked else "paused"}: {prescription_label(authorization)}. '
+                                'The subscription is paused and parcels not yet sent are held.'
+                                + (' A new prescription restarts treatment.' if revoked else '')})
     entries.sort(key=lambda entry: entry['at'], reverse=True)
     for entry in entries:
         entry['lead'] = entry['kind'] in LEAD_KINDS
@@ -140,7 +156,7 @@ def _bmi(weight, height):
 
 
 def _kg(value):
-    return f'{Decimal(value).quantize(Decimal("0.1"))}' if value is not None else '—'
+    return f'{Decimal(value).quantize(Decimal("0.1"))}' if value is not None else '-'
 
 
 def summary_context(company, patient, summary):
@@ -171,8 +187,39 @@ def summary_context(company, patient, summary):
     }
 
 
+def paused_plan(company, patient):
+    """The care plan the patient paused themselves (not one the doctor paused), with the parcel they had already paid
+    for, which still goes out as the last one until they resume (or None): (plan, parcel), or (None, None)."""
+    from care.billing import paid_before_pause
+    from care.models import PatientSubscription, Shipment
+
+    plan = PatientSubscription.objects.filter(company=company, patient=patient, status=PatientSubscription.Status.PAUSED,
+                                              authorization__status='active').order_by('-created_at', '-pk').first()
+    if plan is None:
+        return None, None
+    parcels = Shipment.objects.filter(company=company, patient=patient, subscription=plan,
+                                      status__in=(Shipment.Status.DRAFT, Shipment.Status.READY, Shipment.Status.HELD))
+    return plan, next((parcel for parcel in parcels.order_by('scheduled_for', 'pk') if paid_before_pause(parcel)), None)
+
+
+def confirmation_needed(company, patient, prescription):
+    """An old prescription the doctor must confirm before the patient starts or their first parcel goes out:
+    {'written_on', 'paid_on'} (paid_on when the patient has already paid), or None."""
+    from care.models import PatientSubscription, SubscriptionCycle
+    from care.prescriptions import course_steps
+
+    steps = course_steps(prescription)
+    if not steps or not steps[0].needs_confirmation:
+        return None
+    paid = SubscriptionCycle.objects.filter(company=company, patient=patient, status=SubscriptionCycle.Status.PAID,
+                                            subscription__authorization__in=steps).exclude(
+        subscription__status=PatientSubscription.Status.CANCELLED).order_by('paid_at').first()
+    return {'written_on': min(step.starts_on for step in steps), 'paid_on': timezone.localdate(paid.paid_at) if paid else None}
+
+
 def record_overview_context(request, company, membership, patient, *, log_filter='clinical', open_dialog=''):
     prescription = current_prescription(company, patient)
+    revoked = revoked_prescription(company, patient) if prescription is None else None
     today = timezone.localdate()
     summary = get_summary(company, patient)
     log = clinical_log(company, patient, membership, request.user)
@@ -182,15 +229,22 @@ def record_overview_context(request, company, membership, patient, *, log_filter
     # A clinician assigned to this patient before, but not now, reads the Overview without changing it.
     changeable = can_change_record(membership, request.user, patient)
     prescriber = membership.is_prescriber and changeable
+    # Renewing is a doctor's, and the practice's Super Admin's too, doctor or not (James, 26 Nov 2026).
+    renewer = prescriber or (membership.role == membership.Role.SUPER_ADMIN and changeable)
     options = prescription_options(company, prescription) if prescriber else {}
     context = {
         'record_overview': True,
         'log_filter': log_filter if log_filter in ('clinical', 'dispensed') else 'clinical',
         'clinical_log': log, 'dispensed_log': shipped,
-        'prescription': prescription, 'prescription_state': prescription_state(prescription, today),
+        'prescription': prescription, 'prescription_state': 'revoked' if revoked else prescription_state(prescription, today),
+        # Revoked, with nothing prescribed since (James, 26 Nov 2026): shown as revoked instead of an older step.
+        'revoked_prescription': revoked,
+        **dict(zip(('paused_plan', 'last_before_pause'), paused_plan(company, patient))),
+        'confirmation_needed': confirmation_needed(company, patient, prescription),
+        'course_moved': moved_note(prescription),
         'prescription_label': prescription_label(prescription) if prescription else '',
         'prescription_days_left': (prescription.expires_on - today).days if prescription else None,
-        'can_prescribe': prescriber,
+        'can_prescribe': prescriber, 'can_renew': renewer and prescription is not None,
         'can_edit_summary': membership.has_clinical_access and changeable,
         'weight_chart': record_chart(company, patient, summary, log, shipped),
         'safety_flags': summary_safety_flags(company, patient, summary),
@@ -216,10 +270,19 @@ def record_overview_context(request, company, membership, patient, *, log_filter
             prescription_context_token=make_workflow_context(request, company, 'patient-prescription', patient=patient),
             renew_weeks=[{'weeks': weeks, 'expires_on': renewal_expiry(prescription, weeks, today)} for weeks in WEEK_CHOICES]
             if prescription else [],
-            change_weeks=[{'weeks': weeks, 'expires_on': expiry_preview(weeks, today)} for weeks in WEEK_CHOICES],
+            change_weeks=[{'weeks': weeks, 'expires_on': expiry_preview(weeks, today, company)} for weeks in WEEK_CHOICES],
             prescription_choices=[{'name': name, 'doses': doses} for name, doses in options.items()],
         )
         context.update(initiate_context(company, prescription, today, InitiatePrescriptionForm))
+    elif renewer:
+        from .prescription_views import RenewPrescriptionForm
+
+        context.update(
+            renew_form=RenewPrescriptionForm(initial={'weeks': str(DEFAULT_WEEKS), 'current': prescription.pk if prescription else None}),
+            prescription_context_token=make_workflow_context(request, company, 'patient-prescription', patient=patient),
+            renew_weeks=[{'weeks': weeks, 'expires_on': renewal_expiry(prescription, weeks, today)} for weeks in WEEK_CHOICES]
+            if prescription else [],
+        )
     if context['can_edit_summary']:
         context['summary_context_token'] = make_workflow_context(request, company, 'patient-summary', patient=patient)
     if prescriber:
@@ -232,6 +295,7 @@ def initiate_context(company, prescription, today, form_class):
     steps with their dates, so the dialog can show what will be prescribed before it is saved."""
     import json
 
+    from care.prescriptions import weeks_from
     from care.starting_plans import offered_plans, plan_schedule, plan_summary, plan_week_choices, schedule_text
 
     plans = offered_plans(company)
@@ -239,7 +303,9 @@ def initiate_context(company, prescription, today, form_class):
         plan.summary = plan_summary(plan)
         plan.week_choices = plan_week_choices(plan)
         plan.default = plan.default_weeks if plan.default_weeks in plan.week_choices else plan.week_choices[-1]
-        plan.previews = json.dumps({str(weeks): schedule_text(plan_schedule(plan, weeks, today)) for weeks in plan.week_choices})
+        # Its weeks run from its first pens (care.prescriptions.weeks_from).
+        plan.previews = json.dumps({str(weeks): schedule_text(plan_schedule(plan, weeks, weeks_from(company, today)))
+                                    for weeks in plan.week_choices})
     medicines = list(dict.fromkeys(plan.medicine for plan in plans))
     first = plans[0] if plans else None
     return {
@@ -247,7 +313,7 @@ def initiate_context(company, prescription, today, form_class):
         'initiate_form': form_class(plans=plans, initial={
             'current': prescription.pk if prescription else None, 'medicine': first.medicine if first else '',
             'plan': first.pk if first else None, 'weeks': str(first.default) if first else str(DEFAULT_WEEKS)}),
-        'initiate_weeks': [{'weeks': weeks, 'expires_on': expiry_preview(weeks, today)} for weeks in WEEK_CHOICES],
+        'initiate_weeks': [{'weeks': weeks, 'expires_on': expiry_preview(weeks, today, company)} for weeks in WEEK_CHOICES],
     }
 
 

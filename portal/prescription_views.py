@@ -12,8 +12,8 @@ from django.views.decorators.cache import never_cache
 from care.clinical_summary import FIELDS, edit_summary
 from care.models import MedicationDose, StartingPlan, TreatmentAuthorization
 from care.prescriptions import (
-    DEFAULT_WEEKS, WEEK_CHOICES, change_prescription, current_prescription, plan_steps, prescription_options,
-    renew_prescription, weeks_text,
+    DEFAULT_WEEKS, WEEK_CHOICES, change_prescription, confirm_prescription, current_prescription, plan_steps,
+    prescription_options, renew_prescription, weeks_text,
 )
 from care.starting_plans import initiate_prescription, offered_plans
 from practices.models import Patient
@@ -109,8 +109,9 @@ class RecordActionMixin(LoginRequiredMixin, StaffCompanyRequiredMixin):
 
 class PrescriptionRenewView(RecordActionMixin, View):
     def post(self, request, pk):
-        if not self.membership.is_prescriber:
-            raise PermissionDenied('Only a doctor can renew a prescription.')
+        # A doctor renews a prescription, and so does the practice's Super Admin, doctor or not (James, 26 Nov 2026).
+        if not (self.membership.is_prescriber or self.membership.role == self.membership.Role.SUPER_ADMIN):
+            raise PermissionDenied('Only a doctor or the Super Admin can renew a prescription.')
         patient = self.patient(pk)
         form = RenewPrescriptionForm(request.POST)
         if form.is_valid():
@@ -152,6 +153,27 @@ class PrescriptionChangeView(RecordActionMixin, View):
                 for message in error.messages:
                     form.add_error(None, message)
         return render_overview(request, self, patient, change_form=form, open_dialog='change')
+
+
+class PrescriptionConfirmView(RecordActionMixin, View):
+    """The doctor confirms a prescription written too long before the patient started or first paid
+    (care.prescriptions.confirm_prescription)."""
+
+    def post(self, request, pk):
+        if not self.membership.is_prescriber:
+            raise PermissionDenied('Only a doctor can confirm a prescription.')
+        patient = self.patient(pk)
+        try:
+            validate_workflow_context(request, self.company, 'patient-prescription', patient=patient)
+            current = self.current(patient, request.POST.get('current'))
+            if current is None:
+                raise ValidationError('Choose the prescription to confirm.')
+            confirm_prescription(company=self.company, patient=patient, actor=request.user, authorization=current,
+                                 request=request)
+            messages.success(request, 'Prescription confirmed. It now starts today, and this is written to the clinical log.')
+        except ValidationError as error:
+            messages.error(request, ' '.join(error.messages))
+        return redirect(self.overview_url(patient, 'record-prescription'))
 
 
 class PrescriptionInitiateView(RecordActionMixin, View):

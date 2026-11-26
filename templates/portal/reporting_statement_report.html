@@ -1,5 +1,5 @@
 {% extends 'portal/staff_page_base.html' %}{% load static workspace_ui %}
-{% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/backoffice.css' %}?v=20261120c">{% endblock %}
+{% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/backoffice.css' %}?v=20261126a">{% endblock %}
 {% block breadcrumbs %}{% breadcrumbs 'Activity statements' 'portal:activity-statements' 'Monthly report' %}{% endblock %}
 {% block page_heading %}<header class="staff-page-header"><div><h1>Monthly activity report</h1><p>{{ period }} · {{ company.name }}</p></div><a class="console-button console-button--secondary" data-no-loader href="{% url 'portal:activity-report-export' report.pk %}">Download CSV</a></header>{% endblock %}
 {% block page_content %}<div class="backoffice">

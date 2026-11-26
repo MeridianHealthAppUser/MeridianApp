@@ -5,7 +5,7 @@ from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand, CommandError
 from django.db import transaction
 
-from care.demo import seed_demo_care, seed_demo_catalogue
+from care.demo import seed_demo_care, seed_demo_catalogue, seed_insight_figures
 from care.notifications import paused as notifications_paused
 from practices.models import Company, CompanyMembership, Patient
 from practices.tenancy import multi_practice_enabled
@@ -55,6 +55,7 @@ class Command(BaseCommand):
         people = (
             {
                 'email': 'joshua.czech@meridianhealth.co.za',
+                'title': 'DR',
                 'first_name': 'Joshua',
                 'last_name': 'Czech',
                 'is_staff': True,
@@ -64,6 +65,7 @@ class Command(BaseCommand):
             },
             {
                 'email': 'sam.marchant@meridianhealth.co.za',
+                'title': 'DR',
                 'first_name': 'Sam',
                 'last_name': 'Marchant',
                 'is_staff': True,
@@ -102,6 +104,10 @@ class Command(BaseCommand):
             if created or options.get('reset_passwords'):
                 user.set_password(DEMO_PASSWORD)
                 user.save(update_fields=['password'])
+            if person.get('title') and not user.title:
+                # The demo doctors show as "Dr Sam Marchant", as a practice would set them in Users and roles.
+                user.title = person['title']
+                user.save(update_fields=['title'])
             users[person['email']] = user
 
         memberships = (
@@ -149,6 +155,8 @@ class Command(BaseCommand):
 
         with notifications_paused():  # Demo messages email nobody.
             seed_demo_care(meridian=meridian, orion=orion, users=users, nadia=nadia)
+            # Insights' Historical data: Dr Czech's monthly figures from before the app.
+            seed_insight_figures(meridian)
 
         self.stdout.write(self.style.SUCCESS(
             f'Demo data is ready: {2 if orion else 1} practices, {len(people)} accounts, '

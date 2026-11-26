@@ -1,8 +1,9 @@
 // The questionnaire inside the practice's WordPress screening page (docs/WORDPRESS_EMBED.md). It tells WordPress
 // how tall it is, so the frame grows with it instead of scrolling inside the page, and to scroll back to the top of
 // the form after each step. Leaving for the patient portal moves the whole tab, never just the frame.
-// Messages: { source: 'meridian-questionnaire', height | scrollTo | navigate }. WordPress's listener checks they come
-// from the app's address; they only go to the sites allowed to frame these pages (QUESTIONNAIRE_FRAME_ANCESTORS).
+// Messages: { source: 'meridian-questionnaire', height | scrollTo | navigate }; scrollTo also brings an opened dialog
+// into view. WordPress's listener checks they come from the app's address; they only go to the sites allowed to frame
+// these pages (QUESTIONNAIRE_FRAME_ANCESTORS).
 (function () {
   var script = document.currentScript;
   var framed = window.parent !== window;
@@ -58,6 +59,10 @@
     reportHeight();
     scrollParent();
     leave();
+    // A dialog opened in the form (static/js/questionnaire.js): scroll the page to it.
+    document.addEventListener('questionnaire:scroll-to', function (event) {
+      if (typeof event.detail === 'number') send({ scrollTo: event.detail });
+    });
     if ('ResizeObserver' in window) new ResizeObserver(reportHeight).observe(document.body);
     window.addEventListener('load', reportHeight);
     window.addEventListener('resize', reportHeight);

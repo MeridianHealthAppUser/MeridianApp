@@ -53,12 +53,19 @@ if not MULTI_PRACTICE_ENABLED and not SINGLE_PRACTICE_SLUG:
 # to disable; it is off by default when DEBUG is false.
 CHECKOUT_TEST_CODE = os.getenv('CHECKOUT_TEST_CODE', 'devtest' if DEBUG else '').strip()
 
-# Who takes new debit orders and card payments (care/payment_providers.py): sandbox, peach or stitch. "sandbox" approves
+# Who takes new card payments and kept cards (care/payment_providers.py): sandbox, peach or stitch. "sandbox" approves
 # and collects inside the app, for local testing only; empty means no provider is connected and nothing is collected.
 # A debit order already set up stays with the provider that holds it, so keep the old provider's settings when switching.
 PAYMENT_PROVIDER = os.getenv('PAYMENT_PROVIDER', 'sandbox' if DEBUG else '').strip().lower()
 if PAYMENT_PROVIDER == 'sandbox' and not DEBUG and os.getenv('PAYMENT_SANDBOX_IN_PRODUCTION', '').lower() != 'true':
     raise ImproperlyConfigured('PAYMENT_PROVIDER=sandbox takes no real money. Use it with DJANGO_DEBUG=true only.')
+# Card payments only, to start (22 Nov 2026): the patient's card is kept by the provider and charged again each period.
+# DebiCheck debit orders and Stitch are hidden: no DebiCheck choice, no Stitch provider, webhooks or collection files.
+# DEBIT_ORDERS_ENABLED=true brings them back, but the patient and staff wording now speaks of cards, so review it first.
+DEBIT_ORDERS_ENABLED = os.getenv('DEBIT_ORDERS_ENABLED', '').lower() == 'true'
+if PAYMENT_PROVIDER == 'stitch' and not DEBIT_ORDERS_ENABLED:
+    raise ImproperlyConfigured('Stitch is switched off while patients pay by card. Use PAYMENT_PROVIDER=peach, or set '
+                               'DEBIT_ORDERS_ENABLED=true to bring back DebiCheck debit orders.')
 # Each provider's webhook secret: Peach's 64-character hex key and Stitch's whsec_ signing secret. Webhooks are refused
 # without it. PAYMENT_WEBHOOK_SECRET is the secret of the provider in PAYMENT_PROVIDER when its own isn't set.
 PAYMENT_WEBHOOK_SECRET = os.getenv('PAYMENT_WEBHOOK_SECRET', '').strip()

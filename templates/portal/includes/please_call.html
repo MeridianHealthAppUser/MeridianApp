@@ -8,7 +8,7 @@
       <tbody>{% for item in call_page %}<tr>
         <td data-label="Name"><strong>{{ item.name }}</strong><small>Asked {{ item.created_at|date:'j M Y, H:i' }}</small></td>
         <td data-label="Contact" class="dropouts-contact">{{ item.phone }}{% if item.email %}<small>{{ item.email }}</small>{% endif %}</td>
-        <td data-label="Notes" class="dropouts-reason">{{ item.note|default:'—' }}</td>
+        <td data-label="Notes" class="dropouts-reason">{{ item.note|default:'-' }}</td>
         <td data-label="Actions"><button class="console-button console-button--primary" type="button" data-modal-open="called-{{ item.pk }}" aria-haspopup="dialog">Confirm called<span class="sr-only"> {{ item.name }}</span></button></td>
       </tr>{% empty %}<tr><td colspan="4">No one is waiting for a call.</td></tr>{% endfor %}</tbody>
     </table></div>

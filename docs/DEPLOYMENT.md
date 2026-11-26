@@ -201,6 +201,18 @@ Locally, every email is printed in the terminal running `runserver` instead of b
 
 Billing (`care/billing.py`) and The Courier Guy (`care/courier.py`) were added on 24 Oct 2026.
 
+**Card payments only, to start (22 Nov 2026).** Patients add a card, which the provider keeps and the app charges again
+each payment period. DebiCheck debit orders and Stitch are hidden while `DEBIT_ORDERS_ENABLED` is off (the default):
+
+- there is no DebiCheck choice on Start my subscription or Billing and payments, and no "Debit order outside the
+  platform" when staff record a payment;
+- `PAYMENT_PROVIDER=stitch` is refused at start-up, Stitch's webhook address answers 404, and the DebiCheck collection
+  files (Operations > Billing and `manage.py stitch_debicheck`) are switched off.
+
+Use `PAYMENT_PROVIDER=peach` for live payments. The patient and staff wording now speaks of cards ("Add my card", "Next
+payment"), so review it before setting `DEBIT_ORDERS_ENABLED=true` to bring debit orders back. The Stitch notes below
+apply only then.
+
 - `PAYMENT_PROVIDER` chooses who collects:
   - `sandbox` is for local use. A debit order is approved, or a card paid, on a page inside the app, and no money
     moves. It is refused in production.
@@ -215,6 +227,7 @@ Billing (`care/billing.py`) and The Courier Guy (`care/courier.py`) were added o
       test account takes): the card forms, the first and later charges, a decline, and forgetting a card.
     - Peach steers new merchants to its newer Orchestration API. Confirm which API the practice's account is on.
   - `stitch` is Stitch (`care/stitch.py`): DebiCheck debit orders, kept cards, and once-off card or bank payments.
+    Hidden for now: it needs `DEBIT_ORDERS_ENABLED=true`.
     - Set `STITCH_CLIENT_ID` and `STITCH_CLIENT_SECRET`.
     - Stitch must allowlist the app's domain for the return page.
     - DebiCheck collections go to Stitch as daily collection files, and Stitch's REPLY and OUTPUT files come back.

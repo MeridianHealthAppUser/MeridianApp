@@ -66,7 +66,7 @@
       <dl class="record-rows record-rows--summary">
         <div><dt>Weight <span>start &rarr; current &rarr; goal</span></dt><dd>{{ summary_weight.start }} &rarr; {{ summary_weight.current }} &rarr; {% if summary.goal_weight_kg %}{% firstof summary.goal_weight_kg|kg as goal_display %}{% else %}{% firstof 'Not set' as goal_display %}{% endif %}{% include 'portal/includes/record_summary_value.html' with field='goal_weight_kg' label='Goal weight' kind='number' current=summary.goal_weight_kg display=goal_display %}&nbsp;kg</dd></div>
         <div><dt>Height</dt><dd>{% if summary.height_cm %}{% firstof summary.height_cm|kg as height_display %}{% else %}{% firstof 'Not recorded' as height_display %}{% endif %}{% include 'portal/includes/record_summary_value.html' with field='height_cm' label='Height' kind='number' current=summary.height_cm display=height_display number_min=80 number_max=260 %}{% if summary.height_cm %}&nbsp;cm{% endif %}</dd></div>
-        <div><dt>BMI <span>start &rarr; current</span></dt><dd>{{ summary_bmi.start|default:'—' }} &rarr; {{ summary_bmi.current|default:'—' }}</dd></div>
+        <div><dt>BMI <span>start &rarr; current</span></dt><dd>{{ summary_bmi.start|default:'-' }} &rarr; {{ summary_bmi.current|default:'-' }}</dd></div>
         {% for row in summary_texts %}
           <div><dt>{{ row.label }}</dt><dd>{% include 'portal/includes/record_summary_value.html' with field=row.field label=row.label kind='text' current=row.value display=row.value|default:'Not recorded' %}</dd></div>
         {% endfor %}
@@ -114,18 +114,36 @@
           {# A starting plan: each strength with its dates, the one in effect in bold. #}
           {% if prescription.plan_steps|length > 1 %}<div><dt>Starting plan</dt><dd><ol class="record-plan">{% for step in prescription.plan_steps %}<li{% if step.pk == prescription.pk %} class="is-current" aria-current="step"{% endif %}>{{ step.max_dose }} <span>{{ step.starts_on|date:'j M' }} – {{ step.expires_on|date:'j M Y' }}</span></li>{% endfor %}</ol></dd></div>{% endif %}
           <div><dt>Authorised</dt><dd>{{ prescription.starts_on|date:'j M Y' }}</dd></div>
-          <div><dt>Expires</dt><dd{% if prescription_state == 'expired' %} class="is-rose"{% elif prescription_state == 'due' %} class="is-amber"{% endif %}>{{ prescription.ends_on|date:'j M Y' }}{% if prescription_state == 'expired' %} &middot; expired{% endif %}</dd></div>
+          <div><dt>Expires</dt><dd{% if prescription_state == 'expired' %} class="is-rose"{% elif prescription_state == 'due' %} class="is-amber"{% endif %}>{{ prescription.ends_on|date:'j M Y' }}{% if prescription_state == 'expired' %} &middot; expired{% endif %}{% if course_moved %}<small style="display:block;font-weight:400">Moved from {{ course_moved.from|date:'j M Y' }} {{ course_moved.because }}</small>{% endif %}</dd></div>
           <div><dt>By</dt><dd>{{ prescription.prescribed_by.full_name }}</dd></div>
         </dl>
         {% if prescription_state == 'paused' %}<p class="record-card__note">This prescription is paused. Undispatched parcels are on hold.</p>{% endif %}
+        {% if paused_plan %}<p class="record-card__note">The patient has paused their subscription.{% if last_before_pause %} Their parcel for {{ last_before_pause.scheduled_for|date:'j M' }} is already paid for and still goes out: the last one until they resume.{% else %} Nothing more goes out until they resume.{% endif %}</p>{% endif %}
+      {% elif revoked_prescription %}
+        {# Revoked, with nothing prescribed since (James, 26 Nov 2026): not an older step still marked active. #}
+        <dl class="record-rows">
+          <div><dt>Medicine</dt><dd>{{ revoked_prescription.product.name }}</dd></div>
+          <div><dt>Dose</dt><dd>{{ revoked_prescription.max_dose }}</dd></div>
+          <div><dt>Authorised</dt><dd>{{ revoked_prescription.starts_on|date:'j M Y' }}</dd></div>
+          <div><dt>Revoked</dt><dd class="is-rose">{{ revoked_prescription.revoked_on|date:'j M Y' }}</dd></div>
+          <div><dt>By</dt><dd>{{ revoked_prescription.revoked_by.titled_name|default:revoked_prescription.prescribed_by.titled_name }}</dd></div>
+        </dl>
+        <p class="record-card__note">Revoked: the subscription is paused and parcels not yet sent are held. A new prescription restarts treatment.</p>
       {% else %}
         <p class="record-card__empty">No prescription yet. One is written at the first consult.</p>
       {% endif %}
-      {% if can_prescribe %}
+      {% if confirmation_needed %}
+        <div class="record-card__note record-card__confirm" role="status">
+          <p style="margin:0 0 .6rem"><strong>Needs a doctor to confirm.</strong> {% if confirmation_needed.paid_on %}The patient first paid on {{ confirmation_needed.paid_on|date:'j M Y' }}, more than a payment period after this prescription was written. Their first parcel and further payments wait until it’s confirmed.{% else %}The patient wants to start their subscription, but this prescription was written on {{ confirmation_needed.written_on|date:'j M Y' }}.{% endif %} If it’s still right, confirm it: it then starts today. Or request blood tests below and change it once they’re back.</p>
+          {% if can_prescribe %}<form method="post" action="{% url 'portal:patient-prescription-confirm' patient.pk %}">{% csrf_token %}<input type="hidden" name="workflow_context" value="{{ prescription_context_token }}"><input type="hidden" name="current" value="{{ prescription.pk }}"><button class="console-button console-button--primary" type="submit">Confirm prescription</button></form>{% endif %}
+        </div>
+      {% endif %}
+      {% if can_prescribe or can_renew %}
+        {# Renew is a doctor's and the Super Admin's (James, 26 Nov 2026); Initiate and Change are doctors' only. #}
         <div class="record-card__actions">
-          <a class="console-button console-button--primary" href="{{ workspace_url }}&amp;prescription=initiate#record-initiate" data-dialog-open="record-initiate">Initiate prescription</a>
-          {% if prescription %}<a class="console-button console-button--primary" href="{{ workspace_url }}&amp;prescription=renew#record-renew" data-dialog-open="record-renew">Renew prescription</a>{% endif %}
-          <a class="console-button console-button--secondary" href="{{ workspace_url }}&amp;prescription=change#record-change" data-dialog-open="record-change">{% if prescription %}Change prescription{% else %}Create prescription{% endif %}</a>
+          {% if can_prescribe %}<a class="console-button console-button--primary" href="{{ workspace_url }}&amp;prescription=initiate#record-initiate" data-dialog-open="record-initiate">Initiate prescription</a>{% endif %}
+          {% if can_renew %}<a class="console-button console-button--primary" href="{{ workspace_url }}&amp;prescription=renew#record-renew" data-dialog-open="record-renew">Renew prescription</a>{% endif %}
+          {% if can_prescribe %}<a class="console-button console-button--secondary" href="{{ workspace_url }}&amp;prescription=change#record-change" data-dialog-open="record-change">{% if prescription %}Change prescription{% else %}Create prescription{% endif %}</a>{% endif %}
         </div>
       {% endif %}
     </section>
@@ -215,33 +233,6 @@
       {% endif %}
     </form>
   </dialog>
-  {% if prescription %}
-    <dialog class="record-dialog" id="record-renew" aria-labelledby="record-renew-title"{% if open_dialog == 'renew' %} open{% endif %}>
-      <form method="post" action="{% url 'portal:patient-prescription-renew' patient.pk %}" data-renew-form>
-        {% csrf_token %}
-        <input type="hidden" name="workflow_context" value="{{ prescription_context_token }}">
-        <input type="hidden" name="current" value="{{ prescription.pk }}">
-        <h2 id="record-renew-title">Renew prescription</h2>
-        <p class="record-dialog__sub">{{ patient }} &middot; {{ prescription_label }}</p>
-        {% if renew_form.non_field_errors %}<div class="record-error" role="alert">{{ renew_form.non_field_errors|join:' ' }}</div>{% endif %}
-        <fieldset class="record-dialog__months">
-          <legend>Renew for</legend>
-          {% for option in renew_weeks %}
-            <label class="record-chip"><input type="radio" name="weeks" value="{{ option.weeks }}" data-expires="{{ option.expires_on|date:'j M Y' }}"{% if option.weeks|stringformat:'s' == renew_form.weeks.value|stringformat:'s' %} checked{% endif %}><span>{{ option.weeks }} week{{ option.weeks|pluralize }}</span></label>
-          {% endfor %}
-        </fieldset>
-        <dl class="record-rows">
-          <div><dt>Current expiry</dt><dd>{{ prescription.ends_on|date:'j M Y' }}</dd></div>
-          <div><dt>New expiry</dt><dd class="is-teal" data-renew-expiry>{% for option in renew_weeks %}{% if option.weeks|stringformat:'s' == renew_form.weeks.value|stringformat:'s' %}{{ option.expires_on|date:'j M Y' }}{% endif %}{% endfor %}</dd></div>
-        </dl>
-        {% include 'portal/includes/record_safety_flags.html' with prefix='renew' %}
-        <div class="record-dialog__actions">
-          <a class="console-button console-button--secondary" href="{{ workspace_url }}#record-prescription" data-dialog-close>Cancel</a>
-          <button class="console-button console-button--primary" type="submit">Renew prescription</button>
-        </div>
-      </form>
-    </dialog>
-  {% endif %}
   <dialog class="record-dialog" id="record-change" aria-labelledby="record-change-title"{% if open_dialog == 'change' %} open{% endif %}>
     <form method="post" action="{% url 'portal:patient-prescription-change' patient.pk %}" data-change-form>
       {% csrf_token %}
@@ -291,3 +282,31 @@
     </form>
   </dialog>
 {% endif %}
+{# Renew prescription: a doctor's, and the Super Admin's (outside the doctors' block above). #}
+{% if can_renew %}
+    <dialog class="record-dialog" id="record-renew" aria-labelledby="record-renew-title"{% if open_dialog == 'renew' %} open{% endif %}>
+      <form method="post" action="{% url 'portal:patient-prescription-renew' patient.pk %}" data-renew-form>
+        {% csrf_token %}
+        <input type="hidden" name="workflow_context" value="{{ prescription_context_token }}">
+        <input type="hidden" name="current" value="{{ prescription.pk }}">
+        <h2 id="record-renew-title">Renew prescription</h2>
+        <p class="record-dialog__sub">{{ patient }} &middot; {{ prescription_label }}</p>
+        {% if renew_form.non_field_errors %}<div class="record-error" role="alert">{{ renew_form.non_field_errors|join:' ' }}</div>{% endif %}
+        <fieldset class="record-dialog__months">
+          <legend>Renew for</legend>
+          {% for option in renew_weeks %}
+            <label class="record-chip"><input type="radio" name="weeks" value="{{ option.weeks }}" data-expires="{{ option.expires_on|date:'j M Y' }}"{% if option.weeks|stringformat:'s' == renew_form.weeks.value|stringformat:'s' %} checked{% endif %}><span>{{ option.weeks }} week{{ option.weeks|pluralize }}</span></label>
+          {% endfor %}
+        </fieldset>
+        <dl class="record-rows">
+          <div><dt>Current expiry</dt><dd>{{ prescription.ends_on|date:'j M Y' }}</dd></div>
+          <div><dt>New expiry</dt><dd class="is-teal" data-renew-expiry>{% for option in renew_weeks %}{% if option.weeks|stringformat:'s' == renew_form.weeks.value|stringformat:'s' %}{{ option.expires_on|date:'j M Y' }}{% endif %}{% endfor %}</dd></div>
+        </dl>
+        {% include 'portal/includes/record_safety_flags.html' with prefix='renew' %}
+        <div class="record-dialog__actions">
+          <a class="console-button console-button--secondary" href="{{ workspace_url }}#record-prescription" data-dialog-close>Cancel</a>
+          <button class="console-button console-button--primary" type="submit">Renew prescription</button>
+        </div>
+      </form>
+    </dialog>
+  {% endif %}

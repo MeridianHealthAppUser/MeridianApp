@@ -84,8 +84,8 @@
       const info = entry?.products[row.dataset.productId];
       if (!unitCell || !lineCell) return;
       if (!info) {
-        unitCell.textContent = '—';
-        lineCell.textContent = '—';
+        unitCell.textContent = '-';
+        lineCell.textContent = '-';
         complete = false;
         return;
       }
@@ -102,7 +102,7 @@
         lineCell.textContent = formatRand(line);
         subtotal += line;
       } else {
-        lineCell.textContent = '—';
+        lineCell.textContent = '-';
         complete = false;
       }
     });
@@ -134,7 +134,7 @@
       row.querySelector('[data-order-product-input]').value = box.value;
       row.querySelector('[data-order-product-name]').textContent = product;
       row.querySelector('[data-order-product-detail]').textContent = [strength, box.dataset.productCategory].filter(Boolean).join(' · ');
-      row.querySelector('[data-order-suggested]').textContent = box.dataset.suggestedQuantity === '' ? '—' : box.dataset.suggestedQuantity;
+      row.querySelector('[data-order-suggested]').textContent = box.dataset.suggestedQuantity === '' ? '-' : box.dataset.suggestedQuantity;
       input.id = `purchase-order-quantity-${box.value}`;
       input.value = quantities.has(box.value) ? quantities.get(box.value) : (suggestion > 0 ? String(suggestion) : '');
       label.htmlFor = input.id;

@@ -51,7 +51,8 @@ class ShipmentDetailConfirmationTests(OperationsPortalFixture):
     def test_detail_confirmation_checks_prescription_address_and_payment(self):
         parcel = self.shipment(quantity=4)
         for gate in ('clinical', 'address', 'payment'):
-            self.plan.status = 'paused' if gate == 'clinical' else 'active'
+            # A cancelled plan blocks every parcel (a paused one lets through a parcel already paid for).
+            self.plan.status = 'cancelled' if gate == 'clinical' else 'active'
             self.plan.save(update_fields=('status',))
             self.address.phone = '' if gate == 'address' else '082 555 0114'
             self.address.save(update_fields=('phone',))

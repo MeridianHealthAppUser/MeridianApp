@@ -40,7 +40,7 @@
       </section>
 
       <aside class="record-sidebar" aria-label="Current practice care summary">
-        <section class="staff-page-card record-summary"><p class="console-kicker">Authorization · {{ company.name }}</p>
+        <section class="staff-page-card record-summary"><p class="console-kicker">Authorization{% if multi_practice_enabled %} · {{ company.name }}{% endif %}</p>
           {% if authorization %}<dl>
             <dt>Medicine</dt><dd>{{ authorization.product }}</dd>
             <dt>Maximum dose</dt><dd>{{ authorization.max_dose }}</dd>
@@ -51,7 +51,7 @@
             <dt>Current validity</dt><dd>{% if authorization.is_current %}<span class="console-status console-status--active">Active</span>{% else %}<span class="console-status">Not currently valid</span>{% endif %}</dd>
           </dl>{% else %}<p>No treatment authorization recorded in this practice.</p>{% endif %}
         </section>
-        <section class="staff-page-card record-summary"><p class="console-kicker">Recent weight · {{ company.name }}</p>
+        <section class="staff-page-card record-summary"><p class="console-kicker">Recent weight{% if multi_practice_enabled %} · {{ company.name }}{% endif %}</p>
           <dl>{% for weight in record_weights %}<dt>{{ weight.recorded_on|date:"j M Y" }}</dt><dd>{{ weight.weight_kg }} kg</dd>{% empty %}<dt>No weight measurements recorded.</dt>{% endfor %}</dl>
           <p class="record-small">Actual recorded measurements. No estimated values or clinical interpretation.</p>
         </section>

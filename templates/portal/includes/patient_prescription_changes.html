@@ -1,0 +1,20 @@
+{# The doctor's decisions on the treatment, oldest first as on the timeline, each with the week it was made in and #}
+{# what it meant for the pens and payments: portal.patient_summary.prescription_changes. Opened from the top of the #}
+{# week-by-week timeline (nothing outlined) or from a decision on it (that one outlined: prescription_changes.js, or #}
+{# ?change= without scripts). #}
+<dialog class="app-dialog patient-changes" id="prescription-changes" aria-labelledby="prescription-changes-heading"{% if changes_open %} open{% endif %}>
+  <div class="app-dialog__body">
+    <h2 id="prescription-changes-heading">Prescription changes</h2>
+    <p class="app-dialog__sub">Each change your doctor made to your prescription, in the order they happened.</p>
+    <ol class="patient-changes__list">
+      {% for change in prescription_changes %}
+        <li class="patient-changes__item{% if change.key == changes_selected %} is-selected{% endif %}" id="change-{{ change.key }}"{% if change.key == changes_selected %} aria-current="true" data-dialog-scroll{% endif %}>
+          <div class="patient-changes__head"><span class="patient-changes__title"><span class="patient-pill patient-pill--teal patient-pill--plain">Week {{ change.week }}</span><strong>{{ change.title }}</strong></span><span>{{ change.date|date:"D, j M Y" }}{% if change.by %} · {{ change.by }}{% endif %}</span></div>
+          {% if change.change %}<p class="patient-changes__what">{{ change.change }}</p>{% endif %}
+          {% if change.facts %}<dl class="patient-kv">{% for label, value, week in change.facts %}<div{% if label == "Next payment" %} class="patient-changes__next"{% endif %}><dt>{{ label }}</dt><dd>{{ value }}{% if week is not None %} <span class="patient-pill patient-pill--plain">Week {{ week }}</span>{% endif %}</dd></div>{% endfor %}</dl>{% endif %}
+        </li>
+      {% endfor %}
+    </ol>
+    <div class="app-dialog__actions"><a class="console-button console-button--secondary" href="{% url 'portal:patient-treatment' %}" data-dialog-close>Close</a></div>
+  </div>
+</dialog>

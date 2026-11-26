@@ -82,7 +82,7 @@ def overview_rows(company, patient):
     yield from _table('Summary data', ('Field', 'Value'), (
         ('Weight start → current → goal (kg)', f"{weight['start']} → {weight['current']} → {weight['goal'] or 'Not set'}"),
         ('Height (cm)', format_kg(summary['summary'].height_cm) if summary['summary'].height_cm else 'Not recorded'),
-        ('BMI start → current', f"{bmi['start'] or '—'} → {bmi['current'] or '—'}"),
+        ('BMI start → current', f"{bmi['start'] or '-'} → {bmi['current'] or '-'}"),
         *((row['label'], row['value'] or 'Not recorded') for row in summary['summary_texts']),
         *((flag['label'], flag['display']) for flag in summary['summary_flags']),
     ), '')

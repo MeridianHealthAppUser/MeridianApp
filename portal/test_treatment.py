@@ -64,9 +64,8 @@ class TreatmentPageTests(TestCase):
             url = reverse(f'portal:{name}')
             self.assertEqual(self.client.get(url).status_code, 302)
         self.login()
-        # Clinicians find authorisations on each patient's Treatment tab; the list is for Super Admins.
-        self.assertRedirects(self.client.get(reverse('portal:treatment-authorisations')), reverse('portal:desktop-dashboard'),
-                             fetch_redirect_response=False)
+        # Doctors open the list too, from a patient's Authorisation history (James, 26 Nov 2026).
+        self.assertContains(self.client.get(reverse('portal:treatment-authorisations')), '<h1>Authorisations</h1>')
         # Subscriptions sit in Operations, which the Clinician role doesn't see.
         self.assertEqual(self.client.get(reverse('portal:treatment-subscriptions')).status_code, 403)
         self.login(self.admin)
@@ -89,8 +88,25 @@ class TreatmentPageTests(TestCase):
         self.assertEqual(self.client.get(reverse('portal:treatment-authorisation-detail', args=[auth.pk])).status_code, 403)
         self.assertEqual(self.client.get(reverse('portal:treatment-subscriptions')).status_code, 200)
         self.login(self.super_admin)
-        self.assertContains(self.client.get(reverse('portal:treatment-authorisation-detail', args=[auth.pk])), 'Read-only')
+        # The Super Admin manages it (James, 26 Nov 2026): renew, pause or revoke, doctor or not.
+        detail = self.client.get(reverse('portal:treatment-authorisation-detail', args=[auth.pk]))
+        self.assertNotContains(detail, 'Read-only')
+        self.assertContains(detail, 'Pause treatment')
+        self.assertContains(detail, 'Revoke authorisation')
+        self.assertTrue(detail.context['can_change'])
+        # A main treatment is renewed from the Overview, with no link to it here (James, 26 Nov 2026).
+        if detail.context['renewable_here']:
+            self.assertContains(detail, 'Review and record a renewal')
+        self.assertNotContains(detail, 'Renew from the Overview')
+        if detail.context['renewable_here']:
+            self.assertEqual(self.client.get(reverse('portal:treatment-authorisation-renew', args=[auth.pk])).status_code, 200)
         self.assertEqual(self.client.get(reverse('portal:treatment-authorisation-create', args=[self.patient.pk])).status_code, 403)
+        page = self.client.get(reverse('portal:treatment-authorisation-detail', args=[auth.pk]))
+        paused = self.client.post(reverse('portal:treatment-authorisation-status', args=[auth.pk]), {
+            'treatment_context': page.context['treatment_context'], 'confirm': 'on', 'action': 'pause'})
+        self.assertEqual(paused.status_code, 302)
+        auth.refresh_from_db()
+        self.assertEqual(auth.status, 'paused')
 
     def compounded(self):
         return MedicationProduct.objects.create(company=self.company, name='Compounded cream', price=100, is_compounded=True)
@@ -128,7 +144,7 @@ class TreatmentPageTests(TestCase):
                 self.assertTrue(self.client.get(url).url.startswith(overview))
                 self.assertTrue(self.client.post(url, {}).url.startswith(overview))
         detail = self.client.get(reverse('portal:treatment-authorisation-detail', args=[main.pk]))
-        self.assertContains(detail, 'Renew from the Overview')
+        self.assertNotContains(detail, 'Renew from the Overview')
         self.assertNotContains(detail, renew)
         # The Treatment tab (Super Admins') offers it only once the catalogue has a compounded or other treatment.
         self.login(self.super_admin)
@@ -159,7 +175,7 @@ class TreatmentPageTests(TestCase):
         self.assertContains(response, 'Where should we send your parcels?')
         # Starting asks for the delivery address and how to pay (24 Oct 2026).
         data = dict(authorization=auth.pk, confirm='on', street='1 Long Street', suburb='Gardens', city='Cape Town',
-                    province='WC', postal_code='8001', phone='082 555 0114', method='debicheck')
+                    province='WC', postal_code='8001', phone='082 555 0114', method='card')
         self.assertEqual(self.client.post(url, data).status_code, 400)
         self.assertFalse(PatientSubscription.objects.exists())
         data['treatment_context'] = response.context['enrollment_context']
@@ -309,3 +325,60 @@ class TreatmentPageTests(TestCase):
         page = self.client.get(url)
         self.assertContains(page, opened)
         self.assertContains(page, 'Resume my subscription')
+
+    def test_statuses_say_replaced_expired_or_revoked_and_only_open_ones_can_be_managed(self):
+        # James, 26 Nov 2026: the stored status misled ("Cancelled" for one a dose change replaced, "Active" for one
+        # long ended), and an authorisation with nothing left to do still had a Manage card.
+        from care.treatment import change_authorization_status
+
+        today = timezone.localdate()
+        old = self.authorization()
+        TreatmentAuthorization.objects.filter(pk=old.pk).update(status=TreatmentAuthorization.Status.CANCELLED)
+        new = self.authorization()
+        TreatmentAuthorization.objects.filter(pk=new.pk).update(replaces=old)
+        ended = self.authorization(patient=self.other)
+        TreatmentAuthorization.objects.filter(pk=ended.pk).update(starts_on=today - timedelta(days=60), expires_on=today - timedelta(days=30))
+        revoked = self.authorization(patient=self.other)
+        change_authorization_status(authorization=revoked, actor=self.doctor, action='revoke')
+        self.login(self.super_admin)
+        listing = self.client.get(reverse('portal:treatment-authorisations'))
+        self.assertEqual({item.pk: item.state['label'] for item in listing.context['page_obj']},
+                         {new.pk: 'Active', old.pk: 'Replaced', ended.pk: 'Expired', revoked.pk: 'Revoked'})
+        for record, label, managed in ((new, 'Active', True), (old, 'Replaced', False), (ended, 'Expired', False), (revoked, 'Revoked', False)):
+            with self.subTest(label=label):
+                page = self.client.get(reverse('portal:treatment-authorisation-detail', args=[record.pk]))
+                self.assertContains(page, f'>{label}</span>')
+                (self.assertContains if managed else self.assertNotContains)(page, 'Manage this authorisation')
+                self.assertNotContains(page, 'Renew from the Overview')
+        page = self.client.get(reverse('portal:treatment-authorisation-detail', args=[old.pk]))
+        self.assertContains(page, 'Open the new authorisation')
+        page = self.client.get(reverse('portal:treatment-authorisation-detail', args=[revoked.pk]))
+        self.assertContains(page, f'Revoked on {today:%-d %b %Y} by {self.doctor.titled_name}')
+
+    def test_a_doctor_sees_the_authorisation_history_of_their_own_patients_only(self):
+        # James, 26 Nov 2026: a doctor's Authorisation history button sent them away with "Treatment authorisations are
+        # on each patient's record".
+        users = get_user_model().objects
+        stranger = users.create_user(email='treatment-pages-stranger@example.test')
+        CompanyMembership.objects.create(company=self.company, user=stranger, role='doctor')
+        theirs = Patient.objects.create(company=self.company, user=users.create_user(email='treatment-pages-theirs@example.test'),
+                                        first_name='Not', last_name='Mine', assigned_doctor=stranger)
+        mine = self.authorization()
+        other = create_authorization(company=self.company, patient=theirs, actor=stranger, product=self.product,
+                                     max_dose='Recorded doctor decision', quantity_per_cycle=4, starts_on=timezone.localdate(),
+                                     expires_on=timezone.localdate() + timedelta(days=90), review_interval_days=90)
+        self.login()
+        detail = self.client.get(reverse('portal:treatment-authorisation-detail', args=[mine.pk]))
+        history = f'{reverse("portal:treatment-authorisations")}?patient={self.patient.pk}'
+        self.assertContains(detail, f'href="{history}"')
+        listing = self.client.get(history)
+        self.assertEqual(listing.status_code, 200)
+        self.assertEqual([item.pk for item in listing.context['page_obj']], [mine.pk])
+        everything = self.client.get(reverse('portal:treatment-authorisations'))
+        self.assertEqual([item.pk for item in everything.context['page_obj']], [mine.pk])
+        self.assertNotContains(everything, 'Not Mine')
+        # Asking for another doctor's patient finds nothing.
+        self.assertEqual(list(self.client.get(reverse('portal:treatment-authorisations'), {'patient': theirs.pk}).context['page_obj']), [])
+        self.login(self.super_admin)
+        self.assertEqual({item.pk for item in self.client.get(reverse('portal:treatment-authorisations')).context['page_obj']},
+                         {mine.pk, other.pk})

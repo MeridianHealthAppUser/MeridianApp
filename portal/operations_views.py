@@ -16,6 +16,7 @@ from django.db.models.functions import TruncDate
 from django.http import FileResponse, HttpResponse, QueryDict
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.defaultfilters import pluralize
+from django.utils.formats import date_format
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.decorators import method_decorator
@@ -23,6 +24,7 @@ from django.views import View
 from django.views.decorators.cache import never_cache
 from django.views.decorators.csrf import csrf_exempt
 
+from care.billing import paid_before_pause, paid_before_revoke
 from care.models import MedicationDose, MedicationProduct, PharmacyOrder, Shipment, ShipmentItem
 from care.operations import (
     AVERAGE_WEEKS, UNDISPATCHED, can_ship, change_parcel, dispatch_shipment, dispatch_week, hold_or_cancel_shipment, lock_reasons,
@@ -30,6 +32,7 @@ from care.operations import (
     set_shipment_note, shipment_hold_reason, week_order, week_stock,
 )
 from care.pharmacy import accept_order, cancel_order, set_basket_quantity, submit_basket
+from care.prescriptions import moves_with_later
 from care.services import record_audit
 from care.shipment_intake import create_manual_shipment
 from practices.models import Company, CompanyMembership
@@ -459,6 +462,10 @@ class ShippingListView(OperationsView):
             shipment.address_changed = open_parcel and changed_since_booking(shipment, shipment.address)
             shipment.payment_state, shipment.payment_text = (getattr(form, 'payment_states', {}).get(shipment.pk)
                                                                 or parcel_payment(shipment))
+            # Paid for before the patient paused: it still goes out, the last one until they resume.
+            shipment.last_before_pause = open_parcel and paid_before_pause(shipment)
+            # Paid for before its prescription was revoked: held, but the practice may still send it (26 Nov 2026).
+            shipment.paid_before_revoke = open_parcel and paid_before_revoke(shipment)
             # What Check and lock week would hold it back for, besides its prescription; payment is in its own column.
             shipment.lock_problems = [delivery_problem(shipment)] if open_parcel and delivery_problem(shipment) else []
             if self.can_edit and shipment.status not in (Shipment.Status.CANCELLED, Shipment.Status.DELIVERED):
@@ -814,12 +821,15 @@ class ShipmentDetailView(OperationsView):
                                form=form if form is not None else ShipmentActionForm(shipment=shipment, items=self.batch_items(shipment, items)),
                                workflow_context=make_workflow_context(request, self.company, 'shipment', shipment) if changing
                                else self.token('shipment', shipment),
-                               current_hold_reason=shipment_hold_reason(shipment) if shipment.status in UNDISPATCHED else '')
+                               current_hold_reason=shipment_hold_reason(shipment) if shipment.status in UNDISPATCHED else '',
+                               last_before_pause=paid_before_pause(shipment),
+                               paid_before_revoke=shipment.status in UNDISPATCHED and paid_before_revoke(shipment))
         if shipment.status in (Shipment.Status.CANCELLED, Shipment.Status.DELIVERED):
             context['can_edit'] = False
         # A parcel that isn't locked can be moved to another day or given other pens.
         if context['can_edit'] and shipment.status in UNDISPATCHED and not shipment.locked_at:
-            context.update(change_form=change_form or ShipmentChangeForm(items=items, initial={'scheduled_for': shipment.scheduled_for}),
+            context.update(change_form=change_form or ShipmentChangeForm(items=items, prescription=moves_with_later(shipment),
+                                                                         initial={'scheduled_for': shipment.scheduled_for}),
                            change_context=self.token('shipment-change', shipment) if changing
                            else make_workflow_context(request, self.company, 'shipment-change', shipment))
         context.update(patient_action_context(self, shipment.patient, 'deliveries',
@@ -894,17 +904,33 @@ class ShipmentChangeView(ShipmentDetailView):
         self.company = Company.objects.select_for_update().get(pk=self.company.pk)
         require_operations_actor(self.company, request.user, shipping=True)
         shipment = get_object_or_404(self.shipments(), pk=pk)
-        form = ShipmentChangeForm(request.POST, items=list(shipment.items.select_related('product')))
+        form = ShipmentChangeForm(request.POST, items=list(shipment.items.select_related('product')),
+                                  prescription=moves_with_later(shipment))
         try:
             validate_workflow_context(request, self.company, 'shipment-change', shipment)
             if form.is_valid():
-                change_parcel(shipment=shipment, actor=request.user, scheduled_for=form.cleaned_data['scheduled_for'],
-                              quantities=form.quantities(), request=request)
-                messages.success(request, 'Parcel changed. Confirm & lock it again when it is ready for shipping.')
+                changed = change_parcel(shipment=shipment, actor=request.user, scheduled_for=form.cleaned_data['scheduled_for'],
+                                        quantities=form.quantities(), with_later=form.with_later(), request=request)
+                messages.success(request, _moved_message(changed.moved_with_later)
+                                 + 'Confirm & lock it again when it is ready for shipping.')
                 return redirect('portal:ops-shipment-detail', pk=pk)
         except ValidationError as error:
             _errors(request, form, error)
         return self.display(request, shipment, status=400, change_form=form)
+
+
+def _moved_message(moved):
+    """What moved with a parcel (care.prescriptions.move_with_later_parcels), for the message after saving."""
+    if not moved:
+        return 'Parcel changed. '
+    weeks, parcels = abs(moved['weeks']), moved['parcels']
+    text = f'Parcel moved {"a week" if weeks == 1 else f"{weeks} weeks"} {"earlier" if moved["weeks"] < 0 else "later"}'
+    text += f' with the {parcels} parcel{pluralize(parcels)} after it.' if parcels else '.'
+    if moved['next_payment']:
+        text += f' Next payment {date_format(moved["next_payment"], "D, j M")}.'
+    if moved['ends_on']:
+        text += f' Prescription now runs to {date_format(moved["ends_on"], "D, j M Y")}.'
+    return text + ' '
 
 
 def _week_redirect(request, stage):
@@ -1297,12 +1323,13 @@ class ManifestDownloadView(OperationsView):
 
 
 class StaffOrderListView(OperationsView):
-    nav_section, page_title = 'orders', 'Non-prescription requests'
+    nav_section, page_title = 'orders', 'Non-prescriptions'
     http_method_names = ('get', 'head', 'options')
 
     def get(self, request):
         form = OrderFilterForm(without_all(request.GET, 'status'))
-        queryset = self.orders()
+        # Each row opens its items below it (includes/patient_requests_table.html).
+        queryset = self.orders().select_related('patient__user').prefetch_related('items')
         if form.is_valid():
             if form.cleaned_data['status']:
                 queryset = queryset.filter(status__in=form.cleaned_data['status'])
@@ -1311,7 +1338,13 @@ class StaffOrderListView(OperationsView):
             queryset = queryset.none()
         context = self.context(filter_form=form, **_paginate(request, queryset))
         context['orders'] = list(context['page_obj'].object_list)
-        context.update(_list_tools(request, form, url_name='portal:ops-orders', label='Filter non-prescription requests',
+        # Patient orders' second tab, under Patient Records & Messages (James, 26 Nov 2026): a name opens the record for
+        # those who can open records.
+        from .navigation import messages_title
+        from .record_access import no_records
+
+        context.update(messages_title=messages_title(self.membership), patient_links=not no_records(self.membership))
+        context.update(_list_tools(request, form, url_name='portal:ops-orders', label='Filter non-prescription orders',
                                    sections=ticked_sections(form, request.GET, ('status',)), placeholder='Patient name',
                                    count=context['page_obj'].paginator.count, noun='request'))
         return render(request, 'portal/operations_orders.html', context)
@@ -1426,6 +1459,7 @@ class PatientBasketView(PatientShopBase):
 
     def display(self, request, order, form=None, status=200):
         from care.addresses import address_for
+        from care.parcels import first_shipping_day
         from care.payment_providers import current_provider
 
         items = _order_items(order) if order else []
@@ -1435,6 +1469,8 @@ class PatientBasketView(PatientShopBase):
             'Basket', order=order, items=items, address=address_for(self.patient),
             needs_prescription=[item for item in items if item.product.requires_authorisation],
             pays_by_card=current_provider() is not None, form=form if form is not None else OrderForm(),
+            # Paid today, it goes out on this day: the first whose order cut-off is still to come.
+            ships_if_paid_today=first_shipping_day(timezone.localdate(), self.patient_company),
             workflow_context=(request.POST.get('workflow_context', '') if request.method == 'POST'
                               else self.token('patient-order', order) if order else ''),
         ), status=status)

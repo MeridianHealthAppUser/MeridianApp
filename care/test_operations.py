@@ -217,9 +217,12 @@ class ShipmentOperationsTests(OperationsFixture):
         with self.assertRaises(ValidationError):
             self.ready(shipment)
         shipment.items.update(dose=self.auth.max_dose)
+        # Paused with nothing paid for this parcel (one paid for before the pause still goes out).
         PatientSubscription.objects.filter(pk=self.plan.pk).update(status='paused')
+        SubscriptionCycle.objects.filter(pk=self.cycle.pk).update(status='failed')
         with self.assertRaises(ValidationError):
             self.ready(shipment)
+        SubscriptionCycle.objects.filter(pk=self.cycle.pk).update(status='paid')
         PatientSubscription.objects.filter(pk=self.plan.pk).update(status='active')
         Patient.objects.filter(pk=self.patient.pk).update(is_active=False)
         with self.assertRaises(ValidationError):

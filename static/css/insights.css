@@ -50,6 +50,9 @@
 .insights-card__header h2 { color: var(--console-ink, var(--c-1d4a5e)); font-size: 1rem; font-weight: 750; margin: 0; }
 .insights-card__header p { color: var(--console-muted, var(--c-70838d)); font-size: .78rem; line-height: 1.5; margin: .25rem 0 0; max-width: 60rem; }
 .insights-card__header--controls { align-items: end; display: flex; flex-wrap: wrap; gap: .75rem 1.25rem; justify-content: space-between; }
+/* A chart's own Notes button, at the right of its title (26 Nov 2026): its notes mark that chart alone. */
+.insights-card__header--notes { align-items: flex-start; display: flex; gap: .75rem; justify-content: space-between; }
+.insights-tool--small { border-radius: .7rem; height: 2.25rem; width: 2.25rem; }
 .insights-heat-controls { display: flex; flex-wrap: wrap; gap: .6rem; }
 .insights-heat-controls .console-form__field { min-width: 9rem; }
 
@@ -59,6 +62,9 @@
 .insight-chart__key { align-items: center; color: var(--console-ink, var(--c-1d4a5e)); display: inline-flex; font-size: .78rem; font-weight: 600; gap: .4rem; }
 .insight-chart__key i { border-radius: 3px; display: inline-block; height: .7rem; width: .7rem; }
 .insight-chart__key i.insight-chart__swatch-line { border-radius: 2px; height: 3px; width: 1rem; }
+/* A dashed series (a doctor's signups): its key is dashes of its colour. */
+.insight-chart__key i.insight-chart__swatch-dash, .insight-tip__row i.insight-chart__swatch-dash { background: repeating-linear-gradient(90deg, var(--insight-tone) 0 5px, transparent 5px 8px); border-radius: 0; height: 3px; width: 1rem; }
+.insight-line--dash { stroke-dasharray: 6 4; }
 .insight-chart__plot { border-radius: .6rem; position: relative; }
 .insight-chart__plot:focus-visible { outline: 2px solid var(--console-teal, var(--c-1d4a5f)); outline-offset: 3px; }
 .insight-chart__svg { display: block; overflow: visible; }
@@ -136,17 +142,26 @@
 .insights-heatmap tbody th { color: var(--console-ink, var(--c-1d4a5e)); font-weight: 650; text-align: left; }
 .insights-heatmap__size { color: var(--console-muted, var(--c-70838d)); }
 .insights-heatmap td.insights-heat { border: 2px solid var(--c-ffffff); border-radius: .45rem; font-weight: 650; min-width: 2.6rem; }
-.insights-heat--1 { background: var(--c-cde2fb); color: var(--console-ink, var(--c-1d4a5e)); }
-.insights-heat--2 { background: var(--c-b7d3f6); color: var(--console-ink, var(--c-1d4a5e)); }
-.insights-heat--3 { background: var(--c-9ec5f4); color: var(--console-ink, var(--c-1d4a5e)); }
-.insights-heat--4 { background: var(--c-6da7ec); color: var(--insights-heat-mid); }
-.insights-heat--5 { background: var(--c-3987e5); color: var(--insights-heat-mid); }
-.insights-heat--6 { background: var(--c-256abf); color: var(--c-ffffff); }
-.insights-heat--7 { background: var(--c-184f95); color: var(--c-ffffff); }
+.insights-heat--1 { --insights-heat: var(--c-cde2fb); color: var(--console-ink, var(--c-1d4a5e)); }
+.insights-heat--2 { --insights-heat: var(--c-b7d3f6); color: var(--console-ink, var(--c-1d4a5e)); }
+.insights-heat--3 { --insights-heat: var(--c-9ec5f4); color: var(--console-ink, var(--c-1d4a5e)); }
+.insights-heat--4 { --insights-heat: var(--c-6da7ec); color: var(--insights-heat-mid); }
+.insights-heat--5 { --insights-heat: var(--c-3987e5); color: var(--insights-heat-mid); }
+.insights-heat--6 { --insights-heat: var(--c-256abf); color: var(--c-ffffff); }
+.insights-heat--7 { --insights-heat: var(--c-184f95); color: var(--c-ffffff); }
+/* A shade stays put when its row is pointed at (the workspace lightens a hovered row's cells): the row shows it by its
+   name and the empty cells instead (26 Nov 2026). */
+.insights-heatmap td.insights-heat, .workspace-page .meridian-console .insights-heatmap tbody tr:hover td.insights-heat { background: var(--insights-heat); }
+.insights-heatmap tbody tr:hover th { color: var(--console-teal, var(--c-1d4a5f)); }
 
 .insights-segments { background: var(--console-soft-line, var(--c-e5eef2)); border-radius: 999px; display: inline-flex; gap: .2rem; justify-self: start; padding: .2rem; }
 .insights-segments a { border-radius: 999px; color: var(--console-ink, var(--c-1d4a5e)); font-size: .84rem; font-weight: 650; padding: .45rem .9rem; text-decoration: none; }
 .insights-segments a[aria-current="page"] { background: var(--c-ffffff); box-shadow: 0 1px 3px var(--c-183643-160); }
+/* Views of one chart, switched on the page (Each doctor, per month). */
+.insights-segments button { background: none; border: 0; border-radius: 999px; color: var(--console-ink, var(--c-1d4a5e)); cursor: pointer; font: inherit; font-size: .84rem; font-weight: 650; padding: .45rem .9rem; }
+.insights-segments button[aria-pressed="true"] { background: var(--c-ffffff); box-shadow: 0 1px 3px var(--c-183643-160); }
+.insights-segments--views { margin: .15rem 0 .7rem; max-width: 100%; }
+.insights-view__note { color: var(--console-muted, var(--c-70838d)); font-size: .76rem; line-height: 1.5; margin: 0 0 .45rem; }
 .insights-multiples { display: grid; gap: 1rem 1.25rem; grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .insights-multiples h3 { color: var(--console-ink, var(--c-1d4a5e)); font-size: .86rem; font-weight: 750; margin: 0 0 .35rem; }
 
@@ -163,7 +178,7 @@
   /* On a phone the bar doesn't stay at the top: the section picker, then the buttons and the quick range, then the
      dates across the width. */
   .insights-bar { align-items: stretch; display: grid; gap: .75rem; position: static; }
-  .insights-tools { display: grid; gap: .5rem; grid-template-columns: repeat(3, 2.75rem) minmax(0, 1fr); margin-left: 0; }
+  .insights-tools { display: grid; gap: .5rem; grid-template-columns: repeat(2, 2.75rem) minmax(0, 1fr); margin-left: 0; }
   .insights-range { display: contents; }
   .insights-range__preset { min-width: 0; }
   .insights-range select { min-width: 0; width: 100%; }

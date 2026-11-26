@@ -24,11 +24,15 @@
 .ops-form { display: grid; gap: 1rem; }
 .ops-form-field { display: grid; gap: .4rem; min-width: 0; }
 .ops-form label { color: var(--c-34565f); font-size: .875rem; font-weight: 650; line-height: 1.5; }
-.ops-form input:not([type=checkbox]):not([type=hidden]), .ops-form select, .ops-form textarea { background: var(--c-ffffff); border: 1px solid var(--c-dde8ec); border-radius: .7rem; box-sizing: border-box; color: var(--c-1c3947); font: inherit; min-height: 2.75rem; padding: .7rem .8rem; width: 100%; }
+.ops-form input:not([type=checkbox]):not([type=radio]):not([type=hidden]), .ops-form select, .ops-form textarea { background: var(--c-ffffff); border: 1px solid var(--c-dde8ec); border-radius: .7rem; box-sizing: border-box; color: var(--c-1c3947); font: inherit; min-height: 2.75rem; padding: .7rem .8rem; width: 100%; }
 .ops-form textarea { resize: vertical; }
 .ops-form :is(input, select, textarea):focus-visible { outline: 2px solid var(--c-225369); outline-offset: 2px; }
 .ops-check { align-items: flex-start; display: flex; gap: .65rem; }
 .ops-check input { accent-color: var(--c-225369); flex: 0 0 auto; height: 1.15rem; margin: .12rem 0 0; width: 1.15rem; }
+/* A choice of one (operations_fields.html): each option a row like a tick box. */
+.ops-choices { border: 0; margin: 0; min-width: 0; padding: 0; }
+.ops-choices legend { color: var(--c-34565f); font-size: .875rem; font-weight: 650; line-height: 1.5; margin-bottom: .1rem; padding: 0; }
+.ops-choices .ops-check { font-weight: 500; }
 .ops-form .helptext { color: var(--c-647e87); font-size: .8rem; line-height: 1.5; }
 .ops-workspace .errorlist { color: var(--c-a33131); margin: .4rem 0; padding-left: 1.2rem; }
 .ops-filter { align-items: end; display: grid; gap: 1rem; grid-template-columns: repeat(2, minmax(10rem, 1fr)) auto; }
@@ -138,6 +142,9 @@
 .ops-paid--due { background: var(--c-eef3f5); color: var(--c-4d6c7b); }
 .ops-paid--retrying { background: var(--c-fff6e4); color: var(--c-7a5410); }
 .ops-paid--failed, .ops-paid--unpaid { background: var(--c-fcedeb); color: var(--c-aa4d47); }
+/* Billing (26 Nov 2026): each row's payments button at the right of Payments, in line down the table, beside Open. */
+.ops-billing-table .subscription-payment-progress-link { display: flex; justify-content: space-between; width: 100%; }
+.ops-billing-table td[data-label="Actions"] { padding-left: .35rem; white-space: nowrap; width: 1%; }
 .ops-flag { background: var(--c-fcedeb); border-radius: 99rem; color: var(--c-aa4d47); display: inline-block; font-size: .72rem; font-weight: 750; padding: .15rem .55rem; }
 .ops-table td small.ops-problem { color: var(--c-a2532a); }
 .ops-deliver { display: block; }
@@ -256,7 +263,7 @@
 @media(max-width:760px) { .shipping-action-icon { width:2.75rem; height:2.75rem; } }
 @media(prefers-reduced-motion:reduce) { .shipping-action-icon[data-tooltip]::after { transition:none; } }
 
-.ops-delivery-address-line { display:flex; align-items:flex-start; gap:.35rem; flex-basis:100%; min-width:0; }
+.ops-delivery-address-line { display:flex; align-items:center; gap:.35rem; flex-basis:100%; min-width:0; }
 .ops-delivery-address-line > .ops-deliver { min-width:0; }
 .shipping-action-icon.shipping-address-edit { width:1.65rem; height:1.65rem; border-color:transparent; background:transparent; }
 .shipping-address-edit svg { width:1rem; height:1rem; }
@@ -342,3 +349,40 @@
   .ops-shipping-table td[data-label="Deliver to"] { min-width:13rem; }
   .ops-shipping-table td[data-label="Due date"] { min-width:6rem; }
 }
+/* Non-prescription requests (26 Nov 2026): a request's number opens its items in the row below (static/js/row_details.js)
+   and the house button its delivery address in a small dialog. */
+.ops-row-toggle { align-items: center; background: none; border: 0; border-radius: .35rem; color: var(--c-1a4457); cursor: pointer; display: inline-flex; font: inherit; font-weight: 700; gap: .3rem; margin-left: -.25rem; padding: .15rem .3rem .15rem .1rem; }
+.ops-row-toggle svg { fill: none; flex: 0 0 auto; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.9; transition: transform .15s ease; }
+.ops-row-toggle[aria-expanded="true"] svg { transform: rotate(90deg); }
+.ops-row-toggle:hover { background: var(--console-teal-soft, var(--c-ecf6fa)); }
+.ops-row-toggle:focus-visible { outline: 2px solid var(--console-teal, var(--c-1d4a5f)); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) { .ops-row-toggle svg { transition: none; } }
+.ops-row-actions { align-items: center; display: flex; flex-wrap: wrap; gap: .5rem; }
+.ops-row-requested { align-items: center; display: flex; gap: .6rem; }
+.ops-square-button { align-items: center; background: var(--c-ffffff); border: 1px solid var(--console-line, var(--c-d2e2e8)); border-radius: .65rem; color: var(--console-teal-dark, var(--c-1a4457)); cursor: pointer; display: inline-flex; flex: 0 0 auto; height: 2.5rem; justify-content: center; padding: 0; width: 2.5rem; }
+.ops-square-button svg { fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.8; }
+.ops-square-button:hover { background: var(--console-teal-soft, var(--c-ecf6fa)); border-color: var(--c-a9d6e1); }
+.ops-square-button:focus-visible { outline: 2px solid var(--console-teal, var(--c-1d4a5f)); outline-offset: 2px; }
+.ops-table tr.ops-row-details > td { border-top: 0; padding: 0 1rem 1rem; }
+.ops-row-details__body { border: 1px solid var(--console-line, var(--c-d2e2e8)); border-radius: .8rem; overflow: hidden; }
+.ops-row-details__body .ops-table td { border-top-color: var(--c-edf3f5); }
+.ops-address-dialog { max-width: min(26rem, calc(100vw - 2rem)); }
+@media (max-width: 42rem) {
+  /* A request's items on a phone: across its card, each item a few lines of its own. */
+  .ops-table tr.ops-row-details { border-top: 0; padding-top: 0; }
+  .ops-table tr.ops-row-details > td { display: block; padding: 0; }
+  .ops-table tr.ops-row-details > td::before { content: none; }
+  .ops-row-details__body .ops-table tr { padding: .6rem .85rem; }
+  .ops-row-details__body .ops-table tr:first-child { border-top: 0; }
+  .ops-row-details__body .ops-table td { grid-template-columns: minmax(4.75rem, .6fr) minmax(0, 1.4fr); }
+  .ops-row-details__body .ops-total { padding: .85rem; }
+}
+
+/* Weekly shipping (26 Nov 2026): every cell, buttons too, in the middle of its row; the phone number right under the
+   address, the edit button not pushing them apart. */
+@media (min-width: 42.001rem) { .ops-shipping-table td { vertical-align: middle; } }
+.ops-shipping-table .ops-delivery-detail { row-gap: .1rem; }
+.ops-shipping-table .ops-delivery-detail > small { margin-top: 0; }
+.ops-delivery-address-line .shipping-action-icon.shipping-address-edit { margin-block: -.3rem; }
+/* The shipment page's action panel: Add waybill on its own row, the fields spaced as one form. */
+.ops-panel__waybill { margin: .2rem 0 1rem; }

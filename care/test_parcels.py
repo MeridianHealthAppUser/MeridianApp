@@ -14,7 +14,7 @@ from .models import (
     MedicationDose, MedicationProduct, PatientSubscription, PracticeSettings, Shipment, TreatmentAuthorization,
 )
 from .operations import prepare_shipment
-from .parcels import schedule_parcels
+from .parcels import first_shipping_day, schedule_parcels
 from .prescriptions import change_prescription, renew_prescription
 from .treatment import change_authorization_status, enroll_local_subscription
 
@@ -41,11 +41,12 @@ class ParcelTests(TestCase):
         cls.today = timezone.localdate()
 
     def prescribe(self, dose, starts_on=None, weeks=24, **values):
+        """As the app writes one: valid from starts_on, its weeks from its first pens (care.prescriptions.weeks_from)."""
         starts_on = starts_on or self.today
         return TreatmentAuthorization.objects.create(
             company=self.company, patient=self.patient, prescribed_by=self.doctor, product=dose.pen, dose=dose,
             max_dose=dose.label, quantity_per_cycle=dose.pens_per_dispatch, starts_on=starts_on,
-            expires_on=starts_on + timedelta(weeks=weeks), **values)
+            expires_on=first_shipping_day(starts_on, self.company) + timedelta(weeks=weeks), **values)
 
     def days(self, authorization=None):
         parcels = Shipment.objects.filter(patient=self.patient).exclude(status='cancelled')
@@ -64,7 +65,10 @@ class ParcelTests(TestCase):
                 days = [parcel.scheduled_for for parcel in parcels]
                 self.assertEqual(len(days), 6)
                 self.assertTrue(all(day.weekday() == 1 for day in days))
-                self.assertLess((days[0] - start).days, 7)
+                # The first shipping day whose order cut-off (Thursday) is on or after the start: within 12 days, so
+                # inside its first 4-week supply period (25 Nov 2026).
+                self.assertEqual(days[0], first_shipping_day(start, self.company))
+                self.assertLess((days[0] - start).days, 12)
                 self.assertEqual({(later - earlier).days for earlier, later in zip(days, days[1:])}, {28})
                 self.assertLess(days[-1], prescription.expires_on)
                 item = parcels[0].items.get()

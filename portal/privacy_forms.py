@@ -88,11 +88,13 @@ class PublicPracticeForm(forms.Form):
 
 
 class PolicyVersionForm(forms.Form):
-    kind = forms.ChoiceField(label='Document type', choices=ConsentDocument.Kind.choices)
-    version = forms.CharField(label='New version identifier', max_length=64)
-    title = forms.CharField(label='Document title', max_length=255)
+    """A new version of the Terms and Conditions or the Privacy Policy: numbered and titled for it (Dr Czech,
+    26 Nov 2026)."""
+
+    kind = forms.ChoiceField(label='Document type', choices=[
+        (kind.value, kind.label) for kind in ConsentDocument.QUESTIONNAIRE_KINDS])
     body = forms.CharField(label='Approved document text', max_length=100000,
-                           widget=forms.Textarea(attrs={'rows': 16}), help_text='Plain text. No template legal wording is supplied.')
+                           widget=forms.Textarea(attrs={'rows': 16}), help_text='Plain text.')
     effective_from = forms.DateField(label='Effective from', widget=forms.DateInput(attrs={
         'type': 'date', 'min': '1900-01-01', 'max': '2100-12-31',
     }), validators=[MinValueValidator(date(1900, 1, 1)), MaxValueValidator(date(2100, 12, 31))])

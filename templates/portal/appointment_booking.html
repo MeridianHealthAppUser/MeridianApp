@@ -1,5 +1,5 @@
 {% extends 'portal/staff_page_base.html' %}{% load static workspace_ui %}
-{% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/backoffice.css' %}?v=20261120c"><link rel="stylesheet" href="{% static 'css/time_slots.css' %}?v=20261119a"><script src="{% static 'js/appointment_booking.js' %}?v=20261119a" defer></script>{% endblock %}
+{% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/backoffice.css' %}?v=20261126a"><link rel="stylesheet" href="{% static 'css/time_slots.css' %}?v=20261119a"><script src="{% static 'js/appointment_booking.js' %}?v=20261119a" defer></script>{% endblock %}
 {% block breadcrumbs %}{% breadcrumbs 'Calendar' 'portal:schedule-appointments' 'Book an appointment' %}{% endblock %}
 {% block page_heading %}<header class="staff-page-header"><div><h1>Book an appointment</h1><p>For an existing patient in {{ company.name }}. Working hours, time off and both participants’ other appointments are checked again when you save.</p></div><a class="console-button console-button--secondary" href="{% url 'portal:schedule-appointments' %}">View schedule</a></header>{% endblock %}
 {% block page_content %}

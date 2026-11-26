@@ -1,12 +1,13 @@
 {% load l10n %}
 <dialog class="app-dialog app-dialog--wide subscription-payments" id="subscription-payments-{{ payment_plan.pk }}" aria-labelledby="subscription-payments-title-{{ payment_plan.pk }}"{% if payment_open %} open{% endif %}>
   <div class="app-dialog__body">
-    <h2 id="subscription-payments-title-{{ payment_plan.pk }}">Subscription payments</h2>
-    <p class="app-dialog__sub">{{ payment_plan.patient }} · {{ payment_plan.plan_name }}</p>
+    {# Bulk discount at the top right, above how many are settled (James, 26 Nov 2026). #}
+    <div class="subscription-payments-head"><div><h2 id="subscription-payments-title-{{ payment_plan.pk }}">Subscription payments</h2>
+    <p class="app-dialog__sub">{{ payment_plan.patient }} · {{ payment_plan.plan_name }}</p></div>
+    {% if payment_plan.status != 'cancelled' %}<a class="console-button console-button--primary" href="{% url 'portal:subscription-payments' payment_plan.pk %}?bulk=1" data-modal-open="bulk-discount-dialog-{{ payment_plan.pk }}" aria-haspopup="dialog">Bulk discount</a>{% endif %}</div>
     <div class="subscription-payment-summary"><strong>{{ payment_schedule.paid_count }} of {{ payment_schedule.total_count }} payments settled</strong><span>R{{ payment_schedule.paid_total|floatformat:2 }} paid to date</span></div>
     <div class="subscription-payments-toolbar">
       <p class="patient-small">Discount a payment on its row, or select several to update together. Paid and processing payments stay unchanged.</p>
-      {% if payment_plan.status != 'cancelled' %}<a class="console-button console-button--primary" href="{% url 'portal:subscription-payments' payment_plan.pk %}?bulk=1" data-modal-open="bulk-discount-dialog-{{ payment_plan.pk }}" aria-haspopup="dialog">Bulk discount</a>{% endif %}
     </div>
     {% if payment_errors %}<div class="errorlist" role="alert">{{ payment_errors }}</div>{% endif %}
     <div class="treatment-table-wrap"><table class="staff-phone-cards treatment-table subscription-payment-table">
@@ -16,21 +17,12 @@
           <td>{% if row.editable %}<input type="checkbox" name="payments" value="{{ row.key }}" form="bulk-discount-{{ payment_plan.pk }}" data-payment-select aria-label="Select payment due {{ row.due_on|date:'j M Y' }}"{% if row.key in bulk_discount_form.payments.value %} checked{% endif %}>{% else %}<span class="sr-only">Not editable</span>{% endif %}</td>
           <td data-label="Due">{{ row.due_on|date:'j M Y' }}{% if row.projected %}<small>Planned</small>{% endif %}</td>
           <td data-label="Original">{% if row.base is not None %}R{{ row.base|floatformat:2 }}{% else %}Not priced{% endif %}</td>
-          <td data-label="Discount">{% if row.discount_amount %}<span class="subscription-discount-label">−R{{ row.discount_amount|floatformat:2 }}</span>{% if row.discount.kind == 'percent' %}<small>{{ row.discount.value|floatformat:'-2' }}% off</small>{% endif %}{% else %}—{% endif %}</td>
+          <td data-label="Discount">{% if row.discount_amount %}<span class="subscription-discount-label">−R{{ row.discount_amount|floatformat:2 }}</span>{% if row.discount.kind == 'percent' %}<small>{{ row.discount.value|floatformat:'-2' }}% off</small>{% endif %}{% else %}-{% endif %}</td>
           <td data-label="Amount">{% if row.amount is not None %}<strong>R{{ row.amount|floatformat:2 }}</strong>{% else %}Not priced{% endif %}</td>
-          <td data-label="Status">{{ row.status }}</td><td data-label="Paid on">{{ row.paid_at|date:'j M Y'|default:'—' }}</td>
-          <td data-label="Actions">{% if row.editable %}<a class="subscription-line-discount-toggle" href="{% url 'portal:subscription-payments' payment_plan.pk %}?edit={{ row.key|urlencode }}#{{ row.editor_id }}" data-line-discount-open="{{ row.editor_id }}" aria-controls="{{ row.editor_id }}" aria-expanded="{{ row.edit_open|yesno:'true,false' }}">{% if row.discount_amount %}Edit discount{% else %}Discount{% endif %}<span class="sr-only"> payment due {{ row.due_on|date:'j M Y' }}</span></a>{% endif %}</td>
+          {# Each status a pill in Billing's colours; Discount a button on every row, off where it can't be (26 Nov 2026). #}
+          <td data-label="Status"><span class="ops-paid ops-paid--{{ row.tone }}">{{ row.status }}</span></td><td data-label="Paid on">{{ row.paid_at|date:'j M Y'|default:'-' }}</td>
+          <td data-label="Actions" class="subscription-payment-actions">{% if row.editable %}<a class="console-button console-button--secondary subscription-line-discount-toggle" href="{% url 'portal:subscription-payments' payment_plan.pk %}?edit={{ row.key|urlencode }}#{{ row.editor_id }}" data-modal-open="{{ row.editor_id }}" aria-haspopup="dialog">{% if row.discount_amount %}Edit discount{% else %}Discount{% endif %}<span class="sr-only"> payment due {{ row.due_on|date:'j M Y' }}</span></a>{% else %}<button class="console-button console-button--secondary subscription-line-discount-toggle" type="button" disabled title="Paid and processing payments stay unchanged">Discount<span class="sr-only"> payment due {{ row.due_on|date:'j M Y' }}: not available</span></button>{% endif %}</td>
         </tr>
-        {% if row.discount_form %}
-        <tr class="subscription-line-editor" id="{{ row.editor_id }}"{% if not row.edit_open %} hidden{% endif %}><td colspan="8">
-          <form class="console-form subscription-discount-form" method="post" action="{% url 'portal:subscription-payments' payment_plan.pk %}" data-line-discount-form data-discount-base="{{ row.base|unlocalize }}">
-            {% csrf_token %}<input type="hidden" name="workflow_context" value="{{ discount_token }}"><input type="hidden" name="return_to" value="{{ payment_return }}"><input type="hidden" name="scope" value="one"><input type="hidden" name="payment" value="{{ row.key }}">
-            <div class="subscription-line-editor__heading"><strong>Discount for {{ row.due_on|date:'j M Y' }}</strong><span>Original: R{{ row.base|floatformat:2 }}</span></div>
-            {{ row.discount_form.non_field_errors }}{{ row.discount_form.payment.errors }}
-            {% include 'portal/includes/subscription_discount_fields.html' with line_form=row.discount_form line_editor=True %}
-            <div class="subscription-discount-actions"><output data-discount-preview aria-live="polite">New amount: R{{ row.amount|floatformat:2 }}</output><button class="console-button console-button--secondary" type="button" data-line-discount-cancel="{{ row.editor_id }}">Cancel</button><button class="console-button console-button--primary" type="submit"{% if not row.editable %} disabled{% endif %}>Save discount</button></div>
-          </form>
-        </td></tr>{% endif %}
       {% empty %}<tr><td colspan="8">No payment schedule is available.</td></tr>{% endfor %}</tbody>
     </table></div>
     {% if payment_schedule.projected_through %}<p class="patient-small">Planned payments are estimates through {{ payment_schedule.projected_through|date:'j M Y' }}.</p>{% endif %}
@@ -51,3 +43,19 @@
     </form>
   </div>
 </dialog>{% endif %}
+{# Each payment's discount in a small dialog of its own (James, 26 Nov 2026), a sibling like Bulk discount: its fields one #}
+{# above another, the new amount, then Cancel and Save. #}
+{% for row in payment_schedule.rows %}{% if row.discount_form %}
+<dialog class="app-dialog subscription-line-dialog" id="{{ row.editor_id }}" aria-labelledby="{{ row.editor_id }}-title"{% if row.edit_open %} open{% endif %}>
+  <div class="app-dialog__body">
+    <h2 id="{{ row.editor_id }}-title">Discount for {{ row.due_on|date:'j M Y' }}</h2>
+    <p class="app-dialog__sub">{{ payment_plan.patient }} · Original: R{{ row.base|floatformat:2 }}</p>
+    <form class="console-form subscription-discount-form" method="post" action="{% url 'portal:subscription-payments' payment_plan.pk %}" data-line-discount-form data-discount-base="{{ row.base|unlocalize }}">
+      {% csrf_token %}<input type="hidden" name="workflow_context" value="{{ discount_token }}"><input type="hidden" name="return_to" value="{{ payment_return }}"><input type="hidden" name="scope" value="one"><input type="hidden" name="payment" value="{{ row.key }}">
+      {{ row.discount_form.non_field_errors }}{{ row.discount_form.payment.errors }}
+      {% include 'portal/includes/subscription_discount_fields.html' with line_form=row.discount_form line_editor=True %}
+      <output class="subscription-line-dialog__preview" data-discount-preview aria-live="polite">New amount: R{{ row.amount|floatformat:2 }}</output>
+      <div class="app-dialog__actions"><button class="console-button console-button--secondary" type="button" data-dialog-close>Cancel</button><button class="console-button console-button--primary" type="submit"{% if not row.editable %} disabled{% endif %}>Save discount</button></div>
+    </form>
+  </div>
+</dialog>{% endif %}{% endfor %}

@@ -1,6 +1,6 @@
 {% load tz %}{% timezone 'Africa/Johannesburg' %}{% for entry in timeline_entries %}
   <li class="record-timeline__entry record-timeline__entry--{{ entry.category }}" data-entry-key="{{ entry.kind }}:{{ entry.id }}">
-    <div class="record-timeline__meta"><time datetime="{{ entry.at|date:'c' }}">{{ entry.at|date:"j M Y · H:i" }}</time><span class="console-status">{{ entry.company_name }}</span><span>{{ entry.category_label }}</span></div>
+    <div class="record-timeline__meta"><time datetime="{{ entry.at|date:'c' }}">{{ entry.at|date:"j M Y · H:i" }}</time>{% if multi_practice_enabled %}<span class="console-status">{{ entry.company_name }}</span>{% endif %}<span>{{ entry.category_label }}</span></div>
     <h3>{{ entry.title }}</h3>
     {% if entry.actor %}<p class="record-timeline__actor">{{ entry.actor }}{% if entry.signed_at %} · Signed {{ entry.signed_at|date:"j M Y · H:i" }}{% endif %}</p>{% endif %}
     {% if entry.detail %}<p class="record-timeline__detail">{{ entry.detail }}</p>{% endif %}

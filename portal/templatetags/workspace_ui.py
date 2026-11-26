@@ -24,19 +24,6 @@ def staff_unread_messages(context):
     return counts['patient_unread_total'] + counts['team_unread_total']
 
 
-def _open_data_requests(context):
-    """Data requests waiting on the practice, for the Super Admins who see that menu item; once per request."""
-    request = context.get('request')
-    membership = context.get('active_membership')
-    if request is None or membership is None or membership.role != membership.Role.SUPER_ADMIN:
-        return 0
-    if not hasattr(request, '_open_data_requests'):
-        from care.privacy import unresolved_request_count
-
-        request._open_data_requests = unresolved_request_count(membership.company)
-    return request._open_data_requests
-
-
 @register.simple_tag(takes_context=True)
 def message_counts(context):
     """The unread counts for the Messages and Team tabs."""
@@ -52,8 +39,7 @@ def staff_menu(context):
     from portal.navigation import build_staff_navigation
 
     return build_staff_navigation(membership, multi_practice=context.get('multi_practice_enabled', False),
-                                  nav_section=context.get('nav_section') or '', unread=staff_unread_messages(context),
-                                  data_requests=_open_data_requests(context))
+                                  nav_section=context.get('nav_section') or '', unread=staff_unread_messages(context))
 
 
 @register.inclusion_tag('portal/includes/page_tabs.html', takes_context=True)
@@ -61,8 +47,7 @@ def page_tabs(context):
     """The Operations or Administration tabs for this page, styled as a patient record's tabs."""
     from portal.navigation import page_tabs as tabs_for
 
-    return {'group': tabs_for(context.get('nav_section') or '', data_requests=_open_data_requests(context),
-                              membership=context.get('active_membership'))}
+    return {'group': tabs_for(context.get('nav_section') or '', membership=context.get('active_membership'))}
 
 
 @register.inclusion_tag('includes/breadcrumbs.html', takes_context=True)

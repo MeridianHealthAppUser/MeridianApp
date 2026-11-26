@@ -130,8 +130,8 @@ class ConsumptionDetailView(OperationsView):
         page.object_list = list(page.object_list)
         for row in consumption_dispatch_data(self.company, page.object_list):
             item = row['item']
-            item.patient_label, item.doctor_label = row['patient'], row['doctor'] or '—'
-            item.waybill_label = row['waybill'] or row['tracking'] or '—'
+            item.patient_label, item.doctor_label = row['patient'], row['doctor'] or '-'
+            item.waybill_label = row['waybill'] or row['tracking'] or '-'
         path = reverse('portal:inventory-consumption-detail', kwargs={'pk': product.pk, 'week': start.isoformat()})
         export = reverse('portal:inventory-consumption-detail-export', kwargs={'pk': product.pk, 'week': start.isoformat()})
         context = self.context(inventory_view='consumption', product=product, week_start=start,

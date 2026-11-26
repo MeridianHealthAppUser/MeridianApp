@@ -34,7 +34,7 @@
             <tr>
               <td><time datetime="{{ weight.recorded_on|date:'Y-m-d' }}">{{ weight.recorded_on|date:"j M Y" }}</time></td>
               <td><strong>{{ weight.weight_kg }} kg</strong></td>
-              <td>{% if weight.note|length > 120 %}<details class="record-weight-note"><summary>View note</summary><p>{{ weight.note|linebreaksbr }}</p></details>{% else %}{{ weight.note|default:"—"|linebreaksbr }}{% endif %}{% if weight.recorded_by %}<small>Recorded by {{ weight.recorded_by.full_name }}</small>{% endif %}</td>
+              <td>{% if weight.note|length > 120 %}<details class="record-weight-note"><summary>View note</summary><p>{{ weight.note|linebreaksbr }}</p></details>{% else %}{{ weight.note|default:"-"|linebreaksbr }}{% endif %}{% if weight.recorded_by %}<small>Recorded by {{ weight.recorded_by.full_name }}</small>{% endif %}</td>
             </tr>
           {% endfor %}
         </tbody>

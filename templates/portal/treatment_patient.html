@@ -2,7 +2,7 @@
 {% load static workspace_ui %}
 
 {% block title %}My Treatment | Meridian{% endblock %}
-{% block patient_extra_css %}<link rel="stylesheet" href="{% static 'css/treatment.css' %}?v=20261115a"><link rel="stylesheet" href="{% static 'css/patient_billing.css' %}?v=20261104a"><link rel="stylesheet" href="{% static 'css/patient_medications.css' %}?v=20261108a"><link rel="stylesheet" href="{% static 'css/dialogs.css' %}?v=20261115a"><script src="{% static 'js/dialogs.js' %}?v=20261115b" defer></script><script src="{% static 'js/basket_quantity.js' %}?v=20261108a" defer></script><script src="{% static 'js/appointment_video.js' %}?v=20261108a" defer></script>{% endblock %}
+{% block patient_extra_css %}<link rel="stylesheet" href="{% static 'css/treatment.css' %}?v=20261126d"><link rel="stylesheet" href="{% static 'css/patient_billing.css' %}?v=20261126b"><link rel="stylesheet" href="{% static 'css/patient_medications.css' %}?v=20261108a"><link rel="stylesheet" href="{% static 'css/dialogs.css' %}?v=20261115a"><script src="{% static 'js/dialogs.js' %}?v=20261115b" defer></script><script src="{% static 'js/prescription_changes.js' %}?v=20261125a" defer></script><script src="{% static 'js/basket_quantity.js' %}?v=20261108a" defer></script><script src="{% static 'js/appointment_video.js' %}?v=20261108a" defer></script>{% endblock %}
 {% block patient_content_class %}patient-treatment{% endblock %}
 {% block patient_breadcrumbs %}{% breadcrumbs 'My Treatment' %}{% endblock %}
 {% block patient_heading %}<header class="patient-page-heading"><div><h1>My Treatment</h1><p>Your prescription, deliveries and next steps.</p></div></header>{% endblock %}
@@ -24,14 +24,13 @@
             {% if plan_dose.price is not None %}<p class="patient-plan__amount">R{{ plan_dose.price|floatformat:"-2" }}<span>{{ plan_dose.billing_text }}</span></p>{% endif %}
           </div>
           {% if treatment %}{% include 'portal/includes/patient_treatment_overview.html' %}{% endif %}
-          <dl class="patient-kv">
-            <div><dt>Plan</dt><dd>{{ current_plan.plan_name }}</dd></div>
+          <dl class="patient-kv{% if treatment %} patient-kv--continued{% endif %}">
             <div><dt>Status</dt><dd>{{ current_plan.get_status_display }}</dd></div>
             {% if plan_authorization and not treatment %}
               <div><dt>Maximum dose</dt><dd>{{ plan_authorization.max_dose }}</dd></div>
               <div><dt>Authorised on</dt><dd>{{ plan_authorization.starts_on|date:"j M Y" }}</dd></div>
               <div><dt>Valid until</dt><dd class="patient-kv__amber">{{ plan_authorization.expires_on|date:"j M Y" }}</dd></div>
-              <div><dt>Prescribing doctor</dt><dd>{{ plan_authorization.prescribed_by.full_name }}</dd></div>
+              <div><dt>Prescribing doctor</dt><dd>{{ plan_authorization.prescribed_by.titled_name }}</dd></div>
             {% endif %}
             <div><dt>Doctor review due</dt><dd>{{ current_plan.review_due_on|date:"j M Y"|default:"Not specified" }}</dd></div>
           </dl>
@@ -39,9 +38,9 @@
           {% if plan_authorization.instructions %}<div class="patient-plan__note"><h3 class="patient-eyebrow">Your doctor’s instructions</h3><p class="treatment-instructions">{{ plan_authorization.instructions|linebreaksbr }}</p></div>{% endif %}
 
           {% include 'portal/includes/patient_timeline_link.html' %}
-          <p class="patient-small patient-plan__billing">{% if plan_billing %}{{ plan_billing.text }}. {% endif %}<a class="patient-inline-link" href="{% url 'portal:patient-billing' %}">Billing and payments</a></p>
-
-          {% if action_plan %}<div class="patient-plan__support"><p>Questions or concerns about your treatment?</p><a class="patient-inline-link" href="?help=1#treatment-help" data-modal-open="treatment-help" aria-haspopup="dialog">Something is wrong, help me</a></div>{% endif %}
+          {# Each a line of text with its button on the right; on a phone the button goes under the text (treatment.css). #}
+          <div class="patient-plan__support"><p>{% if plan_billing %}{{ plan_billing.text }}.{% else %}Your card, payments and invoices.{% endif %}</p><a class="console-button console-button--secondary" href="{% url 'portal:patient-billing' %}"><svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2V3Z"/><path d="M9 7h6M9 11h6M9 15h3"/></svg>Billing and payments</a></div>
+          {% if action_plan %}<div class="patient-plan__support"><p>Questions or concerns about your treatment?</p><a class="console-button console-button--secondary" href="?help=1#treatment-help" data-modal-open="treatment-help" aria-haspopup="dialog">Something is wrong, help me</a></div>{% endif %}
           <details class="patient-plan__manage patient-plan__settings"{% if action_form.errors or action_plan.status == 'paused' %} open{% endif %}>
             <summary>Manage subscription <span>Pause, resume or cancel</span></summary>
             <div class="patient-plan__settings-body">
@@ -74,14 +73,27 @@
             <div><dt>Maximum dose</dt><dd>{{ current_authorization.max_dose }}</dd></div>
             <div><dt>Authorised on</dt><dd>{{ current_authorization.starts_on|date:"j M Y" }}</dd></div>
             <div><dt>Valid until</dt><dd class="patient-kv__amber">{{ current_authorization.expires_on|date:"j M Y" }}</dd></div>
-            <div><dt>Prescribing doctor</dt><dd>{{ current_authorization.prescribed_by.full_name }}</dd></div>
+            <div><dt>Prescribing doctor</dt><dd>{{ current_authorization.prescribed_by.titled_name }}</dd></div>
           </dl>{% endif %}
           {% if current_authorization.instructions %}<div class="patient-plan__note"><h3 class="patient-eyebrow">Your doctor’s instructions</h3><p class="treatment-instructions">{{ current_authorization.instructions|linebreaksbr }}</p></div>{% endif %}
           {% include 'portal/includes/patient_timeline_link.html' %}
           {% if can_enroll or enrollment_form.errors %}
             <div class="patient-plan__manage" id="start-subscription">
               <h3 class="patient-eyebrow">Start your subscription</h3>
-              <p class="patient-small">Your parcels are sent from your subscription, once each payment is in.{% if enroll_dose.price is not None %} It’s R{{ enroll_dose.price|floatformat:"-2" }} {{ enroll_dose.billing_text }}{% if enroll_amount and enroll_amount != enroll_dose.price %}, up to R{{ enroll_amount|floatformat:"-2" }} as your dose goes up{% endif %}, starting today.{% endif %}</p>
+              <p class="patient-small">Your parcels are sent from your subscription, once each payment is in.{% if enroll_dose.price is not None %} It’s R{{ enroll_dose.price|floatformat:"-2" }} {{ enroll_dose.billing_text }}{% if enroll_amount and enroll_amount != enroll_dose.price %}, up to R{{ enroll_amount|floatformat:"-2" }} as your dose goes up{% endif %}{% if not start_check %}, starting today{% endif %}.{% endif %}{% if not start_check and first_pens_if_paid_today %} Paid today, your first pens go out on {{ first_pens_if_paid_today|date:"l j F" }}.{% endif %}</p>
+              {% if start_check %}
+                {# Written too long ago to start on alone: the doctor confirms it first, and may ask for blood tests. #}
+                <div class="treatment-notice treatment-notice--warning" role="status" style="margin-top:.9rem">
+                  {% if start_check.asked %}
+                    <strong>Waiting for {% if start_check.doctor %}{{ start_check.doctor.titled_name }}{% else %}your doctor{% endif %} to confirm your prescription</strong>
+                    <p>We’ve asked {% if start_check.doctor %}{{ start_check.doctor.titled_name }}{% else %}your doctor{% endif %} to confirm your prescription. They may ask for blood tests first. You can start your subscription here once they’ve confirmed it.</p>
+                  {% else %}
+                    <strong>Your doctor needs to confirm your prescription</strong>
+                    <p>Your prescription was written on {{ start_check.written_on|date:"j F" }}, more than {{ start_check.weeks }} weeks ago, so {% if start_check.doctor %}{{ start_check.doctor.titled_name }}{% else %}your doctor{% endif %} needs to confirm it’s still right before you start. They may ask for blood tests first.</p>
+                    <form method="post" action="{% url 'portal:patient-prescription-ask' %}">{% csrf_token %}<input type="hidden" name="treatment_context" value="{{ ask_context }}"><div class="patient-card-actions"><button type="submit" class="console-button console-button--primary">Ask {% if start_check.doctor %}{{ start_check.doctor.titled_name }}{% else %}my doctor{% endif %} to confirm</button></div></form>
+                  {% endif %}
+                </div>
+              {% else %}
               <form method="post" action="{% url 'portal:patient-subscription-enroll' %}" class="console-form patient-start-form">
                 {% csrf_token %}
                 <input type="hidden" name="treatment_context" value="{{ enrollment_context }}">
@@ -97,14 +109,17 @@
                 </fieldset>
                 <fieldset class="patient-fieldset">
                   <legend>{{ enrollment_form.method.label }}</legend>
-                  {% for choice in enrollment_form.method %}<label class="patient-check" for="{{ choice.id_for_label }}">{{ choice.tag }}<span>{{ choice.choice_label }}</span></label>{% endfor %}
+                  {% if enrollment_form.method.is_hidden %}{{ enrollment_form.method }}
+                  <p class="patient-small">By card. Next you add your card on our payment provider’s secure page. Your first payment is taken then. After that your card is charged the same amount every {{ enroll_dose.billing_weeks|default:4 }} weeks, a week before each parcel goes out.</p>
+                  {% else %}{% for choice in enrollment_form.method %}<label class="patient-check" for="{{ choice.id_for_label }}">{{ choice.tag }}<span>{{ choice.choice_label }}</span></label>{% endfor %}
+                  <p class="patient-small">Next you approve it with your bank or card provider. Your first payment is taken once it’s approved, and the same amount every {{ enroll_dose.billing_weeks|default:4 }} weeks after that.</p>{% endif %}
                   {{ enrollment_form.method.errors }}
-                  <p class="patient-small">Next you approve it with your bank or card provider. Your first payment is taken once it’s approved, and the same amount every {{ enroll_dose.billing_weeks|default:4 }} weeks after that.</p>
                 </fieldset>
                 <label class="patient-check" for="{{ enrollment_form.confirm.id_for_label }}">{{ enrollment_form.confirm }}<span>{{ enrollment_form.confirm.label }}</span></label>
                 {{ enrollment_form.confirm.errors }}
                 <div class="patient-card-actions"><button type="submit" class="console-button console-button--primary">Start my subscription</button></div>
               </form>
+              {% endif %}
             </div>
           {% endif %}
         {% else %}
@@ -123,6 +138,7 @@
   {% if shop_products or basket_count or has_orders %}{% include 'portal/includes/patient_once_off_items.html' %}{% endif %}
 </div>
 {% if timeline %}{% include 'portal/includes/patient_treatment_timeline.html' %}{% endif %}
+{% if prescription_changes %}{% include 'portal/includes/patient_prescription_changes.html' %}{% endif %}
 {% if action_plan %}
   {# Something is wrong, help me: what isn't working goes to the patient's doctor and the practice team as a message. #}
   <dialog class="app-dialog" id="treatment-help" aria-labelledby="treatment-help-title"{% if help_open %} open{% endif %}>

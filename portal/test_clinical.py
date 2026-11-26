@@ -281,13 +281,14 @@ class ClinicalPortalTests(TestCase):
         self.login()
         for name, reason in (('clinical-consultations', 'Consultation notes are on each patient’s record'),
                              ('clinical-labs', 'Blood tests are on each patient’s record'),
-                             ('treatment-authorisations', 'Treatment authorisations are on each patient’s record'),
                              ('compounding-list', 'Your compounding records open from My tasks.')):
             with self.subTest(page=name):
                 response = self.client.get(reverse(f'portal:{name}'), follow=True)
                 self.assertRedirects(response, reverse('portal:desktop-dashboard'))
                 self.assertContains(response, 'class="flash-message toast error"')
                 self.assertContains(response, reason)
+        # Authorisations open for doctors too, with their own patients' (James, 26 Nov 2026).
+        self.assertEqual(self.client.get(reverse('portal:treatment-authorisations')).status_code, 200)
         self.login(self.super_admin)
         for name in ('clinical-consultations', 'clinical-labs', 'treatment-authorisations', 'compounding-list'):
             with self.subTest(page=name, role='super_admin'):

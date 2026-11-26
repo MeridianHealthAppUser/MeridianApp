@@ -17,17 +17,17 @@
   <section class="console-metrics" aria-label="Weight summary">
     <article class="metric-card">
       <span class="metric-card__label">First recorded weight</span>
-      <strong class="metric-card__value">{% if first_weight %}{{ first_weight.weight_kg|kg }} kg{% else %}—{% endif %}</strong>
+      <strong class="metric-card__value">{% if first_weight %}{{ first_weight.weight_kg|kg }} kg{% else %}-{% endif %}</strong>
       <span class="metric-card__hint">{% if first_weight %}{{ first_weight.recorded_on|date:"j M Y" }}{% else %}Add your first check-in{% endif %}</span>
     </article>
     <article class="metric-card">
       <span class="metric-card__label">Latest weight</span>
-      <strong class="metric-card__value">{% if latest_weight %}{{ latest_weight.weight_kg|kg }} kg{% else %}—{% endif %}</strong>
+      <strong class="metric-card__value">{% if latest_weight %}{{ latest_weight.weight_kg|kg }} kg{% else %}-{% endif %}</strong>
       <span class="metric-card__hint">{% if latest_weight %}{{ latest_weight.recorded_on|date:"j M Y" }}{% else %}No check-ins yet{% endif %}</span>
     </article>
     <article class="metric-card">
       <span class="metric-card__label">Change since first check-in</span>
-      <strong class="metric-card__value">{% if weight_change != None %}{% if weight_change > 0 %}+{{ weight_change|kg }}{% elif weight_change < 0 %}−{{ weight_change|kg|cut:'-' }}{% else %}0{% endif %} kg{% else %}—{% endif %}</strong>
+      <strong class="metric-card__value">{% if weight_change != None %}{% if weight_change > 0 %}+{{ weight_change|kg }}{% elif weight_change < 0 %}−{{ weight_change|kg|cut:'-' }}{% else %}0{% endif %} kg{% else %}-{% endif %}</strong>
       <span class="metric-card__hint">Your recorded weight difference</span>
     </article>
   </section>
@@ -87,7 +87,7 @@
               <tr>
                 <td data-label="Date"><time datetime="{{ weight.recorded_on|date:'Y-m-d' }}">{{ weight.recorded_on|date:"j M Y" }}</time></td>
                 <td data-label="Weight"><strong>{{ weight.weight_kg|kg }} kg</strong></td>
-                <td data-label="Note"{% if not weight.note %} class="patient-table__blank"{% endif %}><span class="patient-table__note">{{ weight.note|default:"—"|linebreaksbr }}</span></td>
+                <td data-label="Note"{% if not weight.note %} class="patient-table__blank"{% endif %}><span class="patient-table__note">{{ weight.note|default:"-"|linebreaksbr }}</span></td>
               </tr>
             {% empty %}
               <tr><td class="patient-table__empty" colspan="3">Your check-ins will appear here once you save your first update.</td></tr>

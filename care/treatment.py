@@ -13,7 +13,7 @@ from django.utils import timezone
 
 from practices.models import CompanyMembership
 
-from .clinical import _active_actor, _lock_context, _require_doctor
+from .clinical import _active_actor, _lock_context, _require_doctor, is_super_admin, renewing_doctor
 from .models import AuditEvent, MedicationProduct, PatientEvent, PatientSubscription, Shipment, TreatmentAuthorization
 from .notifications import queue as notify
 from .services import record_audit
@@ -68,14 +68,17 @@ def dose_in_effect(subscription, on_date=None):
     return authorization.dose if authorization.dose_id else None
 
 
-def subscription_hold_reason(subscription, on_date=None):
+def subscription_hold_reason(subscription, on_date=None, *, paid_before_pause=False):
+    """Why a care plan's parcels can't go out, or ''. paid_before_pause: the parcel was paid for before the patient
+    paused the plan (care.billing.paid_before_pause), so it still goes out while the plan is paused."""
     if subscription is None:
         return 'A care plan is required.'
     if not subscription.company.is_active or not subscription.patient.is_active or subscription.patient.company_id != subscription.company_id:
         return 'The patient or practice is inactive.'
     # A plan whose debit is being retried stays eligible: whether its parcels are paid for is checked on its own
     # (care.billing.parcel_payment) when the week is locked.
-    if subscription.status not in (PatientSubscription.Status.ACTIVE, PatientSubscription.Status.PAYMENT_RETRY):
+    if subscription.status not in (PatientSubscription.Status.ACTIVE, PatientSubscription.Status.PAYMENT_RETRY) and not (
+            paid_before_pause and subscription.status == PatientSubscription.Status.PAUSED):
         return 'The care plan is not active.'
     from .blood_tests import pause_reason
 
@@ -90,8 +93,8 @@ def subscription_hold_reason(subscription, on_date=None):
     return ''
 
 
-def ensure_subscription_eligible(subscription, on_date=None):
-    reason = subscription_hold_reason(subscription, on_date=on_date)
+def ensure_subscription_eligible(subscription, on_date=None, *, paid_before_pause=False):
+    reason = subscription_hold_reason(subscription, on_date=on_date, paid_before_pause=paid_before_pause)
     if reason:
         raise ValidationError(reason)
     return step_in_effect(subscription.authorization, on_date)
@@ -124,6 +127,31 @@ def _event(record, title, detail):
     )
 
 
+PATIENT_STOPPED = 'Subscription paused or cancelled by the patient.'
+
+
+def _hold_unpaid_parcels(company, patient, subscription):
+    """Pausing holds the plan's parcels that aren't paid for. One the patient has already paid for still goes out, as
+    the last one until they resume (care.billing.paid_before_pause marks it for staff)."""
+    from .billing import parcel_payment
+
+    unpaid = [shipment.pk for shipment in Shipment.objects.select_for_update().for_company(company).filter(
+        subscription=subscription, patient=patient,
+        status__in=(Shipment.Status.DRAFT, Shipment.Status.READY, Shipment.Status.HELD),
+    ) if parcel_payment(shipment)[0] != 'paid']
+    return Shipment.objects.filter(pk__in=unpaid).update(status=Shipment.Status.HELD, hold_reason=PATIENT_STOPPED,
+                                                         updated_at=timezone.now())
+
+
+def _release_paused_parcels(company, patient, subscription):
+    """Resuming puts the parcels the pause held, from today on, back on the list as drafts, to be checked and locked
+    again (payment included). Ones for weeks that passed while paused stay held."""
+    return Shipment.objects.select_for_update().for_company(company).filter(
+        subscription=subscription, patient=patient, status=Shipment.Status.HELD, hold_reason=PATIENT_STOPPED,
+        scheduled_for__gte=timezone.localdate(),
+    ).update(status=Shipment.Status.DRAFT, hold_reason='', locked_at=None, updated_at=timezone.now())
+
+
 def _hold_shipments(company, patient, subscriptions, reason, authorizations=()):
     # A dispatched parcel is history. Only unfulfilled parcels for the affected
     # plans or prescriptions are held; another treatment's shipments are not changed.
@@ -150,7 +178,10 @@ def create_authorization(*, company, patient, actor, product, max_dose, quantity
     from .prescriptions import _check_flags
 
     company, patient = _lock_context(company, patient, actor)
-    _require_doctor(company, actor)
+    # A doctor authorises treatment; the practice's Super Admin also renews one, doctor or not (James, 26 Nov 2026).
+    super_admin_renewal = renews is not None and is_super_admin(company, actor)
+    if not super_admin_renewal:
+        _require_doctor(company, actor)
     key = _key(submission_key)
     duplicate = _duplicate(company, patient, actor, key, 'treatment.authorized', TreatmentAuthorization)
     if duplicate is not None:
@@ -178,13 +209,17 @@ def create_authorization(*, company, patient, actor, product, max_dose, quantity
         previous = TreatmentAuthorization.objects.select_for_update().for_company(company).filter(pk=renews.pk, patient=patient).first()
         if previous is None:
             raise PermissionDenied('This authorisation does not belong to this patient and practice.')
-        _require_doctor(company, actor, previous.prescribed_by_id)
+        # The prescribing doctor renews it, or the practice's Super Admin (James, 26 Nov 2026).
+        if not super_admin_renewal:
+            _require_doctor(company, actor, previous.prescribed_by_id)
         # Each historical record may be replaced once. A stale renewal form must
         # not rebind a plan backwards or create parallel replacement decisions.
         if AuditEvent.objects.for_company(company).filter(action='treatment.authorized', metadata__previous_authorization_id=previous.pk).exists():
             raise ValidationError('This authorisation has already been renewed. Open its replacement.')
+    # A Super Admin who isn't a doctor renews it for the doctor who prescribed it (James, 26 Nov 2026).
     authorization = TreatmentAuthorization(
-        company=company, patient=patient, prescribed_by=actor, product=product, max_dose=max_dose,
+        company=company, patient=patient, prescribed_by=renewing_doctor(company, actor, previous) if super_admin_renewal else actor,
+        product=product, max_dose=max_dose,
         quantity_per_cycle=quantity_per_cycle, starts_on=starts_on, expires_on=expires_on,
         review_interval_days=review_interval_days, instructions=instructions,
     )
@@ -216,7 +251,9 @@ def create_authorization(*, company, patient, actor, product, max_dose, quantity
 def change_authorization_status(*, authorization, actor, action, request=None):
     company, patient = _lock_context(authorization.company, authorization.patient, actor)
     record = TreatmentAuthorization.objects.select_for_update().for_company(company).get(pk=authorization.pk, patient=patient)
-    _require_doctor(company, actor, record.prescribed_by_id)
+    # The prescribing doctor, or the practice's Super Admin (James, 26 Nov 2026), pauses or revokes it.
+    if not is_super_admin(company, actor):
+        _require_doctor(company, actor, record.prescribed_by_id)
     statuses = {'pause': TreatmentAuthorization.Status.PAUSED, 'revoke': TreatmentAuthorization.Status.CANCELLED}
     if action not in statuses:
         raise ValidationError('Choose pause or revoke. Restarting treatment requires a new doctor authorisation.')
@@ -226,11 +263,20 @@ def change_authorization_status(*, authorization, actor, action, request=None):
         raise ValidationError('This historical authorisation cannot be changed. Issue a new authorisation after review.')
     record.status = statuses[action]
     record.save(update_fields=('status', 'updated_at'))
-    plans = PatientSubscription.objects.select_for_update().for_company(company).filter(patient=patient, authorization=record).exclude(status=PatientSubscription.Status.CANCELLED)
+    # Revoking a starting plan's step ends the plan: its later steps are revoked with it (James, 26 Nov 2026).
+    affected = [record]
+    if action == 'revoke' and record.plan_key and record.plan_step:
+        later = list(TreatmentAuthorization.objects.select_for_update().for_company(company).filter(
+            patient=patient, plan_key=record.plan_key, plan_step__gt=record.plan_step,
+        ).exclude(status=TreatmentAuthorization.Status.CANCELLED))
+        TreatmentAuthorization.objects.filter(pk__in=[step.pk for step in later]).update(
+            status=TreatmentAuthorization.Status.CANCELLED, updated_at=timezone.now())
+        affected += later
+    plans = PatientSubscription.objects.select_for_update().for_company(company).filter(patient=patient, authorization__in=affected).exclude(status=PatientSubscription.Status.CANCELLED)
     plan_ids = list(plans.values_list('pk', flat=True))
     plans.update(status=PatientSubscription.Status.PAUSED, next_debit_on=None, updated_at=timezone.now())
     _hold_shipments(company, patient, plan_ids, 'Treatment authorisation paused or revoked. Doctor review is required.',
-                    authorizations=[record])
+                    authorizations=affected)
     record_audit(company=company, actor=actor, patient=patient, action=f'treatment.{action}', target=record, request=request)
     _event(record, 'Treatment paused' if action == 'pause' else 'Treatment authorisation revoked', 'Contact your care team about the next steps. Undispatched parcels for this treatment are on hold.')
     return record
@@ -276,15 +322,17 @@ def enroll_local_subscription(*, company, patient, actor, authorization, confirm
         company=company, actor=actor, patient=patient, action='subscription.enrolled_local', target=plan, request=request,
         metadata={'submission_key': key, 'authorization_id': authorization.pk},
     )
-    _event(plan, 'Subscription started', 'Your first payment is collected once your debit order is approved, and your parcels go out once it’s paid.')
+    _event(plan, 'Subscription started', 'Your first payment is taken once you’ve added your card, and your parcels go out once it’s paid.')
     return plan
 
 
 # What the patient's Updates say after they pause, resume or cancel (title, detail).
 STATUS_EVENTS = {
-    'pause': ('Subscription paused', 'Nothing is debited while it’s paused, and parcels not yet sent are held.'),
-    'resume': ('Subscription resumed', 'Debits carry on after the last period you paid for.'),
-    'cancel': ('Subscription cancelled', 'Its debit order is stopped and parcels not yet sent are held. Parcels already sent are unchanged.'),
+    'pause': ('Subscription paused', 'Your card isn’t charged while it’s paused. A parcel you’ve already paid for still goes '
+                                     'out; later ones wait until you resume.'),
+    'resume': ('Subscription resumed', 'Payments carry on after the last period you paid for, and your parcels are back on '
+                                       'the list.'),
+    'cancel': ('Subscription cancelled', 'Your card won’t be charged for it again, and parcels not yet sent are held. Parcels already sent are unchanged.'),
 }
 
 
@@ -337,8 +385,12 @@ def change_subscription_status(*, subscription, actor, action, confirm=False, re
             fields.append('winback_sent_at')
             notify('subscription_winback', record.pk)
     record.save(update_fields=fields)
-    if action in ('pause', 'cancel'):
-        _hold_shipments(company, patient, [record.pk], 'Subscription paused or cancelled by the patient.')
+    if action == 'pause':
+        _hold_unpaid_parcels(company, patient, record)
+    elif action == 'cancel':
+        _hold_shipments(company, patient, [record.pk], PATIENT_STOPPED)
+    elif action == 'resume':
+        _release_paused_parcels(company, patient, record)
     if action == 'cancel':
         from .billing import release_mandates
         from .followups import close_help_requests

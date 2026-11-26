@@ -274,13 +274,14 @@ class PaidOrderShippingTests(OperationsFixture):
         return order, payment
 
     def test_a_paid_order_of_open_items_is_drafted_on_the_next_shipping_day(self):
-        from .parcels import shipping_day_from, shipping_weekday
+        # The first shipping day whose order cut-off is still to come, as prescription parcels (25 Nov 2026).
+        from .parcels import first_shipping_day
 
         order, payment = self.pay(self.open_product)
         self.assertEqual(order.status, PharmacyOrder.Status.ACCEPTED)
         parcel = order.shipment
         self.assertEqual((parcel.status, parcel.scheduled_for, parcel.subscription),
-                         ('draft', shipping_day_from(self.today, shipping_weekday(self.company)), self.plan))
+                         ('draft', first_shipping_day(self.today, self.company), self.plan))
         self.assertEqual(list(parcel.items.values_list('product', 'quantity', 'dose')), [(self.open_product.pk, 2, '')])
         self.assertTrue(AuditEvent.objects.filter(action='pharmacy_order.accepted', target_id=str(order.pk),
                                                   metadata__automatic=True).exists())

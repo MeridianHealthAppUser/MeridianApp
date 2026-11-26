@@ -1,3 +1,4 @@
+import re
 from decimal import Decimal
 from django.urls import reverse
 from care.models import SubscriptionCycle, SubscriptionDiscount
@@ -11,13 +12,31 @@ class SubscriptionPaymentPopupTests(BillingPageFixture):
     def test_popup_has_paid_and_planned_rows_and_saves_a_discount_with_effective_date(self):
         self.approved()
         self.login(self.admin)
-        page = self.client.get(reverse('portal:treatment-subscriptions'))
+        # The Payments column is on Shipping > Billing (James, 26 Nov 2026), and no longer on Patient orders.
+        page = self.client.get(reverse('portal:ops-billing'))
         self.assertEqual(page.status_code, 200)
         self.assertContains(page, f'data-modal-open="subscription-payments-{self.plan.pk}"')
+        self.assertContains(page, f'id="subscription-payments-{self.plan.pk}"')
         self.assertContains(page, 'R3295.00 paid to date')
         self.assertContains(page, '<th scope="col">Payments</th>', html=True)
-        self.assertNotContains(page, 'Payment progress')
         self.assertContains(page, 'subscription-payment-progress-link')
+        # James, 26 Nov 2026: Billing's columns in his order, the patient as All patients shows them, Last paid as its
+        # date over its amount, and in the pop-up each status a pill and Discount a button on every row.
+        heads = [cell.strip() for cell in re.findall(r'<th scope="col">([^<]*)</th>', page.content.decode())]
+        self.assertEqual(heads[:7], ['Patient', 'Card', 'Last paid', 'Next payment', 'Billing status', 'Outstanding', 'Payments'])
+        self.assertContains(page, '<small class="patient-cell__email">', html=False)
+        self.assertContains(page, f'<td data-label="Last paid">{self.today:%-d %b %Y}<small>R3295</small></td>', html=False)
+        self.assertContains(page, '<span class="ops-paid ops-paid--paid">Paid</span>', html=False)
+        self.assertContains(page, 'type="button" disabled title="Paid and processing payments stay unchanged">Discount', html=False)
+        self.assertContains(page, 'class="console-button console-button--secondary subscription-line-discount-toggle"', html=False)
+        # A payment's discount opens a small dialog of its own (James, 26 Nov 2026), not a row under it.
+        editable = next(row for row in page.context['payment_popups'][0]['payment_schedule']['rows'] if row['editable'])
+        self.assertContains(page, f'data-modal-open="{editable["editor_id"]}" aria-haspopup="dialog"', html=False)
+        self.assertContains(page, f'<dialog class="app-dialog subscription-line-dialog" id="{editable["editor_id"]}"', html=False)
+        self.assertNotContains(page, 'subscription-line-editor')
+        subscriptions = self.client.get(reverse('portal:treatment-subscriptions'))
+        self.assertNotContains(subscriptions, 'subscription-payment-progress-link')
+        self.assertNotContains(subscriptions, '<th scope="col">Payments</th>', html=True)
         dialog = self.client.get(self.url())
         self.assertTrue(dialog.context['payment_open'])
         schedule = dialog.context['payment_schedule']
@@ -64,11 +83,12 @@ class SubscriptionPaymentPopupTests(BillingPageFixture):
         page = self.client.get(self.url())
         data = {'workflow_context': page.context['discount_token'], 'scope': 'future',
                 'effective_on': self.today, 'kind': 'amount', 'value': '100',
-                'return_to': '/subscriptions/?page=2&status=active&status=paused'}
+                'return_to': '/billing/?page=2&state=paid&state=due'}
         response = self.client.post(self.url(), data)
         self.assertEqual(response.status_code, 302)
         self.assertIn('page=2', response.url)
-        self.assertIn('status=active&status=paused', response.url)
+        self.assertTrue(response.url.startswith('/billing/?'))
+        self.assertIn('state=paid&state=due', response.url)
         self.assertIn(f'payments={self.plan.pk}', response.url)
         self.assertEqual(SubscriptionDiscount.objects.count(), 1)
 
@@ -104,7 +124,7 @@ class SubscriptionPaymentPopupTests(BillingPageFixture):
         import os
         from pathlib import Path
         if os.environ.get('MERIDIAN_PAYMENTS_PREVIEW'):
-            listing = self.client.get(reverse('portal:treatment-subscriptions'), {'payments': self.plan.pk})
+            listing = self.client.get(reverse('portal:ops-billing'), {'payments': self.plan.pk})
             Path(os.environ['MERIDIAN_PAYMENTS_PREVIEW']).write_bytes(listing.content)
 
     def test_bulk_discount_button_opens_its_own_dialog_with_cancel_and_apply(self):

@@ -19,7 +19,7 @@ from django.views.decorators.cache import never_cache
 from care.forms import ClinicalNoteForm, ClinicalTaskForm
 from care.models import (
     Appointment, AuditEvent, ClinicalEncounter, ClinicalTask, LabRequest,
-    PatientSubscription, Payment, RecordTag, Shipment, TreatmentAuthorization,
+    PatientSubscription, Payment, PharmacyOrder, RecordTag, Shipment,
 )
 from care.patient_details import can_edit_details
 from care.services import record_audit
@@ -42,8 +42,10 @@ TABS = (
     ('payments', 'Payments'), ('treatment', 'Treatment'), ('deliveries', 'Dispatch history'),
 )
 CLINICAL_TABS = {'consultations', 'blood-tests', 'notes', 'treatment'}
-# Doctors (the Clinician role) work from the Overview: they also see Blood results and, for their own patients, Messages.
-CLINICIAN_TABS = {'overview', 'blood-tests', 'messages'}
+# Doctors (the Clinician role) work from the Overview: they also see Blood results, Treatment (James, 26 Nov 2026: the
+# patient's subscriptions with their weekly timelines, and their non-prescription orders) and, for their own patients,
+# Messages.
+CLINICIAN_TABS = {'overview', 'blood-tests', 'treatment', 'messages'}
 OPERATIONAL_AUDIT_LABELS = {
     'appointment.created': 'Appointment booked', 'appointment.patient_booked': 'Appointment booked by patient',
     'appointment.status_changed': 'Appointment status changed', 'appointment.proposal.accepted': 'Appointment time changed',
@@ -71,8 +73,8 @@ def workspace_url(patient, tab='overview', **query):
 
 
 def shows_tab(membership, user, patient, tab):
-    """Doctors (the Clinician role) see the Overview, Blood results and, only as the patient's Prescribing doctor,
-    Messages: another doctor's conversations with the patient aren't theirs to read. Super Admins see every tab.
+    """Doctors (the Clinician role) see the Overview, Blood results, Treatment and, only as the patient's Prescribing
+    doctor, Messages: another doctor's conversations with the patient aren't theirs to read. Super Admins see every tab.
     Practice administrators don't open records (portal.record_access)."""
     if tab in CLINICAL_TABS and not membership.has_clinical_access:
         return False
@@ -304,11 +306,21 @@ def workspace_tab_context(request, company, membership, patient, tab, **override
     elif tab == 'payments':
         context.update(paginated(request, patient, tab, scoped(Payment, company, patient).only('pk', 'amount', 'due_on', 'paid_at', 'status').order_by('-due_on', '-pk'), Payment.Status.choices))
     elif tab == 'treatment':
+        # The patient's orders (James, 26 Nov 2026): Subscriptions and Non-prescription requests as Patient orders lists
+        # them, without the Patient column, each subscription with its weekly timeline.
         from care.treatment import other_treatments
+        from .treatment_views import _plans, prepare_subscription_rows
 
-        authorizations = scoped(TreatmentAuthorization, company, patient).filter(product__company=company).select_related('product', 'prescribed_by').order_by('-created_at', '-pk')
-        context.update(paginated(request, patient, tab, authorizations, TreatmentAuthorization.Status.choices))
-        context['other_treatments_offered'] = other_treatments(company).exists()
+        context.update(
+            orders_tab='requests' if request.GET.get('orders') == 'requests' else 'subscriptions',
+            treatment_plans=list(prepare_subscription_rows(_plans(company, patient), company, payments=False)),
+            treatment_requests=list(scoped(PharmacyOrder, company, patient).exclude(status=PharmacyOrder.Status.DRAFT)
+                                    .select_related('patient', 'shipment').prefetch_related('items').order_by('-submitted_at', '-pk')),
+            can_read_clinical=membership.has_clinical_access,
+            # A request's own page is the practice administrators' (Operations): a doctor sees its items and address.
+            orders_readonly=not membership.is_admin,
+            other_treatments_offered=other_treatments(company).exists(),
+        )
     elif tab == 'deliveries':
         from .dispatch_history import DISPATCHED_STATUSES, history_queryset, prepare_history_shipments
 

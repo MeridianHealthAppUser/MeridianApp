@@ -471,7 +471,7 @@ class PatientShopPortalTests(OperationsPortalFixture):
 
     def test_add_place_and_pay_puts_the_order_on_the_next_shipping_list(self):
         from care.billing import parcel_payment
-        from care.parcels import shipping_day_from, shipping_weekday
+        from care.parcels import first_shipping_day
 
         self.assertRedirects(self.add_item(note='ignored'), reverse('portal:patient-basket'), fetch_redirect_response=False)
         order = PharmacyOrder.objects.get()
@@ -492,7 +492,7 @@ class PatientShopPortalTests(OperationsPortalFixture):
         parcel = order.shipment
         self.assertEqual(order.status, PharmacyOrder.Status.ACCEPTED)
         self.assertEqual((parcel.status, parcel.patient, parcel.scheduled_for),
-                         ('draft', self.patient, shipping_day_from(self.today, shipping_weekday(self.company))))
+                         ('draft', self.patient, first_shipping_day(self.today, self.company)))  # After the order cut-off.
         self.assertEqual([(item.product, item.quantity) for item in parcel.items.all()], [(self.open_product, 2)])
         self.assertEqual(parcel_payment(parcel)[0], 'paid')
         self.assertTrue(AuditEvent.objects.filter(action='pharmacy_order.accepted', metadata__automatic=True).exists())

@@ -59,6 +59,10 @@ class StaffClinicalView(LoginRequiredMixin, StaffCompanyRequiredMixin, ClinicalA
         # Blood tests, treatment and compounding stay with doctors.
         return self.membership.is_prescriber
 
+    @property
+    def super_admin(self):
+        return self.membership.role == CompanyMembership.Role.SUPER_ADMIN
+
     def require_clinician(self, owner_id=None):
         if not self.is_clinician or (owner_id is not None and owner_id != self.request.user.pk):
             raise PermissionDenied('Only the responsible clinician can change this clinical record.')

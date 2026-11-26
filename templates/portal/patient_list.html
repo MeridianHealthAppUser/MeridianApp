@@ -32,16 +32,18 @@
           <thead>
             <tr>
               <th scope="col">Patient</th>
-              <th scope="col">Practice</th>
+              {# One practice per deployment: Practice only where the app runs several (James, 26 Nov 2026). #}
+              {% if multi_practice_enabled %}<th scope="col">Practice</th>{% endif %}
               <th scope="col">ID and record</th>
               <th scope="col">Prescribing doctor</th>
               <th scope="col">Authorized for</th>
               <th scope="col">Subscription</th>
               {# Billing columns are for practice administrators and Super Admins, not the Clinician role. #}
               {% if active_membership.role != 'doctor' %}<th scope="col">Cycle</th>
-              <th scope="col">Next debit</th>{% endif %}
+              <th scope="col">Next payment</th>{% endif %}
               <th scope="col">Auth expires</th>
-              <th scope="col">Status</th>
+              {# Whether the patient's record is active, not their treatment (James, 26 Nov 2026). #}
+              <th scope="col">Record</th>
               <th scope="col"><span class="sr-only">Open record</span></th>
             </tr>
           </thead>
@@ -54,15 +56,16 @@
                     <span><span class="patient-table__name">{% if listed_patient.in_current_practice %}<a class="record-text-link" href="{% url 'portal:patient-detail' listed_patient.pk %}">{{ listed_patient }}</a>{% else %}{{ listed_patient }}{% endif %}{% if listed_patient.record_access_label %}<span class="console-status console-status--{% if listed_patient.record_access_label == 'Covering' %}covering{% else %}past{% endif %}" title="{% if listed_patient.record_access_label == 'Covering' %}You can read this record and write notes{% else %}Read only{% endif %}">{{ listed_patient.record_access_label }}</span>{% endif %}</span>{% if listed_patient.user %}<small>{{ listed_patient.user.email }}</small>{% endif %}</span>
                   </div>
                 </td>
-                <td data-label="Practice"><span class="console-status">{{ listed_patient.company.name }}</span></td>
+                {% if multi_practice_enabled %}<td data-label="Practice"><span class="console-status">{{ listed_patient.company.name }}</span></td>{% endif %}
                 <td data-label="ID and record">{{ listed_patient.id_number|default:"ID not recorded" }}<small>{{ listed_patient.medical_record_number|default:"Record number pending" }}</small></td>
-                <td data-label="Prescribing doctor">{% if listed_patient.assigned_doctor %}{{ listed_patient.assigned_doctor.full_name }}{% else %}Unassigned{% endif %}</td>
+                <td data-label="Prescribing doctor">{% if listed_patient.assigned_doctor %}{{ listed_patient.assigned_doctor.titled_name }}{% else %}Unassigned{% endif %}</td>
                 <td data-label="Authorized for">{% if listed_patient.record_authorization %}{{ listed_patient.record_authorization.product.name }}<small>{{ listed_patient.record_authorization.max_dose }} · {{ listed_patient.record_authorization.get_status_display }}</small>{% else %}Not recorded{% endif %}</td>
-                <td data-label="Subscription">{% if listed_patient.record_subscription %}{{ listed_patient.record_subscription.get_status_display }}{% else %}Not enrolled{% endif %}</td>
-                {% if active_membership.role != 'doctor' %}<td data-label="Cycle">{{ listed_patient.record_subscription.cycle_number|default:"—" }}</td>
-                <td data-label="Next debit">{{ listed_patient.record_subscription.next_debit_on|date:"j M Y"|default:"—" }}</td>{% endif %}
-                <td data-label="Auth expires">{{ listed_patient.record_authorization.ends_on|date:"j M Y"|default:"—" }}</td>
-                <td data-label="Status">{% if listed_patient.is_active %}<span class="console-status console-status--active">Active</span>{% else %}<span class="console-status">Inactive</span>{% endif %}</td>
+                {# A pill in the subscription status's colour (James, 26 Nov 2026). #}
+                <td data-label="Subscription">{% if listed_patient.record_subscription %}<span class="console-status console-status--plan-{{ listed_patient.record_subscription.status }}">{{ listed_patient.record_subscription.get_status_display }}</span>{% else %}<span class="console-status console-status--plan-none">Not enrolled</span>{% endif %}</td>
+                {% if active_membership.role != 'doctor' %}<td data-label="Cycle">{{ listed_patient.record_subscription.cycle_number|default:"-" }}</td>
+                <td data-label="Next payment">{{ listed_patient.record_subscription.next_payment_on|date:"j M Y"|default:"-" }}</td>{% endif %}
+                <td data-label="Auth expires">{{ listed_patient.record_authorization.ends_on|date:"j M Y"|default:"-" }}</td>
+                <td data-label="Record">{% if listed_patient.is_active %}<span class="console-status console-status--active">Active</span>{% else %}<span class="console-status">Inactive</span>{% endif %}</td>
                 <td class="staff-patient-table__action-cell" data-label="Action">
                   {% if listed_patient.in_current_practice %}<div class="record-directory-actions">
                     <a class="console-button console-button--primary record-directory-open" href="{% url 'portal:patient-detail' listed_patient.pk %}">Open record<span class="sr-only"> for {{ listed_patient }}</span></a>

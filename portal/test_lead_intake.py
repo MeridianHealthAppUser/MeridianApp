@@ -1,5 +1,6 @@
 """The public enquiry flow never grants accounts, booking, or payment privileges."""
 
+import hashlib
 from datetime import timedelta
 from decimal import Decimal
 from unittest.mock import patch
@@ -75,6 +76,18 @@ class PublicLeadIntakeTests(TestCase):
             reverse('portal:questionnaire-result'), fetch_redirect_response=False,
         )
 
+    def test_the_terms_and_the_privacy_policy_are_read_in_dialogs_and_accepted_with_one_tick(self):
+        page = self.client.get(reverse('portal:questionnaire'))
+        for kind in ('telehealth', 'service'):
+            document = self.documents[self.company.pk, kind]
+            self.assertContains(page, f'data-consent-open="consent-{self.company.pk}-{kind}"', html=False)
+            self.assertContains(page, f'<dialog class="questionnaire-dialog" id="consent-{self.company.pk}-{kind}"', html=False)
+            self.assertContains(page, f'Read the {document.title}')
+        self.assertContains(page, 'I accept the Terms and Conditions and the Privacy Policy.')
+        content = page.content.decode()
+        # The Terms and Conditions first.
+        self.assertLess(content.index(f'consent-{self.company.pk}-telehealth'), content.index(f'consent-{self.company.pk}-service'))
+
     def test_public_form_has_expanded_fields_and_only_active_practices(self):
         response = self.client.get(reverse('portal:questionnaire'))
         form = response.context['form']
@@ -120,6 +133,9 @@ class PublicLeadIntakeTests(TestCase):
             self.assertIsNone(consent.patient_id)
             self.assertEqual(consent.ip_address, '192.0.2.41')
             self.assertEqual(consent.source, 'public-questionnaire')
+            # The exact wording accepted is part of the record (Dr Czech, 26 Nov 2026), whatever is published later.
+            self.assertEqual((consent.document_title, consent.document_text), (consent.document.title, consent.document.body))
+            self.assertEqual(consent.document_hash, hashlib.sha256(consent.document.body.encode()).hexdigest())
         self.assertEqual(self.identity_counts(), before)
         self.assertNotIn('_auth_user_id', self.client.session)
 
@@ -467,6 +483,18 @@ class StaffLeadWorkspaceTests(TestCase):
         session = self.client.session
         session[ACTIVE_COMPANY_SESSION_KEY] = (company or self.company).pk
         session.save()
+
+    def test_the_lead_page_shows_the_exact_wording_accepted(self):
+        consent = ConsentRecord.objects.create(
+            company=self.company, lead=self.pending, consent_type='telehealth', document_version='1', accepted=True,
+            accepted_at=timezone.now(), source='public-questionnaire', document_title='Terms and Conditions',
+            document_text='The exact terms Alice accepted.', document_hash='0' * 64)
+        self.login()
+        page = self.client.get(reverse('portal:lead-detail', args=[self.pending.pk]))
+        self.assertContains(page, f'data-modal-open="consent-wording-{consent.pk}"', html=False)
+        self.assertContains(page, f'<dialog class="app-dialog app-dialog--wide privacy-document-dialog" id="consent-wording-{consent.pk}"', html=False)
+        self.assertContains(page, '>The exact terms Alice accepted.</div>', html=False)
+        self.assertContains(page, 'Version 1 · Accepted')
 
     def test_lead_pages_require_authentication(self):
         for url in (reverse('portal:staff-leads'), reverse('portal:lead-detail', args=[self.pending.pk])):

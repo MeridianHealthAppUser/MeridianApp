@@ -1,5 +1,5 @@
 {% extends 'portal/staff_page_base.html' %}{% load static workspace_ui %}
-{% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/backoffice.css' %}?v=20261120c"><link rel="stylesheet" href="{% static 'css/filter_menu.css' %}?v=20261120a"><script src="{% static 'js/filter_menu.js' %}?v=20261114a" defer></script><link rel="stylesheet" href="{% static 'css/conversation_search.css' %}?v=20261104a"><script src="{% static 'js/conversation_search.js' %}?v=20261005" defer></script><link rel="stylesheet" href="{% static 'css/dialogs.css' %}?v=20261115a"><script src="{% static 'js/dialogs.js' %}?v=20261115b" defer></script>{% endblock %}
+{% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/backoffice.css' %}?v=20261126a"><link rel="stylesheet" href="{% static 'css/filter_menu.css' %}?v=20261120a"><script src="{% static 'js/filter_menu.js' %}?v=20261114a" defer></script><link rel="stylesheet" href="{% static 'css/conversation_search.css' %}?v=20261104a"><script src="{% static 'js/conversation_search.js' %}?v=20261005" defer></script><link rel="stylesheet" href="{% static 'css/dialogs.css' %}?v=20261115a"><script src="{% static 'js/dialogs.js' %}?v=20261115b" defer></script>{% endblock %}
 {% block breadcrumbs %}{% breadcrumbs 'Leads and dropouts' %}{% endblock %}
 {% block page_heading %}<header class="staff-page-header"><div><h1>Leads and dropouts</h1><p>Patients who need help or have cancelled. Treatment and payments are not restarted here.</p></div></header>{% page_tabs %}{% endblock %}
 {% block page_content %}<div class="backoffice dropouts">
@@ -10,7 +10,7 @@
       <thead><tr><th scope="col">Patient</th><th scope="col">Doctor</th><th scope="col">Reason</th><th scope="col">Contact</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead>
       <tbody>{% for item in help_page %}<tr>
         <td data-label="Patient"><strong>{{ item.patient }}</strong><small>Asked {{ item.created_at|date:'j M Y' }}</small></td>
-        <td data-label="Doctor">{{ item.doctor.titled_name|default:'—' }}</td>
+        <td data-label="Doctor">{{ item.doctor.titled_name|default:'-' }}</td>
         <td data-label="Reason" class="dropouts-reason">{{ item.reason|truncatechars:160 }}</td>
         <td data-label="Contact" class="dropouts-contact">{{ item.patient.phone|default:'No phone number' }}{% if item.patient.user.email %}<small>{{ item.patient.user.email }}</small>{% endif %}</td>
         <td data-label="Actions"><div class="backoffice-actions dropouts-actions">
@@ -30,9 +30,9 @@
         <thead><tr><th scope="col">Patient</th><th scope="col">Doctor</th><th scope="col">Status</th><th scope="col">Reasons</th><th scope="col">Contact</th><th scope="col">Follow-up</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead>
         <tbody>{% for item in page_obj %}<tr>
           <td data-label="Patient"><strong>{{ item.patient }}</strong><small>{{ item.plan_name }}</small></td>
-          <td data-label="Doctor">{{ item.patient.assigned_doctor.titled_name|default:'—' }}</td>
+          <td data-label="Doctor">{{ item.patient.assigned_doctor.titled_name|default:'-' }}</td>
           <td data-label="Status">{{ item.get_status_display }}<small>{% if item.cancelled_at %}{{ item.cancelled_at|date:'j M Y' }}{% if item.winback_sent_at %} · email sent{% endif %}{% else %}Paused{% endif %}</small></td>
-          <td data-label="Reasons">{% for label in item.cancellation_reason_labels %}{{ label }}{% if not forloop.last %}, {% endif %}{% empty %}—{% endfor %}{% if item.cancellation_note %}<small>“{{ item.cancellation_note|truncatechars:120 }}”</small>{% endif %}</td>
+          <td data-label="Reasons">{% for label in item.cancellation_reason_labels %}{{ label }}{% if not forloop.last %}, {% endif %}{% empty %}-{% endfor %}{% if item.cancellation_note %}<small>“{{ item.cancellation_note|truncatechars:120 }}”</small>{% endif %}</td>
           <td data-label="Contact" class="dropouts-contact">{{ item.patient.phone|default:'No phone number' }}{% if item.patient.user.email %}<small>{{ item.patient.user.email }}</small>{% endif %}</td>
           <td data-label="Follow-up">{{ item.follow_up_status|default:'Not recorded'|capfirst }}{% if item.next_contact_on %}<small>Next contact {{ item.next_contact_on|date:'j M Y' }}</small>{% endif %}</td>
           <td data-label="Actions"><a href="{% url 'portal:dropout-detail' item.pk %}">Open follow-up<span class="sr-only"> for {{ item.patient }}</span></a></td>

@@ -171,11 +171,26 @@ def shipment_hold_reason(shipment, on_date=None):
     blood_tests = pause_reason(shipment.company_id, shipment.patient_id, on_date)
     if blood_tests:
         return blood_tests
+    if shipment.authorization_id:
+        from .prescriptions import confirmation_hold_reason
+
+        waiting = confirmation_hold_reason(shipment.authorization)
+        if waiting:
+            return waiting
+    # Paid for before its prescription was revoked (James, 26 Nov 2026): the practice may still send it, so neither
+    # the paused care plan nor the revoked prescription holds it back.
+    from .billing import paid_before_revoke
+
+    released = paid_before_revoke(shipment)
     if shipment.subscription_id:
         if shipment.subscription.patient_id != shipment.patient_id or shipment.subscription.company_id != shipment.company_id:
             return 'The subscription does not match this patient and practice.'
+        from .billing import paid_before_pause
+
         try:
-            ensure_subscription_eligible(shipment.subscription, on_date=on_date)
+            # A parcel paid for before the patient paused still goes out: the last one until they resume.
+            if not released:
+                ensure_subscription_eligible(shipment.subscription, on_date=on_date, paid_before_pause=paid_before_pause(shipment))
         except ValidationError as error:
             return ' '.join(error.messages)
     items = list(shipment.items.select_related('product'))
@@ -187,6 +202,8 @@ def shipment_hold_reason(shipment, on_date=None):
             return 'A shipment product is inactive or belongs to another practice.'
         if type(item.quantity) is not int or item.quantity <= 0:
             return 'Each shipment item must have a positive whole-number quantity.'
+        if released:
+            continue  # Its pens were authorised and paid for before the revoke.
         auth, remaining, reason = product_allowance(shipment.patient, item.product, on_date=on_date,
                                                    exclude_shipment=shipment)
         if reason:
@@ -253,9 +270,11 @@ def prepare_week(*, company, actor, week_start, shipment_ids=None, request=None)
 
 
 @transaction.atomic
-def change_parcel(*, shipment, actor, scheduled_for, quantities, request=None):
+def change_parcel(*, shipment, actor, scheduled_for, quantities, with_later=False, request=None):
     """Change when a parcel that isn't locked goes out and how many pens each line has ({item pk: pens}). A ready
-    parcel goes back to draft, to be checked again."""
+    parcel goes back to draft, to be checked again. with_later (a prescription parcel, moved by whole weeks) moves
+    everything after it too: the patient's later parcels, payments and prescription end
+    (care.prescriptions.move_with_later_parcels); the result is on the parcel as moved_with_later."""
     company, shipment = _locked_shipment(shipment, actor)
     if shipment.status not in UNDISPATCHED or shipment.locked_at:
         raise ValidationError('Only a parcel that isn’t locked or dispatched can be changed. Hold it first to unlock it.')
@@ -265,6 +284,11 @@ def change_parcel(*, shipment, actor, scheduled_for, quantities, request=None):
     if set(quantities) != set(items) or any(type(pens) is not int or not 1 <= pens <= 100 for pens in quantities.values()):
         raise ValidationError('Enter between 1 and 100 pens for each line.')
     before = {'scheduled_for': shipment.scheduled_for.isoformat(), 'pens': {str(pk): item.quantity for pk, item in items.items()}}
+    moved = None
+    if with_later:
+        from .prescriptions import move_with_later_parcels
+
+        moved = move_with_later_parcels(shipment, scheduled_for, actor=actor, request=request)
     for pk, pens in quantities.items():
         if items[pk].quantity != pens:
             items[pk].quantity = pens
@@ -275,7 +299,9 @@ def change_parcel(*, shipment, actor, scheduled_for, quantities, request=None):
     shipment.save(update_fields=('scheduled_for', 'status', 'updated_at'))
     record_audit(company=company, actor=actor, patient=shipment.patient, action='shipment.changed', target=shipment,
                  request=request, metadata={'before': before, 'scheduled_for': scheduled_for.isoformat(),
-                                            'pens': {str(pk): pens for pk, pens in quantities.items()}})
+                                            'pens': {str(pk): pens for pk, pens in quantities.items()},
+                                            'with_later': bool(moved)})
+    shipment.moved_with_later = moved
     return shipment
 
 

@@ -1,6 +1,8 @@
 {% load workspace_ui %}{% message_counts as counts %}
-{# Patient Records & Messages: one page with All patients (the default), Patient messages and Team messages tabs. #}
-{# Practice administrators don't browse patient records: theirs is Messages, without All patients. #}
+{# Patient Records & Messages: one page with All patients (the default), Patient orders, Patient messages and Team #}
+{# messages tabs. Patient orders, with its Subscriptions and Non-prescription requests, moved here from Shipping for #}
+{# practice administrators and Super Admins (James, 26 Nov 2026). Practice administrators don't browse patient #}
+{# records: theirs is Messages, without All patients. #}
 <header class="records-header">
   <div class="records-header__title">
     <h1>{% if active_membership.role == 'practice_admin' %}Messages{% else %}Patient Records &amp; Messages{% endif %}</h1>
@@ -8,7 +10,9 @@
   </div>
   <nav class="records-tabs" aria-label="{% if active_membership.role == 'practice_admin' %}Messages{% else %}Patient Records &amp; Messages{% endif %}">
     {% if active_membership.role != 'practice_admin' %}<a href="{% url 'portal:patient-list' %}"{% if records_tab == 'patients' %} class="is-active" aria-current="page"{% endif %}>All patients</a>{% endif %}
+    {% if active_membership.is_admin %}<a href="{% url 'portal:treatment-subscriptions' %}"{% if records_tab == 'orders' %} class="is-active" aria-current="page"{% endif %}>Patient orders</a>{% endif %}
     <a href="{% url 'portal:staff-inbox' %}"{% if records_tab == 'messages' %} class="is-active" aria-current="page"{% endif %}>Patient messages{% include 'portal/includes/live_message_badge.html' with kind='patient' count=counts.patient_unread_total %}</a>
     <a href="{% url 'portal:team-inbox' %}"{% if records_tab == 'team' %} class="is-active" aria-current="page"{% endif %}>Team messages{% include 'portal/includes/live_message_badge.html' with kind='team' count=counts.team_unread_total %}</a>
   </nav>
+  {% if records_tab == 'orders' %}<nav class="patient-order-subtabs records-subtabs" aria-label="Patient orders"><a href="{% url 'portal:treatment-subscriptions' %}"{% if orders_tab == 'subscriptions' %} class="is-active" aria-current="page"{% endif %}>Subscriptions</a><a href="{% url 'portal:ops-orders' %}"{% if orders_tab == 'requests' %} class="is-active" aria-current="page"{% endif %}>Non-prescriptions</a></nav>{% endif %}
 </header>

@@ -1,13 +1,13 @@
 {% extends 'portal/patient_page_base.html' %}
 {% load static workspace_ui %}
 {% block title %}Billing and payments | Meridian{% endblock %}
-{% block patient_extra_css %}<link rel="stylesheet" href="{% static 'css/patient_billing.css' %}?v=20261104a">{% endblock %}
+{% block patient_extra_css %}<link rel="stylesheet" href="{% static 'css/patient_billing.css' %}?v=20261126b">{% endblock %}
 {% block patient_breadcrumbs %}{% breadcrumbs 'My Treatment' 'portal:patient-treatment' 'Billing and payments' %}{% endblock %}
 {% block patient_heading %}
   <header class="patient-page-heading">
     <div>
       <h1>Billing and payments</h1>
-      <p>Your subscription payments, the debit order they’re collected with, and your invoices. Your parcels go out once each payment is in.</p>
+      <p>Your subscription payments, the card they’re charged to, and your invoices. Your parcels go out once each payment is in.</p>
     </div>
     {% if has_previous_orders %}<div class="patient-page-heading__actions"><a class="console-button console-button--secondary" href="{% url 'portal:patient-orders' %}">My orders</a></div>{% endif %}
   </header>
@@ -15,7 +15,7 @@
 
 {% block patient_content %}
   {% if due %}
-    {# Payments that didn't go through, with Pay now by card; a new debit order also collects them. #}
+    {# Payments that didn't go through, with Pay now by card; a new card also collects them once it's saved. #}
     <section class="console-card patient-page-section billing-due" aria-labelledby="billing-due-heading">
       <div class="console-card__body">
         <h2 class="patient-eyebrow" id="billing-due-heading">Payment needed</h2>
@@ -38,27 +38,27 @@
           <p class="patient-small">Once your doctor has prescribed your treatment, start your subscription on My Treatment. You set up how you pay there.</p>
           <div class="patient-card-actions"><a class="console-button console-button--secondary" href="{% url 'portal:patient-treatment' %}#treatment-plan">Go to My Treatment</a></div>
         {% else %}
-          {% if summary %}<p class="billing-state billing-state--{{ summary.state }}">{{ summary.text }}</p>{% endif %}
+          {% if notice %}<p class="billing-state billing-state--{{ notice.state }}">{{ notice.text }}</p>{% endif %}
           {% if mandate %}
             <dl class="patient-kv">
-              <div><dt>Method</dt><dd>{{ mandate.get_method_display }}</dd></div>
-              {% if mandate.account_label %}<div><dt>Account</dt><dd>{{ mandate.account_label }}</dd></div>{% endif %}
+              {% if mandate.method == 'card' %}{% if mandate.account_label %}<div><dt>Card</dt><dd>{{ mandate.account_label }}</dd></div>{% endif %}{% else %}<div><dt>Method</dt><dd>{{ mandate.get_method_display }}</dd></div>
+              {% if mandate.account_label %}<div><dt>Account</dt><dd>{{ mandate.account_label }}</dd></div>{% endif %}{% endif %}
               <div><dt>Up to</dt><dd>R{{ mandate.amount|floatformat:"-2" }} every {{ mandate.interval_weeks }} weeks</dd></div>
-              <div><dt>Status</dt><dd>{{ mandate.get_status_display }}</dd></div>
+              <div><dt>{% if mandate.method == 'card' %}Card status{% else %}Status{% endif %}</dt><dd>{{ mandate.status_text }}</dd></div>
               <div><dt>Reference</dt><dd>{{ mandate.reference }}</dd></div>
-              {% if plan.next_debit_on %}<div><dt>Next payment</dt><dd>{{ plan.next_debit_on|date:"j F Y" }}</dd></div>{% endif %}
+              {% if plan.status == 'paused' %}<div><dt>Next payment</dt><dd>None while it’s paused</dd></div>{% elif plan.next_debit_on %}<div><dt>Next payment</dt><dd>{% with day=plan.next_payment_on %}{% if day %}{{ day|date:"j F Y" }}{% else %}None: your prescription ends on {{ plan.prescription_ends_on|date:"j F Y" }}{% endif %}{% endwith %}</dd></div>{% endif %}
             </dl>
           {% endif %}
           {% if provider %}
+            {% if debit_form.method.is_hidden %}<p class="patient-small billing-note">You enter your card on our payment provider’s secure page, and your card details stay with them. It’s charged each payment period. A new card replaces the old one once it’s saved.</p>{% else %}<p class="patient-small billing-note">You approve it with your bank or card provider; your card and bank details stay with them. A new debit order replaces the old one once it’s approved.</p>{% endif %}
             <form method="post" action="{% url 'portal:patient-debit-order' %}" class="console-form billing-method">{% csrf_token %}
               <input type="hidden" name="workflow_context" value="{{ debit_context }}">
-              <fieldset class="patient-fieldset">
+              {% if debit_form.method.is_hidden %}{{ debit_form.method }}{% else %}<fieldset class="patient-fieldset">
                 <legend>{% if mandate and mandate.status == 'active' %}Change how you pay{% else %}Set up how you pay{% endif %}</legend>
                 {% for choice in debit_form.method %}<label class="patient-check" for="{{ choice.id_for_label }}">{{ choice.tag }}<span>{{ choice.choice_label }}</span></label>{% endfor %}
-              </fieldset>
-              <div class="patient-card-actions"><button class="console-button console-button--primary" type="submit">{% if summary.action %}{{ summary.action }}{% else %}Change my payment details{% endif %}</button></div>
+              </fieldset>{% endif %}
+              <div class="patient-card-actions"><button class="console-button console-button--primary" type="submit">{% if summary.action %}{{ summary.action }}{% elif debit_form.method.is_hidden %}Use a different card{% else %}Change my payment details{% endif %}</button></div>
             </form>
-            <p class="patient-small">You approve it with your bank or card provider; your card and bank details stay with them. A new debit order replaces the old one once it’s approved.</p>
           {% else %}
             <p class="patient-small">Online payment isn’t connected yet. {{ patient_company.name }} will tell you how to pay.</p>
           {% endif %}
@@ -70,7 +70,12 @@
       <div class="console-card__body">
         <h2 class="patient-eyebrow" id="billing-address-heading">Where your parcels go</h2>
         {% if address %}
-          <address class="billing-address">{{ address.recipient|default:patient }}<br>{% for line in address.lines %}{{ line }}<br>{% endfor %}{{ address.phone }}</address>
+          <dl class="patient-kv billing-address">
+            <div><dt>Name</dt><dd>{{ address.recipient|default:patient }}</dd></div>
+            <div><dt>Address</dt><dd>{% for line in address.lines %}{{ line }}{% if not forloop.last %}<br>{% endif %}{% endfor %}</dd></div>
+            {% if address.phone %}<div><dt>Phone</dt><dd>{{ address.phone }}</dd></div>{% endif %}
+            {% if address.instructions %}<div class="is-long"><dt>Delivery instructions</dt><dd class="billing-instructions"><svg class="billing-instructions__icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2Z"/><path d="M8 9h8M8 13h5"/></svg><span>{{ address.instructions }}</span></dd></div>{% endif %}
+          </dl>
         {% else %}
           <p class="patient-small">No delivery address yet. Your parcels can’t go out without one.</p>
         {% endif %}
@@ -90,10 +95,10 @@
               <td data-label="Period">{{ cycle.starts_on|date:"j M" }} – {{ cycle.ends_on|default:cycle.starts_on|date:"j M Y" }}</td>
               <td data-label="Amount">R{{ cycle.amount|floatformat:"-2" }}</td>
               <td data-label="Status">{% if cycle.status == 'paid' %}<span class="billing-pill billing-pill--paid">Paid {{ cycle.paid_at|date:"j M" }}</span>{% elif cycle.status == 'failed' %}<span class="billing-pill billing-pill--failed">Not paid</span>{% elif cycle.attempts %}<span class="billing-pill billing-pill--retrying">Retrying</span>{% elif cycle.status == 'cancelled' %}<span class="billing-pill">Cancelled</span>{% else %}<span class="billing-pill">Due {{ cycle.due_on|date:"j M" }}</span>{% endif %}</td>
-              <td class="patient-table__fit" data-label="Invoice">{% if cycle.patient_invoice %}<span class="billing-invoice-links"><a class="patient-inline-link billing-invoice-link" href="{% url 'portal:patient-invoice' cycle.patient_invoice.pk %}">View invoice {{ cycle.patient_invoice.invoice_number }}</a>{% if cycle.invoice_downloadable %} · <a class="patient-inline-link" href="{% url 'portal:patient-invoice-download' cycle.patient_invoice.pk %}">Download PDF</a>{% endif %}</span>{% else %}—{% endif %}</td>
+              <td class="patient-table__fit" data-label="Invoice">{% if cycle.patient_invoice %}<span class="billing-invoice-links"><a class="patient-inline-link billing-invoice-link" href="{% url 'portal:patient-invoice' cycle.patient_invoice.pk %}">View invoice {{ cycle.patient_invoice.invoice_number }}</a>{% if cycle.invoice_downloadable %} · <a class="patient-inline-link" href="{% url 'portal:patient-invoice-download' cycle.patient_invoice.pk %}">Download PDF</a>{% endif %}</span>{% else %}-{% endif %}</td>
             </tr>
           {% empty %}
-            <tr><td class="patient-table__empty" colspan="4">No subscription payments yet. Your first is collected once your debit order is approved.</td></tr>
+            <tr><td class="patient-table__empty" colspan="4">No subscription payments yet. Your first is taken once you’ve added your card.</td></tr>
           {% endfor %}
         </tbody>
       </table>

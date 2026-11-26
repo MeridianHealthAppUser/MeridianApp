@@ -12,8 +12,8 @@ from care.models import MedicationProduct
 from care.operations import can_ship
 
 # Each tab: its nav_section key, label and page.
+# Patient orders moved to Patient Records & Messages (James, 26 Nov 2026: care and patient data more than shipping).
 OPERATIONS_TABS = (
-    ('subscriptions', 'Patient orders', 'portal:treatment-subscriptions'),
     # Weekly shipping holds what was Dispatch stock (the week's pens) since 24 Oct 2026.
     ('shipping', 'Weekly shipping', 'portal:ops-shipping'),
     ('history', 'Dispatch history', 'portal:ops-history'),
@@ -22,7 +22,7 @@ OPERATIONS_TABS = (
 ADMINISTRATION_TABS = (
     ('leads', 'Leads', 'portal:staff-leads'),
     ('dropouts', 'Dropouts', 'portal:dropouts'),
-    ('privacy_requests', 'Data requests', 'portal:staff-data-requests'),
+    # No Data requests tab (Dr Czech, 26 Nov 2026): patients raise none in the app, and a request comes by message.
     # The communications log: every email sent to a patient or an enquiry.
     ('emails', 'Emails', 'portal:email-log'),
 )
@@ -59,8 +59,6 @@ SCHEDULE_TAB_QUERY = {'availability': '?section=availability'}
 TAB_GROUPS = {'operations': ('Shipping', OPERATIONS_TABS), 'administration': ('Leads and dropouts', ADMINISTRATION_TABS),
               'insights': ('Insights', INSIGHTS_TABS), 'settings': ('Settings', SETTINGS_TABS)}
 # The Operations tabs a doctor has when the practice lets doctors ship (Practice settings).
-PATIENT_ORDER_TABS = (('subscriptions', 'Subscriptions', 'portal:treatment-subscriptions'),
-                      ('orders', 'Non-prescription requests', 'portal:ops-orders'))
 SHIPPING_TABS = ('shipping', 'history')
 
 
@@ -69,14 +67,11 @@ def _item(key, label, url_name, *, also=(), short_label=None, mobile_url_name=No
             'mobile_url': reverse(mobile_url_name or url_name), 'badge': 0, 'badge_label': 'unread message'}
 
 
-def _set_badges(items, *, unread=0, data_requests=0):
-    """Patient Records & Messages (Messages for practice administrators) counts unread messages; Data requests, and
-    Administration that holds it, count requests still waiting on the practice."""
+def _set_badges(items, *, unread=0):
+    """Patient Records & Messages (Messages for practice administrators) counts unread messages."""
     for item in items:
         if item['key'] == 'records':
             item['badge'] = unread
-        elif item['key'] in ('privacy_requests', 'administration'):
-            item['badge'], item['badge_label'] = data_requests, 'open data request'
 
 
 def _current(item, nav_section):
@@ -88,41 +83,32 @@ def uses_flat_menu(membership):
     return membership.role in ('doctor', 'practice_admin')
 
 
-def page_tabs(nav_section, *, data_requests=0, membership=None):
+def page_tabs(nav_section, *, membership=None):
     """The Operations, Administration, Insights or Settings tabs for the page at nav_section, with the current one
-    marked; None for any other page. Data requests carries its count, as the menu does. A doctor sees only Weekly
-    shipping and Dispatch history (so no Insights tabs on Activity statements); a practice administrator doesn't see
-    Data requests."""
-    order_section = nav_section in ('subscriptions', 'orders')
-    active_section = 'subscriptions' if order_section else nav_section
+    marked; None for any other page. A doctor sees only Weekly shipping and Dispatch history (so no Insights tabs on
+    Activity statements)."""
     for key, (label, tabs) in TAB_GROUPS.items():
         if key in ('insights', 'settings') and membership is not None and membership.role != 'super_admin':
             continue  # Super Admins' pages; anyone else allowed one of them gets just that page.
         if membership is not None and membership.role == 'doctor':
             tabs = tuple(tab for tab in tabs if tab[0] in SHIPPING_TABS)
-        elif membership is not None and membership.role == 'practice_admin':
-            # Patients no longer raise data requests in the app, so practice administrators don't get the tab.
-            tabs = tuple(tab for tab in tabs if tab[0] != 'privacy_requests')
-        if active_section in (tab[0] for tab in tabs):
-            items = [dict(key=tab_key, label=tab_label, url=reverse(url_name), active=tab_key == active_section,
-                          badge=data_requests if tab_key == 'privacy_requests' else 0, badge_label='open data request')
+        if nav_section in (tab[0] for tab in tabs):
+            items = [dict(key=tab_key, label=tab_label, url=reverse(url_name), active=tab_key == nav_section,
+                          badge=0, badge_label='')
                      for tab_key, tab_label, url_name in tabs]
-            return {'key': key, 'label': label, 'tabs': items,
-                    'subtabs': [dict(label=title, url=reverse(url), active=section == nav_section)
-                                for section, title, url in PATIENT_ORDER_TABS] if order_section else []}
+            return {'key': key, 'label': label, 'tabs': items}
     return None
 
 
 def _tab_items(group):
-    return [_item(key, label, url_name, also=('orders',) if key == 'subscriptions' else ())
-            for key, label, url_name in TAB_GROUPS[group][1]]
+    return [_item(key, label, url_name) for key, label, url_name in TAB_GROUPS[group][1]]
 
 
 def _group_item(group, short_label):
-    """A group of tabs as one menu entry: it opens the first tab and stays current on all of them (and on Patient
-    orders' Non-prescription requests, and on Practices under Settings)."""
+    """A group of tabs as one menu entry: it opens the first tab and stays current on all of them (and on Practices
+    under Settings)."""
     label, tabs = TAB_GROUPS[group]
-    extra = {'operations': ('orders',), 'settings': ('practices',)}.get(group, ())
+    extra = {'settings': ('practices',)}.get(group, ())
     return _item(group, label, tabs[0][2], also=tuple(tab[0] for tab in tabs) + extra, short_label=short_label)
 
 
@@ -168,14 +154,16 @@ def messages_title(membership):
 
 
 def _records_item(membership):
+    # Patient orders (Subscriptions and Non-prescription requests) is one of its tabs (James, 26 Nov 2026).
     if membership.role == 'practice_admin':
-        return _item('records', MESSAGES_TITLE, 'portal:staff-inbox', also=('messages', 'team'))
-    # All patients (the default tab), Patient messages and Team messages share one page; an open record belongs to it too.
-    return _item('records', RECORDS_TITLE, 'portal:patient-list', also=('messages', 'patients', 'team', 'record'),
-                 short_label='Records')
+        return _item('records', MESSAGES_TITLE, 'portal:staff-inbox', also=('messages', 'team', 'subscriptions', 'orders'))
+    # All patients (the default tab), Patient orders, Patient messages and Team messages share one page; an open record
+    # belongs to it too.
+    return _item('records', RECORDS_TITLE, 'portal:patient-list',
+                 also=('messages', 'patients', 'team', 'record', 'subscriptions', 'orders'), short_label='Records')
 
 
-def build_flat_menu(membership, *, nav_section='', unread=0, data_requests=0):
+def build_flat_menu(membership, *, nav_section='', unread=0):
     """Overview and the member's pages, each with an icon; Patient Records & Messages (Messages for practice
     administrators) carries the unread count. Practice administrators also get Operations and Administration, each one
     page of tabs."""
@@ -194,11 +182,11 @@ def build_flat_menu(membership, *, nav_section='', unread=0, data_requests=0):
         items.append(_item('operations', 'Weekly shipping', 'portal:ops-shipping', also=SHIPPING_TABS, short_label='Shipping'))
     for item in items:
         item['current'] = _current(item, nav_section)
-    _set_badges(items, unread=unread, data_requests=data_requests)
+    _set_badges(items, unread=unread)
     return items
 
 
-def build_staff_menu(membership, *, multi_practice=False, nav_section='', unread=0, data_requests=0):
+def build_staff_menu(membership, *, multi_practice=False, nav_section='', unread=0):
     """Sections the member may use, each with the pages inside it and which one is current.
 
     Clinicians and practice administrators have no sections: their menu is flat (build_flat_menu), so this returns
@@ -247,7 +235,7 @@ def build_staff_menu(membership, *, multi_practice=False, nav_section='', unread
         link = _section_link(key) if key in SINGLE_PAGE_SECTIONS else None
         for item in items + ([link] if link else []):
             item['current'] = _current(item, nav_section)
-        _set_badges(items + ([link] if link else []), unread=unread, data_requests=data_requests)
+        _set_badges(items + ([link] if link else []), unread=unread)
         labels = {item['badge_label'] for item in items if item['badge']}
         menu.append({
             'key': key, 'label': label, 'short_label': short_label, 'items': items, 'link': link,
@@ -273,9 +261,9 @@ def breadcrumb_section(membership, nav_section):
     return None
 
 
-def build_staff_navigation(membership, *, multi_practice=False, nav_section='', unread=0, data_requests=0):
+def build_staff_navigation(membership, *, multi_practice=False, nav_section='', unread=0):
     if uses_flat_menu(membership):
-        return {'flat': build_flat_menu(membership, nav_section=nav_section, unread=unread, data_requests=data_requests),
+        return {'flat': build_flat_menu(membership, nav_section=nav_section, unread=unread),
                 'sections': []}
     return {'flat': [], 'sections': build_staff_menu(membership, multi_practice=multi_practice, nav_section=nav_section,
-                                                     unread=unread, data_requests=data_requests)}
+                                                     unread=unread)}

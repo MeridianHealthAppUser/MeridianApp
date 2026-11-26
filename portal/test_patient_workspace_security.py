@@ -12,7 +12,7 @@ from practices.models import CompanyMembership, Patient
 from . import test_records
 
 # The tabs a doctor in the Clinician role sees on their own patient's record.
-DOCTOR_TABS = ('overview', 'blood-tests', 'messages')
+DOCTOR_TABS = ('overview', 'blood-tests', 'messages', 'treatment')
 
 
 @override_settings(MULTI_PRACTICE_ENABLED=True)
@@ -198,7 +198,12 @@ class PatientWorkspaceSecurityTests(TestCase):
 
     def test_bad_status_filter_never_broadens_an_existing_tab(self):
         self.promote_doctor()
-        for tab in ('appointments', 'consultations', 'blood-tests', 'tasks', 'payments', 'treatment', 'deliveries'):
+        # Treatment lists the patient's own orders, unfiltered (James, 26 Nov 2026): a status can't widen it.
+        treatment = self.get('treatment', status='PRIVATE_INVALID_STATUS')
+        self.assertEqual(treatment.status_code, 200)
+        self.assertEqual({plan.patient_id for plan in treatment.context['treatment_plans']} - {self.patient.pk}, set())
+        self.assertEqual({order.patient_id for order in treatment.context['treatment_requests']} - {self.patient.pk}, set())
+        for tab in ('appointments', 'consultations', 'blood-tests', 'tasks', 'payments', 'deliveries'):
             response = self.get(tab, status='PRIVATE_INVALID_STATUS')
             self.assertEqual(response.status_code, 200)
             if tab == 'appointments':

@@ -184,22 +184,28 @@ class DoseSupplyAndPriceTests(DoseTestData, TestCase):
     def test_my_treatment_shows_the_dose_pens_week_and_next_parcel_and_a_weekly_timeline(self):
         from .patient_summary import treatment_timeline
 
+        from care.parcels import first_shipping_day
+
         first = self.tirzepatide_plan()
-        ends = self.today + timedelta(weeks=24)
-        parcel = Shipment.objects.filter(patient=self.patient).order_by('scheduled_for').first()
-        # Week 1 is the week of the first parcel.
-        week_one = parcel.scheduled_for - timedelta(days=parcel.scheduled_for.weekday())
+        # Paid today, the first pens go out on the first shipping day whose order cut-off is still to come; week 1 is
+        # the week of that parcel, and week 0 the prescription and the payment before it. The prescription is valid
+        # from today and its 24 weeks run from those pens (25 Nov 2026).
+        first_pens = first_shipping_day(self.today, self.company)
+        ends = first_pens + timedelta(weeks=24)
+        week_one = first_pens - timedelta(days=first_pens.weekday())
+        self.assertEqual(Shipment.objects.filter(patient=self.patient).order_by('scheduled_for').first().scheduled_for, first_pens)
         self.login(self.patient_user)
         page = self.client.get(reverse('portal:patient-treatment'))
-        heading = 'Week 1 of 24' if week_one <= self.today else f'Week 1 starts {week_one:%-d %b}, with your first pens'
-        for text in ('Tirzepatide 2.5 mg weekly', heading, 'Your dose is <strong>2.5 mg once a week</strong>',
+        # Nothing paid yet: treatment starts on the first payment, so the weeks are counted from its pens.
+        for text in ('Tirzepatide 2.5 mg weekly', 'Week 1 starts with your first pens, after your first payment', '24 weeks from then',
+                     'Your dose is <strong>2.5 mg once a week</strong>',
                      'You receive <strong>1 × 5 mg pen every 2 weeks</strong>',
-                     f'From week 3 ({week_one + timedelta(weeks=2):%-d %b}) your dose changes to 5 mg weekly',
-                     f'{parcel.scheduled_for:%a %-d %b} · 1 × Tirzepatide 5 mg pen', f'{ends.day} {ends:%b %Y}',
-                     'R2995<span>every 2 weeks</span>', 'Your treatment timeline',
-                     # Before week 1 it is next; from then on, the patient is there.
-                     'You are here' if week_one <= self.today else 'Up next'):
+                     'From week 3 your dose changes to 5 mg weekly', f'After your first payment: {first_pens:%a %-d %b} if you pay today',
+                     '24 weeks from your first payment', 'R2995<span>every 2 weeks</span>', 'Your treatment timeline',
+                     f'Your treatment starts with your first payment: paid today, your first pens go out on {first_pens:%A %-d %B}.',
+                     f'Paid today, your first pens go out on {first_pens:%A %-d %B}.', 'Up next'):
             self.assertContains(page, text, html=False)
+        self.assertNotContains(page, 'none is taken in this app')
         # Read the prescription and next shipment before opening the optional timeline.
         content = page.content.decode()
         self.assertLess(content.index('Next shipment'), content.index('class="patient-plan__timeline-link"'))
@@ -207,7 +213,7 @@ class DoseSupplyAndPriceTests(DoseTestData, TestCase):
         # The timeline opens in a dialog after the prescription summary, at where the patient is.
         self.assertContains(page, f'href="{reverse("portal:patient-treatment")}?timeline=1" data-modal-open="treatment-timeline"', html=False)
         self.assertContains(page, '<dialog class="app-dialog app-dialog--wide patient-timeline" id="treatment-timeline" aria-labelledby="treatment-timeline-heading">', html=False)
-        self.assertContains(page, 'aria-current="step" data-dialog-scroll' if week_one <= self.today else ' data-dialog-scroll>', html=False)
+        self.assertContains(page, ' data-dialog-scroll>', html=False)
         opened = self.client.get(reverse('portal:patient-treatment'), {'timeline': 1})
         self.assertContains(opened, 'aria-labelledby="treatment-timeline-heading" open>', html=False)
         # With one current prescription, Start your subscription starts on it.
@@ -215,17 +221,22 @@ class DoseSupplyAndPriceTests(DoseTestData, TestCase):
 
         timeline = treatment_timeline(self.company, self.patient, first)
         weeks = self.weeks(timeline)
-        # The plan starting is week 1's decision; until its pens go out, week 1 is next rather than here.
-        self.assertEqual([(event['text'], event['date']) for event in weeks[0]['events']], [('Prescription started', self.today)])
-        self.assertEqual((len(weeks), weeks[0]['date'], weeks[0]['current'], weeks[0]['next']),
-                         (24, week_one, week_one <= self.today, week_one > self.today))
-        self.assertEqual((weeks[0]['dose'], weeks[0]['payments']), ('2.5 mg', [Decimal('2995.00')]))
-        self.assertEqual([(item['contents'], item['when']) for item in weeks[0]['parcels']],
-                         [('1 × 5 mg pen', f'ships {parcel.scheduled_for:%a %-d %b}')])
-        # The plan's step up starts in the week its pens go out; 5 mg weekly is billed every 4 weeks from then.
-        self.assertEqual((weeks[2]['dose'], weeks[2]['change']), ('5 mg', 'up from 2.5 mg'))
-        self.assertEqual([week['number'] for week in weeks if week['payments']], [1, 3, 7, 11, 15, 19, 23])
-        self.assertEqual([len(week['parcels']) for week in weeks], [1, 0] + [1] * 22)
+        # Week 0: the prescription written and the first payment, as if paid today. Until then, paying is next.
+        self.assertTrue(timeline['not_started'])
+        zero, one = weeks[0], weeks[1]
+        self.assertEqual((zero['number'], zero['dose'], zero['next'], zero['current']), (0, None, True, False))
+        self.assertEqual([(event['text'], event['date']) for event in zero['events']], [('Prescription written', self.today)])
+        self.assertEqual(zero['payments'], [{'amount': Decimal('2995.00'), 'state': 'planned', 'note': 'your first payment'}])
+        self.assertEqual((len(weeks), one['number'], one['date'], one['next']), (25, 1, week_one, False))
+        # The pens and the dose start in week 1.
+        self.assertEqual(one['dose'], '2.5 mg')
+        self.assertEqual([(item['contents'], item['when']) for item in one['parcels']],
+                         [('1 × 5 mg pen', f'ships {first_pens:%a, %-d %b}, after your first payment')])
+        # The plan's step up starts in the week its pens go out; 5 mg weekly is billed every 4 weeks from then, each a
+        # week before its parcel.
+        self.assertEqual((weeks[3]['dose'], weeks[3]['change']), ('5 mg', 'up from 2.5 mg'))
+        self.assertEqual([week['number'] for week in weeks if week['payments']], [0, 2, 6, 10, 14, 18, 22])
+        self.assertEqual([len(week['parcels']) for week in weeks], [0, 1, 0] + [1] * 22)
         self.assertEqual(sum(len(week['events']) for week in weeks), 1)
 
     def test_the_timeline_shows_the_doctor_increasing_the_dose_from_a_week(self):
@@ -252,21 +263,25 @@ class DoseSupplyAndPriceTests(DoseTestData, TestCase):
                                       current=current_prescription(self.company, self.patient), dose=self.step_up, weeks=12)
         timeline = treatment_timeline(self.company, self.patient, changed)
         weeks = self.weeks(timeline)
+        number = {week['number']: week for week in weeks}
         self.assertEqual(timeline['total'], 18)
-        # The new dose starts in the week its pens go out.
-        self.assertEqual([(week['number'], week['dose']) for week in weeks[:8]],
-                         [(1, '2.5 mg'), (2, '2.5 mg'), (3, '5 mg'), (4, '5 mg'), (5, '5 mg'), (6, '5 mg'), (7, '7.5 mg'), (8, '7.5 mg')])
-        self.assertEqual((weeks[6]['change'], weeks[6]['payments'], [item['contents'] for item in weeks[6]['parcels']]),
+        # Week 0 has the prescription, written before the first pens; the new dose starts in the week its pens go out.
+        self.assertEqual([(week['number'], week['dose']) for week in weeks[:9]],
+                         [(0, None), (1, '2.5 mg'), (2, '2.5 mg'), (3, '5 mg'), (4, '5 mg'), (5, '5 mg'), (6, '5 mg'), (7, '7.5 mg'), (8, '7.5 mg')])
+        self.assertEqual((number[7]['change'], [payment['amount'] for payment in number[7]['payments']], [item['contents'] for item in number[7]['parcels']]),
                          ('up from 5 mg', [Decimal('4500.00')], ['1 × 10 mg pen']))
+        # No card payments on record: each dose's reference price, every billing period from its first week.
         self.assertEqual([week['number'] for week in weeks if week['payments'] and week['dose'] == '7.5 mg'], [7, 12, 17])
-        # Each decision is in the week it was made: the plan in week 1, the change in this week.
+        # Each decision is in the week it was made: the plan in week 0, the change in this week.
         now = (self.today - week_one).days // 7 + 1
         events = [(week['number'], event['text'], event['by'], event['date']) for week in weeks for event in week['events']]
-        self.assertEqual(events, [(1, 'Prescription started', self.doctor.full_name, self.today - moved),
-                                  (now, 'Prescription adjusted', self.doctor.full_name, self.today)])
+        doctor = f'Dr {self.doctor.full_name}'  # Only doctors prescribe: Dr even without a title on their profile.
+        self.assertEqual(events, [(0, 'Prescription started', doctor, self.today - moved),
+                                  (now, 'Dose changed to 7.5 mg', doctor, self.today)])
         self.assertEqual([week['number'] for week in weeks if week['current']], [now])
-        self.assertTrue(all(week['past'] for week in weeks[:now - 1]))
-        self.assertEqual([item['when'].split()[0] for week in weeks[:6] for item in week['parcels']], ['delivered'] * 5)
+        self.assertTrue(all(week['past'] for week in weeks if week['number'] < now))
+        sent = [item['when'].split()[0] for week in weeks if 1 <= week['number'] < now for item in week['parcels']]
+        self.assertTrue(sent and all(when == 'delivered' for when in sent))
         # The card counts the same weeks.
         self.assertEqual(treatment_overview(self.company, self.patient, changed)['week'], now)
 
@@ -282,6 +297,9 @@ class DoseSupplyAndPriceTests(DoseTestData, TestCase):
         for step in TreatmentAuthorization.objects.filter(patient=self.patient):
             TreatmentAuthorization.objects.filter(pk=step.pk).update(
                 starts_on=step.starts_on - moved, expires_on=step.expires_on - moved, created_at=step.created_at - moved)
+        # Under way: the first pens were delivered.
+        Shipment.objects.filter(pk=Shipment.objects.filter(patient=self.patient).order_by('scheduled_for').first().pk).update(
+            status=Shipment.Status.DELIVERED, scheduled_for=self.today - moved, dispatched_at=timezone.now() - moved)
         again = initiate_prescription(company=self.company, patient=self.patient, actor=self.doctor,
                                       current=current_prescription(self.company, self.patient),
                                       plan=StartingPlan.objects.get(medicine='Tirzepatide'), weeks=24)
@@ -298,7 +316,8 @@ class DoseSupplyAndPriceTests(DoseTestData, TestCase):
         first = initiate_prescription(company=self.company, patient=self.patient, actor=self.doctor, current=None, plan=plan, weeks=24)
         again = initiate_prescription(company=self.company, patient=self.patient, actor=self.doctor, current=first, plan=plan, weeks=24)
         events = [event['text'] for week in treatment_timeline(self.company, self.patient, again)['weeks'] for event in week['events']]
-        self.assertEqual(events, ['Prescription started'])
+        # Nothing paid or sent yet, so it is the prescription written, not treatment started.
+        self.assertEqual(events, ['Prescription written'])
 
     def test_each_week_shows_its_first_and_last_day(self):
         from datetime import date

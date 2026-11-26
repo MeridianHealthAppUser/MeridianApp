@@ -1,6 +1,7 @@
 """Idempotent, realistic local data for the Meridian demonstration workspace."""
 
-from datetime import timedelta
+import hashlib
+from datetime import date, timedelta
 from decimal import Decimal
 
 from django.utils import timezone
@@ -145,6 +146,49 @@ def seed_demo_catalogue(company):
     return pens, doses
 
 
+# Insights' Historical data for the demo practice (James, 26 Nov 2026): Dr Czech's monthly figures from before the
+# app, as the Historical data dialog holds them. Each month: new bookings, then Google, AI overview, word of mouth,
+# Facebook and Instagram; None is an empty cell (the app's own count is used).
+DEMO_INSIGHT_FIGURES = {
+    '2024-12': (7,),
+    '2025-01': (22,), '2025-02': (11,), '2025-03': (16,), '2025-04': (11,), '2025-05': (33,), '2025-06': (37,),
+    '2025-07': (20,),
+    '2025-08': (13, 9, None, 4, None, None),
+    '2025-09': (33, 26, None, 5, 3, 1),
+    '2025-10': (41, 29, None, 10, 3, None),
+    '2025-11': (65, 45, None, 18, 2, 1),
+    '2025-12': (53, 42, None, 10, 3, 1),
+    '2026-01': (64, 52, None, 8, 2, 2),
+    '2026-02': (72, 55, None, 15, 1, 2),
+    '2026-03': (63, 56, None, 6, None, 2),
+    '2026-04': (103, 51, None, 30, 19, 17),
+    '2026-05': (59, 45, None, 10, 5, 3),
+    '2026-06': (60, 43, None, 14, 4, 1),
+    '2026-07': (62, 48, None, 11, 2, 2),
+    '2026-08': (47, 37, None, 9, None, 2),
+    '2026-09': (54, 42, None, 14, 2, None),
+    '2026-10': (54, 39, None, 15, None, None),
+    '2026-11': (18, 13, None, 5, None, None),
+}
+
+
+def seed_insight_figures(company):
+    """Insights' Historical data for a demo practice. A figure the practice already has for a month and measure is
+    kept as it is, so seeding again never undoes one changed in the app. Returns how many were added."""
+    from .models import InsightFigure
+
+    metrics = (InsightFigure.Metric.NEW_BOOKINGS, InsightFigure.Metric.GOOGLE, InsightFigure.Metric.AI_OVERVIEW,
+               InsightFigure.Metric.WORD_OF_MOUTH, InsightFigure.Metric.FACEBOOK, InsightFigure.Metric.INSTAGRAM)
+    added = 0
+    for month, values in DEMO_INSIGHT_FIGURES.items():
+        year, number = (int(part) for part in month.split('-'))
+        for metric, value in zip(metrics, values):
+            if value is not None:
+                added += InsightFigure.objects.get_or_create(
+                    company=company, month=date(year, number, 1), metric=metric, defaults={'value': value})[1]
+    return added
+
+
 def seed_demo_care(*, meridian, orion, users, nadia):
     """Populate the explicitly supplied demo practices, without external integrations."""
     today = timezone.localdate()
@@ -167,10 +211,10 @@ def seed_demo_care(*, meridian, orion, users, nadia):
         service_document, _ = ConsentDocument.objects.update_or_create(
             company=company,
             kind=ConsentDocument.Kind.SERVICE,
-            version='2026.09',
+            version='1',
             defaults={
-                'title': 'Service and privacy notice',
-                'body': 'Demo versioned service and privacy notice.',
+                'title': 'Privacy Policy',
+                'body': 'Demo versioned privacy policy.',
                 'content_hash': 'demo-service-2026-09',
                 'is_active': True,
             },
@@ -178,10 +222,10 @@ def seed_demo_care(*, meridian, orion, users, nadia):
         telehealth_document, _ = ConsentDocument.objects.update_or_create(
             company=company,
             kind=ConsentDocument.Kind.TELEHEALTH,
-            version='2026.09',
+            version='1',
             defaults={
-                'title': 'Telehealth treatment consent',
-                'body': 'Demo versioned telehealth consent.',
+                'title': 'Terms and Conditions',
+                'body': 'Demo versioned terms and conditions.',
                 'content_hash': 'demo-telehealth-2026-09',
                 'is_active': True,
             },
@@ -241,6 +285,9 @@ def seed_demo_care(*, meridian, orion, users, nadia):
                 defaults={
                     'user': patient.user,
                     'document': document,
+                    'document_title': document.title,
+                    'document_text': document.body,
+                    'document_hash': hashlib.sha256(document.body.encode('utf-8')).hexdigest(),
                     'accepted': True,
                     'accepted_at': timezone.now() - timedelta(days=32),
                     'source': 'demo-seed',
@@ -382,7 +429,7 @@ def seed_demo_care(*, meridian, orion, users, nadia):
         )
         from .messaging import add_participant
         add_participant(thread, sam)
-        _message(thread=thread, sender=sam, body='Welcome — your care plan is ready in your Meridian portal.')
+        _message(thread=thread, sender=sam, body='Welcome, your care plan is ready in your Meridian portal.')
         shipment, _ = Shipment.objects.update_or_create(
             company=company,
             patient=patient,

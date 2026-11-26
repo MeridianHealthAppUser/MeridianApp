@@ -59,6 +59,16 @@ class PracticeSettings(CompanyScopedModel):
     review_interval_days = models.PositiveSmallIntegerField(default=180)
     # The day of the week parcels go out. Pens are ordered for the week's parcels before it.
     shipping_weekday = models.PositiveSmallIntegerField('Parcels go out on', choices=Weekday.choices, default=Weekday.TUESDAY)
+    # Pens are ordered for a shipping day at the order cut-off before it (Dr Czech, 26 Nov 2026: Monday 15:00 for
+    # Tuesday parcels). A payment received by then has its parcel that shipping day; one received later, the shipping
+    # day after, and the parcels and payments after it move a week too (care.parcels.first_shipping_day). Repeat
+    # payments are taken a week before each parcel, with a retry on the cut-off day (care.billing).
+    order_cutoff_weekday = models.PositiveSmallIntegerField(
+        'Order cut-off', choices=Weekday.choices, default=Weekday.MONDAY,
+        help_text='Payments received by then go out on the next shipping day. Later ones go out a week later, and so '
+                  'does everything after them.',
+    )
+    order_cutoff_time = models.TimeField('Order cut-off time', default=time(15, 0))
     payment_grace_days = models.PositiveSmallIntegerField(default=7)
     support_email = models.EmailField(blank=True)
     timezone_name = models.CharField(max_length=64, default='Africa/Johannesburg')
@@ -73,17 +83,19 @@ class PracticeSettings(CompanyScopedModel):
         help_text='Check and lock week holds back any parcel whose subscription payment or order is not paid.',
     )
     payment_retry_days = models.CharField(
-        'Retry a failed debit after', max_length=40, default='3,7',
-        help_text='Days after the debit date, separated by commas. After the last retry the payment goes to the failure queue.',
+        'Retry a failed payment after', max_length=40, default='3,7',
+        help_text='Days after the payment date, separated by commas. After the last retry the payment goes to the failure queue.',
     )
 
     class NewDebitOrder(models.TextChoices):
-        ANY_CHANGE = 'any', 'Whenever the prescription or its price changes'
         HIGHER = 'higher', 'Only when the amount goes above what the patient approved'
+        ANY_CHANGE = 'any', 'Whenever the prescription or its price changes'
 
-    # When a prescription or price change asks the patient to approve a new debit order (care.billing.review_mandates).
-    new_debit_order = models.CharField('Ask for a new debit order', max_length=10, choices=NewDebitOrder.choices,
-                                       default=NewDebitOrder.ANY_CHANGE)
+    # When a prescription or price change asks the patient to confirm their card again (care.billing.review_mandates).
+    # Only when the amount goes up, by default (22 Nov 2026): a dose change at the same or a lower price carries on
+    # charging the card the patient already saved.
+    new_debit_order = models.CharField('Ask patients to confirm their card again', max_length=10,
+                                       choices=NewDebitOrder.choices, default=NewDebitOrder.HIGHER)
     # Weekly shipping and Dispatch history (care.operations) for doctors as well as administrators. Off by default:
     # shipping is administrative work for practice administrators and Super Admins.
     doctors_ship = models.BooleanField(
@@ -158,12 +170,18 @@ class PracticeSettings(CompanyScopedModel):
 
 
 class ConsentDocument(CompanyScopedModel):
-    """A versioned legal document; historical text is retained for auditability."""
+    """A versioned legal document; historical text is retained for auditability. The Terms and Conditions and the
+    Privacy Policy are the two a screening questionnaire is submitted with (Dr Czech, 26 Nov 2026), kept apart from the
+    practice's website. Each new version is numbered 1, 2, 3 for its kind and titled as its kind
+    (care.privacy.publish_policy_version)."""
 
     class Kind(models.TextChoices):
-        SERVICE = 'service', 'Service and privacy notice'
+        SERVICE = 'service', 'Privacy Policy'
         MARKETING = 'marketing', 'Marketing communications'
-        TELEHEALTH = 'telehealth', 'Telehealth treatment'
+        TELEHEALTH = 'telehealth', 'Terms and Conditions'
+
+    # The two a questionnaire is accepted with, as Settings > Policy versions offers them.
+    QUESTIONNAIRE_KINDS = (Kind.TELEHEALTH, Kind.SERVICE)
 
     kind = models.CharField(max_length=16, choices=Kind.choices)
     version = models.CharField(max_length=64)
@@ -249,10 +267,13 @@ class ScreeningQuestionnaire(CompanyScopedModel):
 
 
 class ConsentRecord(CompanyScopedModel):
+    """An acceptance, with a copy of the exact wording accepted (its title, text and SHA-256 fingerprint: Dr Czech,
+    26 Nov 2026), as well as the document version it points to."""
+
     class ConsentType(models.TextChoices):
-        SERVICE = 'service', 'Service and privacy notice'
+        SERVICE = 'service', 'Privacy Policy'
         MARKETING = 'marketing', 'Marketing communications'
-        TELEHEALTH = 'telehealth', 'Telehealth treatment'
+        TELEHEALTH = 'telehealth', 'Terms and Conditions'
 
     user = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name='consent_records')
     lead = models.ForeignKey(Lead, null=True, blank=True, on_delete=models.SET_NULL, related_name='consent_records')
@@ -260,6 +281,9 @@ class ConsentRecord(CompanyScopedModel):
     document = models.ForeignKey(ConsentDocument, null=True, blank=True, on_delete=models.PROTECT, related_name='acceptances')
     consent_type = models.CharField(max_length=16, choices=ConsentType.choices)
     document_version = models.CharField(max_length=64)
+    document_title = models.CharField(max_length=255, blank=True)
+    document_text = models.TextField(blank=True)
+    document_hash = models.CharField(max_length=64, blank=True)
     accepted = models.BooleanField(default=False)
     accepted_at = models.DateTimeField(null=True, blank=True)
     source = models.CharField(max_length=100, default='web')
@@ -448,6 +472,14 @@ class TreatmentAuthorization(PatientCompanyScopedModel):
     # dates, so dispensing only allows each month's strength while its step is current. The steps share plan_key.
     plan_key = models.UUIDField(null=True, blank=True, db_index=True)
     plan_step = models.PositiveSmallIntegerField(null=True, blank=True)
+    # The doctor must confirm the prescription is still right before the patient starts, or before the first parcel goes
+    # out: it was written more than a first payment period before the patient started or first paid
+    # (care.prescriptions.confirm_prescription). Kept on a starting plan's first step.
+    needs_confirmation = models.BooleanField(default=False)
+    # When the course has moved (care.prescriptions: treatment starts on the first payment, or carries on after a missed
+    # payment), the day it ended as the doctor wrote it and why it moved, for the "moved from" notes. On the first step.
+    ends_as_written = models.DateField(null=True, blank=True)
+    moved_because = models.CharField(max_length=120, blank=True)
 
     class Meta:
         indexes = [models.Index(fields=('company', 'patient', 'status', 'expires_on'))]
@@ -535,6 +567,18 @@ class PatientSubscription(PatientCompanyScopedModel):
     def cancellation_reason_labels(self):
         labels = dict(self.CANCELLATION_REASONS)
         return [labels[reason] for reason in self.cancellation_reasons if reason in labels]
+
+    @property
+    def next_payment_on(self):
+        """When the card is next charged: None before a card is added, or when the prescription ends before that
+        payment's parcel (care.billing.next_payment_on)."""
+        from .billing import next_payment_on
+        return next_payment_on(self)
+
+    @property
+    def prescription_ends_on(self):
+        from .billing import prescription_ends_on
+        return prescription_ends_on(self)
 
     def clean(self):
         super().clean()
@@ -1809,6 +1853,11 @@ class PharmacyOrderItem(CompanyScopedModel):
             models.CheckConstraint(condition=models.Q(quantity__gt=0, quantity__lte=100), name='pharmacy_order_quantity_limit'),
         ]
 
+    @property
+    def total_price(self):
+        """The line's price: its quantity at its unit price."""
+        return self.quantity * self.unit_price
+
     def clean(self):
         super().clean()
         if self.order_id and self.order.company_id != self.company_id:
@@ -1979,6 +2028,13 @@ class DebitMandate(PatientCompanyScopedModel):
         ordering = ('-created_at', '-pk')
         indexes = [models.Index(fields=('company', 'patient', 'status'))]
 
+    @property
+    def status_text(self):
+        """The status as patients and staff read it: a card is saved, where a debit order is approved."""
+        if self.method == self.Method.CARD:
+            return {self.Status.PENDING: 'Not saved yet', self.Status.FAILED: 'Not saved'}.get(self.status, self.get_status_display())
+        return self.get_status_display()
+
     def clean(self):
         super().clean()
         if self.subscription_id and self.company_id and (self.subscription.company_id != self.company_id
@@ -2075,9 +2131,20 @@ class ActivityReport(CompanyScopedModel):
 
 
 class InsightNote(CompanyScopedModel):
-    """A dated note on Insights' charts (Dr Czech, Nov 2026), such as "Decreased price to R1000": a marker at its month
-    on every chart over time, and on the cohort trend, so the effect of a change can be seen."""
+    """A dated note on one of Insights' charts (Dr Czech, Nov 2026), such as "Decreased price to R1000": a marker at its
+    month on that chart only (26 Nov 2026), so a price change doesn't mark the consults chart."""
 
+    class Chart(models.TextChoices):
+        BOOKINGS = 'bookings', 'Bookings per month'
+        SOURCES = 'sources', 'Sources of bookings'
+        SIGNUPS = 'signups', 'New subscriptions per month'
+        MRR = 'mrr', 'Monthly recurring revenue'
+        DROPOUTS = 'dropouts', 'Dropouts per month'
+        CHURN = 'churn', 'Churn rate'
+        DOCTORS = 'doctors', 'Each doctor, per month'
+        RETENTION = 'retention', 'Retention at a fixed month'
+
+    chart = models.CharField(max_length=16, choices=Chart.choices)
     on = models.DateField('Date')
     label = models.CharField('Note', max_length=160)
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name='+')

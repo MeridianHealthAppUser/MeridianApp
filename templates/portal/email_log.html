@@ -10,9 +10,9 @@
       <thead><tr><th scope="col">Sent</th><th scope="col">To</th><th scope="col">Subject</th><th scope="col">Email</th><th scope="col">Status</th></tr></thead>
       <tbody>{% for email in page_obj %}<tr>
         <td data-label="Sent">{{ email.sent_at|default:email.created_at|date:'j M Y, H:i' }}</td>
-        <td data-label="To"><strong>{% if email.patient %}{{ email.patient }}{% elif email.lead %}{{ email.lead }}<small>Enquiry</small>{% else %}—{% endif %}</strong><small>{{ email.recipient_email }}</small></td>
-        <td data-label="Subject">{{ email.subject|default:'—' }}</td>
-        <td data-label="Email">{% if email.journey %}{{ email.journey.name }}<small>{{ email.journey.get_track_display }}</small>{% else %}{{ email.kind|default:'—' }}{% endif %}</td>
+        <td data-label="To"><strong>{% if email.patient %}{{ email.patient }}{% elif email.lead %}{{ email.lead }}<small>Enquiry</small>{% else %}-{% endif %}</strong><small>{{ email.recipient_email }}</small></td>
+        <td data-label="Subject">{{ email.subject|default:'-' }}</td>
+        <td data-label="Email">{% if email.journey %}{{ email.journey.name }}<small>{{ email.journey.get_track_display }}</small>{% else %}{{ email.kind|default:'-' }}{% endif %}</td>
         <td data-label="Status">{{ email.status|capfirst }}</td>
       </tr>{% empty %}<tr><td colspan="5" class="ops-empty">No emails match. Emails are logged here as they’re sent.</td></tr>{% endfor %}</tbody>
     </table></div>

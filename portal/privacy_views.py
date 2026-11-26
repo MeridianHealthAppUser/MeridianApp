@@ -340,9 +340,16 @@ class PolicyListView(PrivacyStaffPage):
 
     def get(self, request):
         require_privacy_admin(request.user, self.company, policies=True)
+        today = timezone.localdate()
         docs = ConsentDocument.objects.filter(company=self.company).order_by('-effective_from', '-created_at', '-pk')
-        context = self.context('Policy versions', section='policies', today=timezone.localdate(),
-                               **paginate(request, docs))
+        # Active: the version of each kind in effect today (the latest whose date has come); Replaced: an earlier one.
+        current = {}
+        for document in docs.filter(is_active=True, effective_from__lte=today):
+            current.setdefault(document.kind, document.pk)
+        context = self.context('Policy versions', section='policies', today=today, **paginate(request, docs))
+        for document in context['page_obj']:
+            document.status = ('Inactive' if not document.is_active else 'Scheduled' if document.effective_from > today
+                               else 'Active' if current.get(document.kind) == document.pk else 'Replaced')
         return render(request, 'portal/privacy_policy_list.html', context)
 
 
@@ -369,11 +376,12 @@ class PolicyCreateView(PrivacyStaffPage):
             values = form.cleaned_data.copy()
             values['confirmed'] = values.pop('confirm_publication')
             try:
-                _, created = publish_policy_version(actor=request.user, company=self.company, request=request, **values)
+                document, created = publish_policy_version(actor=request.user, company=self.company, request=request, **values)
             except ValidationError as error:
                 add_error(form, error)
             else:
-                messages.success(request, 'Policy version published. It becomes current on its effective date.' if created else 'This exact policy version is already published.')
+                messages.success(request, f'{document.title} version {document.version} published. It becomes active on its effective date.'
+                                 if created else 'This exact policy version is already published.')
                 return redirect('portal:policy-list')
         return self.display(request, form)
 

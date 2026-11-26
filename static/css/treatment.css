@@ -34,7 +34,26 @@
 .treatment-table th { padding: .85rem 1rem; text-align: left; color: var(--c-7f9199); font-size: .73rem; text-transform: uppercase; letter-spacing: .07em; }
 .treatment-table td { padding: 1rem; border-top: 1px solid var(--c-edf3f5); vertical-align: top; }
 .treatment-table .console-button { white-space: nowrap; }
+/* Patient orders (26 Nov 2026): View timeline opens the weekly timeline. */
+.treatment-table .treatment-table__timeline { align-items: center; display: inline-flex; gap: .4rem; }
+.treatment-table__timeline[aria-busy="true"] { cursor: progress; opacity: .7; }
 .treatment-instructions { white-space: normal; overflow-wrap: anywhere; line-height: 1.65; }
+/* Treatment authorisation (James, 26 Nov 2026): the dose and its status pill head the details; the Manage card says what
+   pausing or revoking does, then the tick and the buttons; with nothing to manage the details take the page. */
+.treatment-header__patient { color: inherit; font-weight: 600; text-decoration: none; }
+.treatment-header__patient:hover { text-decoration: underline; }
+.treatment-panel__head { align-items: center; display: flex; flex-wrap: wrap; gap: .5rem 1rem; justify-content: space-between; margin-bottom: .35rem; }
+.treatment-panel__head h2, .treatment-manage > h2 { margin: 0; }
+.treatment-panel h3 { margin: 1.5rem 0 .45rem; }
+.treatment-instructions--empty { color: var(--console-muted); }
+.treatment-workspace--single { max-width: 48rem; }
+.treatment-workspace--single .treatment-grid { grid-template-columns: minmax(0, 1fr); }
+.treatment-notice a { color: var(--console-teal-dark); font-weight: 600; }
+.treatment-manage { align-content: start; display: grid; gap: 1rem; }
+.treatment-manage__note { color: var(--console-muted); font-size: .86rem; line-height: 1.55; margin: 0; }
+.treatment-workspace .treatment-manage__form { gap: .9rem; }
+.treatment-workspace .treatment-manage .treatment-check { font-size: .875rem; font-weight: 500; }
+.treatment-manage .treatment-actions { margin-top: 0; }
 .treatment-empty { padding: 1.5rem; color: var(--c-70838d); }
 .treatment-workspace .errorlist { margin: .4rem 0; padding-left: 1.25rem; color: var(--c-a33131); }
 .treatment-pagination { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 1rem; margin-top: 1rem; }
@@ -51,6 +70,8 @@
 .patient-course__track span { background: var(--console-teal); border-radius: inherit; display: block; height: 100%; min-width: .4rem; }
 /* Your treatment timeline, in a dialog: a row a week, each with its dose, pens, payments and prescription changes. */
 .patient-timeline__key { display: flex; flex-wrap: wrap; gap: .35rem; list-style: none; margin: 0; padding: 0; }
+/* The key on the left, Prescription changes on the right; on a phone the button goes under the key. */
+.patient-timeline__tools { align-items: center; display: flex; flex-wrap: wrap; gap: .6rem 1rem; justify-content: space-between; }
 .patient-timeline__weeks { display: grid; gap: .35rem; list-style: none; margin: .9rem 0 1rem; padding: 0; }
 /* Five equal columns: the week, then Prescription, Shipment, Dosage and Payment, each centred in the row. */
 .patient-timeline.app-dialog { max-width: min(62rem, calc(100vw - 2rem)); }
@@ -70,7 +91,18 @@
 .patient-timeline__chip--dose.is-empty { background: transparent; border-style: dashed; color: var(--console-muted); }
 .patient-timeline__chip--parcel { background: var(--c-ecf3fb); border-color: var(--c-d3e3f5); }
 .patient-timeline__chip--payment { background: var(--c-fbf4e6); border-color: var(--c-f0e1bf); }
+/* A payment that didn't go through (retrying, or not paid), and a parcel that was missed: the colours of the app's
+   error messages. A week with a missed parcel has a dashed outline. */
+.patient-timeline__chip--payment.is-failed, .patient-timeline__chip--parcel.is-missed { background: var(--c-fff4f2); border-color: var(--c-efc9c4); }
+.patient-timeline__chip--payment.is-failed small, .patient-timeline__chip--parcel.is-missed small { color: var(--c-8e3e36); }
+.patient-timeline__week.is-missed { border-style: dashed; }
 .patient-timeline__chip--event { background: var(--c-f4eefb); border-color: var(--c-e2d6f3); }
+/* A decision opens Prescription changes: a history icon on its left (patient_treatment_timeline). */
+.patient-timeline__cell .patient-timeline__chip--link { align-items: center; column-gap: .5rem; cursor: pointer; grid-template-columns: auto minmax(0, 1fr); text-decoration: none; }
+.patient-timeline__chip--link > svg { color: var(--console-teal-dark); grid-row: span 2; }
+.patient-timeline__chip--link > span, .patient-timeline__chip--link > small { grid-column: 2; }
+.patient-timeline__chip--link:hover { border-color: var(--console-teal); }
+.patient-timeline__chip--link:focus-visible { outline: 2px solid var(--console-teal-dark); outline-offset: 2px; }
 @media (max-width: 480px) {
   .patient-timeline__when { align-items: baseline; grid-auto-flow: column; justify-content: start; gap: .5rem; }
 }
@@ -104,10 +136,29 @@
 .patient-plan__timeline p, .patient-plan__support p { color: var(--patient-text); font-size: .84rem; line-height: 1.55; margin: .35rem 0 0; }
 .patient-plan__timeline-link { align-items: center; background: var(--console-canvas); border: 1px solid var(--console-line); border-radius: 999px; color: var(--console-teal-dark); display: inline-flex; flex: 0 1 auto; font-size: .82rem; font-weight: 600; gap: .7rem; line-height: 1.5; min-height: 2.75rem; padding: .55rem 1rem; text-decoration: none; }
 .patient-plan__timeline-link:hover { background: var(--console-teal-soft); }
+/* Prescription changes: one card per decision, newest first, like the timeline's weeks (patient_prescription_changes). */
+.patient-changes__list { display: grid; gap: .35rem; list-style: none; margin: .9rem 0 1rem; padding: 0; }
+.patient-changes__item { background: var(--c-ffffff); border: 1px solid var(--console-soft-line); border-radius: .75rem; padding: .7rem .9rem; }
+.patient-changes__head { align-items: baseline; display: flex; flex-wrap: wrap; gap: .15rem .7rem; justify-content: space-between; }
+.patient-changes__title { align-items: center; display: inline-flex; flex-wrap: wrap; gap: .3rem .5rem; }
+.patient-changes__title .patient-pill { font-size: .72rem; padding-block: .1rem; }
+.patient-changes__head strong { color: var(--console-ink); font-size: .9rem; font-weight: 600; }
+/* Opened from a decision on the timeline: that one is outlined, as the timeline's current week is. */
+.patient-changes__item.is-selected { border-color: var(--console-teal); box-shadow: 0 0 0 1px var(--console-teal); }
+.patient-changes__head span { color: var(--console-muted); font-size: .76rem; }
+.patient-changes__what { color: var(--console-ink); font-size: .86rem; font-weight: 500; line-height: 1.5; margin: .45rem 0 0; }
+/* Its facts as My Treatment shows its details (patient-kv), a little tighter in the card. */
+.patient-changes__item .patient-kv { margin-top: .35rem; }
+.patient-changes__item .patient-kv > div { padding: .42rem 0; }
+/* A fact's timeline week: a grey pill beside its day (the card's own week, in its header, stays blue). */
+/* The payment schedule and the next payment read as one pair: the same space between them, without the line. */
+.patient-changes__item .patient-kv > div:has(+ .patient-changes__next) { border-bottom: 0; padding-bottom: .37rem; }
+.patient-changes__item .patient-kv > .patient-changes__next { padding-top: .37rem; }
+.patient-changes__item .patient-kv dd .patient-pill { font-size: .7rem; margin-left: .35rem; padding-block: .05rem; vertical-align: .05rem; }
 .patient-plan__timeline-link:active { opacity: .75; }
 .patient-plan__timeline-link:focus-visible, .patient-plan__settings > summary:focus-visible { outline: 2px solid var(--console-teal-dark); outline-offset: 4px; }
-.patient-plan__support { align-items: baseline; display: flex; flex-wrap: wrap; gap: .45rem 1rem; padding-block: 1rem; }
-.patient-plan__support p { margin: 0; }
+.patient-plan__support { align-items: center; display: flex; flex-wrap: wrap; gap: .6rem 1.5rem; justify-content: space-between; padding-block: .85rem; }
+.patient-plan__support p { flex: 1 1 15rem; margin: 0; min-width: 0; }
 .patient-plan__settings { border-top: 1px solid var(--console-soft-line); padding-top: 0; }
 .treatment-workspace .patient-plan__settings > summary { color: var(--console-ink); font-size: .95rem; min-height: 2.75rem; padding: 1rem 0; }
 .patient-plan__settings > summary span { color: var(--console-muted); font-size: .8rem; font-weight: 400; margin-left: .7rem; }
@@ -117,6 +168,8 @@
   .patient-plan__timeline { align-items: flex-start; flex-direction: column; }
   .patient-plan__timeline > div { flex-basis: auto; }
   .patient-plan__timeline-link { max-width: 100%; white-space: normal; }
+  .patient-plan__support { align-items: flex-start; flex-direction: column; }
+  .patient-plan__support p { flex-basis: auto; }
   .patient-plan__settings > summary span { display: block; margin: .25rem 0 0 1rem; }
 }
 @media (prefers-contrast: more) { .patient-plan__timeline-link, .patient-plan__settings { border-color: currentColor; } }

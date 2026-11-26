@@ -185,11 +185,12 @@ def _draft_parcel(company, order, scheduled_for):
 
 
 def ship_paid_order(order, *, request=None):
-    """Once a submitted order is paid, put it on the next shipping day's list by itself, when every item needs no
-    prescription. Returns the draft parcel, or None when the order waits for the practice to accept it (an item needs
+    """Once a submitted order is paid, put it on the list of the first shipping day whose order cut-off is still to
+    come (care.parcels.first_shipping_day, as prescription parcels: James, 25 Nov 2026), by itself, when every item needs
+    no prescription. Returns the draft parcel, or None when the order waits for the practice to accept it (an item needs
     a doctor's authorisation, or is no longer available). A payment is never undone by this: it runs in its own
     savepoint, inside the payment's transaction."""
-    from .parcels import shipping_day_from, shipping_weekday
+    from .parcels import first_shipping_day
 
     company = Company.objects.select_for_update().get(pk=order.company_id)
     order = PharmacyOrder.objects.select_for_update(of=('self',)).select_related('patient').get(pk=order.pk, company=company)
@@ -198,7 +199,7 @@ def ship_paid_order(order, *, request=None):
     items = list(order.items.select_related('product'))
     if not items or any(item.product.requires_authorisation for item in items) or not order.patient.is_active:
         return None
-    day = shipping_day_from(timezone.localdate(), shipping_weekday(company))
+    day = first_shipping_day(timezone.localdate(), company)
     try:
         with transaction.atomic():
             shipment = _draft_parcel(company, order, day)

@@ -86,7 +86,7 @@ class BillingExportTests(OperationsPortalFixture):
         self.plan.next_debit_on = self.today + timedelta(days=7)
         self.plan.save(update_fields=('next_debit_on', 'updated_at'))
         DebitMandate.objects.create(company=self.company, patient=self.patient, subscription=self.plan,
-            method='debicheck', status='active', amount='150.50', provider='sandbox', account_label='Bank ···1234')
+            method='card', status='active', amount='150.50', provider='sandbox', account_label='Visa ···1234')
         SubscriptionCycle.objects.create(company=self.company, patient=self.patient, subscription=self.plan,
             cycle_number=2, starts_on=self.today, due_on=self.today, amount='75.25', attempts=1,
             next_attempt_on=self.today + timedelta(days=2))
@@ -96,13 +96,13 @@ class BillingExportTests(OperationsPortalFixture):
         displayed = page.context['page_obj'][0]
         self.assertEqual(row['Billing'], 'Retrying')
         self.assertEqual(row['Billing detail'], displayed.state_text)
-        self.assertEqual(row['Debit order'], 'DebiCheck debit order')
-        self.assertEqual(row['Debit order status'], 'Active')
-        self.assertEqual(row['Account'], 'Bank ···1234')
-        self.assertEqual(row['Debit order limit'], Decimal('150.50'))
+        self.assertEqual(row['Payment method'], 'Card')
+        self.assertEqual(row['Card status'], 'Active')
+        self.assertEqual(row['Card'], 'Visa ···1234')
+        self.assertEqual(row['Charge limit'], Decimal('150.50'))
         self.assertEqual(row['Last paid'], Decimal('100.00'))
         self.assertEqual(row['Last paid date'], date(2026, 11, 3))
-        self.assertEqual(row['Next debit'], self.plan.next_debit_on)
+        self.assertEqual(row['Next payment'], self.plan.next_debit_on)
         self.assertEqual(row['Outstanding'], displayed.owed)
         self.assertEqual(row['Outstanding'], Decimal('75.25'))
 
@@ -118,7 +118,7 @@ class BillingExportTests(OperationsPortalFixture):
         self.assertEqual(len(page.context['page_obj']), 2)
         self.assertEqual(len(rows), 52)
         self.assertTrue(all(row['Patient'] == str(self.patient) for row in rows))
-        self.assertTrue(all(row['Billing'] == 'No debit order' for row in rows))
+        self.assertTrue(all(row['Billing'] == 'No card' for row in rows))
 
     def test_invalid_filters_raise_validation_errors_instead_of_exporting_everything(self):
         for table, params in (('subscriptions', {'status': 'not-real'}), ('billing', {'state': 'not-real'}),

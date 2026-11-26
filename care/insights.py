@@ -8,7 +8,8 @@ before the app) uses it in place of the app's own count for that month and measu
 
 Definitions:
 - A booking is an appointment that wasn't cancelled, counted in the month it is for. New is an initial consultation;
-  Follow-up is every other kind (follow-up, six-month review, ad-hoc).
+  Follow-up is every other kind (follow-up, six-month review, ad-hoc). A month with a historical figure for new bookings
+  has no follow-ups: the app's bookings then were tests.
 - Sources come from How did you hear about us? on the screening form, for enquiries that went on to book.
 - A signup is a subscription, counted in the month it starts; its medicine is the one it was prescribed for.
 - Monthly recurring revenue is, at the end of each month (today, for this month), what the subscriptions paid up to
@@ -141,7 +142,8 @@ def figures(company):
 
 
 def notes(company):
-    return [{'id': note.pk, 'month': f'{note.on:%Y-%m}', 'on': note.on.isoformat(), 'label': note.label}
+    """The practice's notes, each for the one chart it marks (InsightNote.chart)."""
+    return [{'id': note.pk, 'chart': note.chart, 'month': f'{note.on:%Y-%m}', 'on': note.on.isoformat(), 'label': note.label}
             for note in InsightNote.objects.for_company(company)]
 
 
@@ -253,7 +255,9 @@ def overview(company, *, start=None, end=None, today=None):
         if position is not None:
             (new if kind == Appointment.Type.INITIAL else follow_up)[position] += 1
     for position, month in enumerate(months):
-        new[position] = entered.get((month, InsightFigure.Metric.NEW_BOOKINGS), new[position])
+        if (month, InsightFigure.Metric.NEW_BOOKINGS) in entered:
+            # Before the app there were no follow-ups to count (Dr Czech, 26 Nov 2026): its bookings then were tests.
+            new[position], follow_up[position] = entered[(month, InsightFigure.Metric.NEW_BOOKINGS)], 0
     bookings = {'all': [a + b for a, b in zip(new, follow_up)], 'new': new, 'follow_up': follow_up}
 
     # 2. Sources of bookings.
@@ -324,6 +328,9 @@ def overview(company, *, start=None, end=None, today=None):
         'dropouts': dropouts, 'running': running, 'churn': churn,
         'doctors': doctors, 'doctor_months': doctor_months,
         'doctor_consults': {doctor['id']: [consults[doctor['id']][position] for position in range(len(months))] for doctor in doctors},
+        # Each doctor's new subscriptions a month, by medicine and in all (Semaglutide and Tirzepatide together).
+        'doctor_signups': {doctor['id']: {key: [prescribed[(doctor['id'], key)][position] for position in range(len(months))]
+                                          for key, _ in MEDICINES} for doctor in doctors},
         'weight_by_month': weight_by_month(company, subs),
         'kpis': {
             'kg_lost': kg, 'weighed': weighed,

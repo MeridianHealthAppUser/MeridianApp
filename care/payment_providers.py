@@ -3,13 +3,16 @@ doesn't change with the provider. PAYMENT_PROVIDER takes new debit orders and pa
 the provider that holds it (its card or mandate is there), so the practice can move from Peach to Stitch, or back,
 without asking every patient again, as long as the old provider's settings stay in place.
 
-- "sandbox": for local testing. A debit order is approved, and a card paid, on a page inside the app; debits succeed
-  unless the patient chose "approve, but fail the debits" there. No money moves.
+- "sandbox": for local testing. A card is saved, or paid once, on a page inside the app; later charges succeed
+  unless the patient chose "save it, but fail the charges" there. No money moves.
 - "peach": Peach Payments (care.peach). Cards only: Peach doesn't offer DebiCheck. The card is kept by Peach and
   charged each period; once-off payments are paid by card on Peach's form.
 - "stitch": Stitch (care.stitch). DebiCheck debit orders, approved in the patient's banking app and collected with
   daily collection files, or a card kept by Stitch; once-off payments on Stitch's page (card or bank).
 - "" (empty): no provider. Nothing can be collected, and staff record payments received some other way by hand.
+
+Card payments only, to start (settings.DEBIT_ORDERS_ENABLED off): patients are offered only a card, and Stitch is hidden
+(not a provider, no webhooks, no DebiCheck collection files). offered_methods and hosted_providers say what is on.
 
 A hosted provider (Peach, Stitch) sends the patient to its own page, then back to the app's return page, which asks the
 provider how it went; its webhooks say the same later. Card and bank details never reach the app: only a label such as
@@ -148,24 +151,45 @@ class SandboxProvider:
         return None
 
 
+def debit_orders_enabled():
+    """Whether DebiCheck debit orders and Stitch are offered. Off for now: patients pay by card."""
+    return bool(settings.DEBIT_ORDERS_ENABLED)
+
+
+def offered_methods(provider):
+    """The ways a patient can pay their subscription with this provider: its methods, without DebiCheck while debit
+    orders are hidden."""
+    if provider is None:
+        return ()
+    return tuple(method for method in provider.methods if method != 'debicheck' or debit_orders_enabled())
+
+
+def hosted_providers():
+    """The hosted providers that are switched on: Peach, and Stitch only while debit orders are offered."""
+    return HOSTED if debit_orders_enabled() else tuple(name for name in HOSTED if name != 'stitch')
+
+
 def current_provider():
     """The provider new debit orders and payments go to, or None when there isn't one."""
     name = settings.PAYMENT_PROVIDER
     if name and name not in HOSTED and name != SandboxProvider.name:
         raise ImproperlyConfigured(f'Unknown PAYMENT_PROVIDER "{name}". Use sandbox, peach, stitch or leave it empty.')
+    if name == 'stitch' and not debit_orders_enabled():
+        raise ImproperlyConfigured('Stitch is switched off while patients pay by card. Use PAYMENT_PROVIDER=peach.')
     return provider_named(name)
 
 
 def provider_named(name):
     """The provider a debit order or payment was made with (its provider field), or None. The sandbox only while it is
-    the current provider, so a sandbox debit order is never "collected" once real money is."""
+    the current provider, so a sandbox debit order is never "collected" once real money is. Stitch only while debit
+    orders are offered."""
     if name == SandboxProvider.name:
         return SandboxProvider() if settings.PAYMENT_PROVIDER == name else None
     if name == 'peach':
         from .peach import PeachProvider
 
         return PeachProvider()
-    if name == 'stitch':
+    if name == 'stitch' and debit_orders_enabled():
         from .stitch import StitchProvider
 
         return StitchProvider()

@@ -4,7 +4,9 @@
    [data-insight-chart] is drawn from its spec in the page's insight-charts JSON (portal/insights_views.py): lines, bars
    or stacked bars by month (or by month of subscription), a legend for two or more series, and its numbers as a table.
    Pointing at a chart, or the arrow keys on it, reads out every series at that month. The practice's notes
-   (insight-chart-notes) mark their month with a dashed line and a button that shows the note. Names go in with
+   (insight-chart-notes) mark their month with a dashed line and a button that shows the note, on the chart they were
+   added to only (spec.notes: its chart, 26 Nov 2026). A series can be dashed (a doctor's signups), and a spec can
+   give its own legend. [data-chart-views] buttons show one of several charts in a card. Names go in with
    textContent only. The chart redraws to its width. */
 (() => {
   const read = (id) => {
@@ -24,6 +26,7 @@
     rand: (value) => `R${grouped(Math.round(value))}`,
     pct: (value) => `${tenth(value)}%`,
     kg: (value) => `${tenth(value)} kg`,
+    ratio: (value) => String(Math.round(value * 100) / 100),
   };
   const make = (tag, className) => Object.assign(document.createElement(tag), className ? { className } : {});
   const svg = (tag, attributes = {}) => {
@@ -74,7 +77,7 @@
       row.append(name);
       spec.series.forEach((series) => {
         const value = series.values[index];
-        row.insertCell().textContent = value === null || value === undefined ? '—' : FORMAT[spec.format](value)
+        row.insertCell().textContent = value === null || value === undefined ? '-' : FORMAT[spec.format](value)
           + (series.counts && value !== null ? ` (${series.counts[index]})` : '');
       });
     });
@@ -86,10 +89,12 @@
     const box = host.querySelector('.insight-chart__legend');
     if (!box) return;
     box.replaceChildren();
-    if (spec.series.length < 2) return;
-    spec.series.forEach((series) => {
+    const keys = spec.legend || spec.series;
+    if (keys.length < 2) return;
+    keys.forEach((series) => {
       const item = make('span', 'insight-chart__key');
-      const swatch = make('i', `insight-tone insight-tone--${series.tone}${spec.kind === 'line' ? ' insight-chart__swatch-line' : ''}`);
+      const shape = series.dash ? ' insight-chart__swatch-dash' : (spec.kind === 'line' ? ' insight-chart__swatch-line' : '');
+      const swatch = make('i', `insight-tone insight-tone--${series.tone}${shape}`);
       swatch.setAttribute('aria-hidden', 'true');
       item.append(swatch, document.createTextNode(series.label));
       box.append(item);
@@ -114,7 +119,7 @@
     const ticks = [];
     for (let value = y.bottom; value <= y.top + y.step / 1000; value += y.step) ticks.push(value);
     const left = Math.max(...ticks.map((value) => format(value).length)) * 6.6 + 12;
-    const marked = spec.notes ? notes.filter((note) => spec.x.includes(note.month)) : [];
+    const marked = spec.notes ? notes.filter((note) => note.chart === spec.notes && spec.x.includes(note.month)) : [];
     const top = marked.length ? 20 : 10;
     const right = spec.ends ? 78 : 12;
     const bottom = 26;
@@ -170,9 +175,12 @@
           path += `${drawing ? 'L' : 'M'}${cx(index).toFixed(1)} ${cy(value).toFixed(1)} `;
           drawing = true;
         });
-        if (path) group.append(svg('path', { d: path, class: 'insight-line' }));
-        const points = series.values.map((value, index) => [value, index]).filter(([value]) => value !== null && value !== undefined);
-        const dots = n <= 16 ? points : points.slice(-1);
+        if (path) group.append(svg('path', { d: path, class: `insight-line${series.dash ? ' insight-line--dash' : ''}` }));
+        const missing = (index) => series.values[index] === null || series.values[index] === undefined;
+        const points = series.values.map((value, index) => [value, index]).filter(([, index]) => !missing(index));
+        // Every point on a short chart; on a long one the last, and any with no line to it (gaps either side).
+        const dots = n <= 16 ? points : points.filter(([, index], position) => position === points.length - 1
+          || ((index === 0 || missing(index - 1)) && (index === n - 1 || missing(index + 1))));
         dots.forEach(([value, index]) => group.append(svg('circle', { cx: cx(index), cy: cy(value), r: 4, class: 'insight-dot' })));
         if (spec.ends && points.length) {
           const [value, index] = points[points.length - 1];
@@ -263,10 +271,10 @@
       const rows = spec.series.map((series) => {
         const value = series.values[at];
         const row = make('p', 'insight-tip__row');
-        const key = make('i', `insight-tone insight-tone--${series.tone}`);
+        const key = make('i', `insight-tone insight-tone--${series.tone}${series.dash ? ' insight-chart__swatch-dash' : ''}`);
         key.setAttribute('aria-hidden', 'true');
         const amount = make('strong');
-        amount.textContent = value === null || value === undefined ? '—' : format(value);
+        amount.textContent = value === null || value === undefined ? '-' : format(value);
         const name = make('span');
         name.textContent = series.counts && value !== null ? `${series.label} (${series.counts[at]} patients)` : series.label;
         row.append(key, amount, name);
@@ -325,6 +333,20 @@
   }
   listen(document, 'click', (event) => { if (!event.target.closest?.('.insight-note')) closeNotes(); });
   listen(document, 'keydown', (event) => { if (event.key === 'Escape') closeNotes(); });
+
+  // A card's views (Each doctor, per month): one button a chart, the others hidden; a chart drawn while hidden waits
+  // for its width, so it draws when shown.
+  document.querySelectorAll('[data-chart-views]').forEach((group) => {
+    const buttons = [...group.querySelectorAll('button[aria-controls]')];
+    buttons.forEach((button) => listen(button, 'click', () => {
+      buttons.forEach((other) => {
+        const on = other === button;
+        other.setAttribute('aria-pressed', String(on));
+        const view = document.getElementById(other.getAttribute('aria-controls'));
+        if (view) view.hidden = !on;
+      });
+    }));
+  });
 
   const watching = [];
   document.querySelectorAll('[data-insight-chart]').forEach((host) => {

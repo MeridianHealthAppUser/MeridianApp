@@ -13,8 +13,9 @@
   reminder; the 15-minute reminder records successful delivery separately for each recipient.
 - Welcome: to a patient who made their account at checkout.
 - Win-back: once, to a patient who cancels their subscription.
-- Billing (care.billing): a debit that failed (the first time, and when its retries run out); a debit order that
-  needs a new amount approved after a prescription or price change; and the practice asking for a new debit order.
+- Billing (care.billing): a card payment that failed (the first time, and when its retries run out); a card that
+  needs a new amount confirmed after a prescription or price change; and the practice asking the patient to add their
+  card again. (The templates keep their debit_order_ names.)
 
 Patients are emailed only with an active login, and staff only while active in the practice. Every email a patient
 is sent is logged against them (EmailDelivery), which the communications log lists.
@@ -445,7 +446,7 @@ def _winback_email(subscription, user, actor_id):
     })
 
 
-# Billing: a failed debit, a debit order to approve again
+# Billing: a failed card payment, a card to confirm or add again
 
 def _cycle(pk):
     return SubscriptionCycle.objects.select_related('patient__user', 'subscription').get(pk=pk)
@@ -463,7 +464,7 @@ def _patient_only(obj, actor_id):
 def _payment_failed_email(cycle, user, actor_id):
     from .billing import money
 
-    return build_email(to=user.email, subject='We couldn’t collect your payment', template='payment_failed', context={
+    return build_email(to=user.email, subject='We couldn’t take your payment', template='payment_failed', context={
         'greeting': cycle.patient.first_name, 'amount': money(cycle.amount), 'retry_on': cycle.next_attempt_on,
         'final': cycle.status == SubscriptionCycle.Status.FAILED, 'url': site_link('portal:patient-billing'),
     })
@@ -476,14 +477,14 @@ def _debit_order_update_email(mandate, user, actor_id):
     # How often the prescription is billed now (every 5 weeks for Tirzepatide 7.5 mg), as the new debit order will be;
     # the old debit order's interval is the one before the change.
     weeks = billing_weeks(mandate.subscription) if mandate.subscription_id else mandate.interval_weeks
-    return build_email(to=user.email, subject='Please approve your new debit order', template='debit_order_update', context={
+    return build_email(to=user.email, subject='Please confirm your card for the new amount', template='debit_order_update', context={
         'greeting': mandate.patient.first_name, 'amount': money(needed) if needed else '',
         'weeks': weeks, 'url': site_link('portal:patient-billing'),
     })
 
 
 def _debit_order_request_email(subscription, user, actor_id):
-    return build_email(to=user.email, subject='Please set up your debit order again', template='debit_order_request',
+    return build_email(to=user.email, subject='Please add your card again', template='debit_order_request',
                        context={'greeting': subscription.patient.first_name, 'url': site_link('portal:patient-billing')})
 
 

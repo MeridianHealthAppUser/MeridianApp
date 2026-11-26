@@ -8,6 +8,7 @@ from django.test import Client, RequestFactory
 from django.urls import reverse
 from django.utils import timezone
 
+from care.consumption import week_start
 from care.models import AuditEvent, MedicationProduct, Payment, Shipment, StockMovement, SubscriptionCycle
 from practices.models import CompanyMembership
 from .test_operations import OperationsPortalFixture
@@ -31,8 +32,8 @@ class InventoryStartingAWCTests(OperationsPortalFixture):
             {'starting_awc': value, 'workflow_context': token, 'q': q})
 
     def history(self):
-        week = self.today - timedelta(days=self.today.weekday())
-        day = week - timedelta(days=1)
+        # The Monday before this shipping week (Tuesday to Monday), so it is always in the last completed week.
+        day = week_start(self.today) - timedelta(days=1)
         timestamp = timezone.make_aware(datetime.combine(day, time(12)), timezone.get_default_timezone())
         self.shipment(quantity=8, subscription=None, status=Shipment.Status.DISPATCHED,
                       scheduled_for=day, dispatched_at=timestamp)

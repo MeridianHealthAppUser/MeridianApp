@@ -83,11 +83,17 @@ class HelpRequestForm(forms.Form):
 
 
 def limit_methods(field, provider):
-    """Offer only the ways the payment provider takes (Peach Payments: cards only)."""
-    if provider is not None:
-        field.choices = [choice for choice in field.choices if choice[0] in provider.methods]
-        if field.initial not in provider.methods:
-            field.initial = provider.methods[0]
+    """Offer only the ways the payment provider takes (Peach Payments: cards only), and only a card while DebiCheck debit
+    orders are hidden. With one way left the choice itself is hidden: the page just says how the patient pays."""
+    from care.payment_providers import debit_orders_enabled, offered_methods
+
+    methods = (offered_methods(provider) if provider is not None
+               else [value for value, _ in field.choices if value != DebitMandate.Method.DEBICHECK or debit_orders_enabled()])
+    field.choices = [choice for choice in field.choices if choice[0] in methods]
+    if field.initial not in methods and methods:
+        field.initial = methods[0]
+    if len(field.choices) == 1:
+        field.widget = forms.HiddenInput()
 
 
 class EnrollmentForm(DeliveryAddressForm):
@@ -95,9 +101,9 @@ class EnrollmentForm(DeliveryAddressForm):
 
     authorization = forms.ModelChoiceField(label='Your prescription', queryset=TreatmentAuthorization.objects.none(),
                                            empty_label='Choose your current authorisation')
-    method = forms.ChoiceField(label='Pay by', widget=forms.RadioSelect, initial=DebitMandate.Method.DEBICHECK, choices=(
-        (DebitMandate.Method.DEBICHECK, 'DebiCheck debit order: you approve it in your banking app (preferred)'),
+    method = forms.ChoiceField(label='Pay by', widget=forms.RadioSelect, initial=DebitMandate.Method.CARD, choices=(
         (DebitMandate.Method.CARD, 'Card: kept safely by our payment provider'),
+        (DebitMandate.Method.DEBICHECK, 'DebiCheck debit order: you approve it in your banking app'),
     ))
     confirm = forms.BooleanField(label='I agree to the practice collecting my subscription as shown, from today, until I '
                                        'pause or cancel it.')
@@ -112,6 +118,10 @@ class EnrollmentForm(DeliveryAddressForm):
         super().__init__(*args, **kwargs)
         self.fields['authorization'].queryset = authorizations
         limit_methods(self.fields['method'], current_provider())
+        if [value for value, _ in self.fields['method'].choices] == [DebitMandate.Method.CARD]:
+            self.fields['method'].label = 'How you pay'
+            self.fields['confirm'].label = ('I agree to the practice charging my card for my subscription as shown, from '
+                                            'today, until I pause or cancel it.')
         # A starting plan's step is authorised until the plan ends.
         ends = {row.pk: row.ends_on for row in with_plan_ends(list(authorizations))}
         self.fields['authorization'].label_from_instance = (

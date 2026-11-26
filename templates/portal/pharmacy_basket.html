@@ -51,7 +51,7 @@
               {% include 'portal/operations_fields.html' %}
               <button class="console-button console-button--primary" type="submit">{% if pays_by_card %}Pay R{{ order.subtotal|floatformat:"-2" }} by card{% else %}Place my order{% endif %}</button>
             </form>
-            <p class="patient-small">{% if pays_by_card %}You pay once, now. {% else %}The practice tells you how to pay. {% endif %}Once it’s paid, your order goes out with the parcels on the next shipping day.</p>
+            <p class="patient-small">{% if pays_by_card %}You pay once, now. {% else %}The practice tells you how to pay. {% endif %}Once it’s paid, your order goes out with the next parcels{% if ships_if_paid_today %}: paid today, on {{ ships_if_paid_today|date:"D, j M" }}{% endif %}.</p>
           {% endif %}
           <div class="patient-card-actions"><a class="console-button console-button--secondary patient-card-actions__wide" href="{% url 'portal:patient-treatment' %}#once-off-items">Keep shopping</a></div>
         </div>

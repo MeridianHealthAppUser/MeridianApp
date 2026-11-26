@@ -50,6 +50,8 @@
 .patient-kv { display: grid; margin: .6rem 0 0; }
 .patient-kv > div { align-items: baseline; border-bottom: 1px solid var(--console-soft-line); display: flex; gap: 1rem; justify-content: space-between; padding: .68rem 0; }
 .patient-kv > div:last-child { border-bottom: 0; }
+/* A second list straight after another reads as one (My Treatment: the dose's rows, then Status). */
+.patient-kv--continued { border-top: 1px solid var(--console-soft-line); margin-top: 0; }
 .patient-kv dt { color: var(--patient-text); flex: 0 0 auto; font-size: .82rem; }
 .patient-kv dd { color: var(--console-ink); font-size: .86rem; font-weight: 500; margin: 0; min-width: 0; overflow-wrap: anywhere; text-align: right; }
 .patient-kv dd.patient-kv__amber { color: var(--console-amber); }
@@ -143,7 +145,7 @@ a.patient-chip { display: inline-block; text-decoration: none; }
 .patient-plan .patient-plan__billing { margin-top: .2rem; }
 .patient-plan__hold { background: var(--patient-amber-soft); border: 1px solid var(--patient-amber-line); border-radius: .7rem; color: var(--console-amber); font-size: .82rem; line-height: 1.55; margin: .8rem 0 0; padding: .65rem .8rem; }
 .patient-plan__note { border-top: 1px solid var(--console-soft-line); margin-top: .7rem; padding-top: .8rem; }
-.patient-plan__note p { color: var(--console-ink); font-size: .85rem; margin: .35rem 0 0; }
+.patient-plan__note p { color: var(--console-ink); font-size: .85rem; margin: .75rem 0 0; }
 .patient-plan__manage { border-top: 1px solid var(--console-line); margin-top: 1.1rem; padding-top: 1rem; }
 .patient-plan__manage .patient-small { margin-top: .4rem; }
 .patient-plan__manage .console-form { gap: .8rem; margin-top: .8rem; }

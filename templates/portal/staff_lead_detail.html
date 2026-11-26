@@ -2,7 +2,7 @@
 {% load static workspace_ui %}
 
 {% block title %}{{ lead }} | Leads | {{ company.name }}{% endblock %}
-{% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/leads.css' %}?v=20261104a">{% endblock %}
+{% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/leads.css' %}?v=20261126a"><link rel="stylesheet" href="{% static 'css/privacy.css' %}?v=20261126a"><link rel="stylesheet" href="{% static 'css/dialogs.css' %}?v=20261115a"><script src="{% static 'js/dialogs.js' %}?v=20261115b" defer></script>{% endblock %}
 
 {% block breadcrumbs %}{% with lead.first_name|add:' '|add:lead.last_name as lead_name %}{% breadcrumbs 'Leads' 'portal:staff-leads' lead_name %}{% endwith %}{% endblock %}
 {% block page_heading %}
@@ -11,7 +11,7 @@
 
 {% block page_content %}
   <p><a class="console-button console-button--primary" href="{% url 'portal:lead-follow-up' lead.pk %}">Follow-up notes and next contact</a></p>
-  <aside class="staff-lead-notice"><strong>{% if lead.converted_patient_id %}Converted enquiry{% else %}Lead only — no patient account created{% endif %}</strong><p>This is the original enquiry, not a clinical record.</p></aside>
+  <aside class="staff-lead-notice"><strong>{% if lead.converted_patient_id %}Converted enquiry{% else %}Lead only: No patient account created{% endif %}</strong><p>This is the original enquiry, not a clinical record.</p></aside>
   <div class="staff-lead-detail-grid">
     <section class="staff-page-card" aria-labelledby="lead-answers-heading">
       <header class="staff-page-card__header"><div><h2 id="lead-answers-heading">Questionnaire answers</h2><p>{% if questionnaire.submitted_at %}Submitted {{ questionnaire.submitted_at|date:"j F Y, H:i" }}{% else %}Information supplied with this enquiry.{% endif %}</p></div></header>
@@ -33,19 +33,30 @@
         </dl>
       </section>
       <section class="staff-page-card" aria-labelledby="lead-consents-heading">
-        <header class="staff-page-card__header"><div><h2 id="lead-consents-heading">Recorded consent</h2><p>Versions and acceptance times retained with this enquiry.</p></div></header>
+        <header class="staff-page-card__header"><div><h2 id="lead-consents-heading">Recorded consent</h2><p>Versions, acceptance times and the exact wording accepted, kept with this enquiry.</p></div></header>
         <ul class="staff-lead-consents">
           {% for consent in consents %}
-            <li><strong>{% if consent.document %}{{ consent.document.title }}{% else %}{{ consent.get_consent_type_display }}{% endif %}</strong><span>{{ consent.document_version }} · {% if consent.accepted %}Accepted{% else %}Not accepted{% endif %}</span>{% if consent.accepted_at %}<time datetime="{{ consent.accepted_at|date:'c' }}">{{ consent.accepted_at|date:"j M Y, H:i" }}</time>{% endif %}<small>Source: {{ consent.source }}</small></li>
+            <li><strong>{{ consent.document_title|default:consent.get_consent_type_display }}</strong><span>Version {{ consent.document_version }} · {% if consent.accepted %}Accepted{% else %}Not accepted{% endif %}</span>{% if consent.accepted_at %}<time datetime="{{ consent.accepted_at|date:'c' }}">{{ consent.accepted_at|date:"j M Y, H:i" }}</time>{% endif %}<small>Source: {{ consent.source }}</small>{% if consent.document_text %}<button class="console-button console-button--secondary staff-lead-consents__read" type="button" data-modal-open="consent-wording-{{ consent.pk }}" aria-haspopup="dialog">Read what was accepted<span class="sr-only">: {{ consent.document_title }}</span></button>{% endif %}</li>
           {% empty %}<li>No consent records are available.</li>{% endfor %}
         </ul>
       </section>
       {% if screening_reasons or questionnaire.answers.screening_rules_version == 'prototype-rev2.6-demo' %}
         <section class="staff-page-card" aria-labelledby="lead-screening-heading">
-          <header class="staff-page-card__header"><div><h2 id="lead-screening-heading">Screening context</h2>{% if questionnaire.answers.screening_rules_version == 'prototype-rev2.6-demo' %}<p>Prototype screening only — not clinical approval.</p>{% endif %}</div></header>
+          <header class="staff-page-card__header"><div><h2 id="lead-screening-heading">Screening context</h2>{% if questionnaire.answers.screening_rules_version == 'prototype-rev2.6-demo' %}<p>Prototype screening only: Not clinical approval.</p>{% endif %}</div></header>
           {% if screening_reasons %}<ul class="staff-lead-screening-reasons">{% for reason in screening_reasons %}<li>{{ reason }}</li>{% endfor %}</ul>{% endif %}
         </section>
       {% endif %}
     </aside>
   </div>
+  {# The exact wording each acceptance kept (Dr Czech, 26 Nov 2026), whatever the practice publishes later. #}
+  {% for consent in consents %}{% if consent.document_text %}
+  <dialog class="app-dialog app-dialog--wide privacy-document-dialog" id="consent-wording-{{ consent.pk }}" aria-labelledby="consent-wording-{{ consent.pk }}-title">
+    <div class="app-dialog__body">
+      <h2 id="consent-wording-{{ consent.pk }}-title">{{ consent.document_title|default:consent.get_consent_type_display }}</h2>
+      <p class="app-dialog__sub">Version {{ consent.document_version }}{% if consent.accepted_at %} · Accepted {{ consent.accepted_at|date:"j M Y, H:i" }}{% endif %}</p>
+      <div class="privacy-document" tabindex="0" role="region" aria-label="The wording accepted">{{ consent.document_text }}</div>
+      <div class="app-dialog__actions"><button class="console-button console-button--primary" type="button" data-dialog-close autofocus>Close</button></div>
+    </div>
+  </dialog>
+  {% endif %}{% endfor %}
 {% endblock %}

@@ -7,6 +7,7 @@ from .subscription_payment_views import SubscriptionPaymentsView
 
 urlpatterns = [
     path('subscriptions/<int:pk>/payments/', SubscriptionPaymentsView.as_view(), name='subscription-payments'),
+    path('subscriptions/<int:pk>/timeline/', views.SubscriptionTimelineView.as_view(), name='subscription-timeline'),
     path('review-rules/', review_views.ReviewRuleListView.as_view(), name='treatment-review-rules'),
     path('review-rules/new/', review_views.ReviewRuleEditorView.as_view(), name='treatment-review-rule-create'),
     path('review-rules/default/', review_views.ReviewDefaultUpdateView.as_view(), name='treatment-review-default'),
@@ -20,6 +21,7 @@ urlpatterns = [
     path('patient/treatment/', views.PatientTreatmentView.as_view(), name='patient-treatment'),
     path('patient/subscription/', views.PatientSubscriptionView.as_view(), name='patient-subscription'),
     path('patient/subscription/enroll/', views.PatientEnrollmentView.as_view(), name='patient-subscription-enroll'),
+    path('patient/prescription/ask-to-confirm/', views.PatientAskConfirmView.as_view(), name='patient-prescription-ask'),
     path('patient/subscription/<int:pk>/status/', views.PatientSubscriptionStatusView.as_view(), name='patient-subscription-status'),
     path('patient/treatment/help/', views.PatientHelpRequestView.as_view(), name='patient-help-request'),
 ]

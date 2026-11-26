@@ -84,6 +84,7 @@ urlpatterns = [
     path('patients/<int:pk>/prescription/renew/', prescription_views.PrescriptionRenewView.as_view(), name='patient-prescription-renew'),
     path('patients/<int:pk>/prescription/initiate/', prescription_views.PrescriptionInitiateView.as_view(), name='patient-prescription-initiate'),
     path('patients/<int:pk>/prescription/change/', prescription_views.PrescriptionChangeView.as_view(), name='patient-prescription-change'),
+    path('patients/<int:pk>/prescription/confirm/', prescription_views.PrescriptionConfirmView.as_view(), name='patient-prescription-confirm'),
     path('patients/<int:pk>/summary/', prescription_views.SummaryEditView.as_view(), name='patient-summary-edit'),
     path('patients/<int:pk>/details/', patient_details_views.PatientDetailsEditView.as_view(), name='patient-details-edit'),
     path('patients/<int:pk>/blood-tests/', pathcare_views.BloodTestRequestView.as_view(), name='patient-blood-tests'),

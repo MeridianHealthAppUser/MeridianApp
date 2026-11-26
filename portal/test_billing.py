@@ -2,6 +2,7 @@
 and debit order, Operations > Billing, delivery addresses, and Weekly shipping's payment and courier steps."""
 
 from datetime import timedelta
+from decimal import Decimal
 from unittest.mock import patch
 
 from django.test import override_settings
@@ -13,7 +14,7 @@ from care.addresses import save_delivery_address
 from care.billing import approve_mandate, start_debit_order
 from care.models import (
     AuditEvent, DebitMandate, DeliveryAddress, PatientSubscription, Payment, PharmacyOrder, PracticeSettings, Shipment,
-    SubscriptionCycle,
+    SubscriptionCycle, TreatmentAuthorization,
 )
 from care.operations import prepare_shipment
 from care.test_billing import ADDRESS, BillingFixture
@@ -43,23 +44,35 @@ class BillingPageFixture(BillingFixture):
 
 
 class PatientBillingPageTests(BillingPageFixture):
-    def test_the_sandbox_approval_page_approves_the_debit_order_and_collects_the_first_payment(self):
+    def test_the_sandbox_approval_page_saves_the_card_and_collects_the_first_payment(self):
         self.login(self.patient_user)
         page = self.client.get(reverse('portal:patient-billing'))
-        self.assertContains(page, 'No debit order yet')
-        response = self.client.post(reverse('portal:patient-debit-order'), {
+        self.assertContains(page, 'No card saved yet')
+        # Card only, to start: no DebiCheck choice, and the card goes in a hidden field.
+        self.assertTrue(page.context['debit_form']['method'].is_hidden)
+        self.assertNotContains(page, 'DebiCheck')
+        self.assertContains(page, 'Add my card')
+        refused = self.client.post(reverse('portal:patient-debit-order'), {
             'workflow_context': page.context['debit_context'], 'method': 'debicheck'})
+        self.assertFalse(DebitMandate.objects.exists())
+        self.assertRedirects(refused, reverse('portal:patient-billing'), fetch_redirect_response=False)
+        response = self.client.post(reverse('portal:patient-debit-order'), {
+            'workflow_context': page.context['debit_context'], 'method': 'card'})
         mandate = DebitMandate.objects.get()
         self.assertRedirects(response, reverse('portal:patient-billing-sandbox-mandate', args=[mandate.pk]),
                              fetch_redirect_response=False)
         approval = self.client.get(response['Location'])
         self.assertContains(approval, 'R3 295.00')
+        self.assertContains(approval, 'Save my card')
         self.client.post(response['Location'], {'workflow_context': approval.context['workflow_context'], 'choice': 'approve'})
         mandate.refresh_from_db()
-        self.assertEqual(mandate.status, 'active')
+        self.assertEqual((mandate.method, mandate.status), ('card', 'active'))
         self.assertEqual(SubscriptionCycle.objects.get().status, 'paid')
         page = self.client.get(reverse('portal:patient-billing'))
-        self.assertContains(page, 'Paid by DebiCheck debit order')
+        # Paid up: no banner, the Card row says it (James, 26 Nov 2026).
+        self.assertContains(page, '<dt>Card</dt><dd>Visa ···4242</dd>', html=True)
+        self.assertNotContains(page, 'Paid by Visa')
+        self.assertContains(page, 'Use a different card')
         invoice = SubscriptionCycle.objects.get().invoice
         self.assertContains(self.client.get(reverse('portal:patient-invoice', args=[invoice.pk])), invoice.invoice_number)
 
@@ -70,7 +83,7 @@ class PatientBillingPageTests(BillingPageFixture):
         self.assertContains(page, 'Payment needed')
         cycle = page.context['due'][0]
         response = self.client.post(reverse('portal:patient-cycle-pay', args=[cycle.pk]), {'workflow_context': cycle.pay_context})
-        payment = Payment.objects.get(method='card')
+        payment = Payment.objects.get(checkout=True)
         checkout = self.client.get(response['Location'])
         self.client.post(response['Location'], {'workflow_context': checkout.context['workflow_context'], 'choice': 'pay'})
         cycle.refresh_from_db()
@@ -195,6 +208,19 @@ class StartSubscriptionTests(BillingPageFixture):
         super().setUp()
         PatientSubscription.objects.all().delete()
 
+    def test_start_my_subscription_offers_only_a_card(self):
+        self.login(self.patient_user)
+        page = self.client.get(reverse('portal:patient-treatment'))
+        form = page.context['enrollment_form']
+        self.assertTrue(form['method'].is_hidden)
+        self.assertEqual(form['method'].value(), 'card')
+        self.assertIn('charging my card', form.fields['confirm'].label)
+        self.assertNotContains(page, 'DebiCheck')
+        self.assertContains(page, 'add your card on our payment provider’s secure page')
+        from portal.billing_views import ManualPaymentForm
+
+        self.assertNotIn('debicheck', [value for value, _ in ManualPaymentForm().fields['method'].choices])
+
     def test_starting_saves_the_address_and_goes_on_to_approve_the_debit_order(self):
         self.login(self.patient_user)
         page = self.client.get(reverse('portal:patient-treatment'))
@@ -258,7 +284,7 @@ class StaffBillingTests(BillingPageFixture):
         self.assertContains(page, 'Initial consultation fee (R)')
         self.assertContains(page, 'Whenever the prescription or its price changes')
         self.client.post(reverse('portal:practice-settings'), {'section': 'billing', 'initial_consult_fee': '700',
-                                                                'require_payment': 'on', 'payment_retry_days': '7, 3',
+                                                                'payment_retry_days': '7, 3',
                                                                 'new_debit_order': 'higher'})
         settings_row = PracticeSettings.objects.get(company=self.company)
         self.assertEqual((settings_row.initial_consult_fee, settings_row.payment_retry_days, settings_row.new_debit_order),
@@ -371,8 +397,12 @@ class HostedProviderPageTests(BillingPageFixture):
         self.assertEqual(self.client.get(reverse('portal:patient-payment-return', args=['mandate', mandate.pk])).status_code, 403)
 
     def test_each_hosted_provider_has_a_webhook_that_refuses_what_it_cant_verify(self):
-        # Stitch's address answers too (it may hold debit orders from before a move), but without its secret it refuses.
-        self.assertEqual(self.client.post(reverse('portal:payment-webhook', args=['stitch']), 'x', content_type='text/plain').status_code, 400)
+        # Stitch's address is closed while patients pay by card.
+        self.assertEqual(self.client.post(reverse('portal:payment-webhook', args=['stitch']), 'x', content_type='text/plain').status_code, 404)
+        with override_settings(DEBIT_ORDERS_ENABLED=True):
+            # With debit orders back, Stitch's address answers too (it may hold debit orders from before a move), but
+            # without its secret it refuses.
+            self.assertEqual(self.client.post(reverse('portal:payment-webhook', args=['stitch']), 'x', content_type='text/plain').status_code, 400)
         self.assertEqual(self.client.post(reverse('portal:payment-webhook', args=['other']), 'x', content_type='text/plain').status_code, 404)
         with override_settings(PAYMENT_WEBHOOK_SECRET='00' * 32):
             refused = self.client.post(reverse('portal:payment-webhook', args=['peach']), 'abcd', content_type='text/plain',
@@ -382,7 +412,7 @@ class HostedProviderPageTests(BillingPageFixture):
             self.assertEqual(self.client.post(reverse('portal:payment-webhook', args=['sandbox']), '{}', content_type='application/json').status_code, 404)
 
 
-@override_settings(PAYMENT_PROVIDER='stitch', STITCH_CLIENT_ID='test-client', STITCH_CLIENT_SECRET='secret')
+@override_settings(PAYMENT_PROVIDER='stitch', STITCH_CLIENT_ID='test-client', STITCH_CLIENT_SECRET='secret', DEBIT_ORDERS_ENABLED=True)
 class DebiCheckFilePageTests(BillingPageFixture):
     def test_super_admins_download_the_collection_file_and_upload_stitchs_results(self):
         mandate = DebitMandate.objects.create(company=self.company, patient=self.patient, subscription=self.plan, method='debicheck',
@@ -417,3 +447,106 @@ class DebiCheckFilePageTests(BillingPageFixture):
         self.assertContains(response, '1 paid, 0 failed')
         payment.refresh_from_db()
         self.assertEqual(payment.status, 'paid')
+
+
+class PausedParcelPageTests(BillingPageFixture):
+    """A parcel paid for before the patient paused still goes out, and the practice and the doctor can see it's the last."""
+
+    def test_the_last_parcel_before_a_pause_is_marked_for_the_practice_and_the_doctor(self):
+        from care.treatment import change_subscription_status
+
+        self.approved()
+        shipment = Shipment.objects.create(company=self.company, patient=self.patient, subscription=self.plan,
+                                           authorization=self.auth, scheduled_for=self.today)
+        shipment.items.create(company=self.company, product=self.dose.pen, dose=self.auth.max_dose, quantity=1)
+        change_subscription_status(subscription=self.plan, actor=self.patient_user, action='pause', confirm=True)
+        self.login(self.admin)
+        page = self.client.get(reverse('portal:ops-shipping'), {'week': self.today, 'shipping_step': 'all'})
+        self.assertTrue(page.context['shipments'][0].last_before_pause)
+        self.assertContains(page, 'Last parcel before pause')
+        self.assertContains(self.client.get(reverse('portal:ops-shipment-detail', args=[shipment.pk])),
+                            'still goes out. Nothing more is sent until they resume.')
+        self.login(self.super_admin)
+        self.assertContains(self.client.get(reverse('portal:treatment-subscriptions')),
+                            f'Last parcel before pause · {self.today:%-d %b}')
+        self.login(self.doctor)
+        record = self.client.get(reverse('portal:patient-detail', args=[self.patient.pk]))
+        self.assertContains(record, 'Subscription paused')
+        self.assertContains(record, f'Their parcel for {self.today:%-d %b} is already paid for and still goes out')
+
+
+class OldPrescriptionPageTests(BillingPageFixture):
+    """A prescription written more than a first payment period ago: the patient asks, the doctor confirms."""
+
+    def setUp(self):
+        super().setUp()
+        PatientSubscription.objects.all().delete()
+        start = self.today - timedelta(days=35)
+        TreatmentAuthorization.objects.filter(pk=self.auth.pk).update(starts_on=start, expires_on=start + timedelta(weeks=12))
+
+    def test_the_patient_asks_and_starts_once_the_doctor_confirms(self):
+        from care.models import ClinicalTask
+
+        self.login(self.patient_user)
+        page = self.client.get(reverse('portal:patient-treatment'))
+        self.assertContains(page, 'needs to confirm it’s still right before you start')
+        self.assertNotContains(page, 'Start my subscription</button>')
+        refused = self.client.post(reverse('portal:patient-subscription-enroll'), {
+            **ADDRESS, 'authorization': self.auth.pk, 'method': 'card', 'confirm': 'on',
+            'treatment_context': page.context['enrollment_context']})
+        self.assertEqual(refused.status_code, 400)
+        self.assertFalse(PatientSubscription.objects.exists())
+        self.client.post(reverse('portal:patient-prescription-ask'), {'treatment_context': page.context['ask_context']})
+        self.assertEqual(ClinicalTask.objects.get().assigned_to, self.doctor)
+        self.assertContains(self.client.get(reverse('portal:patient-treatment')), 'We’ve asked')
+        # The doctor sees it on the record and confirms it.
+        self.login(self.doctor)
+        record = self.client.get(reverse('portal:patient-detail', args=[self.patient.pk]))
+        self.assertContains(record, 'Prescription needs confirming')
+        self.assertContains(record, 'Confirm prescription</button>')
+        self.client.post(reverse('portal:patient-prescription-confirm', args=[self.patient.pk]), {
+            'workflow_context': record.context['prescription_context_token'], 'current': self.auth.pk})
+        self.auth.refresh_from_db()
+        self.assertEqual((self.auth.starts_on, self.auth.needs_confirmation), (self.today, False))
+        self.login(self.patient_user)
+        self.assertContains(self.client.get(reverse('portal:patient-treatment')), 'Start my subscription</button>')
+
+
+class TimelinePaymentTests(BillingPageFixture):
+    """The patient's treatment timeline shows their real payments: paid, retrying or not paid, then the planned ones."""
+
+    def test_the_timeline_shows_paid_retrying_failed_and_planned_payments(self):
+        from care.billing import run_debits
+        from portal.patient_summary import treatment_timeline
+
+        mandate = self.approved()
+        payments = lambda: [payment for week in treatment_timeline(self.company, self.patient, self.auth)['weeks']
+                            for payment in week['payments']]
+        first = payments()[0]
+        self.assertEqual((first['state'], first['note'], first['amount']), ('paid', f'paid {self.today:%a, %-d %b}', Decimal('3295')))
+        self.assertTrue(all(payment['state'] == 'planned' for payment in payments()[1:]))
+        # The next a week before the second parcel.
+        second = self.first_parcel + timedelta(weeks=3)
+        self.assertEqual(payments()[1]['note'], f'{second:%a, %-d %b}')
+        # The next one doesn't go through: retrying (Friday, then Monday's order cut-off and Tuesday), then not paid
+        # after the last retry.
+        DebitMandate.objects.filter(pk=mandate.pk).update(provider_reference=f'sandbox-decline-{mandate.pk}')
+        run_debits(self.company, today=second)
+        retry = payments()[1]
+        self.assertEqual(retry['state'], 'retrying')
+        self.assertIn(f'retry {second + timedelta(days=3):%a, %-d %b}', retry['note'])  # Friday; the cut-off is Monday.
+        for day in (3, 6, 7):
+            run_debits(self.company, today=second + timedelta(days=day))
+        self.assertEqual((payments()[1]['state'], payments()[1]['note']), ('failed', 'not paid'))
+        # Its parcel was held, unpaid: two weeks on, the timeline shows it missed and why.
+        parcel = Shipment.objects.create(company=self.company, patient=self.patient, subscription=self.plan,
+                                         authorization=self.auth, scheduled_for=second + timedelta(weeks=1),
+                                         status=Shipment.Status.HELD, hold_reason='Not paid: payment failed.')
+        parcel.items.create(company=self.company, product=self.dose.pen, dose=self.auth.max_dose, quantity=1)
+        weeks = treatment_timeline(self.company, self.patient, self.auth, today=second + timedelta(weeks=2))['weeks']
+        self.assertIn((True, 'missed · payment didn’t go through', True),
+                      [(week['missed'], item['when'], item['missed']) for week in weeks for item in week['parcels']])
+        self.login(self.patient_user)
+        page = self.client.get(reverse('portal:patient-treatment'))
+        self.assertContains(page, 'patient-timeline__chip--payment is-failed')
+        self.assertContains(page, f'paid {self.today:%a, %-d %b}')

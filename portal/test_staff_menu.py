@@ -59,7 +59,8 @@ class StaffMenuTests(TestCase):
         html = self.client.get(reverse('portal:mobile-dashboard')).content.decode()
         bar = html[html.index('class="mobile-bottom-nav staff-mobile-nav"'):]
         paths = actionable_paths('<nav ' + bar[:bar.index('</nav>')] + '</nav>')
-        for name in ('inventory', 'treatment-subscriptions', 'staff-leads', 'metrics', 'treatment-review-rules'):
+        # Shipping opens on Weekly shipping: Patient orders moved to Patient Records & Messages (James, 26 Nov 2026).
+        for name in ('inventory', 'ops-shipping', 'staff-leads', 'metrics', 'treatment-review-rules'):
             self.assertIn(reverse(f'portal:{name}'), paths)
 
     def test_a_section_page_lists_its_options_and_hidden_sections_are_not_found(self):
@@ -187,8 +188,9 @@ class StaffMenuTests(TestCase):
         paths = actionable_paths(overview)
         for name in pages:
             with self.subTest(page=name, role='super_admin'):
-                if name == 'ops-orders':
-                    self.assertIn(reverse('portal:treatment-subscriptions'), paths)
+                if name in ('treatment-subscriptions', 'ops-orders'):
+                    # Patient orders is a tab of Patient Records & Messages (James, 26 Nov 2026).
+                    self.assertIn(reverse('portal:patient-list'), paths)
                 elif name == 'ops-catalogue':
                     self.assertIn(reverse('portal:inventory'), paths)
                 else:
@@ -259,12 +261,35 @@ class StaffMenuTests(TestCase):
         self.assertIn('data-live-unread="total" hidden', sidebar)
         self.assertContains(self.client.get(reverse('portal:staff-inbox')), '<h1>Messages</h1>', html=True)
 
+    def test_patient_orders_are_a_records_tab(self):
+        # James, 26 Nov 2026: Patient orders (Subscriptions and Non-prescription requests) is the second tab of Patient
+        # Records & Messages, for those who can open it; the Records menu entry stays current on it.
+        for role, first in (('super_admin', 'All patients'), ('practice_admin', 'Patient orders')):
+            self.login(role)
+            for name, label in (('treatment-subscriptions', 'Subscriptions'), ('ops-orders', 'Non-prescriptions')):
+                with self.subTest(role=role, page=name):
+                    response = self.client.get(reverse(f'portal:{name}'))
+                    html = response.content.decode()
+                    tabs = html[html.index('class="records-tabs"'):]
+                    tabs = [tab.strip() for tab in re.findall(r'<a href="[^"]+"[^>]*>([^<]+)', tabs[:tabs.index('</nav>')])]
+                    expected = ['All patients', 'Patient orders', 'Patient messages', 'Team messages']
+                    self.assertEqual(tabs, expected if first == 'All patients' else expected[1:])
+                    self.assertContains(response, f'<a href="{reverse("portal:treatment-subscriptions")}" class="is-active" aria-current="page">Patient orders</a>', html=False)
+                    self.assertContains(response, f'<a href="{reverse(f"portal:{name}")}" class="is-active" aria-current="page">{label}</a>', html=False)
+                    self.assertNotContains(response, 'class="patient-workspace-tabs"')
+                    sidebar = html[html.index('class="console-nav'):]
+                    self.assertIn('aria-current="true"', sidebar[:sidebar.index('</nav>')])
+        # The All patients tab shows it too; doctors don't have it.
+        self.login('super_admin')
+        self.assertContains(self.client.get(reverse('portal:patient-list')), f'href="{reverse("portal:treatment-subscriptions")}">Patient orders</a>', html=False)
+        self.login('doctor')
+        self.assertNotContains(self.client.get(reverse('portal:patient-list')), '>Patient orders</a>')
+
     def test_practice_admins_open_operations_and_administration_as_pages_of_tabs_without_insights(self):
         self.login('practice_admin')
         tabs = {
-            'Shipping': [('treatment-subscriptions', 'Subscriptions'), ('ops-orders', 'Non-prescription requests'),
-                           ('ops-shipping', 'Weekly shipping'), ('ops-history', 'Dispatch history'),
-                           ('ops-billing', 'Billing')],
+            # Patient orders is on their Messages page now (James, 26 Nov 2026: test_patient_orders_are_a_records_tab).
+            'Shipping': [('ops-shipping', 'Weekly shipping'), ('ops-history', 'Dispatch history'), ('ops-billing', 'Billing')],
             # Data requests is a Super Admin's tab only (Dr Czech, 4 Nov 2026).
             'Leads and dropouts': [('staff-leads', 'Leads'), ('dropouts', 'Dropouts'), ('email-log', 'Emails')],
         }
@@ -276,13 +301,8 @@ class StaffMenuTests(TestCase):
                     html = response.content.decode()
                     nav = html[html.index('class="patient-workspace-tabs"'):]
                     nav = nav[:nav.index('</nav>')]
-                    expected_tabs = ['Patient orders', 'Weekly shipping', 'Dispatch history', 'Billing'] if group == 'Shipping' else [tab for _, tab in pages]
-                    self.assertEqual(re.findall(r'<a href="[^"]+"[^>]*>([^<]+)', nav), expected_tabs)
-                    if name in ('treatment-subscriptions', 'ops-orders'):
-                        self.assertIn(f'<a href="{reverse("portal:treatment-subscriptions")}" class="is-active" aria-current="page">Patient orders', nav)
-                        self.assertContains(response, f'<a href="{reverse(f"portal:{name}")}" class="is-active" aria-current="page">{label}</a>')
-                    else:
-                        self.assertIn(f'<a href="{reverse(f"portal:{name}")}" class="is-active" aria-current="page">{label}', nav)
+                    self.assertEqual(re.findall(r'<a href="[^"]+"[^>]*>([^<]+)', nav), [tab for _, tab in pages])
+                    self.assertIn(f'<a href="{reverse(f"portal:{name}")}" class="is-active" aria-current="page">{label}', nav)
                     # Each tab's table has its search at the top right with the Filters menu before it, except
                     # Dispatch history, which opens on a week: its search only, the week being the dates; and Leads,
                     # which is the Please call list (its search is on Full Lead History).

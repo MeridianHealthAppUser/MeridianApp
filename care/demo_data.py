@@ -22,6 +22,7 @@ from .models import (
     PatientEvent, PatientSubscription, PurchaseOrder, PurchaseOrderItem, Shipment,
     RecordTag, ShipmentItem, StockMovement, Supplier, SupplierProduct, TreatmentAuthorization, WeightEntry,
 )
+from .consumption import week_start
 from .notifications import paused
 from .operations import _lock_company
 from .services import record_audit
@@ -383,9 +384,11 @@ def _seed(company, actor):
             StockMovement.objects.filter(pk=movement.pk).update(created_at=when)
         return shipment
 
-    # Eight complete weeks produce non-flat charts and exact drill-down rows.
+    # Eight complete weeks produce non-flat charts and exact drill-down rows. They are counted in shipping weeks
+    # (Tuesday to Monday), like the consumption report, so a Monday run doesn't leave the oldest week empty.
+    shipping_week = week_start(today)
     for week_index in range(8):
-        due = week-timedelta(weeks=8-week_index)+timedelta(days=1)
+        due = shipping_week-timedelta(weeks=8-week_index)
         for product_index, patient_index in enumerate((0, 1, 3, 2)):
             parcel(patient_index, product_index, due, quantity=1+(week_index+product_index) % 3,
                    status='delivered', cycle=week_index+1, historical=True)

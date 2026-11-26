@@ -2,12 +2,12 @@
 {% comment %}Cohorts (portal/insights_views.py CohortsView, care/insights.py cohorts): of everyone whose subscription started
   in a month, the share still subscribed months on, in the three views from Dr Czech's notes (Nov 2026): the detailed
   heatmap first (James, 20 Nov 2026), then the average per signup year, and one milestone across every month's cohort
-  with the practice's notes.{% endcomment %}
+  with the notes added to them (their Notes button, 26 Nov 2026).{% endcomment %}
 {% block title %}Cohorts | Meridian{% endblock %}
-{% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/dialogs.css' %}?v=20261115a"><link rel="stylesheet" href="{% static 'css/insights.css' %}?v=20261120c"><script src="{% static 'js/dialogs.js' %}?v=20261115b" defer></script><script src="{% static 'js/insights_charts.js' %}?v=20261119b" defer></script><script src="{% static 'js/submit_on_change.js' %}?v=20261017a" defer></script>{% endblock %}
+{% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/dialogs.css' %}?v=20261115a"><link rel="stylesheet" href="{% static 'css/insights.css' %}?v=20261126b"><script src="{% static 'js/dialogs.js' %}?v=20261115b" defer></script><script src="{% static 'js/insights_charts.js' %}?v=20261126a" defer></script><script src="{% static 'js/submit_on_change.js' %}?v=20261017a" defer></script>{% endblock %}
 {% block breadcrumbs %}{% breadcrumbs 'Insights' %}{% endblock %}
 {% block page_heading %}<header class="staff-page-header"><div><h1>Insights</h1><p>Cohort retention: of everyone who started a subscription in a month, how many are still subscribed months on.</p></div></header>
-<div class="insights-bar">{% page_tabs %}<div class="insights-tools">{% include 'portal/includes/insight_notes_button.html' %}</div></div>{% endblock %}
+<div class="insights-bar">{% page_tabs %}</div>{% endblock %}
 {% block page_content %}
 <div class="insights">
   <nav class="insights-segments" aria-label="Patients">
@@ -20,7 +20,7 @@
   {% else %}
   <section class="insights-kpis" aria-label="Average retention">
     {% for months, share, reached in kpi_rows %}
-    <article class="insights-kpi"><h2>Still subscribed at month {{ months }}</h2><strong>{% if share is not None %}{{ share }}%{% else %}—{% endif %}</strong><p>{% if reached %}Of {{ reached|grouped }} subscriber{{ reached|pluralize }} who have reached month {{ months }}.{% else %}No cohort has reached month {{ months }} yet.{% endif %}</p></article>
+    <article class="insights-kpi"><h2>Still subscribed at month {{ months }}</h2><strong>{% if share is not None %}{{ share }}%{% else %}-{% endif %}</strong><p>{% if reached %}Of {{ reached|grouped }} subscriber{{ reached|pluralize }} who have reached month {{ months }}.{% else %}No cohort has reached month {{ months }} yet.{% endif %}</p></article>
     {% endfor %}
   </section>
 
@@ -39,7 +39,7 @@
         <tbody>{% for row in rows %}<tr><th scope="row">{% if row.label %}{{ row.label }}{% else %}{{ row.month|date:'M Y' }}{% endif %}</th><td class="insights-heatmap__size">{{ row.size }}</td>{% for value, step in row.cells %}{% if value is None %}<td class="insights-heatmap__empty"><span class="sr-only">Not reached yet</span></td>{% else %}<td class="insights-heat insights-heat--{{ step }}">{{ value|floatformat:0 }}%</td>{% endif %}{% endfor %}</tr>{% endfor %}</tbody>
       </table>
     </div>
-    <p class="insights-footnote">Still subscribed: paid up to at least that many months after starting. A cohort shows at a month once all of it has reached that month and a week has passed for the debit. Empty cells haven’t been reached yet; nothing is projected.</p>
+    <p class="insights-footnote">Still subscribed: paid up to at least that many months after starting. A cohort shows at a month once all of it has reached that month and a week has passed for the payment. Empty cells haven’t been reached yet; nothing is projected.</p>
   </section>
 
   <div class="insights-grid">
@@ -47,7 +47,7 @@
   </div>
 
   <section class="insights-card insights-card--wide" aria-labelledby="milestones-title">
-    <header class="insights-card__header"><h2 id="milestones-title">Retention at a fixed month, for every monthly cohort</h2><p>Each point is one month’s new subscribers. A drop right after a note, such as a price change, shows its effect. If the line rises and falls in the same months every year, compare each month with the same month a year earlier.</p></header>
+    <header class="insights-card__header insights-card__header--notes"><div><h2 id="milestones-title">Retention at a fixed month, for every monthly cohort</h2><p>Each point is one month’s new subscribers. A drop right after a note, such as a price change, shows its effect. If the line rises and falls in the same months every year, compare each month with the same month a year earlier.</p></div>{% include 'portal/includes/insight_notes_button.html' with chart='retention' title='Retention at a fixed month' count=note_counts.retention %}</header>
     <div class="insights-multiples">
       {% for months, key, title in milestones %}<div><h3>{{ title }}</h3>{% include 'portal/includes/insight_chart.html' with key=key title=title bare=True %}</div>{% endfor %}
     </div>
