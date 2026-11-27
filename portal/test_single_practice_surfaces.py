@@ -111,7 +111,7 @@ class SinglePracticeSurfacesTests(TestCase):
 
     def test_public_forms_fail_closed_without_configured_practice(self):
         with override_settings(SINGLE_PRACTICE_SLUG='missing-practice'):
-            self.assertFalse(EligibilityQuestionnaireForm().fields['practice'].queryset.exists())
+            self.assertFalse(EligibilityQuestionnaireForm(version=None).fields['practice'].queryset.exists())
             self.assertFalse(PublicPracticeForm().fields['practice'].queryset.exists())
             response = self.client.get(reverse('portal:public-terms'))
             self.assertIsNone(response.context['policy_company'])

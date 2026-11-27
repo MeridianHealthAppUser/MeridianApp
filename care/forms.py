@@ -11,7 +11,7 @@ from django.utils import timezone
 
 from practices.models import Company, CompanyMembership, Patient
 
-from .models import Appointment, ClinicalNote, ClinicalTask, Lead, WeightEntry
+from .models import Appointment, ClinicalNote, ClinicalTask, Lead, ScreeningQuestion, WeightEntry
 from .tag_forms import TagFieldsMixin
 from .widgets import QUARTER_HOUR_CHOICES, QuarterHourDateTimeField, quarter_hour_text
 
@@ -312,8 +312,18 @@ class PatientThreadForm(PatientMessageForm):
         return recipient
 
 
+def custom_field_name(key):
+    return f'custom_{key}'
+
+
 class EligibilityQuestionnaireForm(forms.Form):
-    """A practice-linked enquiry. This form never creates a login or patient."""
+    """A practice-linked enquiry. This form never creates a login or patient.
+
+    Built from a ScreeningFormVersion: locked fields stay in code, core questions take their label and help text
+    from the version, and custom questions become `custom_<key>` fields. `version` is keyword-only and may be None
+    only where no practice exists; the form then keeps its code labels, adds no custom fields, and
+    `screening_items` / `fixed_items` are empty.
+    """
 
     practice = forms.ModelChoiceField(queryset=Company.objects.none(), label='Practice', empty_label='Choose a practice')
     submission_token = forms.CharField(widget=forms.HiddenInput, max_length=8000)
@@ -356,11 +366,16 @@ class EligibilityQuestionnaireForm(forms.Form):
                                            widget=forms.CheckboxSelectMultiple)
     service_consent = forms.BooleanField(label='I accept the terms of service, privacy notice and telehealth consent for my selected practice.')
 
-    def __init__(self, *args, bound_practice=None, **kwargs):
+    def __init__(self, data=None, *args, version, bound_practice=None, **kwargs):
         from practices.tenancy import enabled_companies, multi_practice_enabled
 
         self.bound_practice = bound_practice
-        super().__init__(*args, **kwargs)
+        self.version = version
+        super().__init__(data, *args, **kwargs)
+        self.screening_items = []
+        self.fixed_items = {}
+        if version is not None:
+            self._build_from_version(version)
         self.fields['practice'].queryset = enabled_companies().order_by('name')
         if not multi_practice_enabled():
             self.fields['practice'].widget = forms.HiddenInput()
@@ -370,6 +385,40 @@ class EligibilityQuestionnaireForm(forms.Form):
             self.initial['practice'] = bound_practice.pk
             self.fields['practice'].queryset = self.fields['practice'].queryset.filter(pk=bound_practice.pk)
 
+    def _build_from_version(self, version):
+        from .screening import CORE_KEYS, FIXED_CORE_KEYS, movable_questions, questions_by_key
+
+        questions = questions_by_key(version)
+        for key in CORE_KEYS:
+            if key in questions:  # self.fields holds per-form copies, so the class-level fields stay untouched
+                self.fields[key].label = questions[key].label
+                self.fields[key].help_text = questions[key].help_text
+        movable = movable_questions(version)
+        for question in movable:
+            if question.tier == ScreeningQuestion.Tier.CUSTOM:
+                self.fields[custom_field_name(question.key)] = self._custom_field(question)
+        self.screening_items = [
+            (q, self[q.key if q.tier == ScreeningQuestion.Tier.CORE else custom_field_name(q.key)])
+            for q in movable]
+        self.fixed_items = {key: (questions[key], self[key]) for key in FIXED_CORE_KEYS if key in questions}
+
+    @staticmethod
+    def _custom_field(question):
+        Type = ScreeningQuestion.AnswerType
+        common = {'label': question.label, 'help_text': question.help_text, 'required': question.required}
+        choices = [(option['value'], option['label']) for option in question.options]
+        kind = question.answer_type
+        if kind in (Type.YES_NO, Type.YES_NO_UNSURE, Type.SINGLE):
+            return forms.ChoiceField(choices=choices, widget=forms.RadioSelect, **common)
+        if kind == Type.MULTIPLE:
+            return forms.MultipleChoiceField(choices=choices, widget=forms.CheckboxSelectMultiple, **common)
+        if kind == Type.LONG_TEXT:
+            return forms.CharField(max_length=2000, widget=forms.Textarea(attrs={'rows': 4}), strip=False, **common)
+        if kind == Type.NUMBER:
+            return forms.DecimalField(min_value=question.number_min, max_value=question.number_max,
+                                      max_digits=10, decimal_places=2, **common)
+        return forms.CharField(max_length=200, **common)
+
     def clean_practice(self):
         practice = self.cleaned_data['practice']
         if self.bound_practice and practice.pk != self.bound_practice.pk:
@@ -378,6 +427,16 @@ class EligibilityQuestionnaireForm(forms.Form):
 
     def clean_email(self):
         return self.cleaned_data['email'].lower()
+
+    def _custom_answers(self):
+        answers = {}
+        for question in self.version.questions.filter(tier=ScreeningQuestion.Tier.CUSTOM) if self.version else ():
+            value = self.cleaned_data.get(custom_field_name(question.key))
+            if question.answer_type == ScreeningQuestion.AnswerType.MULTIPLE:
+                answers[question.key] = list(value or [])
+            else:
+                answers[question.key] = '' if value is None else str(value)
+        return answers
 
     def cleaned_answers(self):
         data = self.cleaned_data
@@ -397,4 +456,5 @@ class EligibilityQuestionnaireForm(forms.Form):
             'service_consent': True,
             'telehealth_consent': True,
             'bmi': str(bmi),
+            'custom': self._custom_answers(),
         }

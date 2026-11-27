@@ -28,6 +28,7 @@ from care.forms import EligibilityQuestionnaireForm
 from care.intake import notice_fingerprint, practice_notices, save_intake
 from care.followups import request_callback
 from care.models import CallbackRequest, Lead, PracticeSettings, ScreeningQuestionnaire
+from care.screening import live_version
 from practices.services import ACTIVE_PATIENT_COMPANY_SESSION_KEY
 from practices.tenancy import enabled_companies, multi_practice_enabled, scope_queryset
 from .checkout_forms import CHECKOUT_SLOT_MAX_AGE, CheckoutDateForm, CheckoutForm, make_checkout_slot, read_checkout_slot
@@ -128,6 +129,16 @@ class QuestionnaireView(PrivateIntakeView):
             'demo_screening': settings.DEBUG,
         })
 
+    @staticmethod
+    def company_for(practice_id, fallback=False):
+        """The enabled practice with this pk; with `fallback`, the GET's default practice when it is missing or unknown."""
+        companies = enabled_companies()
+        company = companies.filter(pk=practice_id).first() if str(practice_id or '').isdigit() else None
+        if company is None and fallback:
+            company = (companies.filter(slug='meridian-health').first()
+                       if multi_practice_enabled() else companies.first())
+        return company
+
     def get(self, request, *args, **kwargs):
         editing = request.GET.get('edit') == '1'
         lead = self.owned_lead() if editing else None
@@ -150,13 +161,17 @@ class QuestionnaireView(PrivateIntakeView):
                        if multi_practice_enabled() else enabled_companies().first())
             initial['practice'] = requested if requested in choices else default.pk if default else None
         initial['submission_token'] = self.make_token(lead.submission_key if lead else uuid.uuid4(), notices)
-        form = EligibilityQuestionnaireForm(initial=initial, bound_practice=lead.company if lead else None)
+        company = lead.company if lead else self.company_for(initial.get('practice'))
+        form = EligibilityQuestionnaireForm(
+            initial=initial, version=live_version(company) if company else None, bound_practice=lead.company if lead else None)
         return self.render_form(form, editing=editing, notices=notices)
 
     def post(self, request, *args, **kwargs):
         editing = request.GET.get('edit') == '1'
         lead = self.owned_lead() if editing else None
-        form = EligibilityQuestionnaireForm(request.POST, bound_practice=lead.company if lead else None)
+        company = lead.company if lead else self.company_for(request.POST.get('practice'), fallback=True)
+        form = EligibilityQuestionnaireForm(
+            request.POST, version=live_version(company) if company else None, bound_practice=lead.company if lead else None)
         notices = self.notice_context()
         if form.is_valid():
             try:
