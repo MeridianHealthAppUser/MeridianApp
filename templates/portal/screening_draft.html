@@ -1,12 +1,16 @@
 {% extends 'portal/staff_page_base.html' %}{% load static workspace_ui %}
-{% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/screening_builder.css' %}?v=20261127b"><link rel="stylesheet" href="{% static 'css/dialogs.css' %}?v=20261115a"><script src="{% static 'js/dialogs.js' %}?v=20261115b" defer></script><script src="{% static 'js/screening_builder.js' %}?v=20261127b" defer></script>{% endblock %}
+{% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/screening_builder.css' %}?v=20261127c"><link rel="stylesheet" href="{% static 'css/dialogs.css' %}?v=20261115a"><script src="{% static 'js/dialogs.js' %}?v=20261115b" defer></script><script src="{% static 'js/screening_builder.js' %}?v=20261127c" defer></script>{% endblock %}
 {% block title %}Screening questions draft | {{ company.name }} | Meridian{% endblock %}
 {% block breadcrumbs %}{% breadcrumbs 'Settings' %}{% endblock %}
 {% block page_heading %}<header class="staff-page-header"><div><h1>Settings</h1><p>Settings for {{ company.name }}. Only Super Admins can change these.</p></div></header>{% page_tabs %}{% endblock %}
 {% block page_content %}
-<section class="staff-page-card screening-bar" aria-label="Draft">
-  <div><strong>Draft · Version {{ draft.number }}</strong>
-    <div class="screening-summary" data-screening-summary>{% include 'portal/includes/screening_change_summary.html' %}</div></div>
+<section class="screening-bar" aria-label="Draft">
+  <div class="screening-bar__title">
+    <span class="screening-pill screening-pill--draft">Draft</span>
+    <h2 class="screening-bar__heading">Version {{ draft.number }}</h2>
+    <span class="screening-save-state" data-screening-status role="status" aria-live="polite"></span>
+  </div>
+  <div class="screening-bar__summary screening-summary" data-screening-summary>{% include 'portal/includes/screening_change_summary.html' %}</div>
   <div class="screening-bar__actions">
     <a class="console-button console-button--secondary" href="{% url 'portal:screening-questions' %}">Back</a>
     <button class="console-button console-button--secondary screening-preview-open" type="button" data-preview-open data-modal-open="screening-preview-dialog" aria-haspopup="dialog">Preview</button>
@@ -17,7 +21,17 @@
 <div class="screening-editor">
   <div class="screening-editor__list">{% include 'portal/includes/screening_builder_list.html' with can_edit=True draft_id=draft.pk %}</div>
   <div class="screening-editor__panels">{% for question in movable %}{% include 'portal/includes/screening_question_panel.html' %}{% endfor %}{% for question in fixed %}{% include 'portal/includes/screening_question_panel.html' %}{% endfor %}</div>
-  <div class="screening-editor__preview"><iframe class="screening-preview" src="{% url 'portal:screening-preview' draft.number %}" title="Patient preview"></iframe></div>
+  <div class="screening-editor__preview" data-preview-pane data-device="desktop">
+    <div class="screening-preview-bar">
+      <span class="screening-preview-bar__title">Patient preview</span>
+      <div class="screening-segmented" role="group" aria-label="Preview size">
+        <button type="button" data-preview-device="desktop" aria-pressed="true">Full width</button>
+        <button type="button" data-preview-device="phone" aria-pressed="false">Phone</button>
+      </div>
+      <a class="screening-icon-button" href="{% url 'portal:screening-preview' draft.number %}" target="_blank" rel="noopener" title="Open the preview in a new tab"><svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M9 3h4v4M13 3 7.5 8.5M11 9.5V13H3V5h3.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="sr-only">Open the preview in a new tab</span></a>
+    </div>
+    <div class="screening-device"><iframe class="screening-preview" src="{% url 'portal:screening-preview' draft.number %}" title="Patient preview"></iframe></div>
+  </div>
 </div>
 
 <dialog class="app-dialog" id="screening-publish-dialog" aria-labelledby="screening-publish-title">
@@ -41,7 +55,7 @@
     </form>
   </div>
 </dialog>
-<dialog class="app-dialog app-dialog--wide" id="screening-preview-dialog" aria-labelledby="screening-preview-title">
+<dialog class="app-dialog app-dialog--wide screening-preview-dialog" id="screening-preview-dialog" aria-labelledby="screening-preview-title">
   <div class="app-dialog__body">
     <h2 id="screening-preview-title">Patient preview</h2>
     <div class="screening-preview-dialog__frame" data-preview-slot></div>

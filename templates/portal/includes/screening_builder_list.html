@@ -1,14 +1,22 @@
-{# The editor's left column: locked blocks (greyed), the movable questions, then the fixed core rows. #}
+{# The editor's left column: the locked blocks (greyed, dashed), the movable questions, then the fixed core rows. #}
 <div class="screening-list"{% if can_edit %} data-screening-list data-reorder-url="{% url 'portal:screening-reorder' %}" data-draft-id="{{ draft_id }}"{% endif %}>
-  {% for name, note in locked_blocks|slice:":2" %}
-  <div class="screening-locked"><strong>{{ name }}</strong> <span class="screening-tag screening-tag--lock">🔒 Locked</span><small>{{ note }}</small></div>
-  {% endfor %}
-  <ol class="screening-rows" data-screening-rows>{% for question in movable %}{% include 'portal/includes/screening_builder_row.html' with can_edit=can_edit draft_id=draft_id %}{% endfor %}</ol>
-  {% if can_edit %}
-  <form method="post" action="{% url 'portal:screening-question-add' %}">{% csrf_token %}<input type="hidden" name="draft_id" value="{{ draft_id }}"><button class="console-button console-button--secondary" type="submit">Add a question</button></form>
-  {% endif %}
-  <ol class="screening-rows screening-rows--fixed">{% for question in fixed %}{% include 'portal/includes/screening_builder_row.html' with can_edit=can_edit draft_id=draft_id %}{% endfor %}</ol>
-  {% with block=locked_blocks|last %}
-  <div class="screening-locked"><strong>{{ block.0 }}</strong> <span class="screening-tag screening-tag--lock">🔒 Locked</span><small>{{ block.1 }}</small></div>
-  {% endwith %}
+  <div class="screening-group">
+    {% for name, note in locked_blocks|slice:":2" %}
+    <div class="screening-locked"><span class="screening-locked__icon" aria-hidden="true"><svg viewBox="0 0 16 16" width="16" height="16" focusable="false"><rect x="3.5" y="7" width="9" height="6.5" rx="1.6" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2" fill="none" stroke="currentColor" stroke-width="1.4"/></svg></span><span><strong>{{ name }}</strong><small>{{ note }}</small></span><span class="screening-tag screening-tag--lock">Locked</span></div>
+    {% endfor %}
+  </div>
+  <div class="screening-group">
+    <div class="screening-group__head"><h3 class="screening-group__title">Screening questions</h3>{% if can_edit %}<span class="screening-group__hint">Drag to reorder</span>{% endif %}</div>
+    <ol class="screening-rows" data-screening-rows>{% for question in movable %}{% include 'portal/includes/screening_builder_row.html' with can_edit=can_edit draft_id=draft_id %}{% endfor %}</ol>
+    {% if can_edit %}
+    <form method="post" action="{% url 'portal:screening-question-add' %}" class="screening-add">{% csrf_token %}<input type="hidden" name="draft_id" value="{{ draft_id }}"><button class="screening-add__button" type="submit"><svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M8 3.5v9M3.5 8h9" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>Add a question</button></form>
+    {% endif %}
+  </div>
+  <div class="screening-group">
+    <div class="screening-group__head"><h3 class="screening-group__title">Always last</h3></div>
+    <ol class="screening-rows screening-rows--fixed">{% for question in fixed %}{% include 'portal/includes/screening_builder_row.html' with can_edit=can_edit draft_id=draft_id %}{% endfor %}</ol>
+    {% with block=locked_blocks|last %}
+    <div class="screening-locked"><span class="screening-locked__icon" aria-hidden="true"><svg viewBox="0 0 16 16" width="16" height="16" focusable="false"><rect x="3.5" y="7" width="9" height="6.5" rx="1.6" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2" fill="none" stroke="currentColor" stroke-width="1.4"/></svg></span><span><strong>{{ block.0 }}</strong><small>{{ block.1 }}</small></span><span class="screening-tag screening-tag--lock">Locked</span></div>
+    {% endwith %}
+  </div>
 </div>

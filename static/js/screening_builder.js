@@ -1,9 +1,9 @@
 /* Settings > Screening questions editor (templates/portal/screening_draft.html). Without scripts every panel is a plain
    form and the list a set of links, so the page still works. With them: picking a row shows its panel, typing in a
-   panel autosaves it (600 ms after the last keystroke), Move up / Move down and dragging reorder the list, and the
-   patient preview on the right reloads after each save, scrolled to the question being edited. At 1100px and under the
-   preview lives in the Preview dialog instead. A refused save (draft published, discarded or replaced) stops autosave
-   until the page is reloaded. */
+   panel autosaves it (600 ms after the last keystroke; the draft bar shows Saving… / Saved), Move up / Move down and
+   dragging reorder the list (rows slide into place), and the patient preview reloads after each save, scrolled to the
+   question being edited, at Full width or Phone size. At 1180px and under the preview lives in the Preview dialog
+   instead. A refused save (draft published, discarded or replaced) stops autosave until the page is reloaded. */
 (window.MeridianPages?.register || ((_name, initialize) => initialize(null)))('screening_builder', (lifecycle) => {
   const listen = lifecycle ? lifecycle.on : (target, ...args) => target.addEventListener(...args);
   const list = document.querySelector('[data-screening-list]');
@@ -20,6 +20,8 @@
   let leaving = false;
   let selectedKey = document.querySelector('[data-panel-for]:not([hidden])')?.dataset.panelFor || '';
   const MAX_ANSWERS = 12;
+  const calm = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const stacked = () => window.matchMedia('(max-width: 1180px)').matches;
   const timers = new Map();
   const saving = new Map();
   const again = new Set();
@@ -37,10 +39,20 @@
   alertBox.className = 'screening-alert';
   alertBox.setAttribute('role', 'alert');
   alertBox.hidden = true;
-  const status = document.createElement('p');
-  status.className = 'screening-status';
-  status.setAttribute('role', 'status');
-  editor.before(alertBox, status);
+  // The save state lives in the draft bar's slot; without one, in a line above the editor.
+  const statusSlot = document.querySelector('[data-screening-status]');
+  const status = statusSlot || document.createElement('p');
+  if (!statusSlot) {
+    status.className = 'screening-status';
+    status.setAttribute('role', 'status');
+  }
+  editor.before(alertBox);
+  if (!statusSlot) editor.before(status);
+  editor.classList.add('is-live');
+  function setStatus(text) {
+    status.textContent = text;
+    status.dataset.state = !text ? '' : text === 'Saving…' ? 'saving' : text === 'Saved' ? 'saved' : 'error';
+  }
   function showAlert(message) { alertBox.textContent = message || STALE; alertBox.hidden = false; }
   function refuse(message) {
     stale = true;
@@ -48,7 +60,7 @@
     timers.clear();
     unsaved.clear();
     showAlert(message);
-    status.textContent = '';
+    setStatus('');
   }
   async function readJson(response) {
     try { return await response.json(); } catch (error) { return null; }
@@ -98,6 +110,25 @@
     });
   }
 
+  /* Preview size: Full width or Phone, remembered in this browser */
+  const pane = document.querySelector('[data-preview-pane]');
+  if (pane) {
+    const DEVICE_KEY = 'meridian.screening-preview-device';
+    const setDevice = device => {
+      pane.dataset.device = device;
+      pane.querySelectorAll('[data-preview-device]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.previewDevice === device)));
+    };
+    let remembered = null;
+    try { remembered = window.localStorage.getItem(DEVICE_KEY); } catch (error) { /* storage blocked */ }
+    if (remembered === 'phone' || remembered === 'desktop') setDevice(remembered);
+    listen(pane, 'click', event => {
+      const button = event.target.closest('[data-preview-device]');
+      if (!button) return;
+      setDevice(button.dataset.previewDevice);
+      try { window.localStorage.setItem(DEVICE_KEY, button.dataset.previewDevice); } catch (error) { /* storage blocked */ }
+    });
+  }
+
   /* Selecting a question */
   function select(key, { push = true } = {}) {
     if (!panelFor(key)) return;
@@ -117,7 +148,10 @@
     if (!row || event.button || event.metaKey || event.ctrlKey || event.shiftKey) return;
     if (event.target.closest('[data-move], .screening-row__retire, .screening-row__handle')) return;
     if (event.target.closest('[data-screening-edit]')) event.preventDefault();
-    select(row.dataset.questionKey || row.dataset.fixedKey);
+    const key = row.dataset.questionKey || row.dataset.fixedKey;
+    select(key);
+    // One column (narrow screens): the panel sits below the list, so bring it into view.
+    if (stacked()) panelFor(key)?.closest('.screening-panel')?.scrollIntoView({ behavior: calm() ? 'auto' : 'smooth', block: 'start' });
   });
 
   /* Options editor */
@@ -260,7 +294,7 @@
   async function doSave(form, key) {
     unsaved.delete(key);
     serializeOptions(form);
-    status.textContent = 'Saving…';
+    setStatus('Saving…');
     try {
       const response = await fetch(form.action, {
         method: 'POST',
@@ -282,7 +316,7 @@
         const heading = form.querySelector('h3');
         if (heading) heading.textContent = form.elements.label.value;
         showSummary(data.summary_html);
-        status.textContent = 'Saved';
+        setStatus('Saved');
         previewKey = key;
         reloadPreview();
         return true;
@@ -291,15 +325,15 @@
       if (gone) { refuse(gone); return false; }
       unsaved.set(key, form);
       if (response.status === 400) {
-        status.textContent = '';
+        setStatus('');
         showErrors(form, data?.errors);
         return 'invalid';
       } else {
-        status.textContent = 'Could not save. Try again.';
+        setStatus('Could not save. Try again.');
       }
     } catch (error) {
       unsaved.set(key, form);
-      status.textContent = 'Could not save. Check your connection; the next change tries again.';
+      setStatus('Could not save. Check your connection; the next change tries again.');
     }
     return false;
   }
@@ -331,7 +365,7 @@
   function flushFailed() {
     const bad = document.querySelector('form[data-screening-panel] [aria-invalid]')?.closest('form[data-screening-panel]');
     if (bad && !stale) { select(bad.dataset.screeningPanel); bad.scrollIntoView({ block: 'center' }); }
-    if (!stale) status.textContent = 'Fix the highlighted problem first.';
+    if (!stale) setStatus('Fix the highlighted problem first.');
   }
   // Runs go() once pending saves are flushed. A form in a dialog shows progress in the dialog and closes it on failure,
   // so the error is not left behind the modal. Repeat clicks on the same control are ignored while it waits.
@@ -364,7 +398,7 @@
       dlg?.close();
       if (result === 'stale') { alertBox.scrollIntoView({ block: 'center' }); return; }
       if (result === 'invalid') { flushFailed(); return; }
-      status.textContent = 'Could not save your last change.';
+      setStatus('Could not save your last change.');
       if (dismissed) return;
       if (window.confirm('Could not save your last change. Leave anyway?')) { leaving = true; go(); }
     }).finally(() => guarding.delete(control));
@@ -383,6 +417,8 @@
       syncPanel(form);
     } else if (event.target.matches('[data-option-flag]')) {
       syncPanel(form);
+      // A flag needs its reason: go straight to it.
+      if (event.target.checked) event.target.closest('[data-option-row]')?.querySelector('[data-option-reason]')?.focus();
     }
     schedule(form);
   });
@@ -412,6 +448,20 @@
   });
 
   /* Reordering */
+  // Moves rows, then slides each one from where it was on screen to its new place. Positions are read from the screen
+  // (mid-animation included) before any running slide is cancelled, so a second move carries on without a jump.
+  function animateRows(mutate) {
+    const items = [...rows.children];
+    const first = new Map(items.map(item => [item, item.getBoundingClientRect().top]));
+    items.forEach(item => item.getAnimations?.().forEach(animation => animation.cancel()));
+    mutate();
+    if (calm()) return;
+    items.forEach(item => {
+      const delta = first.get(item) - item.getBoundingClientRect().top;
+      if (!delta || !item.animate) return;
+      item.animate([{ transform: `translateY(${delta}px)` }, { transform: 'translateY(0)' }], { duration: 280, easing: 'cubic-bezier(.2, .8, .2, 1)' });
+    });
+  }
   const order = () => [...rows.querySelectorAll('[data-question-key]')].map(row => row.dataset.questionKey);
   function syncMoves() {
     const items = [...rows.querySelectorAll('[data-question-key]')];
@@ -433,7 +483,7 @@
     syncMoves();
   }
   async function doReorder(previous, movedKey) {
-    status.textContent = 'Saving…';
+    setStatus('Saving…');
     try {
       const response = await fetch(reorderUrl, {
         method: 'POST',
@@ -445,17 +495,17 @@
       const data = await readJson(response);
       if (response.ok && data?.ok && !response.redirected) {
         showSummary(data.summary_html);
-        status.textContent = 'Saved';
+        setStatus('Saved');
         previewKey = movedKey;
         reloadPreview();
         return true;
       }
       revert(previous);
       const gone = staleMessage(response, data);
-      if (gone) refuse(gone); else status.textContent = response.status === 400 ? 'Could not reorder.' : 'Could not save. Try again.';
+      if (gone) refuse(gone); else setStatus(response.status === 400 ? 'Could not reorder.' : 'Could not save. Try again.');
     } catch (error) {
       revert(previous);
-      status.textContent = 'Could not reorder. Check your connection and try again.';
+      setStatus('Could not reorder. Check your connection and try again.');
     }
     return false;
   }
@@ -466,7 +516,7 @@
     const previous = order();
     const sibling = button.dataset.move === 'up' ? row.previousElementSibling : row.nextElementSibling;
     if (!sibling) return;
-    if (button.dataset.move === 'up') sibling.before(row); else sibling.after(row);
+    animateRows(() => { if (button.dataset.move === 'up') sibling.before(row); else sibling.after(row); });
     syncMoves();
     button.focus();
     reorder(previous, row.dataset.questionKey);
@@ -538,5 +588,10 @@
     event.preventDefault();
     event.returnValue = '';
   });
-  lifecycle?.cleanup(() => { flush(); alertBox.remove(); status.remove(); });
+  lifecycle?.cleanup(() => {
+    flush();
+    alertBox.remove();
+    if (statusSlot) setStatus(''); else status.remove();
+    editor.classList.remove('is-live');
+  });
 });

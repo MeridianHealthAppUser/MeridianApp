@@ -1,9 +1,13 @@
-{# The middle column for one question: a form posting to its save URL. Hidden unless it is the selected question. #}
+{% comment %}The middle pane for one question: a form posting to its save URL. Hidden unless it is the selected question. With
+   scripts it autosaves (static/js/screening_builder.js) and Save question is hidden; without them Save question posts.{% endcomment %}
 <section class="screening-panel" data-panel-for="{{ question.key }}"{% if question.key != selected_key %} hidden{% endif %}>
   <form class="console-form screening-panel__form" method="post" action="{% url 'portal:screening-question-save' question.key %}" data-screening-panel="{{ question.key }}" data-autosave>
     {% csrf_token %}<input type="hidden" name="draft_id" value="{{ draft.pk }}">
-    <h3>{{ question.label }}</h3>
-    {% if question.is_core %}<p class="screening-note">{{ core_note }}</p>{% endif %}
+    <header class="screening-panel__head">
+      <span class="screening-panel__eyebrow">{% if question.is_core %}Core question{% else %}Custom question{% endif %}</span>
+      <h3>{{ question.label }}</h3>
+    </header>
+    {% if question.is_core %}<p class="screening-note"><svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><circle cx="8" cy="8" r="6.25" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M8 7.25v4M8 4.9v.1" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg><span>{{ core_note }}. You can reword the question and its help text; the answers stay the same.</span></p>{% endif %}
     {% if not question.is_core %}
     <div class="console-form__field"><label for="sq-type-{{ question.key }}">Answer type</label>
       <select id="sq-type-{{ question.key }}" name="answer_type">{% for value, label in answer_types %}<option value="{{ value }}"{% if value == question.answer_type %} selected{% endif %}>{{ label }}</option>{% endfor %}</select></div>
@@ -11,40 +15,49 @@
     <div class="console-form__field"><label for="sq-label-{{ question.key }}">Question</label>
       <input id="sq-label-{{ question.key }}" name="label" type="text" maxlength="300" value="{{ question.label }}" required></div>
     <div class="console-form__field"><label for="sq-help-{{ question.key }}">Help text</label>
-      <input id="sq-help-{{ question.key }}" name="help_text" type="text" maxlength="500" value="{{ question.help_text }}"></div>
+      <input id="sq-help-{{ question.key }}" name="help_text" type="text" maxlength="500" value="{{ question.help_text }}" aria-describedby="sq-help-hint-{{ question.key }}">
+      <small class="screening-field-hint" id="sq-help-hint-{{ question.key }}">Optional. Shown under the question.</small></div>
     {% if not question.is_core %}
-    <div class="console-form__field"><label><input type="checkbox" name="required"{% if question.required %} checked{% endif %}> Required</label></div>
-    <fieldset class="console-form__field screening-options" data-screening-options>
+    <label class="screening-switch" for="sq-required-{{ question.key }}"><span class="screening-switch__text"><strong>Required</strong><small>Patients must answer it before they can send the form.</small></span><input id="sq-required-{{ question.key }}" type="checkbox" name="required" role="switch"{% if question.required %} checked{% endif %}></label>
+    <fieldset class="screening-options" data-screening-options>
       <legend>Answers</legend>
       {% for option in question.options %}
-      <div class="screening-option" data-option-row>
+      <div class="screening-option{% if option.flag %} is-flagged{% endif %}" data-option-row>
         <input type="hidden" data-option-value value="{{ option.value }}">
-        <input type="text" aria-label="Answer {{ forloop.counter }}" data-option-label value="{{ option.label }}" maxlength="120">
-        <label><input type="checkbox" data-option-flag{% if option.flag %} checked{% endif %}> Flag for review</label>
-        <input type="text" aria-label="Why answer {{ forloop.counter }} is flagged" data-option-reason value="{{ option.reason }}" maxlength="300" placeholder="Reason">
-        <small class="helptext">The patient sees this reason.</small>
-        <button class="console-button console-button--secondary" type="button" data-option-remove>Remove</button>
+        <div class="screening-option__main">
+          <input type="text" aria-label="Answer {{ forloop.counter }}" data-option-label value="{{ option.label }}" maxlength="120" placeholder="Answer">
+          <button class="screening-icon-button screening-icon-button--danger" type="button" data-option-remove title="Remove this answer"><svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="m4.5 4.5 7 7m0-7-7 7" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg><span class="sr-only">Remove</span></button>
+        </div>
+        <label class="screening-option__flag"><input type="checkbox" data-option-flag{% if option.flag %} checked{% endif %}> Flag for review</label>
+        <div class="screening-option__reason">
+          <input type="text" aria-label="Why answer {{ forloop.counter }} is flagged" data-option-reason value="{{ option.reason }}" maxlength="300" placeholder="Reason, for example: needs a clinician’s review">
+          <small class="helptext">The patient sees this reason.</small>
+        </div>
       </div>
       {% endfor %}
-      <button class="console-button console-button--secondary" type="button" data-option-add>+ Add answer</button>
+      <button class="screening-add-answer" type="button" data-option-add>+ Add answer</button>
       <template data-option-template>
         <div class="screening-option" data-option-row>
           <input type="hidden" data-option-value value="">
-          <input type="text" aria-label="New answer" data-option-label value="" maxlength="120">
-          <label><input type="checkbox" data-option-flag> Flag for review</label>
-          <input type="text" aria-label="Why the new answer is flagged" data-option-reason value="" maxlength="300" placeholder="Reason">
-          <small class="helptext">The patient sees this reason.</small>
-          <button class="console-button console-button--secondary" type="button" data-option-remove>Remove</button>
+          <div class="screening-option__main">
+            <input type="text" aria-label="New answer" data-option-label value="" maxlength="120" placeholder="Answer">
+            <button class="screening-icon-button screening-icon-button--danger" type="button" data-option-remove title="Remove this answer"><svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="m4.5 4.5 7 7m0-7-7 7" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg><span class="sr-only">Remove</span></button>
+          </div>
+          <label class="screening-option__flag"><input type="checkbox" data-option-flag> Flag for review</label>
+          <div class="screening-option__reason">
+            <input type="text" aria-label="Why the new answer is flagged" data-option-reason value="" maxlength="300" placeholder="Reason, for example: needs a clinician’s review">
+            <small class="helptext">The patient sees this reason.</small>
+          </div>
         </div>
       </template>
       <input type="hidden" name="options" value="{{ question.options_json }}">
     </fieldset>
-    <div class="console-form__field screening-number"><label for="sq-min-{{ question.key }}">Lowest number</label>
-      <input id="sq-min-{{ question.key }}" name="number_min" type="number" step="0.01" value="{{ question.number_min|default_if_none:'' }}">
-      <label for="sq-max-{{ question.key }}">Highest number</label>
-      <input id="sq-max-{{ question.key }}" name="number_max" type="number" step="0.01" value="{{ question.number_max|default_if_none:'' }}"></div>
+    <div class="console-form__field screening-number">
+      <div class="console-form__field"><label for="sq-min-{{ question.key }}">Lowest number</label><input id="sq-min-{{ question.key }}" name="number_min" type="number" step="0.01" value="{{ question.number_min|default_if_none:'' }}"></div>
+      <div class="console-form__field"><label for="sq-max-{{ question.key }}">Highest number</label><input id="sq-max-{{ question.key }}" name="number_max" type="number" step="0.01" value="{{ question.number_max|default_if_none:'' }}"></div>
+    </div>
     {% endif %}
     <p class="screening-panel__errors" data-panel-errors role="alert"></p>
-    <button class="console-button console-button--primary" type="submit">Save question</button>
+    <button class="console-button console-button--primary screening-panel__save" type="submit">Save question</button>
   </form>
 </section>

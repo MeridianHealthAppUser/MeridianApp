@@ -82,7 +82,7 @@ class ScreeningBuilderTests(BillingFixture):
         page = self.client.get(reverse('portal:screening-questions'))
         self.assertContains(page, 'Version 2')
         row = page.content.decode().split('Version 2</td>', 1)[1].split('</tr>', 1)[0]
-        self.assertIn('data-label="Status">Published<', row)
+        self.assertIn('screening-pill--published">Live<', row)
 
     def test_save_without_json_redirects_back_to_the_editor(self):
         self.start()
@@ -190,8 +190,8 @@ class ScreeningBuilderTests(BillingFixture):
         self.assertContains(page, 'class="screening-preview"')
         self.assertContains(page, 'title="Patient preview"')
         self.assertContains(page, 'data-preview-open')
-        self.assertContains(page, 'js/screening_builder.js?v=20261127b')
-        self.assertContains(page, 'css/screening_builder.css?v=20261127b')
+        self.assertContains(page, 'js/screening_builder.js?v=20261127c')
+        self.assertContains(page, 'css/screening_builder.css?v=20261127c')
         self.assertContains(page, 'data-preview-slot')
         self.assertContains(page, 'id="screening-preview-dialog"')
         for text in ('The app needs these', 'Used for BMI', 'Wording comes from Policy versions',

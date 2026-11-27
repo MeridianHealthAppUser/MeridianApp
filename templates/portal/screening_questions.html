@@ -1,32 +1,33 @@
 {% extends 'portal/staff_page_base.html' %}{% load static workspace_ui %}
-{% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/screening_builder.css' %}?v=20261127a">{% endblock %}
+{% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/screening_builder.css' %}?v=20261127c">{% endblock %}
 {% block title %}Screening questions | {{ company.name }} | Meridian{% endblock %}
 {% block breadcrumbs %}{% breadcrumbs 'Settings' %}{% endblock %}
 {% block page_heading %}<header class="staff-page-header"><div><h1>Settings</h1><p>Settings for {{ company.name }}. Only Super Admins can change these.</p></div></header>{% page_tabs %}{% endblock %}
 {% block page_content %}
-<section class="staff-page-card" aria-labelledby="screening-live-heading">
-  <div class="staff-page-card__header"><div>
-    <h2 id="screening-live-heading">Live: Version {{ live.number }}</h2>
-    <p>{% if live.published_at %}Published {{ live.published_at|date:"j M Y" }}. {% endif %}{% if live.note %}{{ live.note }}. {% endif %}{{ live_row.answered }} lead{{ live_row.answered|pluralize }} answered it. New enquiries on the website and your WordPress page get these questions.</p>
+<section class="staff-page-card screening-live" aria-labelledby="screening-live-heading">
+  <div class="screening-live__main">
+    <div class="screening-live__title"><span class="screening-pill screening-pill--published">Live</span><h2 id="screening-live-heading">Version {{ live.number }}</h2></div>
+    <p class="screening-live__meta">{% if live.published_at %}<span>Published {{ live.published_at|date:"j M Y" }}</span>{% endif %}{% if live.note %}<span>{{ live.note }}</span>{% endif %}<span>{{ live_row.answered }} lead{{ live_row.answered|pluralize }} answered it</span></p>
+    <p class="screening-live__body">New enquiries on the website and your WordPress page get these questions.</p>
   </div>
-  <div>
+  <div class="screening-live__actions">
     <a class="console-button console-button--secondary" href="{% url 'portal:screening-version' live.number %}">View questions</a>
     {% if draft %}<a class="console-button console-button--primary" href="{% url 'portal:screening-draft' %}">Continue draft (Version {{ draft.number }})</a>
-    {% else %}<form method="post" action="{% url 'portal:screening-draft-start' %}" style="display:inline">{% csrf_token %}<button class="console-button console-button--primary" type="submit">Start a new draft</button></form>{% endif %}
-  </div></div>
+    {% else %}<form method="post" action="{% url 'portal:screening-draft-start' %}">{% csrf_token %}<button class="console-button console-button--primary" type="submit">Start a new draft</button></form>{% endif %}
+  </div>
 </section>
 <section class="staff-page-card" aria-labelledby="screening-versions-heading">
-  <div class="staff-page-card__header"><div><h2 id="screening-versions-heading">Versions</h2></div></div>
-  <div class="privacy-table-wrap" role="region" aria-label="Screening question versions" tabindex="0">
-    <table class="staff-phone-cards privacy-table">
+  <div class="staff-page-card__header"><div><h2 id="screening-versions-heading">Versions</h2><p>Every lead keeps the version it answered.</p></div></div>
+  <div class="screening-versions-wrap" role="region" aria-label="Screening question versions" tabindex="0">
+    <table class="staff-phone-cards screening-versions">
       <thead><tr><th scope="col">Version</th><th scope="col">Status</th><th scope="col">Published</th><th scope="col">By</th><th scope="col">Leads answered</th><th scope="col">Note</th><th scope="col"><span class="sr-only">Open</span></th></tr></thead>
       <tbody>{% for version in versions %}<tr>
-        <td data-label="Version">Version {{ version.number }}</td>
-        <td data-label="Status">{{ version.get_status_display }}</td>
-        <td data-label="Published">{{ version.published_at|date:"j M Y"|default:"-" }}</td>
-        <td data-label="By">{% if version.published_by %}{{ version.published_by.get_full_name|default:version.published_by.email }}{% else %}-{% endif %}</td>
-        <td data-label="Leads answered">{{ version.answered }}</td>
-        <td data-label="Note">{{ version.note|default:"-" }}</td>
+        <td data-label="Version" class="screening-versions__version">Version {{ version.number }}</td>
+        <td data-label="Status"><span class="screening-pill screening-pill--{% if version.status == 'published' %}published{% elif version.status == 'draft' %}draft{% else %}superseded{% endif %}">{% if version.status == 'published' %}Live{% else %}{{ version.get_status_display }}{% endif %}</span></td>
+        <td data-label="Published">{% if version.published_at %}{{ version.published_at|date:"j M Y" }}{% else %}<span class="screening-versions__muted">Not yet</span>{% endif %}</td>
+        <td data-label="By">{% if version.published_by %}{{ version.published_by.get_full_name|default:version.published_by.email }}{% else %}<span class="screening-versions__muted">{% if version.number == 1 %}Set up automatically{% else %}—{% endif %}</span>{% endif %}</td>
+        <td data-label="Leads answered" class="screening-versions__number">{{ version.answered }}</td>
+        <td data-label="Note">{% if version.note %}{{ version.note }}{% else %}<span class="screening-versions__muted">—</span>{% endif %}</td>
         <td data-label="Open">{% if version.status == 'draft' %}<a class="console-button console-button--secondary" href="{% url 'portal:screening-draft' %}">Edit draft</a>{% else %}<a class="console-button console-button--secondary" href="{% url 'portal:screening-version' version.number %}">View<span class="sr-only"> Version {{ version.number }}</span></a>{% endif %}</td>
       </tr>{% endfor %}</tbody>
     </table>

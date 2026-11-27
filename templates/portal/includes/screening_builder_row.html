@@ -1,21 +1,21 @@
-{# One question row in the editor's list. `question` is decorated (flagged, is_core, movable); selected_key marks the open one. #}
-<li class="screening-row{% if question.key == selected_key %} is-selected{% endif %}" {% if question.movable %}data-question-key="{{ question.key }}"{% else %}data-fixed-key="{{ question.key }}"{% endif %}>
-  {% if can_edit and question.movable %}<span class="screening-row__handle" aria-hidden="true" title="Drag to reorder">⠿</span>{% endif %}
-  <div class="screening-row__text">
-    <strong class="screening-row__label">{{ question.label }}</strong>
-    <span class="screening-row__meta">
-      {% if question.is_core %}<span class="screening-tag screening-tag--core">Core · reword only</span>{% else %}<span class="screening-tag screening-tag--custom">Custom</span>{% endif %}
-      {% if question.flagged %}<span class="screening-flag" title="An answer is flagged for review">⚑<span class="sr-only"> Flagged for review</span></span>{% endif %}
-    </span>
-  </div>
-  <div class="screening-row__actions">
-    {% if can_edit and question.movable %}
-    <button class="console-button console-button--secondary" type="button" data-move="up">Move up<span class="sr-only"> {{ question.label }}</span></button>
-    <button class="console-button console-button--secondary" type="button" data-move="down">Move down<span class="sr-only"> {{ question.label }}</span></button>
+{% comment %}One question row in the editor's list. `question` is decorated (flagged, is_core, movable); selected_key marks the open one.
+   Clicking the row opens it (static/js/screening_builder.js); the small buttons move, open or retire it, and the Edit
+   link is the no-script way to open it.{% endcomment %}
+<li class="screening-row{% if question.key == selected_key %} is-selected{% endif %}{% if not can_edit or not question.movable %} screening-row--plain{% endif %}" {% if question.movable %}data-question-key="{{ question.key }}"{% else %}data-fixed-key="{{ question.key }}"{% endif %}>
+  {% if can_edit and question.movable %}<span class="screening-row__handle" aria-hidden="true" title="Drag to reorder"><svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor" focusable="false"><circle cx="6" cy="4" r="1.15"/><circle cx="10" cy="4" r="1.15"/><circle cx="6" cy="8" r="1.15"/><circle cx="10" cy="8" r="1.15"/><circle cx="6" cy="12" r="1.15"/><circle cx="10" cy="12" r="1.15"/></svg></span>{% endif %}
+  <strong class="screening-row__label">{{ question.label }}</strong>
+  <span class="screening-row__meta">
+    {% if question.is_core %}<span class="screening-tag screening-tag--core">Core · reword only</span>{% else %}<span class="screening-tag screening-tag--custom">Custom</span><span class="screening-row__type">{{ question.get_answer_type_display }}{% if question.required %} · Required{% endif %}</span>{% endif %}
+    {% if question.flagged %}<span class="screening-tag screening-tag--flag" title="An answer is flagged for review"><svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M4 14V2.5m0 .5h7.5l-1.6 3 1.6 3H4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>Flag<span class="sr-only">s an answer for review</span></span>{% endif %}
+  </span>
+  {% if can_edit %}<span class="screening-row__actions">
+    {% if question.movable %}
+    <button class="screening-icon-button" type="button" data-move="up" title="Move up"><svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="m4 10 4-4 4 4" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="sr-only">Move up {{ question.label }}</span></button>
+    <button class="screening-icon-button" type="button" data-move="down" title="Move down"><svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="m4 6 4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="sr-only">Move down {{ question.label }}</span></button>
     {% endif %}
-    {% if can_edit %}<a class="console-button console-button--secondary" href="{% url 'portal:screening-draft' %}?q={{ question.key }}" data-screening-edit="{{ question.key }}">Edit<span class="sr-only"> {{ question.label }}</span></a>{% endif %}
-    {% if can_edit and not question.is_core %}
-    <form method="post" action="{% url 'portal:screening-question-retire' question.key %}" class="screening-row__retire">{% csrf_token %}<input type="hidden" name="draft_id" value="{{ draft_id }}"><button class="console-button console-button--secondary" type="submit">Retire<span class="sr-only"> {{ question.label }}</span></button></form>
+    <a class="screening-icon-button" href="{% url 'portal:screening-draft' %}?q={{ question.key }}" data-screening-edit="{{ question.key }}" title="Edit"><svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M10.5 2.5 13.5 5.5 6 13H3v-3z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg><span class="sr-only">Edit {{ question.label }}</span></a>
+    {% if not question.is_core %}
+    <form method="post" action="{% url 'portal:screening-question-retire' question.key %}" class="screening-row__retire">{% csrf_token %}<input type="hidden" name="draft_id" value="{{ draft_id }}"><button class="screening-icon-button screening-icon-button--danger" type="submit" title="Retire"><svg viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M3 4.5h10M6.5 4.5V3h3v1.5M5 4.5l.6 8.5h4.8l.6-8.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="sr-only">Retire {{ question.label }}</span></button></form>
     {% endif %}
-  </div>
+  </span>{% endif %}
 </li>
