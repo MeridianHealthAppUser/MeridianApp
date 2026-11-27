@@ -51,12 +51,12 @@
         <p class="questionnaire-bmi" id="bmi-summary" aria-live="polite"><span class="questionnaire-badge questionnaire-badge--blue" id="bmi-value">BMI -</span><span>BMI alone does not determine whether treatment is right for you.</span></p>
       </section>
       {% for question, field in form.screening_items %}{% include 'portal/includes/screening_question.html' %}{% endfor %}
-      {% with item=form.fixed_items.health_context %}{% if item %}<section class="questionnaire-card" aria-labelledby="medication-heading">
+      {% with item=form.fixed_items.health_context %}{% if item %}<section class="questionnaire-card" id="screening-q-{{ item.0.key }}" aria-labelledby="medication-heading">
         <h2 id="medication-heading">{{ item.0.label }}</h2>
         {% if item.0.help_text %}<p>{{ item.0.help_text }}</p>{% endif %}
         <div class="question-field"><label class="questionnaire-sr-only" for="{{ item.1.id_for_label }}">Chronic medication, allergies and other information</label>{{ item.1 }}{% for error in item.1.errors %}<small class="field-error">{{ error }}</small>{% endfor %}</div>
       </section>{% endif %}{% endwith %}
-      {% with item=form.fixed_items.heard_from %}{% if item %}<fieldset class="questionnaire-card questionnaire-question">
+      {% with item=form.fixed_items.heard_from %}{% if item %}<fieldset class="questionnaire-card questionnaire-question" id="screening-q-{{ item.0.key }}">
         <legend>{{ item.0.label }}</legend>
         {% if item.0.help_text %}<p>{{ item.0.help_text }}</p>{% endif %}
         <div class="questionnaire-options">{% for option in item.1 %}<label>{{ option.tag }}<span>{{ option.choice_label }}</span></label>{% endfor %}</div>

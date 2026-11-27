@@ -216,6 +216,8 @@ class QuestionnaireView(PrivateIntakeView):
         notices = self.notice_context()
         if form.is_valid() and payload is not None:
             try:
+                if version is None or form.cleaned_data['practice'].pk != version.company_id:
+                    raise signing.BadSignature('Version belongs to another practice.')
                 submission_key = uuid.UUID(payload['key'])
                 if lead and submission_key != lead.submission_key:
                     raise signing.BadSignature('Different enquiry.')

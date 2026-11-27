@@ -87,6 +87,8 @@ def save_intake(*, form, submission_key, expected_notices, request=None):
         raise ValidationError('Correct the questionnaire before submitting.')
     data = form.cleaned_data
     company = data['practice']
+    if form.version is not None and form.version.company_id != company.pk:
+        raise ValidationError('This questionnaire belongs to a different practice. Reload it before submitting.')
     with transaction.atomic():
         company = Company.objects.select_for_update().filter(pk=company.pk).first()
         if company is None or not company.is_active or not company_is_enabled(company):

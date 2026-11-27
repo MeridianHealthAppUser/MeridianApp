@@ -126,6 +126,21 @@ class QuestionnaireVersionTests(TestCase):
         self.assertContains(post, EXPIRED)
         self.assertFalse(Lead.objects.exists())
 
+    @override_settings(MULTI_PRACTICE_ENABLED=True)
+    def test_posting_another_practice_with_this_practices_token_is_rejected(self):
+        second = Company.objects.create(name='Second Clinic', slug='second-clinic')
+        add_consents(second)
+        response = self.page(practice=self.company.pk)
+        post = self.client.post(reverse('portal:questionnaire'), self.post_data(response, practice=f'+{second.pk}'))
+        self.assertEqual(post.status_code, 200)
+        self.assertContains(post, EXPIRED)
+        self.assertFalse(Lead.objects.exists())
+
+    def test_fixed_cards_carry_their_ids(self):
+        page = self.page()
+        self.assertContains(page, 'id="screening-q-health_context"')
+        self.assertContains(page, 'id="screening-q-heard_from"')
+
     def test_bad_token_rerenders_live_version_without_lead(self):
         response = self.page()
         post = self.client.post(reverse('portal:questionnaire'), self.post_data(response, submission_token='junk'))
