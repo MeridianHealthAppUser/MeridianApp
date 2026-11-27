@@ -561,7 +561,7 @@ class StaffLeadWorkspaceTests(TestCase):
         self.assertNotContains(response, 'Find an enquiry')
         self.assertNotContains(response, 'Apply filters')
         self.assertEqual([section['label'] for section in response.context['filter_menu']['sections']],
-                         ['Screening', 'Stage', 'Follow-up'])
+                         ['Screening', 'Stage', 'Follow-up', 'Flags'])
         for markup in ('class="staff-list-tools"', 'data-conversation-search', 'data-search-region="list"', 'data-search-region="pages"'):
             self.assertContains(response, markup)
         # Ticking several shows any of them, sent as repeated fields or one comma-separated field as the search keeps it.

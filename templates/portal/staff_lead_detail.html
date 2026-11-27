@@ -14,9 +14,9 @@
   <aside class="staff-lead-notice"><strong>{% if lead.converted_patient_id %}Converted enquiry{% else %}Lead only: No patient account created{% endif %}</strong><p>This is the original enquiry, not a clinical record.</p></aside>
   <div class="staff-lead-detail-grid">
     <section class="staff-page-card" aria-labelledby="lead-answers-heading">
-      <header class="staff-page-card__header"><div><h2 id="lead-answers-heading">Questionnaire answers</h2><p>{% if questionnaire.submitted_at %}Submitted {{ questionnaire.submitted_at|date:"j F Y, H:i" }}{% else %}Information supplied with this enquiry.{% endif %}</p></div></header>
+      <header class="staff-page-card__header"><div><h2 id="lead-answers-heading">Questionnaire answers</h2><p>{% if questionnaire.submitted_at %}Submitted {{ questionnaire.submitted_at|date:"j F Y, H:i" }}{% else %}Information supplied with this enquiry.{% endif %}{% if form_version_number %} Answered Version {{ form_version_number }}.{% endif %}</p></div></header>
       <dl class="staff-lead-answers">
-        {% for title, value in answers_display %}<div><dt>{{ title }}</dt><dd>{{ value|linebreaksbr }}</dd></div>{% empty %}<div><dt>Questionnaire</dt><dd>No submitted answers are available for this enquiry.</dd></div>{% endfor %}
+        {% for row in answers_display %}<div{% if row.flag_reason %} class="staff-lead-answer--flagged"{% endif %}><dt>{{ row.label }}</dt><dd>{{ row.value|linebreaksbr }}{% if row.flag_reason %}<p class="staff-lead-flag"><span aria-hidden="true">⚑</span> <strong>Flagged:</strong> {{ row.flag_reason }}</p>{% endif %}</dd></div>{% empty %}<div><dt>Questionnaire</dt><dd>No submitted answers are available for this enquiry.</dd></div>{% endfor %}
       </dl>
     </section>
     <aside class="staff-lead-detail-sidebar">

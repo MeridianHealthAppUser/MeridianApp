@@ -28,7 +28,7 @@
                 <td data-label="Contact"><span class="staff-lead-contact">{{ lead.email }}</span><span class="staff-lead-secondary">{{ lead.phone|default:"No phone provided" }}</span></td>
                 <td data-label="ID / passport">{{ lead.id_number|default:"Not provided" }}</td>
                 <td data-label="BMI">{% if lead.bmi %}{{ lead.bmi|floatformat:1 }}{% else %}-{% endif %}</td>
-                <td data-label="Screening"><span class="lead-status lead-status--{{ lead.screening_status }}">{{ lead.get_screening_status_display }}</span></td>
+                <td data-label="Screening"><span class="lead-status lead-status--{{ lead.screening_status }}">{{ lead.get_screening_status_display }}</span>{% if lead.screening_flagged %} <span class="staff-lead-flag-mark" role="img" aria-label="Flagged for review" title="Flagged for review">⚑</span>{% endif %}</td>
                 <td data-label="Stage">{{ lead.get_stage_display }}{% if lead.follow_up_status %}<span class="staff-lead-secondary">Follow-up: {{ lead.follow_up_status }}{% if lead.next_contact_on %} · {{ lead.next_contact_on|date:'j M' }}{% endif %}</span>{% endif %}</td>
                 <td data-label="Submitted"><time datetime="{{ lead.created_at|date:'c' }}">{{ lead.created_at|date:"j M Y, H:i" }}</time></td>
                 <td data-label="Actions"><a class="console-button console-button--quiet" href="{% url 'portal:lead-detail' lead.pk %}">Open lead</a></td>

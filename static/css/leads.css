@@ -49,3 +49,5 @@
   .staff-lead-table td[data-label="Contact"] .staff-lead-secondary { grid-column: 2; margin: 0; }
   .staff-lead-table .lead-status, .staff-lead-table .console-button { justify-self: start; }
 }
+.staff-lead-flag { background: var(--c-fff5e3); border: 1px solid var(--c-f5e0b7); border-radius: 8px; color: var(--c-a16b24); font-size: .82rem; line-height: 1.5; margin: .4rem 0 0; padding: .4rem .7rem; }
+.staff-lead-flag-mark { color: var(--c-a16b24); font-size: .95rem; margin-left: .3rem; }

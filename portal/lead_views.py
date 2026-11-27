@@ -6,8 +6,9 @@ from django.utils.decorators import method_decorator
 from django.views.decorators.cache import never_cache
 
 from care.models import ConsentRecord, Lead, ScreeningQuestionnaire
+from care.screening import display_answers, live_version
 from care.services import record_audit
-from practices.models import CompanyMembership, Patient
+from practices.models import CompanyMembership
 
 from django.template.defaultfilters import pluralize
 from django.urls import reverse
@@ -22,6 +23,7 @@ class LeadFilterForm(forms.Form):
     screening_status = TickedChoiceField(label='Screening', choices=Lead.ScreeningStatus.choices)
     stage = TickedChoiceField(label='Stage', choices=Lead.Stage.choices)
     follow_up = TickedChoiceField(label='Follow-up', choices=FOLLOW_UP_CHOICES)
+    flags = TickedChoiceField(label='Flags', choices=(('flagged', 'Flagged for review'),))
 
 
 @method_decorator(never_cache, name='dispatch')
@@ -60,6 +62,8 @@ class LeadListView(LeadPageView):
                 queryset = queryset.filter(screening_status__in=filters['screening_status'])
             if filters['stage']:
                 queryset = queryset.filter(stage__in=filters['stage'])
+            if filters['flags']:
+                queryset = queryset.filter(screening_flagged=True)
             if filters['follow_up']:
                 queryset = queryset.filter(follow_up_matches(filters['follow_up']))
         else:
@@ -71,8 +75,8 @@ class LeadListView(LeadPageView):
         context.update(list_tools(
             action=reverse('portal:staff-lead-history'), data=self.request.GET,
             form=form, label='Filter leads',
-            sections=ticked_sections(form, self.request.GET, ('screening_status', 'stage', 'follow_up'),
-                                     icons={'stage': 'list', 'follow_up': 'list'}),
+            sections=ticked_sections(form, self.request.GET, ('screening_status', 'stage', 'follow_up', 'flags'),
+                                     icons={'stage': 'list', 'follow_up': 'list', 'flags': 'list'}),
             placeholder='Name, email, phone or ID'))
         return context
 
@@ -84,22 +88,12 @@ class LeadDetailView(LeadPageView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         lead = get_object_or_404(Lead.objects.for_company(self.company), pk=self.kwargs['pk'])
-        questionnaire = ScreeningQuestionnaire.objects.for_company(self.company).filter(lead=lead, stage=1).first()
-        fields = (('title', 'Title'), ('height_cm', 'Height (cm)'), ('weight_kg', 'Weight (kg)'), ('bmi', 'BMI at submission'),
-                  ('adult', '18 or older'), ('weight_related_condition', 'Weight-related condition'),
-                  ('pregnancy', 'Pregnant, breastfeeding or planning pregnancy within a year'),
-                  ('thyroid_history', 'Personal/family history of medullary thyroid cancer or MEN2'),
-                  ('pancreatitis', 'History of pancreatitis'), ('health_context', 'Chronic medication and allergies'))
+        questionnaire = (ScreeningQuestionnaire.objects.for_company(self.company).select_related('form_version')
+                         .filter(lead=lead, stage=1).first())
         answers = questionnaire.answers if questionnaire else {}
-        display = []
-        for key, label in fields:
-            value = answers.get(key)
-            if key in ('adult', 'weight_related_condition', 'pregnancy', 'thyroid_history', 'pancreatitis'):
-                value = {'yes': 'Yes', 'no': 'No', 'unsure': 'Not sure'}.get(value, 'Not recorded')
-            if key == 'title':
-                value = dict(Patient.Title.choices).get(value, '')
-            display.append((label, value or 'Not recorded'))
+        display = display_answers(questionnaire) if questionnaire else []
         context.update(lead=lead, questionnaire=questionnaire, answers_display=display,
+                       form_version_number=(questionnaire.form_version or live_version(self.company)).number if questionnaire else None,
                        screening_reasons=answers.get('screening_reasons', []),
                        consents=ConsentRecord.objects.for_company(self.company).filter(lead=lead).select_related('document'))
         record_audit(company=self.company, actor=self.request.user, action='lead.viewed', target=lead, request=self.request)
