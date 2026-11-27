@@ -1,13 +1,13 @@
 {# The editor's left column: locked blocks (greyed), the movable questions, then the fixed core rows. #}
-<div class="screening-list"{% if can_edit %} data-screening-list data-reorder-url="{% url 'portal:screening-reorder' %}" data-draft-number="{{ draft_number }}"{% endif %}>
+<div class="screening-list"{% if can_edit %} data-screening-list data-reorder-url="{% url 'portal:screening-reorder' %}" data-draft-id="{{ draft_id }}"{% endif %}>
   {% for name, note in locked_blocks|slice:":2" %}
   <div class="screening-locked"><strong>{{ name }}</strong> <span class="screening-tag screening-tag--lock">🔒 Locked</span><small>{{ note }}</small></div>
   {% endfor %}
-  <ol class="screening-rows" data-screening-rows>{% for question in movable %}{% include 'portal/includes/screening_builder_row.html' with can_edit=can_edit draft_number=draft_number %}{% endfor %}</ol>
+  <ol class="screening-rows" data-screening-rows>{% for question in movable %}{% include 'portal/includes/screening_builder_row.html' with can_edit=can_edit draft_id=draft_id %}{% endfor %}</ol>
   {% if can_edit %}
-  <form method="post" action="{% url 'portal:screening-question-add' %}">{% csrf_token %}<input type="hidden" name="draft_number" value="{{ draft_number }}"><button class="console-button console-button--secondary" type="submit">Add a question</button></form>
+  <form method="post" action="{% url 'portal:screening-question-add' %}">{% csrf_token %}<input type="hidden" name="draft_id" value="{{ draft_id }}"><button class="console-button console-button--secondary" type="submit">Add a question</button></form>
   {% endif %}
-  <ol class="screening-rows screening-rows--fixed">{% for question in fixed %}{% include 'portal/includes/screening_builder_row.html' with can_edit=can_edit draft_number=draft_number %}{% endfor %}</ol>
+  <ol class="screening-rows screening-rows--fixed">{% for question in fixed %}{% include 'portal/includes/screening_builder_row.html' with can_edit=can_edit draft_id=draft_id %}{% endfor %}</ol>
   {% with block=locked_blocks|last %}
   <div class="screening-locked"><strong>{{ block.0 }}</strong> <span class="screening-tag screening-tag--lock">🔒 Locked</span><small>{{ block.1 }}</small></div>
   {% endwith %}

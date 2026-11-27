@@ -1,7 +1,7 @@
 {# The middle column for one question: a form posting to its save URL. Hidden unless it is the selected question. #}
 <section class="screening-panel" data-panel-for="{{ question.key }}"{% if question.key != selected_key %} hidden{% endif %}>
   <form class="console-form screening-panel__form" method="post" action="{% url 'portal:screening-question-save' question.key %}" data-screening-panel="{{ question.key }}">
-    {% csrf_token %}<input type="hidden" name="draft_number" value="{{ draft.number }}">
+    {% csrf_token %}<input type="hidden" name="draft_id" value="{{ draft.pk }}">
     <h3>{{ question.label }}</h3>
     {% if question.is_core %}<p class="screening-note">{{ core_note }}</p>{% endif %}
     {% if not question.is_core %}

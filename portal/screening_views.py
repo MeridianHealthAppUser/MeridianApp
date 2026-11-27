@@ -66,8 +66,8 @@ class SuperAdminView(View):
     def check_draft(self, request, posted=None):
         """The editor that posted this was showing the company's current draft, not an older or newer one."""
         draft = draft_version(self.company)
-        posted = request.POST.get('draft_number') if posted is None else posted
-        if draft is None or str(draft.number) != str(posted):
+        posted = request.POST.get('draft_id') if posted is None else posted
+        if draft is None or not str(posted).isdigit() or draft.pk != int(posted):
             raise ValidationError(STALE_DRAFT)
         return draft
 
@@ -95,7 +95,7 @@ def decorate(question):
 def row_html(request, question, selected=False):
     return render_to_string('portal/includes/screening_builder_row.html',
                             {'question': decorate(question), 'selected_key': question.key if selected else '', 'can_edit': True,
-                             'draft_number': question.version.number}, request=request)
+                             'draft_id': question.version_id}, request=request)
 
 
 def draft_url(key=''):
@@ -225,8 +225,8 @@ class ReorderView(ScreeningStaffView):
     def post(self, request):
         try:
             body = json.loads(request.body) if 'json' in request.content_type else {
-                'keys': request.POST.getlist('keys'), 'draft_number': request.POST.get('draft_number')}
-            keys, number = body.get('keys'), body.get('draft_number')
+                'keys': request.POST.getlist('keys'), 'draft_id': request.POST.get('draft_id')}
+            keys, number = body.get('keys'), body.get('draft_id')
         except (ValueError, AttributeError):
             keys = number = None
         if not isinstance(keys, list) or not all(isinstance(k, str) for k in keys):

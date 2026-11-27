@@ -15,7 +15,7 @@
     {% endif %}
     {% if can_edit %}<a class="console-button console-button--secondary" href="{% url 'portal:screening-draft' %}?q={{ question.key }}" data-screening-edit="{{ question.key }}">Edit<span class="sr-only"> {{ question.label }}</span></a>{% endif %}
     {% if can_edit and not question.is_core %}
-    <form method="post" action="{% url 'portal:screening-question-retire' question.key %}" class="screening-row__retire">{% csrf_token %}<input type="hidden" name="draft_number" value="{{ draft_number }}"><button class="console-button console-button--secondary" type="submit">Retire<span class="sr-only"> {{ question.label }}</span></button></form>
+    <form method="post" action="{% url 'portal:screening-question-retire' question.key %}" class="screening-row__retire">{% csrf_token %}<input type="hidden" name="draft_id" value="{{ draft_id }}"><button class="console-button console-button--secondary" type="submit">Retire<span class="sr-only"> {{ question.label }}</span></button></form>
     {% endif %}
   </div>
 </li>
