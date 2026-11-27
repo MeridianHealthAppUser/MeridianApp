@@ -24,11 +24,11 @@ from care.checkout import (
     CONSULT_MINUTES, can_check_out, checkout_identity, complete_checkout, consultation_slots,
     is_test_code, quote_for,
 )
-from care.forms import EligibilityQuestionnaireForm
+from care.forms import EligibilityQuestionnaireForm, custom_field_name
 from care.intake import notice_fingerprint, practice_notices, save_intake
 from care.followups import request_callback
-from care.models import CallbackRequest, Lead, PracticeSettings, ScreeningQuestionnaire
-from care.screening import live_version
+from care.models import CallbackRequest, Lead, PracticeSettings, ScreeningFormVersion, ScreeningQuestion, ScreeningQuestionnaire
+from care.screening import live_version, questions_by_key
 from practices.services import ACTIVE_PATIENT_COMPANY_SESSION_KEY
 from practices.tenancy import enabled_companies, multi_practice_enabled, scope_queryset
 from .checkout_forms import CHECKOUT_SLOT_MAX_AGE, CheckoutDateForm, CheckoutForm, make_checkout_slot, read_checkout_slot
@@ -112,73 +112,110 @@ class QuestionnaireView(PrivateIntakeView):
     http_method_names = ('get', 'post', 'head', 'options')
 
     def notice_context(self):
-        return [{'practice_id': company.pk, 'name': company.name, 'documents': practice_notices(company)}
+        return [{'practice_id': company.pk, 'name': company.name, 'documents': practice_notices(company),
+                 'version_id': live_version(company).pk}
                 for company in enabled_companies().order_by('name')]
 
     def make_token(self, key, notices):
         owner = self.request.session.setdefault(OWNER_KEY, secrets.token_urlsafe(32))
         return signing.dumps({'key': str(key), 'owner': owner,
-                              'notices': {str(item['practice_id']): notice_fingerprint(item['documents']) for item in notices}},
+                              'notices': {str(item['practice_id']): notice_fingerprint(item['documents']) for item in notices},
+                              'versions': {str(item['practice_id']): item['version_id'] for item in notices}},
                              salt=TOKEN_SALT, compress=True)
+
+    def read_token(self):
+        """The signed token posted with the form. Raises BadSignature when it is bad, tampered, expired or another browser's."""
+        payload = signing.loads(self.request.POST.get('submission_token', ''), salt=TOKEN_SALT, max_age=TOKEN_MAX_AGE)
+        owner = self.request.session.get(OWNER_KEY)
+        if not owner or not secrets.compare_digest(str(payload.get('owner', '')), owner):
+            raise signing.BadSignature('Different browser session.')
+        return payload
+
+    @staticmethod
+    def version_for(practice_id, payload):
+        """The version this practice showed the patient: published or superseded, and the practice's own."""
+        try:
+            version_id = payload['versions'][str(practice_id)]
+            version = ScreeningFormVersion.objects.filter(
+                pk=version_id, company_id=int(practice_id),
+                status__in=(ScreeningFormVersion.Status.PUBLISHED, ScreeningFormVersion.Status.SUPERSEDED)).first()
+        except (KeyError, TypeError, ValueError, AttributeError):
+            version = None
+        if version is None:
+            raise signing.BadSignature('Unknown screening version.')
+        return version
+
+    @staticmethod
+    def screening_total(form):
+        """Required choice questions: the ones the progress counter counts (data-screening-question)."""
+        choices = (ScreeningQuestion.AnswerType.YES_NO, ScreeningQuestion.AnswerType.YES_NO_UNSURE,
+                   ScreeningQuestion.AnswerType.SINGLE, ScreeningQuestion.AnswerType.MULTIPLE)
+        return sum(1 for question, _field in form.screening_items if question.required and question.answer_type in choices)
 
     def render_form(self, form, *, editing, notices):
         selected = form['practice'].value()
         return render(self.request, 'portal/questionnaire.html', {
             'form': form, 'editing': editing, 'selected_practice_id': str(selected or ''),
             'consent_documents_by_practice': notices,
+            'screening_total': self.screening_total(form),
             'demo_screening': settings.DEBUG,
         })
 
     @staticmethod
-    def company_for(practice_id, fallback=False):
-        """The enabled practice with this pk; with `fallback`, the GET's default practice when it is missing or unknown."""
+    def default_company():
         companies = enabled_companies()
-        company = companies.filter(pk=practice_id).first() if str(practice_id or '').isdigit() else None
-        if company is None and fallback:
-            company = (companies.filter(slug='meridian-health').first()
-                       if multi_practice_enabled() else companies.first())
-        return company
+        return companies.filter(slug='meridian-health').first() if multi_practice_enabled() else companies.first()
+
+    @classmethod
+    def company_for(cls, practice_id):
+        """The enabled practice with this pk, else the default practice (None when no practice exists)."""
+        company = enabled_companies().filter(pk=practice_id).first() if str(practice_id or '').isdigit() else None
+        return company or cls.default_company()
 
     def get(self, request, *args, **kwargs):
         editing = request.GET.get('edit') == '1'
         lead = self.owned_lead() if editing else None
         notices = self.notice_context()
         initial = {}
+        company = None
         if lead:
             if lead.converted_patient_id or lead.stage in (Lead.Stage.CONVERTED, Lead.Stage.CLOSED):
                 raise Http404('This enquiry is no longer editable.')
+            company = lead.company
+            version = live_version(company)
             initial.update({field: getattr(lead, field) for field in ('first_name', 'last_name', 'email', 'phone', 'id_number')})
             questionnaire = ScreeningQuestionnaire.objects.for_company(lead.company).filter(lead=lead, stage=1).first()
             if questionnaire:
                 initial.update({key: value for key, value in questionnaire.answers.items() if key in EligibilityQuestionnaireForm.base_fields})
+                current = questions_by_key(version)
+                initial.update({custom_field_name(key): value for key, value in questionnaire.answers.get('custom', {}).items()
+                                if key in current})
             initial.update(practice=lead.company_id, service_consent=False)
         else:
             choices = {str(item['practice_id']) for item in notices}
             requested = request.GET.get('practice')
             if not multi_practice_enabled() and requested is not None and requested not in choices:
                 raise Http404('This practice is not available.')
-            default = (enabled_companies().filter(slug='meridian-health').first()
-                       if multi_practice_enabled() else enabled_companies().first())
-            initial['practice'] = requested if requested in choices else default.pk if default else None
+            company = self.company_for(requested if requested in choices else None)
+            initial['practice'] = company.pk if company else None
+            version = live_version(company) if company else None
         initial['submission_token'] = self.make_token(lead.submission_key if lead else uuid.uuid4(), notices)
-        company = lead.company if lead else self.company_for(initial.get('practice'))
-        form = EligibilityQuestionnaireForm(
-            initial=initial, version=live_version(company) if company else None, bound_practice=lead.company if lead else None)
+        form = EligibilityQuestionnaireForm(initial=initial, version=version, bound_practice=lead.company if lead else None)
         return self.render_form(form, editing=editing, notices=notices)
 
     def post(self, request, *args, **kwargs):
         editing = request.GET.get('edit') == '1'
         lead = self.owned_lead() if editing else None
-        company = lead.company if lead else self.company_for(request.POST.get('practice'), fallback=True)
-        form = EligibilityQuestionnaireForm(
-            request.POST, version=live_version(company) if company else None, bound_practice=lead.company if lead else None)
+        company = lead.company if lead else self.company_for(request.POST.get('practice'))
+        try:
+            payload = self.read_token()
+            version = self.version_for(company.pk if company else None, payload)
+        except signing.BadSignature:
+            payload, version = None, live_version(company) if company else None
+        form = EligibilityQuestionnaireForm(request.POST, version=version, bound_practice=lead.company if lead else None)
         notices = self.notice_context()
-        if form.is_valid():
+        if form.is_valid() and payload is not None:
             try:
-                payload = signing.loads(form.cleaned_data['submission_token'], salt=TOKEN_SALT, max_age=TOKEN_MAX_AGE)
-                owner = request.session.get(OWNER_KEY)
-                if not owner or not secrets.compare_digest(payload.get('owner', ''), owner):
-                    raise signing.BadSignature('Different browser session.')
                 submission_key = uuid.UUID(payload['key'])
                 if lead and submission_key != lead.submission_key:
                     raise signing.BadSignature('Different enquiry.')
@@ -191,6 +228,9 @@ class QuestionnaireView(PrivateIntakeView):
             else:
                 request.session[LEAD_KEY] = saved.pk
                 return redirect('portal:questionnaire-result')
+        elif payload is None:
+            form.is_valid()
+            form.add_error(None, 'This questionnaire has expired or belongs to another browser. Reload it before submitting.')
         return self.render_form(form, editing=editing, notices=notices)
 
 

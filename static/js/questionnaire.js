@@ -31,6 +31,13 @@
   listen(heightInput, 'input', updateBmi);
   listen(weightInput, 'input', updateBmi);
   listen(practiceInput, 'change', () => {
+    // Each practice has its own screening questions: reload the form for the chosen practice (not while editing one).
+    const params = new URLSearchParams(window.location.search);
+    if (practiceInput.tagName === 'SELECT' && params.get('edit') !== '1') {
+      params.set('practice', practiceInput.value);
+      window.location.assign(`${window.location.pathname}?${params.toString()}`);
+      return;
+    }
     updatePracticeDocuments();
     if (consentInput) consentInput.checked = false;
   });

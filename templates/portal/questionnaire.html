@@ -16,9 +16,10 @@
       <span class="questionnaire-badge questionnaire-badge--blue">After you book</span>
       <div><strong>Your doctor takes the rest of your history at your consultation</strong><p>These first questions record your enquiry. At your consultation, your doctor goes through your medication, allergies and medical history with you and records them in your patient portal.</p></div>
     </aside>
+    {% if preview %}<p class="questionnaire-callout questionnaire-preview-banner" role="status"><strong>Preview, not submitted</strong></p>{% endif %}
     <form method="post" class="questionnaire-form" id="screening-form" novalidate>
-      {% csrf_token %}
-      {{ form.submission_token }}
+      {% if not preview %}{% csrf_token %}
+      {{ form.submission_token }}{% endif %}
       {% if form.non_field_errors %}<div class="form-errors" role="alert">{{ form.non_field_errors }}</div>{% endif %}
       {% if form.submission_token.errors %}<div class="form-errors" role="alert">{{ form.submission_token.errors }}</div>{% endif %}
       {% if form.errors %}<p class="form-errors" role="alert">Please check the highlighted fields below. Your questionnaire has not been submitted.</p>{% endif %}
@@ -49,42 +50,17 @@
         </div>
         <p class="questionnaire-bmi" id="bmi-summary" aria-live="polite"><span class="questionnaire-badge questionnaire-badge--blue" id="bmi-value">BMI -</span><span>BMI alone does not determine whether treatment is right for you.</span></p>
       </section>
-      <fieldset class="questionnaire-card questionnaire-question" data-screening-question="adult">
-        <legend>Are you 18 or older?</legend>
-        <div class="questionnaire-options">{% for option in form.adult %}<label>{{ option.tag }}<span>{{ option.choice_label }}</span></label>{% endfor %}</div>
-        {% for error in form.adult.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
-      </fieldset>
-      <fieldset class="questionnaire-card questionnaire-question" data-screening-question="weight_related_condition">
-        <legend>Do you have a weight-related condition?</legend>
-        <p>High blood pressure, type 2 diabetes, sleep apnoea, fatty liver, high cholesterol.</p>
-        <div class="questionnaire-options">{% for option in form.weight_related_condition %}<label>{{ option.tag }}<span>{{ option.choice_label }}</span></label>{% endfor %}</div>
-        {% for error in form.weight_related_condition.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
-      </fieldset>
-      <fieldset class="questionnaire-card questionnaire-question" data-screening-question="pregnancy">
-        <legend>Are you pregnant, breastfeeding, or planning a pregnancy within a year?</legend>
-        <div class="questionnaire-options">{% for option in form.pregnancy %}<label>{{ option.tag }}<span>{{ option.choice_label }}</span></label>{% endfor %}</div>
-        {% for error in form.pregnancy.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
-      </fieldset>
-      <fieldset class="questionnaire-card questionnaire-question" data-screening-question="thyroid_history">
-        <legend>Any personal or family history of medullary thyroid cancer or MEN2?</legend>
-        <div class="questionnaire-options">{% for option in form.thyroid_history %}<label>{{ option.tag }}<span>{{ option.choice_label }}</span></label>{% endfor %}</div>
-        {% for error in form.thyroid_history.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
-      </fieldset>
-      <fieldset class="questionnaire-card questionnaire-question" data-screening-question="pancreatitis">
-        <legend>Have you ever had pancreatitis?</legend>
-        <div class="questionnaire-options">{% for option in form.pancreatitis %}<label>{{ option.tag }}<span>{{ option.choice_label }}</span></label>{% endfor %}</div>
-        {% for error in form.pancreatitis.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
-      </fieldset>
-      <section class="questionnaire-card" aria-labelledby="medication-heading">
-        <h2 id="medication-heading">Chronic medication and allergies</h2>
-        <p>Include the names and doses of any regular medication, and any allergies. If none, say “None”.</p>
-        <div class="question-field"><label class="questionnaire-sr-only" for="{{ form.health_context.id_for_label }}">Chronic medication, allergies and other information</label>{{ form.health_context }}{% for error in form.health_context.errors %}<small class="field-error">{{ error }}</small>{% endfor %}</div>
-      </section>
-      <fieldset class="questionnaire-card questionnaire-question">
-        <legend>How did you hear about us?</legend>
-        <p>Optional. Tick all that apply.</p>
-        <div class="questionnaire-options">{% for option in form.heard_from %}<label>{{ option.tag }}<span>{{ option.choice_label }}</span></label>{% endfor %}</div>
-      </fieldset>
+      {% for question, field in form.screening_items %}{% include 'portal/includes/screening_question.html' %}{% endfor %}
+      {% with item=form.fixed_items.health_context %}{% if item %}<section class="questionnaire-card" aria-labelledby="medication-heading">
+        <h2 id="medication-heading">{{ item.0.label }}</h2>
+        {% if item.0.help_text %}<p>{{ item.0.help_text }}</p>{% endif %}
+        <div class="question-field"><label class="questionnaire-sr-only" for="{{ item.1.id_for_label }}">Chronic medication, allergies and other information</label>{{ item.1 }}{% for error in item.1.errors %}<small class="field-error">{{ error }}</small>{% endfor %}</div>
+      </section>{% endif %}{% endwith %}
+      {% with item=form.fixed_items.heard_from %}{% if item %}<fieldset class="questionnaire-card questionnaire-question">
+        <legend>{{ item.0.label }}</legend>
+        {% if item.0.help_text %}<p>{{ item.0.help_text }}</p>{% endif %}
+        <div class="questionnaire-options">{% for option in item.1 %}<label>{{ option.tag }}<span>{{ option.choice_label }}</span></label>{% endfor %}</div>
+      </fieldset>{% endif %}{% endwith %}
       {% comment %}The Terms and Conditions and the Privacy Policy (Settings > Policy versions; Dr Czech, 26 Nov 2026), each
         read in a dialog, then accepted together with one required tick. The acceptance keeps their exact wording
         (care.intake.save_intake). They are the app's own, not the website's.{% endcomment %}
@@ -104,9 +80,9 @@
         <div class="question-check">{{ form.service_consent }}<div><label for="{{ form.service_consent.id_for_label }}">I accept the Terms and Conditions and the Privacy Policy.</label><p>My acceptance is recorded with this enquiry, with the wording I accepted and when. A consultation does not guarantee a prescription.</p></div></div>
         {% for error in form.service_consent.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
       </section>
-      <footer class="questionnaire-submit-row"><span class="questionnaire-progress" id="screening-progress" aria-live="polite">0 of 5 answered</span><button class="questionnaire-button" type="submit">{% if editing %}Update my answers{% else %}Check my eligibility{% endif %}</button></footer>
+      <footer class="questionnaire-submit-row"><span class="questionnaire-progress" id="screening-progress" aria-live="polite">0 of {{ screening_total }} answered</span><button class="questionnaire-button" type="submit"{% if preview %} disabled{% endif %}>{% if editing %}Update my answers{% else %}Check my eligibility{% endif %}</button></footer>
       <p class="questionnaire-legal">This is an enquiry, not an account registration or a treatment decision. No payment is taken when you submit.</p>
     </form>
   </section>
-  <script src="{% static 'js/questionnaire.js' %}?v=20261126a" defer></script>
+  <script src="{% static 'js/questionnaire.js' %}?v=20261127a" defer></script>
 {% endblock %}

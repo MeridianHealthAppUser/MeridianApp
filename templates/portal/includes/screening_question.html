@@ -1,0 +1,15 @@
+{% comment %}One screening question card, core or custom. Expects `question` (a ScreeningQuestion) and `field` (its bound field).
+  Doctor-written label, help text and option labels are escaped, never marked safe.
+  Only required choice questions carry data-screening-question, which questionnaire.js counts for "N of M answered".{% endcomment %}
+{% if question.answer_type == 'yes_no' or question.answer_type == 'yes_no_unsure' or question.answer_type == 'single' or question.answer_type == 'multiple' %}
+<fieldset class="questionnaire-card questionnaire-question" id="screening-q-{{ question.key }}"{% if question.required %} data-screening-question="{{ question.key }}"{% endif %}>
+  <legend>{{ question.label }}</legend>
+  {% if question.help_text %}<p>{{ question.help_text }}</p>{% endif %}
+  <div class="questionnaire-options">{% for option in field %}<label>{{ option.tag }}<span>{{ option.choice_label }}</span></label>{% endfor %}</div>
+  {% for error in field.errors %}<small class="field-error">{{ error }}</small>{% endfor %}
+</fieldset>
+{% else %}
+<section class="questionnaire-card questionnaire-question" id="screening-q-{{ question.key }}">
+  <div class="question-field"><label for="{{ field.id_for_label }}">{{ question.label }}</label>{{ field }}{% if question.help_text %}<small>{{ question.help_text }}</small>{% endif %}{% for error in field.errors %}<small class="field-error">{{ error }}</small>{% endfor %}</div>
+</section>
+{% endif %}
