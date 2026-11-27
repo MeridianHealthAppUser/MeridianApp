@@ -228,6 +228,7 @@ class Lead(CompanyScopedModel):
                   ('facebook', 'Facebook'), ('instagram', 'Instagram'))
     # From the unsubscribe link at the foot of a journey email (care.journeys); the enquiry itself is kept.
     emails_unsubscribed_at = models.DateTimeField(null=True, blank=True)
+    screening_flagged = models.BooleanField(default=False)
 
     class Meta:
         indexes = [models.Index(fields=('company', 'stage', 'screening_status')), models.Index(fields=('company', 'email'))]
@@ -240,6 +241,66 @@ class Lead(CompanyScopedModel):
         super().clean()
         if self.converted_patient_id and self.company_id and self.converted_patient.company_id != self.company_id:
             raise ValidationError({'converted_patient': 'The patient must belong to the same company as this lead.'})
+
+
+class ScreeningFormVersion(CompanyScopedModel):
+    class Status(models.TextChoices):
+        DRAFT = 'draft', 'Draft'
+        PUBLISHED = 'published', 'Published'
+        SUPERSEDED = 'superseded', 'Superseded'
+
+    number = models.PositiveIntegerField()
+    status = models.CharField(max_length=16, choices=Status.choices, default=Status.DRAFT)
+    based_on = models.ForeignKey('self', null=True, blank=True, on_delete=models.SET_NULL, related_name='+')
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name='+')
+    published_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name='+')
+    published_at = models.DateTimeField(null=True, blank=True)
+    note = models.CharField(max_length=200, blank=True)
+
+    class Meta:
+        ordering = ('-number',)
+        constraints = [
+            models.UniqueConstraint(fields=('company', 'number'), name='unique_screening_version_number'),
+            models.UniqueConstraint(fields=('company',), condition=models.Q(status='draft'), name='one_screening_draft_per_company'),
+            models.UniqueConstraint(fields=('company',), condition=models.Q(status='published'), name='one_live_screening_version_per_company'),
+        ]
+
+    def __str__(self):
+        return f'Screening form v{self.number} ({self.get_status_display()})'
+
+
+class ScreeningQuestion(CompanyScopedModel):
+    class Tier(models.TextChoices):
+        CORE = 'core', 'Core'
+        CUSTOM = 'custom', 'Custom'
+
+    class AnswerType(models.TextChoices):
+        YES_NO = 'yes_no', 'Yes / No'
+        YES_NO_UNSURE = 'yes_no_unsure', 'Yes / No / Not sure'
+        SINGLE = 'single', 'One choice'
+        MULTIPLE = 'multiple', 'Several choices'
+        SHORT_TEXT = 'short_text', 'Short text'
+        LONG_TEXT = 'long_text', 'Long text'
+        NUMBER = 'number', 'Number'
+
+    version = models.ForeignKey(ScreeningFormVersion, on_delete=models.CASCADE, related_name='questions')
+    key = models.SlugField(max_length=60)
+    tier = models.CharField(max_length=16, choices=Tier.choices)
+    answer_type = models.CharField(max_length=20, choices=AnswerType.choices)
+    label = models.CharField(max_length=300)
+    help_text = models.CharField(max_length=500, blank=True)
+    required = models.BooleanField(default=False)
+    options = models.JSONField(default=list, blank=True)
+    number_min = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    number_max = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    position = models.PositiveSmallIntegerField()
+
+    class Meta:
+        ordering = ('position', 'pk')
+        constraints = [models.UniqueConstraint(fields=('version', 'key'), name='unique_screening_question_key_per_version')]
+
+    def __str__(self):
+        return f'{self.key}: {self.label}'
 
 
 class ScreeningQuestionnaire(CompanyScopedModel):
@@ -255,6 +316,7 @@ class ScreeningQuestionnaire(CompanyScopedModel):
     submitted_at = models.DateTimeField(null=True, blank=True)
     reviewed_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name='reviewed_questionnaires')
     clinical_notes = models.TextField(blank=True)
+    form_version = models.ForeignKey(ScreeningFormVersion, null=True, blank=True, on_delete=models.PROTECT, related_name='submissions')
 
     class Meta:
         constraints = [models.UniqueConstraint(fields=('lead', 'stage'), name='one_questionnaire_stage_per_lead')]
