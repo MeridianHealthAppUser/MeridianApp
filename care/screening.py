@@ -169,13 +169,12 @@ def start_draft(*, company, actor, request=None):
 
 
 @transaction.atomic
-def add_question(*, company, actor, request=None):
+def add_question(*, company, actor, label='New question', request=None):
     _lock(company)
     draft = _draft(company)
     movable = movable_questions(draft)
     if sum(q.tier == ScreeningQuestion.Tier.CUSTOM for q in movable) >= MAX_CUSTOM_QUESTIONS:
         raise ValidationError(f'A form can have at most {MAX_CUSTOM_QUESTIONS} custom questions.')
-    label = 'New question'
     row = ScreeningQuestion.objects.create(
         company=company, version=draft, key=new_custom_key(company, label), tier=ScreeningQuestion.Tier.CUSTOM,
         answer_type=ScreeningQuestion.AnswerType.YES_NO, label=label, required=False,
@@ -210,11 +209,6 @@ def save_question(*, question, actor, cleaned, request=None):
         if name in cleaned and getattr(row, name) != cleaned[name]:
             setattr(row, name, cleaned[name])
             changed.append(name)
-    if row.tier == ScreeningQuestion.Tier.CUSTOM and 'label' in changed and not ScreeningQuestion.objects.filter(
-            company=row.company, key=row.key).exclude(pk=row.pk).exists():
-        # A question no version has published yet still takes its key from its label; a published key never changes.
-        row.key = new_custom_key(row.company, row.label, exclude_pk=row.pk)
-        changed.append('key')
     row.save()
     record_audit(company=row.company, actor=actor, action='screening.question_changed', target=row, request=request,
                  metadata={'key': row.key, 'fields': changed})

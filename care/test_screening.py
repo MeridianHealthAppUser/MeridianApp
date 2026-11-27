@@ -103,12 +103,8 @@ class BuilderServiceTests(TestCase):
         return AuditEvent.objects.filter(company=self.company, action=action)
 
     def _custom(self, label='Surgery?'):
-        from care.screening import add_question, save_question
-        row = add_question(company=self.company, actor=self.actor)
-        from care.forms import ScreeningQuestionForm
-        form = ScreeningQuestionForm({'answer_type': 'yes_no', 'label': label, 'options': '[]'}, question=row)
-        self.assertTrue(form.is_valid(), form.errors)
-        return save_question(question=row, actor=self.actor, cleaned=form.cleaned_data)
+        from care.screening import add_question
+        return add_question(company=self.company, actor=self.actor, label=label)
 
     def test_start_draft_copies_live_and_returns_existing_draft(self):
         from care.screening import start_draft
@@ -132,16 +128,22 @@ class BuilderServiceTests(TestCase):
         self.assertEqual([o['value'] for o in row.options], ['yes', 'no'])
 
     def test_custom_keys_are_never_reused(self):
-        from care.screening import add_question, publish_draft, retire_question, save_question, start_draft
-        from care.forms import ScreeningQuestionForm
+        from care.screening import add_question, publish_draft, retire_question, start_draft
         start_draft(company=self.company, actor=self.actor)
-        row = self._custom()
+        row = add_question(company=self.company, actor=self.actor, label='Surgery?')
         self.assertEqual(row.key, 'c_surgery')
         publish_draft(company=self.company, actor=self.actor)
         draft = start_draft(company=self.company, actor=self.actor)
         retire_question(question=draft.questions.get(key='c_surgery'), actor=self.actor)
-        again = self._custom('Surgery?')
+        again = add_question(company=self.company, actor=self.actor, label='Surgery?')
         self.assertEqual(again.key, 'c_surgery-2')
+
+    def test_saving_a_new_label_never_changes_the_key(self):
+        from care.screening import add_question, save_question, start_draft
+        start_draft(company=self.company, actor=self.actor)
+        row = add_question(company=self.company, actor=self.actor, label='Surgery?')
+        saved = save_question(question=row, actor=self.actor, cleaned={'label': 'Any operations?'})
+        self.assertEqual((saved.key, saved.label), ('c_surgery', 'Any operations?'))
 
     def test_new_custom_key_from_label(self):
         from care.screening import new_custom_key
