@@ -255,6 +255,10 @@
 .shipping-action-icon:hover { background:var(--c-e7f4f9); border-color:var(--c-1a4457); }
 .shipping-action-icon--ready { background:var(--c-1a4457); border-color:var(--c-1a4457); color:var(--c-ffffff); }
 .shipping-action-icon--ready:hover { background:var(--c-0b716a, var(--c-173c4c)); color:var(--c-ffffff); }
+/* Confirm & lock for an unpaid parcel: greyed out, its tooltip says why. aria-disabled (not disabled) so hover and focus still show it. */
+.shipping-action-icon--blocked, .shipping-action-icon--blocked:hover { background:var(--c-eef3f5); border-color:var(--c-deeaef); color:var(--c-70838d); cursor:not-allowed; }
+.meridian-console .shipment-row-actions .shipping-action-icon--blocked:active { transform:none; }
+[data-select-shipment]:disabled { cursor:not-allowed; }
 .shipping-action-icon:focus-visible { outline:2px solid var(--c-225369); outline-offset:3px; }
 .shipping-action-icon[data-tooltip]::after { content:attr(data-tooltip); position:absolute; z-index:20; bottom:calc(100% + .4rem); left:50%; transform:translate(-50%, .2rem); background:var(--c-183643); color:var(--c-ffffff); border-radius:.4rem; padding:.35rem .55rem; font-size:.75rem; font-weight:500; line-height:1.3; white-space:nowrap; pointer-events:none; visibility:hidden; opacity:0; transition:opacity .12s ease, transform .12s ease; }
 .shipping-action-icon[data-tooltip]:is(:hover,:focus-visible)::after { visibility:visible; opacity:1; transform:translate(-50%, 0); }

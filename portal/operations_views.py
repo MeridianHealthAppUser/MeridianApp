@@ -477,6 +477,9 @@ class ShippingListView(OperationsView):
                     (shipment.status in (Shipment.Status.DRAFT, Shipment.Status.READY) and not shipment.locked_at)):
                 shipment.confirm_context = make_workflow_context(request, self.company, 'shipping-confirm', shipment)
                 shipment.confirm_week = shipment.scheduled_for - timedelta(days=(shipment.scheduled_for.weekday() - 1) % 7)
+                # Unpaid, where the practice needs payment: its Confirm & lock is greyed out and it can't be selected.
+                # confirm_shipments refuses it as well (parcel_payment_reason), for a form sent anyway.
+                shipment.payment_block = payment_required and shipment.payment_state != 'paid'
             if self.can_edit and shipment.status == Shipment.Status.READY and shipment.locked_at and not (shipment.waybill or shipment.tracking_number):
                 shipment.waybill_context = make_workflow_context(request, self.company, 'shipment-waybill', shipment)
             shipment.shipping_status_label = ('Pending' if shipment.status == Shipment.Status.DRAFT or

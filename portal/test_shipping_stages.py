@@ -339,6 +339,70 @@ class ShippingStageTests(OperationsPortalFixture):
                 self.assertEqual(len(self.warnings(names[0])), 1)
                 self.assertIn(reason, names[0]['text'])
 
+    def confirm_controls(self, response):
+        """Each parcel's row Confirm & lock buttons and selection boxes, by parcel id."""
+        class Controls(HTMLParser):
+            def __init__(self):
+                super().__init__()
+                self.boxes, self.buttons, self.form_parcel = {}, {}, None
+
+            def handle_starttag(self, tag, attrs):
+                attrs = dict(attrs)
+                if tag == 'input' and 'data-select-shipment' in attrs:
+                    self.boxes.setdefault(int(attrs['value']), []).append(attrs)
+                if tag == 'input' and attrs.get('name') == 'single_shipment':
+                    self.form_parcel = int(attrs['value'])
+                if tag == 'button' and 'data-confirm-parcel' in attrs:
+                    self.buttons.setdefault(self.form_parcel, []).append(attrs)
+                if tag == 'button' and 'data-confirm-blocked' in attrs:
+                    self.buttons.setdefault(int(attrs['data-confirm-blocked']), []).append(attrs)
+
+            def handle_endtag(self, tag):
+                if tag == 'form':
+                    self.form_parcel = None
+
+        parser = Controls()
+        parser.feed(response.content.decode())
+        return parser
+
+    def test_unpaid_parcel_cannot_be_selected_or_confirmed_until_paid(self):
+        paid = self.shipment(quantity=1)
+        unpaid = self.shipment(quantity=1, subscription=None)
+        for mode in ('customers', 'medication'):
+            with self.subTest(mode=mode):
+                controls = self.confirm_controls(self.stage('pending', view=mode))
+                for box in controls.boxes[paid.pk]:
+                    self.assertNotIn('disabled', box)
+                for button in controls.buttons[paid.pk]:
+                    self.assertEqual(button.get('type'), 'submit')
+                    self.assertEqual(button.get('data-tooltip'), 'Confirm & lock')
+                self.assertTrue(controls.boxes[unpaid.pk])
+                for box in controls.boxes[unpaid.pk]:
+                    self.assertIn('disabled', box)
+                self.assertTrue(controls.buttons[unpaid.pk])
+                for button in controls.buttons[unpaid.pk]:
+                    self.assertEqual(button.get('type'), 'button')
+                    self.assertEqual(button.get('aria-disabled'), 'true')
+                    self.assertEqual(button.get('data-tooltip'), 'Needs to be paid first')
+                    self.assertNotIn('data-modal-open', button)
+                    self.assertIn('needs to be paid first', button.get('aria-label', '').lower())
+
+    def test_unpaid_parcel_stays_confirmable_when_payment_is_not_required(self):
+        unpaid = self.shipment(quantity=1, subscription=None)
+        PracticeSettings.objects.filter(company=self.company).update(require_payment=False)
+        controls = self.confirm_controls(self.stage('pending'))
+        self.assertNotIn('disabled', controls.boxes[unpaid.pk][0])
+        self.assertEqual(controls.buttons[unpaid.pk][0].get('type'), 'submit')
+
+    def test_server_still_refuses_an_unpaid_parcel_sent_directly(self):
+        unpaid = self.shipment(quantity=1, subscription=None)
+        page = self.stage('pending')
+        self.client.post(reverse('portal:ops-shipping-confirm'), {
+            'workflow_context': page.context['confirm_context'], 'week': self.week, 'shipment_ids': [unpaid.pk]})
+        unpaid.refresh_from_db()
+        self.assertIsNone(unpaid.locked_at)
+        self.assertEqual(self.ids(self.stage('pending')), {unpaid.pk})
+
 
 class WaybillPopupTests(OperationsPortalFixture):
     def test_waybill_moves_locked_parcel_to_tracking_without_dispatch(self):
