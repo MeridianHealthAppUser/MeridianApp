@@ -1,25 +1,26 @@
 {% extends 'portal/operations_base.html' %}{% load static %}
 {% block title %}Consumption | Meridian{% endblock %}
-{% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/dialogs.css' %}?v=20261115a"><link rel="stylesheet" href="{% static 'css/inventory.css' %}?v=20261106a"><link rel="stylesheet" href="{% static 'css/consumption.css' %}?v=20261104a"><script src="{% static 'js/consumption.js' %}?v=20261103a" defer></script><script src="{% static 'js/shipping_help.js' %}?v=20261102b" defer></script>{% endblock %}
+{% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/dialogs.css' %}?v=20261115a"><link rel="stylesheet" href="{% static 'css/inventory.css' %}?v=20261106a"><link rel="stylesheet" href="{% static 'css/consumption.css' %}?v=20261127e"><script src="{% static 'js/consumption.js' %}?v=20261103a" defer></script><script src="{% static 'js/consumption_graph.js' %}?v=20261127c" defer></script><script src="{% static 'js/shipping_help.js' %}?v=20261102b" defer></script>{% endblock %}
 {% block page_heading %}<header class="staff-page-header"><div><h1>Inventory</h1><p>Manage your stock and medication catalogue.</p></div></header>{% endblock %}
 {% block operations_content %}
 {% include 'portal/includes/inventory_tabs.html' %}
-<section class="staff-page-card consumption-card">
+<section class="staff-page-card consumption-card"{% if consumption_view == 'graph' %} data-consumption-graph{% endif %}>
   <header class="staff-page-card__header consumption-heading" data-search-region="consumption-heading">
     <div><div class="consumption-title"><h2>Product consumption</h2><div class="shipping-help" data-shipping-help><button type="button" class="shipping-help-trigger" aria-label="How consumption is calculated" aria-describedby="consumption-method" aria-expanded="false">{% include 'portal/includes/shipping_help_icon.html' %}</button><div class="shipping-help-popover" id="consumption-method" role="tooltip" popover="auto"><strong>Actual units dispatched</strong><p>Monday–Sunday weeks, using the actual dispatch date in South African time. Delivered shipments are included once. Pending parcels, reservations and receipts are excluded.</p><p>Click any weekly number to see its contributing dispatch lines. Historical averages include zero-consumption weeks and exclude the current, incomplete week. Starting AWC entered for purchasing does not change these figures.</p></div></div></div><p>See what went out, and exactly where it went.</p></div>
-    <form method="get" action="{% url 'portal:inventory-consumption' %}" class="consumption-period" aria-label="Consumption period">
+    {% if consumption_view != 'graph' %}<form method="get" action="{% url 'portal:inventory-consumption' %}" class="consumption-period" aria-label="Consumption period">
       {% for name, value in period_hidden %}<input type="hidden" name="{{ name }}" value="{{ value }}">{% endfor %}
       <label><span>Show</span><select name="weeks" aria-label="Weeks to show"><option value="4"{% if filter_form.weeks.value|stringformat:'s' == '4' %} selected{% endif %}>4 weeks</option><option value="8"{% if not filter_form.weeks.value or filter_form.weeks.value|stringformat:'s' == '8' %} selected{% endif %}>8 weeks</option><option value="12"{% if filter_form.weeks.value|stringformat:'s' == '12' %} selected{% endif %}>12 weeks</option></select></label>
       <label><span>Through week of</span><input type="date" name="end_week" value="{% if report %}{{ report.end_week|date:'Y-m-d' }}{% else %}{{ filter_form.end_week.value|default:'' }}{% endif %}" max="{{ report.as_of|date:'Y-m-d' }}" aria-label="Through week of"></label>
       <button type="submit" class="console-button console-button--secondary">Apply</button>
-    </form>
+    </form>{% else %}{% include 'portal/includes/consumption_graph_filters.html' %}{% endif %}
   </header>
   <div class="consumption-toolbar">
-    <nav class="patient-order-subtabs" aria-label="Consumption view" data-search-region="consumption-tabs"><a href="{{ weekly_url }}"{% if consumption_view == 'weekly' %} class="is-active" aria-current="page"{% endif %}>By week</a><a href="{{ averages_url }}"{% if consumption_view == 'averages' %} class="is-active" aria-current="page"{% endif %}>Averages</a></nav>
-    {% include 'portal/includes/list_tools.html' with search_label='Search consumption' %}
+    <nav class="patient-order-subtabs" aria-label="Consumption view" data-search-region="consumption-tabs"><a href="{{ weekly_url }}"{% if consumption_view == 'weekly' %} class="is-active" aria-current="page"{% endif %}>By week</a><a href="{{ averages_url }}"{% if consumption_view == 'averages' %} class="is-active" aria-current="page"{% endif %}>Averages</a><a href="{{ graph_url }}"{% if consumption_view == 'graph' %} class="is-active" aria-current="page"{% endif %}>Graph</a></nav>
+    {% if consumption_view != 'graph' %}{% include 'portal/includes/list_tools.html' with search_label='Search consumption' %}{% endif %}
   </div>
   <div data-search-region="list">
-  {% if filter_form.errors %}<div class="staff-filter-error" role="alert">{{ filter_form.errors }}Correct the filters to view consumption.</div>{% else %}
+  {% if consumption_view == 'graph' %}{% include 'portal/includes/consumption_graph.html' %}
+  {% elif filter_form.errors %}<div class="staff-filter-error" role="alert">{{ filter_form.errors }}Correct the filters to view consumption.</div>{% else %}
     {% if consumption_view == 'weekly' %}
       <div class="consumption-period-summary">
         <div class="consumption-range"><a class="consumption-arrow" href="{{ previous_period }}" aria-label="Previous {{ report.weeks|length }} weeks">‹</a><div><strong>{{ report.period_start|date:'j M' }} – {{ report.period_end|date:'j M Y' }}</strong><small>{{ report.weeks|length }} weeks{% if report.end_week == report.current_week_start %} · current week in progress{% else %} · completed weeks{% endif %}</small></div>{% if next_period %}<a class="consumption-arrow" href="{{ next_period }}" aria-label="Next {{ report.weeks|length }} weeks">›</a>{% endif %}</div>
@@ -39,7 +40,7 @@
       <details class="consumption-definitions"><summary>How the averages work</summary><dl><div><dt>Last 8 weeks</dt><dd>Total units from {{ report.average_8_start|date:'j M Y' }} to {{ report.average_end|date:'j M Y' }}, divided by 8. Weeks with no dispatches count as zero.</dd></div><div><dt>This year</dt><dd>Units from 1 January {{ report.as_of|date:'Y' }} through the last completed Sunday, divided by the elapsed days ÷ 7. This includes the part of the first week that falls in January.</dd></div><div><dt>All time</dt><dd>Units from each product’s first recorded dispatch week through the last completed Sunday, divided by all weeks in that period, including weeks with zero dispatches.</dd></div></dl><p>These are historical dispatch averages. Starting AWC used for purchasing is separate.</p></details>
     {% endif %}
   {% endif %}
-  {% include 'portal/includes/numbered_pagination.html' with pagination_label='Products' %}
+  {% if consumption_view != 'graph' %}{% include 'portal/includes/numbered_pagination.html' with pagination_label='Products' %}{% endif %}
   </div>
 </section>
 <dialog id="consumption-detail" class="app-dialog consumption-dialog" aria-label="Weekly consumption details"><div data-consumption-content aria-live="polite"></div></dialog>

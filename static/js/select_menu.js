@@ -192,7 +192,8 @@
     }
     const box = select.getBoundingClientRect();
     if ((!box.width && !box.height) || box.bottom < 0 || box.top > window.innerHeight) { close(); return; }
-    const width = Math.min(Math.max(box.width, 192), window.innerWidth - EDGE * 2);
+    const minimum = select.dataset.selectWidth === 'trigger' ? box.width : 192;
+    const width = Math.min(Math.max(box.width, minimum), window.innerWidth - EDGE * 2);
     const left = Math.min(Math.max(box.left, EDGE), window.innerWidth - width - EDGE);
     const below = window.innerHeight - box.bottom - GAP - EDGE;
     const above = box.top - GAP - EDGE;

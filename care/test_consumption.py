@@ -7,7 +7,8 @@ from django.core.exceptions import ValidationError
 from django.db.models import Sum
 from django.utils import timezone
 
-from .consumption import consumption_items, consumption_report, period_items, weekly_items
+from .consumption import (consumption_graph_report, consumption_items, consumption_report,
+                          period_items, three_months_ago, weekly_items)
 from .models import Shipment, ShipmentItem
 from .test_operations import OperationsFixture
 
@@ -192,3 +193,72 @@ class ConsumptionReportTests(OperationsFixture):
         report = self.report(end_week=self.monday - timedelta(days=1), weeks=4)
         self.assertEqual(report['end_week'], self.monday - timedelta(days=7))
         self.assertEqual(len(report['weeks']), 4)
+
+    def test_graph_weekly_buckets_clip_exact_inclusive_range_and_fill_zero_products(self):
+        self.dispatched(date(2026, 10, 27), 90)
+        self.dispatched(date(2026, 10, 28), 2, dispatched_at=self.at(date(2026, 10, 28), time.min))
+        self.dispatched(date(2026, 11, 2), 3, dispatched_at=self.at(date(2026, 11, 2), time(23, 59, 59)))
+        self.dispatched(date(2026, 11, 3), 7, status=Shipment.Status.DELIVERED)
+        self.dispatched(date(2026, 11, 4), 80)
+        report = consumption_graph_report(self.company, date_from=date(2026, 10, 28),
+            date_to=date(2026, 11, 3), as_of=self.as_of)
+        series = {row['id']: row for row in report['series']}
+        self.assertEqual([period['start'] for period in report['periods']], ['2026-10-27', '2026-11-03'])
+        self.assertEqual(report['periods'][0]['date_from'], '2026-10-28')
+        self.assertEqual(report['periods'][-1]['date_to'], '2026-11-03')
+        self.assertEqual(report['periods'][0]['label'], '28 Oct 2026 – 2 Nov 2026')
+        self.assertEqual(series[self.product.pk]['values'], [5, 7])
+        self.assertEqual(series[self.open_product.pk]['values'], [0, 0])
+        self.assertEqual(report['total_units'], 12)
+        year_boundary = consumption_graph_report(self.company, date_from=date(2025, 12, 30),
+            date_to=date(2026, 1, 5), as_of=self.as_of)
+        self.assertEqual(year_boundary['periods'][0]['label'], '30 Dec 2025 – 5 Jan 2026')
+
+    def test_graph_months_have_calendar_boundaries_quiet_months_and_matching_totals(self):
+        for day, units in ((date(2026, 8, 31), 90), (date(2026, 9, 15), 2),
+                           (date(2026, 9, 30), 3), (date(2026, 11, 1), 7)):
+            self.dispatched(day, units)
+        self.dispatched(date(2026, 9, 15), 80, status=Shipment.Status.READY)
+        report = consumption_graph_report(self.company, date_from=date(2026, 9, 15),
+            date_to=self.as_of, grouping='months', product_ids=[self.product.pk], as_of=self.as_of)
+        self.assertEqual([period['start'] for period in report['periods']], ['2026-09-01', '2026-10-01', '2026-11-01'])
+        self.assertEqual(report['series'][0]['values'], [5, 0, 7])
+        self.assertEqual(report['total_units'], period_items(self.company, date(2026, 9, 15),
+            self.as_of, as_of=self.as_of).filter(product=self.product).aggregate(total=Sum('quantity'))['total'])
+
+    def test_graph_keeps_selected_products_and_tenant_boundaries_and_explicit_empty_selection(self):
+        day = date(2026, 10, 30)
+        self.dispatched(day, 8)
+        self.dispatched(day, 4, product=self.open_product)
+        self.dispatched(day, 90, company=self.beta, patient=self.beta_patient, product=self.beta_product)
+        self.dispatched(day, 90, patient=self.beta_patient)
+        wrong_item = self.dispatched(day, 90)
+        wrong_item.items.update(company=self.beta)
+        for grouping in ('weeks', 'months'):
+            report = consumption_graph_report(self.company, product_ids=[self.product.pk, self.beta_product.pk],
+                grouping=grouping, as_of=self.as_of)
+            self.assertEqual([series['id'] for series in report['series']], [self.product.pk])
+            self.assertEqual(report['total_units'], 8)
+        self.assertEqual(consumption_graph_report(self.company, product_ids=[], as_of=self.as_of)['series'], [])
+
+    def test_graph_defaults_use_three_calendar_months_and_validate_ranges(self):
+        self.assertEqual(three_months_ago(date(2026, 5, 31)), date(2026, 2, 28))
+        self.assertEqual(three_months_ago(date(2024, 5, 31)), date(2024, 2, 29))
+        report = consumption_graph_report(self.company, as_of=self.as_of)
+        self.assertEqual((report['date_from'], report['date_to'], report['grouping']),
+                         (date(2026, 8, 4), self.as_of, 'weeks'))
+        for params in ({'date_from': date(2026, 11, 5)}, {'date_to': date(2026, 11, 5)},
+                       {'date_from': date(1899, 12, 31)}, {'date_from': '2026-10-01'}, {'grouping': 'days'}):
+            with self.subTest(params=params), self.assertRaises(ValidationError):
+                consumption_graph_report(self.company, as_of=self.as_of, **params)
+
+    def test_graph_local_week_boundary_and_current_cutoff_match_consumption(self):
+        self.dispatched(date(2026, 10, 27), 9,
+            dispatched_at=datetime(2026, 10, 26, 22, 30, tzinfo=datetime_timezone.utc))
+        self.dispatched(date(2026, 10, 26), 4,
+            dispatched_at=datetime(2026, 10, 26, 21, 59, tzinfo=datetime_timezone.utc))
+        self.dispatched(self.as_of, 90, dispatched_at=self.at(self.as_of, time(11)))
+        report = consumption_graph_report(self.company, date_from=date(2026, 10, 26),
+            date_to=self.as_of, product_ids=[self.product.pk], as_of=self.at(self.as_of, time(10)))
+        self.assertEqual(report['series'][0]['values'], [4, 9, 0])
+        self.assertEqual(report['total_units'], 13)

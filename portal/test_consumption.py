@@ -164,6 +164,77 @@ class ConsumptionPortalTests(OperationsPortalFixture):
                 self.assertEqual(response.context['rows'], [])
                 self.assertEqual(self.client.get(self.url('inventory-consumption-export'), params).status_code, 400)
 
+    def test_graph_defaults_to_three_months_weekly_and_all_company_products(self):
+        MedicationProduct.objects.filter(pk=self.open_product.pk).update(is_active=False)
+        self.supplied(3)
+        response = self.report(view='graph')
+        report = response.context['graph_report']
+        self.assertEqual(response.context['consumption_view'], 'graph')
+        self.assertEqual((report['date_from'], report['date_to'], report['grouping']),
+                         (date(2026, 8, 4), date(2026, 11, 4), 'weeks'))
+        self.assertEqual({series['id'] for series in report['series']}, {self.product.pk, self.open_product.pk})
+        self.assertTrue(all(option['selected'] for option in response.context['graph_product_options']))
+        self.assertEqual(response.context['graph_data']['date_from'], '2026-08-04')
+        self.assertEqual(len(response.context['graph_table_rows']), len(report['periods']))
+        self.assertNotContains(response, self.beta_product.name)
+        self.assertIn('no-store', response['Cache-Control'])
+
+    def test_graph_multiple_products_and_monthly_range_survive_tabs_and_search(self):
+        third = MedicationProduct.objects.create(company=self.company, name='Third product', price=1)
+        selected = [self.product.pk, self.open_product.pk, third.pk]
+        self.supplied(3, date(2026, 10, 31))
+        self.supplied(7, date(2026, 11, 1), product=self.open_product)
+        response = self.report(view='graph', products=selected, products_set='1', grouping='months',
+            date_from='2026-10-15', date_to='2026-11-02')
+        self.assertEqual({series['id'] for series in response.context['graph_report']['series']}, set(selected))
+        self.assertEqual(response.context['graph_report']['total_units'], 10)
+        weekly = self.client.get(response.context['weekly_url'])
+        self.assertEqual(weekly.status_code, 200)
+        self.assertEqual(parse_qs(urlsplit(weekly.context['graph_url']).query)['products'], [str(pk) for pk in selected])
+        # Search forms keep repeated products in one comma-separated field.
+        searched = self.report(view='graph', products=','.join(str(pk) for pk in selected), grouping='months',
+            date_from='2026-10-15', date_to='2026-11-02', products_set='1')
+        self.assertEqual(len(searched.context['graph_report']['series']), 3)
+        self.assertNotIn('products', parse_qs(urlsplit(weekly.context['table_export_url']).query))
+
+    def test_graph_invalid_ranges_and_foreign_products_show_errors_without_data(self):
+        for params in ({'date_from': '2026-11-04', 'date_to': '2026-10-01'},
+                       {'date_from': 'bad'}, {'date_from': ''}, {'date_to': '2026-11-05'},
+                       {'grouping': 'days'}, {'products': [self.beta_product.pk]}, {'products': ['unknown']}):
+            with self.subTest(params=params):
+                response = self.client.get(self.url(), {'view': 'graph', **params})
+                self.assertEqual(response.status_code, 400)
+                self.assertTrue(response.context['graph_form'].errors)
+                self.assertIsNone(response.context['graph_report'])
+                self.assertNotContains(response, self.beta_product.name, status_code=400)
+        self.assertEqual(self.client.get(self.url('inventory-consumption-export'), {'view': 'graph'}).status_code, 400)
+
+    def test_graph_native_html_submission_keeps_invalid_range_controls_and_errors_visible(self):
+        valid = self.client.get(self.url(), {'view': 'graph', '__full': '1'}, HTTP_ACCEPT='text/html')
+        self.assertContains(valid, 'aria-label="Graph filters" data-native-navigation')
+        self.assertContains(valid, '<input type="hidden" name="__full" value="1">', html=True)
+        invalid = self.client.get(self.url(), {'view': 'graph', '__full': '1', 'products_set': '1',
+            'products': [self.product.pk], 'grouping': 'months', 'date_from': '2026-11-04',
+            'date_to': '2026-10-01'}, HTTP_ACCEPT='text/html')
+        self.assertEqual(invalid.status_code, 400)
+        self.assertIn('text/html', invalid['Content-Type'])
+        self.assertIn('date_to', invalid.context['graph_form'].errors)
+        self.assertIsNone(invalid.context['graph_report'])
+        self.assertContains(invalid, 'The to date must be on or after the from date.', status_code=400)
+        self.assertContains(invalid, 'name="date_from" value="2026-11-04"', status_code=400)
+        self.assertContains(invalid, 'name="date_to" value="2026-10-01"', status_code=400)
+        self.assertContains(invalid, 'aria-label="Graph filters" data-native-navigation', status_code=400)
+        self.assertContains(invalid, 'value="months" selected', status_code=400)
+        self.assertContains(invalid, f'name="products" value="{self.product.pk}" checked', status_code=400)
+
+    def test_graph_empty_product_selection_stays_empty_when_switching_tabs(self):
+        response = self.report(view='graph', products_set='1')
+        self.assertEqual(response.context['graph_report']['series'], [])
+        weekly = self.client.get(response.context['weekly_url'])
+        back = self.client.get(weekly.context['graph_url'])
+        self.assertEqual(back.status_code, 200)
+        self.assertEqual(back.context['graph_report']['series'], [])
+
     def test_detail_invalid_week_is_rejected_without_leaking_data(self):
         for suffix in ('not-a-week', '2026-11-30'):
             kwargs = {'pk': self.product.pk, 'week': suffix}

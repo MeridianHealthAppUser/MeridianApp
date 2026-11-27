@@ -10,10 +10,10 @@ from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
 from django.utils import timezone
 
-from care.consumption import consumption_report, weekly_items
+from care.consumption import consumption_graph_report, consumption_report, three_months_ago, weekly_items
 from care.models import MedicationProduct
 from care.services import record_audit
-from .filter_menus import TickedChoiceField, list_tools, ticked_sections
+from .filter_menus import TickedChoiceField, list_tools, ticked_sections, ticked_values
 from .operations_views import OperationsView
 from .pagination import numbered_pagination
 
@@ -25,7 +25,7 @@ class ConsumptionFilterForm(forms.Form):
                                   coerce=int, required=False, empty_value=8)
     end_week = forms.DateField(label='Week ending in this range', required=False,
                               widget=forms.DateInput(attrs={'type': 'date'}))
-    view = forms.ChoiceField(choices=(('weekly', 'By week'), ('averages', 'Averages')), required=False)
+    view = forms.ChoiceField(choices=(('weekly', 'By week'), ('averages', 'Averages'), ('graph', 'Graph')), required=False)
 
     def clean_end_week(self):
         value = self.cleaned_data['end_week']
@@ -37,6 +37,52 @@ class ConsumptionFilterForm(forms.Form):
             if value < date(1900, 4, 1):
                 raise forms.ValidationError('Choose a week after March 1900.')
         return value
+
+
+class ConsumptionGraphFilterForm(forms.Form):
+    products = TickedChoiceField(label='Products')
+    grouping = forms.ChoiceField(label='Group by', choices=(('weeks', 'Weeks'), ('months', 'Months')))
+    date_from = forms.DateField(label='From', widget=forms.DateInput(attrs={'type': 'date'}))
+    date_to = forms.DateField(label='To', widget=forms.DateInput(attrs={'type': 'date'}))
+
+    def __init__(self, data, *, company):
+        self.available_products = list(MedicationProduct.objects.filter(company=company).order_by('name', 'strength', 'pk'))
+        data = data.copy()
+        today = timezone.localdate()
+        for name, value in (('grouping', 'weeks'), ('date_from', three_months_ago(today).isoformat()),
+                            ('date_to', today.isoformat())):
+            if name not in data:
+                data[name] = value
+        # An initial visit selects every product; submitting an empty selection
+        # deliberately shows an empty graph rather than silently selecting all.
+        if 'products' not in data and 'products_set' not in data:
+            ids = [str(product.pk) for product in self.available_products]
+            if hasattr(data, 'setlist'):
+                data.setlist('products', ids)
+            else:
+                data['products'] = ids
+        super().__init__(data)
+        self.fields['products'].choices = [(str(product.pk), str(product)) for product in self.available_products]
+
+    def clean(self):
+        values = super().clean()
+        start, end = values.get('date_from'), values.get('date_to')
+        if start and start < date(1900, 1, 1):
+            self.add_error('date_from', 'Choose a date from January 1900 or later.')
+        if end and end > timezone.localdate():
+            self.add_error('date_to', 'Choose today or an earlier date.')
+        if start and end and start > end:
+            self.add_error('date_to', 'The to date must be on or after the from date.')
+        return values
+
+
+GRAPH_QUERY_FIELDS = ('products', 'products_set', 'grouping', 'date_from', 'date_to')
+
+
+def graph_query(data):
+    """Keep graph controls when moving through the other consumption tabs."""
+    return {name: ticked_values(data.getlist(name)) if name == 'products' else data[name]
+            for name in GRAPH_QUERY_FIELDS if name in data}
 
 
 def report_for(company, form):
@@ -61,26 +107,29 @@ class ConsumptionView(OperationsView):
     http_method_names = ('get', 'head', 'options')
 
     def get(self, request):
+        if request.GET.get('view') == 'graph':
+            return self.graph(request)
         form = ConsumptionFilterForm(request.GET)
         valid = form.is_valid()
         report = report_for(self.company, form) if valid else None
         rows = report['rows'] if report else []
         page = Paginator(rows, 25).get_page(request.GET.get('page'))
         view = form.cleaned_data.get('view') or 'weekly'
-        query = report_query(form) if valid else {}
+        query = {**(report_query(form) if valid else {}), **graph_query(request.GET)}
         tools = list_tools(action=reverse('portal:inventory-consumption'), data=request.GET,
             sections=ticked_sections(form, request.GET, ('category',)), label='Filter consumption', form=form,
             placeholder='Product, strength or category')
         # The separate period picker and view tabs survive search/filter changes.
-        for key in ('weeks', 'end_week', 'view'):
+        for key in ('weeks', 'end_week', 'view', *GRAPH_QUERY_FIELDS):
             if query.get(key):
-                tools['search_hidden'][key] = str(query[key])
-                tools['filter_menu']['hidden'].append((key, str(query[key])))
+                values = query[key] if isinstance(query[key], list) else [query[key]]
+                tools['search_hidden'][key] = ','.join(str(value) for value in values)
+                tools['filter_menu']['hidden'].extend((key, str(value)) for value in values)
         tools['search_clear_url'] = url_with('portal:inventory-consumption', {**query, 'q': ''})
         tools['filter_menu']['clear_url'] = url_with('portal:inventory-consumption', {**query, 'category': []})
         tools.update(count_label=f'{len(rows)} product' + ('' if len(rows) == 1 else 's'),
                      table_export_url=url_with('portal:inventory-consumption-export',
-                         {k: v for k, v in query.items() if k != 'view'}), table_export_disabled=not valid)
+                         {k: v for k, v in query.items() if k not in ('view', *GRAPH_QUERY_FIELDS)}), table_export_disabled=not valid)
         peak = max((cell['quantity'] for row in rows for cell in row['cells']), default=0)
         period_total = sum(row['total'] for row in rows)
         for row in page:
@@ -95,6 +144,7 @@ class ConsumptionView(OperationsView):
             active_products=sum(row['total'] > 0 for row in rows), **tools,
             weekly_url=url_with('portal:inventory-consumption', {**query, 'view': 'weekly'}),
             averages_url=url_with('portal:inventory-consumption', {**query, 'view': 'averages'}),
+            graph_url=url_with('portal:inventory-consumption', {**query, 'view': 'graph'}),
             period_hidden=[(key, value) for key, values in query.items() if key not in ('weeks', 'end_week')
                            for value in (values if isinstance(values, list) else [values])],
             **numbered_pagination(page, base_url=reverse('portal:inventory-consumption'), query=query))
@@ -105,6 +155,37 @@ class ConsumptionView(OperationsView):
                 'end_week': min(report['current_week_start'], report['end_week'] + timedelta(weeks=form.cleaned_data['weeks'])).isoformat()})
                     if report['end_week'] < report['current_week_start'] else None,
                 latest_period=url_with('portal:inventory-consumption', {k: v for k, v in query.items() if k != 'end_week'}))
+        return render(request, 'portal/inventory_consumption.html', context, status=200 if valid else 400)
+
+    def graph(self, request):
+        form = ConsumptionGraphFilterForm(request.GET, company=self.company)
+        valid = form.is_valid()
+        report = None
+        if valid:
+            report = consumption_graph_report(self.company, date_from=form.cleaned_data['date_from'],
+                date_to=form.cleaned_data['date_to'], grouping=form.cleaned_data['grouping'],
+                product_ids=form.cleaned_data['products'])
+        data = {**report, 'date_from': report['date_from'].isoformat(), 'date_to': report['date_to'].isoformat()} if report else None
+        # Keep the independent table settings while using the graph controls.
+        table_form = ConsumptionFilterForm(request.GET)
+        table_query = report_query(table_form) if table_form.is_valid() else {}
+        table_query.pop('view', None)
+        graph_values = graph_query(form.data)
+        graph_values['products_set'] = '1'
+        query = {**table_query, **graph_values}
+        chosen = set(graph_values.get('products', []))
+        options = [{'id': product.pk, 'label': str(product), 'selected': str(product.pk) in chosen}
+                   for product in form.available_products]
+        context = self.context(inventory_view='consumption', consumption_view='graph',
+            filter_form=form, graph_form=form, graph_product_options=options,
+            graph_report=report, graph_data=data, graph_as_of=timezone.localdate(),
+            graph_table_rows=[{'label': period['label'], 'values': [series['values'][index] for series in report['series']]}
+                              for index, period in enumerate(report['periods'])] if report else [],
+            graph_hidden=[(key, value) for key, values in table_query.items()
+                          for value in (values if isinstance(values, list) else [values])],
+            weekly_url=url_with('portal:inventory-consumption', {**query, 'view': 'weekly'}),
+            averages_url=url_with('portal:inventory-consumption', {**query, 'view': 'averages'}),
+            graph_url=url_with('portal:inventory-consumption', {**query, 'view': 'graph'}))
         return render(request, 'portal/inventory_consumption.html', context, status=200 if valid else 400)
 
 
@@ -159,7 +240,7 @@ class ConsumptionExportView(OperationsView):
             filename = f'consumption-product-{product.pk}-{start.isoformat()}.xlsx'
         else:
             form = ConsumptionFilterForm(request.GET)
-            if not form.is_valid():
+            if not form.is_valid() or form.cleaned_data.get('view') == 'graph':
                 return HttpResponse('Correct the consumption filters before exporting.', status=400, content_type='text/plain')
             report = report_for(self.company, form)
             output = consumption_workbook(self.company, report)

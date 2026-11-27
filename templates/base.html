@@ -20,7 +20,7 @@
     {% if page_navigation_config %}<link rel="stylesheet" href="{% static 'css/page_navigation.css' %}?v=20261104a"><script src="{% static 'js/page_lifecycle.js' %}" defer></script>{% endif %}
     {% block extra_css %}{% endblock %}
     {# Every dropdown's list and every date field's calendar, after each page's own form styles (static/js/select_menu.js, date_picker.js). #}
-    <link rel="stylesheet" href="{% static 'css/select_menu.css' %}?v=20261119a"><script src="{% static 'js/select_menu.js' %}?v=20261119a" defer></script>
+    <link rel="stylesheet" href="{% static 'css/select_menu.css' %}?v=20261119a"><script src="{% static 'js/select_menu.js' %}?v=20261127a" defer></script>
     <link rel="stylesheet" href="{% static 'css/date_picker.css' %}?v=20261120a"><script src="{% static 'js/date_picker.js' %}?v=20261120a" defer></script>
     {% if is_workspace_page %}<link rel="stylesheet" href="{% static 'css/workspace_polish.css' %}?v=20261106a"><script src="{% static 'js/workspace_polish.js' %}?v=20261119a" defer></script>{% endif %}
     {% if user.is_authenticated %}<link rel="stylesheet" href="{% static 'css/account_menu.css' %}?v=20261117a"><script src="{% static 'js/account_menu.js' %}?v=20261117a" defer></script>{% endif %}

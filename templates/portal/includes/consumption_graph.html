@@ -1,0 +1,15 @@
+<section class="consumption-graph">
+  {% if graph_form.errors %}<div class="staff-filter-error" role="alert">{{ graph_form.errors }}Correct the filters to view usage.</div>
+  {% elif graph_report.series %}
+    <div class="consumption-graph-heading"><div><h3>Usage over time</h3><p>{{ graph_report.date_from|date:'j M Y' }} – {{ graph_report.date_to|date:'j M Y' }} · {% if graph_form.grouping.value == 'months' %}Monthly{% else %}Weekly{% endif %} units dispatched</p></div><div class="consumption-graph-total"><strong>{{ graph_report.total_units }}</strong><span>units in this period</span></div></div>
+    <figure class="consumption-graph-figure">
+      <div class="consumption-graph-legend" data-graph-legend aria-label="Product legend"></div>
+      <div class="consumption-graph-scroll"><div class="consumption-graph-plot" id="consumption-usage-plot" data-graph-plot tabindex="0" role="group" aria-label="Product usage line graph" aria-describedby="consumption-graph-help"><span class="consumption-graph-loading">Loading graph…</span></div></div>
+      <figcaption id="consumption-graph-help">Click a product name above to show or hide its line. Hover over the graph or use the left and right arrow keys to see quantities. Only dispatches within the selected dates are counted.</figcaption>
+    </figure>
+    {% if not graph_report.total_units %}<p class="consumption-graph-zero" role="status">No usage recorded for these products in this period. Each line stays at zero.</p>{% endif %}
+    <details class="consumption-graph-table"><summary>View graph data</summary><div class="consumption-graph-table-scroll"><table class="consumption-graph-data"><caption class="sr-only">Units dispatched by product and {% if graph_form.grouping.value == 'months' %}month{% else %}week{% endif %}</caption><thead><tr><th scope="col">Period</th>{% for series in graph_report.series %}<th scope="col">{{ series.name }}</th>{% endfor %}</tr></thead><tbody>{% for row in graph_table_rows %}<tr><th scope="row">{{ row.label }}</th>{% for quantity in row.values %}<td>{{ quantity }}</td>{% endfor %}</tr>{% endfor %}</tbody></table></div></details>
+    {{ graph_data|json_script:'consumption-graph-data' }}
+    <noscript><p class="consumption-empty">Enable JavaScript to view the usage graph.</p></noscript>
+  {% else %}<div class="consumption-empty"><strong>{% if graph_product_options %}Choose products to compare{% else %}No products available{% endif %}</strong><p>{% if graph_product_options %}Select one or more products above, then apply your filters.{% else %}Your product catalogue will appear here once products have been added.{% endif %}</p></div>{% endif %}
+</section>

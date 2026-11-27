@@ -1,0 +1,27 @@
+{# The Graph view's filters, shown in the card header in line with "Product consumption", like the By week and Averages period filter. #}
+<form method="get" action="{% url 'portal:inventory-consumption' %}" class="consumption-graph-filters" aria-label="Graph filters" data-native-navigation>
+  <input type="hidden" name="view" value="graph">
+  <input type="hidden" name="products_set" value="1">
+  <input type="hidden" name="__full" value="1">
+  {% for name, value in graph_hidden %}<input type="hidden" name="{{ name }}" value="{{ value }}">{% endfor %}
+  <div class="consumption-graph-field consumption-graph-products">
+    <span id="consumption-products-label">Products</span>
+    <details class="consumption-product-picker" data-product-picker>
+      <summary aria-labelledby="consumption-products-label consumption-products-summary"><span id="consumption-products-summary" data-product-summary>Choose products</span><svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true"><path d="m5 7.5 5 5 5-5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></summary>
+      <div class="consumption-product-menu">
+        <label class="sr-only" for="consumption-product-search">Find products</label>
+        <input type="search" id="consumption-product-search" placeholder="Find products…" autocomplete="off" data-product-search>
+        <div class="consumption-product-actions"><button type="button" data-products-all>Select all</button><button type="button" data-products-clear>Clear</button><span data-product-count aria-live="polite"></span></div>
+        <fieldset class="consumption-product-options"><legend class="sr-only">Products to graph</legend>
+          {% for product in graph_product_options %}<label data-product-option><input type="checkbox" name="products" value="{{ product.id }}"{% if product.selected %} checked{% endif %}><span>{{ product.label }}</span></label>{% empty %}<p class="consumption-product-none">No products available.</p>{% endfor %}
+          <p class="consumption-product-none" data-product-no-match hidden>No matching products.</p>
+        </fieldset>
+      </div>
+    </details>
+  </div>
+  <label class="consumption-graph-field"><span>X-axis</span><span class="consumption-graph-select"><select name="grouping" aria-label="Group usage by" data-select-width="trigger"><option value="weeks"{% if graph_form.grouping.value != 'months' %} selected{% endif %}>Weeks</option><option value="months"{% if graph_form.grouping.value == 'months' %} selected{% endif %}>Months</option></select><svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true" focusable="false"><path d="m5 7.5 5 5 5-5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span></label>
+  <label class="consumption-graph-field"><span>From</span><input type="date" name="date_from" value="{{ graph_form.date_from.value|default:'' }}" max="{{ graph_as_of|date:'Y-m-d' }}" min="1900-01-01" aria-label="Usage from date" required></label>
+  <label class="consumption-graph-field"><span>To</span><input type="date" name="date_to" value="{{ graph_form.date_to.value|default:'' }}" max="{{ graph_as_of|date:'Y-m-d' }}" min="1900-01-01" aria-label="Usage to date" required></label>
+  <button type="submit" class="console-button console-button--secondary">Apply</button>
+  <a class="consumption-graph-reset" href="{% url 'portal:inventory-consumption' %}?view=graph">Last 3 months</a>
+</form>

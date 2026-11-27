@@ -5,12 +5,13 @@ receipts, planned parcels or reservations. Every weekly total can be reconciled
 to the same eligible shipment lines returned by ``weekly_items``.
 """
 
+from calendar import monthrange
 from datetime import date, datetime, time, timedelta
 from decimal import Decimal
 
 from django.core.exceptions import ValidationError
 from django.db.models import Min, Q, Sum, F, Value, DurationField, DateTimeField, ExpressionWrapper
-from django.db.models.functions import TruncWeek
+from django.db.models.functions import TruncMonth, TruncWeek
 from django.utils import timezone
 
 from .models import MedicationProduct, Shipment, ShipmentItem
@@ -18,6 +19,14 @@ from .models import MedicationProduct, Shipment, ShipmentItem
 
 WINDOW_CHOICES = (4, 8, 12)
 AVERAGE_WEEKS = 8
+
+
+def three_months_ago(day):
+    """The same calendar day three months earlier, clamped to that month's end."""
+    month_index = day.year * 12 + day.month - 1 - 3
+    year, month = divmod(month_index, 12)
+    month += 1
+    return date(year, month, min(day.day, monthrange(year, month)[1]))
 
 
 def _cutoff(as_of=None):
@@ -69,6 +78,72 @@ def weekly_items(company, product, start, *, as_of=None):
     return period_items(company, start, start + timedelta(days=6), as_of=as_of).filter(
         product_id=getattr(product, 'pk', product),
     )
+
+
+def consumption_graph_report(company, *, date_from=None, date_to=None, grouping='weeks',
+                             product_ids=None, as_of=None):
+    """Zero-filled product series for an exact, inclusive local date range.
+
+    Weekly buckets use the same shipping weeks as the consumption matrix. The
+    first and last buckets only count dates inside the requested range.
+    """
+    cutoff = _cutoff(as_of)
+    today = as_of if isinstance(as_of, date) and not isinstance(as_of, datetime) else timezone.localtime(cutoff).date()
+    date_from = date_from if date_from is not None else three_months_ago(today)
+    date_to = date_to if date_to is not None else today
+    if grouping not in ('weeks', 'months'):
+        raise ValidationError('Choose weeks or months.')
+    if any(type(day) is not date for day in (date_from, date_to)):
+        raise ValidationError('Choose valid from and to dates.')
+    if date_from < date(1900, 1, 1) or date_to < date_from or date_to > today:
+        raise ValidationError('Choose a date range from January 1900 through today, with the from date first.')
+
+    def bucket_start(day):
+        return week_start(day) if grouping == 'weeks' else day.replace(day=1)
+
+    def next_bucket(day):
+        if grouping == 'weeks':
+            return day + timedelta(days=7)
+        return date(day.year + day.month // 12, day.month % 12 + 1, 1)
+
+    periods = []
+    start = bucket_start(date_from)
+    while start <= date_to:
+        following = next_bucket(start)
+        first, last = max(start, date_from), min(following - timedelta(days=1), date_to)
+        label = (f"{first.strftime('%d %b %Y').lstrip('0')} – {last.strftime('%d %b %Y').lstrip('0')}"
+                 if grouping == 'weeks' else start.strftime('%b %Y'))
+        periods.append({'start': start.isoformat(), 'end': last.isoformat(), 'label': label,
+                        'date_from': first.isoformat(), 'date_to': last.isoformat()})
+        start = following
+
+    products = MedicationProduct.objects.filter(company=company)
+    if product_ids is not None:
+        products = products.filter(pk__in=product_ids)
+    products = list(products.order_by('name', 'strength', 'pk'))
+    grid = {}
+    if products:
+        dispatch_date = F('shipment__dispatched_at')
+        if grouping == 'weeks':
+            dispatch_date = ExpressionWrapper(
+                dispatch_date - Value(timedelta(days=1), output_field=DurationField()),
+                output_field=DateTimeField())
+        truncate = TruncWeek if grouping == 'weeks' else TruncMonth
+        values = period_items(company, date_from, date_to, as_of=cutoff).filter(
+            product_id__in=[product.pk for product in products],
+        ).order_by().annotate(
+            graph_period=truncate(dispatch_date, tzinfo=timezone.get_current_timezone()),
+        ).values('product_id', 'graph_period').annotate(units=Sum('quantity'))
+        for value in values:
+            day = value['graph_period'].date() + (timedelta(days=1) if grouping == 'weeks' else timedelta())
+            grid[value['product_id'], day.isoformat()] = int(value['units'])
+
+    series = []
+    for product in products:
+        values = [grid.get((product.pk, period['start']), 0) for period in periods]
+        series.append({'id': product.pk, 'name': str(product), 'values': values, 'total': sum(values)})
+    return {'grouping': grouping, 'date_from': date_from, 'date_to': date_to,
+            'periods': periods, 'series': series, 'total_units': sum(row['total'] for row in series)}
 
 
 def consumption_report(company, *, end_week=None, weeks=8, query='', categories=(), as_of=None):
