@@ -42,3 +42,4 @@
 .screening-option input[type="checkbox"] { width: auto; }
 .screening-option .console-button { justify-self: start; }
 .screening-row { cursor: pointer; }
+.screening-flush-note { color: var(--console-muted, var(--c-627883)); font-size: .85rem; margin: 0 0 .5rem; }

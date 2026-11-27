@@ -291,6 +291,7 @@
       if (response.status === 400) {
         status.textContent = '';
         showErrors(form, data?.errors);
+        return 'invalid';
       } else {
         status.textContent = 'Could not save. Try again.';
       }
@@ -300,25 +301,59 @@
     }
     return false;
   }
-  // Saves every panel with an unsaved change and waits for saves and reorders in flight. False if any failed.
+  // Saves every panel with an unsaved change and waits for saves and reorders in flight.
+  // Resolves 'ok', 'invalid' (a 400 shows field errors), 'stale' (draft gone) or 'error' (anything else).
   async function flush() {
     let ok = true;
+    let invalid = false;
     let forms = [...unsaved.values()];
     for (let pass = 0; pass < 5; pass += 1) {
       forms.forEach(form => { window.clearTimeout(timers.get(form.dataset.screeningPanel)); timers.delete(form.dataset.screeningPanel); });
       const runs = [...forms.map(save), ...saving.values()];
       if (reorderRun) runs.push(reorderRun);
       if (!runs.length) break;
-      if ((await Promise.all(runs)).includes(false)) ok = false;
+      const results = await Promise.all(runs);
+      if (results.includes('invalid')) invalid = true;
+      if (results.includes(false) || invalid) ok = false;
       forms = [...timers.keys()].map(key => unsaved.get(key)).filter(Boolean);
       if (!forms.length) break;
     }
-    return ok && !stale;
+    if (stale) return 'stale';
+    if (invalid) return 'invalid';
+    return ok ? 'ok' : 'error';
   }
   function flushFailed() {
     const bad = document.querySelector('form[data-screening-panel] [aria-invalid]')?.closest('form[data-screening-panel]');
-    if (bad && !stale) select(bad.dataset.screeningPanel);
-    if (!stale) status.textContent = 'Fix the highlighted problem first. Your last change is not saved yet.';
+    if (bad && !stale) { select(bad.dataset.screeningPanel); bad.scrollIntoView({ block: 'center' }); }
+    if (!stale) status.textContent = 'Fix the highlighted problem first.';
+  }
+  // Runs go() once pending saves are flushed. A form in a dialog shows progress in the dialog and closes it on failure,
+  // so the error is not left behind the modal. Repeat clicks on the same control are ignored while it waits.
+  const guarding = new WeakSet();
+  function guard(control, go) {
+    if (guarding.has(control)) return;
+    guarding.add(control);
+    const dlg = control.closest?.('dialog');
+    const buttons = dlg ? [...control.querySelectorAll('button[type="submit"]')] : [];
+    let note = null;
+    if (dlg) {
+      buttons.forEach(button => { button.disabled = true; });
+      note = document.createElement('p');
+      note.className = 'screening-flush-note';
+      note.setAttribute('role', 'status');
+      note.textContent = 'Saving your last change…';
+      control.prepend(note);
+    }
+    flush().then(result => {
+      note?.remove();
+      buttons.forEach(button => { button.disabled = false; });
+      if (result === 'ok') { go(); return; }
+      dlg?.close();
+      if (result === 'stale') { alertBox.scrollIntoView({ block: 'center' }); return; }
+      if (result === 'invalid') { flushFailed(); return; }
+      status.textContent = 'Could not save your last change.';
+      if (window.confirm('Could not save your last change. Leave anyway?')) go();
+    }).finally(() => guarding.delete(control));
   }
   listen(document, 'input', event => {
     const form = event.target.closest?.('form[data-screening-panel]');
@@ -468,7 +503,7 @@
     if (!(form instanceof HTMLFormElement) || form.matches('[data-screening-panel]') || !hasPending()) return;
     event.preventDefault();
     event.stopImmediatePropagation();
-    flush().then(ok => { if (ok) form.submit(); else flushFailed(); });
+    guard(form, () => form.submit());
   }, true);
   listen(document, 'click', event => {
     if (bypass || event.defaultPrevented || event.button || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
@@ -478,8 +513,7 @@
     if (!href || href.startsWith('#') || href.startsWith('javascript:')) return;
     event.preventDefault();
     event.stopImmediatePropagation();
-    flush().then(ok => {
-      if (!ok) { flushFailed(); return; }
+    guard(link, () => {
       bypass = true;
       try { link.click(); } finally { bypass = false; }
     });
