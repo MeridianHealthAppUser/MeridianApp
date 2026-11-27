@@ -21,3 +21,6 @@ staticfiles/
 *.p12
 *.pfx
 /.playwright-cli
+
+# Brainstorming mockups (superpowers visual companion)
+/.superpowers
