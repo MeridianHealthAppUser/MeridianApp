@@ -24,3 +24,6 @@ staticfiles/
 
 # Brainstorming mockups (superpowers visual companion)
 /.superpowers
+
+# Browser-automation tool logs and screenshots (local only)
+/.playwright-mcp
