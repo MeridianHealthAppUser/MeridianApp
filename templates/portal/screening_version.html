@@ -1,0 +1,14 @@
+{% extends 'portal/staff_page_base.html' %}{% load workspace_ui %}
+{% block title %}Screening questions Version {{ version.number }} | {{ company.name }} | Meridian{% endblock %}
+{% block breadcrumbs %}{% breadcrumbs 'Settings' %}{% endblock %}
+{% block page_heading %}<header class="staff-page-header"><div><h1>Settings</h1><p>Settings for {{ company.name }}. Only Super Admins can change these.</p></div></header>{% page_tabs %}{% endblock %}
+{% block page_content %}
+<section class="staff-page-card screening-bar" aria-label="Version">
+  <div><strong>Version {{ version.number }}</strong> <span class="screening-summary">{{ version.get_status_display }}{% if version.published_at %} · {{ version.published_at|date:"j M Y" }}{% endif %}{% if version.note %} · {{ version.note }}{% endif %}</span></div>
+  <div class="screening-bar__actions"><a class="console-button console-button--secondary" href="{% url 'portal:screening-questions' %}">Back</a></div>
+</section>
+<div class="screening-editor screening-editor--readonly">
+  <div class="screening-editor__list">{% include 'portal/includes/screening_builder_list.html' %}</div>
+  <div class="screening-editor__preview"><iframe class="screening-preview" src="{% url 'portal:screening-preview' version.number %}" title="Patient preview"></iframe></div>
+</div>
+{% endblock %}

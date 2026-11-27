@@ -1,0 +1,21 @@
+{# One question row in the editor's list. `question` is decorated (flagged, is_core, movable); selected_key marks the open one. #}
+<li class="screening-row{% if question.key == selected_key %} is-selected{% endif %}" {% if question.movable %}data-question-key="{{ question.key }}"{% else %}data-fixed-key="{{ question.key }}"{% endif %}>
+  {% if question.movable %}<span class="screening-row__handle" aria-hidden="true" title="Drag to reorder">⠿</span>{% endif %}
+  <div class="screening-row__text">
+    <strong class="screening-row__label">{{ question.label }}</strong>
+    <span class="screening-row__meta">
+      {% if question.is_core %}<span class="screening-tag screening-tag--core">Core · reword only</span>{% else %}<span class="screening-tag screening-tag--custom">Custom</span>{% endif %}
+      {% if question.flagged %}<span class="screening-flag" title="An answer is flagged for review">⚑<span class="sr-only"> Flagged for review</span></span>{% endif %}
+    </span>
+  </div>
+  <div class="screening-row__actions">
+    {% if question.movable %}
+    <button class="console-button console-button--secondary" type="button" data-move="up">Move up<span class="sr-only"> {{ question.label }}</span></button>
+    <button class="console-button console-button--secondary" type="button" data-move="down">Move down<span class="sr-only"> {{ question.label }}</span></button>
+    {% endif %}
+    <a class="console-button console-button--secondary" href="{% url 'portal:screening-draft' %}?q={{ question.key }}" data-screening-edit="{{ question.key }}">Edit<span class="sr-only"> {{ question.label }}</span></a>
+    {% if not question.is_core %}
+    <form method="post" action="{% url 'portal:screening-question-retire' question.key %}" class="screening-row__retire">{% csrf_token %}<button class="console-button console-button--secondary" type="submit">Retire<span class="sr-only"> {{ question.label }}</span></button></form>
+    {% endif %}
+  </div>
+</li>

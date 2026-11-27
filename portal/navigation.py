@@ -42,6 +42,7 @@ INSIGHTS_TABS = (
 SETTINGS_TABS = (
     ('review_rules', 'Review rules', 'portal:treatment-review-rules'),
     ('users', 'Users and roles', 'portal:management-users'),
+    ('screening', 'Screening questions', 'portal:screening-questions'),
     ('email_journeys', 'Email journeys', 'portal:email-journeys'),
     ('policies', 'Policy versions', 'portal:policy-list'),
     ('practice_settings', 'Practice settings', 'portal:practice-settings'),

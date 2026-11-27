@@ -27,6 +27,7 @@ urlpatterns = [
     path('', include('portal.operations_urls')),
     path('', include('portal.billing_urls')),
     path('', include('portal.journey_urls')),
+    path('', include('portal.screening_urls')),
     path('screening/', intake_views.QuestionnaireView.as_view(), name='questionnaire'),
     path('screening/result/', intake_views.QuestionnaireResultView.as_view(), name='questionnaire-result'),
     path('screening/call-me/', intake_views.QuestionnaireCallbackView.as_view(), name='questionnaire-call-me'),

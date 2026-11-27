@@ -1,0 +1,37 @@
+{# The middle column for one question: a form posting to its save URL. Hidden unless it is the selected question. #}
+<section class="screening-panel" data-panel-for="{{ question.key }}"{% if question.key != selected_key %} hidden{% endif %}>
+  <form class="console-form screening-panel__form" method="post" action="{% url 'portal:screening-question-save' question.key %}" data-screening-panel="{{ question.key }}">
+    {% csrf_token %}
+    <h3>{{ question.label }}</h3>
+    {% if question.is_core %}<p class="screening-note">{{ core_note }}</p>{% endif %}
+    {% if not question.is_core %}
+    <div class="console-form__field"><label for="sq-type-{{ question.key }}">Answer type</label>
+      <select id="sq-type-{{ question.key }}" name="answer_type">{% for value, label in answer_types %}<option value="{{ value }}"{% if value == question.answer_type %} selected{% endif %}>{{ label }}</option>{% endfor %}</select></div>
+    {% endif %}
+    <div class="console-form__field"><label for="sq-label-{{ question.key }}">Question</label>
+      <input id="sq-label-{{ question.key }}" name="label" type="text" maxlength="300" value="{{ question.label }}" required></div>
+    <div class="console-form__field"><label for="sq-help-{{ question.key }}">Help text</label>
+      <input id="sq-help-{{ question.key }}" name="help_text" type="text" maxlength="500" value="{{ question.help_text }}"></div>
+    {% if not question.is_core %}
+    <div class="console-form__field"><label><input type="checkbox" name="required"{% if question.required %} checked{% endif %}> Required</label></div>
+    <fieldset class="console-form__field screening-options" data-screening-options>
+      <legend>Answers</legend>
+      {% for option in question.options %}
+      <div class="screening-option" data-option-value="{{ option.value }}">
+        <input type="text" aria-label="Answer {{ forloop.counter }}" data-option-label value="{{ option.label }}" maxlength="120">
+        <label><input type="checkbox" data-option-flag{% if option.flag %} checked{% endif %}> Flag for review</label>
+        <input type="text" aria-label="Why answer {{ forloop.counter }} is flagged" data-option-reason value="{{ option.reason }}" maxlength="300" placeholder="Reason">
+        <small class="helptext">The patient sees this reason.</small>
+      </div>
+      {% endfor %}
+      <input type="hidden" name="options" value="{{ question.options_json }}">
+    </fieldset>
+    <div class="console-form__field screening-number"><label for="sq-min-{{ question.key }}">Lowest number</label>
+      <input id="sq-min-{{ question.key }}" name="number_min" type="number" step="0.01" value="{{ question.number_min|default_if_none:'' }}">
+      <label for="sq-max-{{ question.key }}">Highest number</label>
+      <input id="sq-max-{{ question.key }}" name="number_max" type="number" step="0.01" value="{{ question.number_max|default_if_none:'' }}"></div>
+    {% endif %}
+    <p class="screening-panel__errors" data-panel-errors role="alert"></p>
+    <button class="console-button console-button--primary" type="submit">Save question</button>
+  </form>
+</section>

@@ -82,7 +82,7 @@ class StaffMenuTests(TestCase):
         # James, 6 Nov 2026: like Operations and Administration, each is one page with its pages as tabs.
         self.login('super_admin')
         groups = (('Insights', ('metrics', 'activity-statements')),
-                  ('Settings', ('treatment-review-rules', 'management-users', 'email-journeys', 'practice-settings')))
+                  ('Settings', ('treatment-review-rules', 'management-users', 'screening-questions', 'email-journeys', 'practice-settings')))
         for heading, pages in groups:
             for name in pages:
                 with self.subTest(page=name):
