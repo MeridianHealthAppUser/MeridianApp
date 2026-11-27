@@ -11,6 +11,9 @@ FIXED_CORE_KEYS = ('health_context', 'heard_from')
 CORE_KEYS = MOVABLE_CORE_KEYS + FIXED_CORE_KEYS
 
 
+NEW_QUESTION_LABEL = 'New question'
+
+
 def live_version(company):
     """The published screening form version; Version 1 is created only for a company with no version at all."""
     published = ScreeningFormVersion.objects.filter(company=company, status=ScreeningFormVersion.Status.PUBLISHED).first()
@@ -74,6 +77,14 @@ def _display_value(question, value):
     return str(labels.get(value, value))
 
 
+def answered_version(questionnaire):
+    """The version a lead answered. A lead with none (answered before versions existed) saw Version 1, not today's form."""
+    if questionnaire.form_version_id:
+        return questionnaire.form_version
+    first = ScreeningFormVersion.objects.filter(company=questionnaire.company, number=1).first()
+    return first or live_version(questionnaire.company)
+
+
 def display_answers(questionnaire):
     """The lead's answers in the wording of the version they answered: [{'label', 'value', 'flag_reason'}].
 
@@ -82,7 +93,7 @@ def display_answers(questionnaire):
     from practices.models import Patient
 
     answers = questionnaire.answers or {}
-    version = questionnaire.form_version or live_version(questionnaire.company)
+    version = answered_version(questionnaire)
     by_key = questions_by_key(version)
     reasons = {}
     for flag in answers.get('flags', []):
@@ -169,7 +180,7 @@ def start_draft(*, company, actor, request=None):
 
 
 @transaction.atomic
-def add_question(*, company, actor, label='New question', request=None):
+def add_question(*, company, actor, label=NEW_QUESTION_LABEL, request=None):
     _lock(company)
     draft = _draft(company)
     movable = movable_questions(draft)
@@ -271,6 +282,8 @@ def publish_draft(*, company, actor, request=None):
     if len(custom) > MAX_CUSTOM_QUESTIONS:
         raise ValidationError(f'A form can have at most {MAX_CUSTOM_QUESTIONS} custom questions.')
     for row in custom:
+        if row.label.strip() == NEW_QUESTION_LABEL:
+            raise ValidationError(f'Give “{NEW_QUESTION_LABEL}” its real wording before publishing.')
         form = _question_form(row)
         if not form.is_valid():
             problems = '; '.join(m for errors in form.errors.values() for m in errors)

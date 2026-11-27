@@ -117,7 +117,7 @@
   }
   function mayLeave() {
     const unsaved = [...editedForms].some(form => form.isConnected && (form.getAttribute('method') || 'get').toLowerCase() !== 'get'
-      && formBaselines.has(form) && formBaselines.get(form) !== formValue(form));
+      && !form.matches('[data-autosave]') && formBaselines.has(form) && formBaselines.get(form) !== formValue(form));
     return !unsaved || window.confirm('You have unsaved changes. Leave this page without saving them?');
   }
   document.addEventListener('focusin', event => {

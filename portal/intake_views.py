@@ -134,11 +134,14 @@ class QuestionnaireView(PrivateIntakeView):
     @staticmethod
     def version_for(practice_id, payload):
         """The version this practice showed the patient: published or superseded, and the practice's own."""
+        statuses = (ScreeningFormVersion.Status.PUBLISHED, ScreeningFormVersion.Status.SUPERSEDED)
         try:
-            version_id = payload['versions'][str(practice_id)]
-            version = ScreeningFormVersion.objects.filter(
-                pk=version_id, company_id=int(practice_id),
-                status__in=(ScreeningFormVersion.Status.PUBLISHED, ScreeningFormVersion.Status.SUPERSEDED)).first()
+            if 'versions' not in payload:
+                # A token issued before versions existed: every form then was Version 1 (signature and owner still checked).
+                version = ScreeningFormVersion.objects.filter(company_id=int(practice_id), number=1, status__in=statuses).first()
+            else:
+                version = ScreeningFormVersion.objects.filter(
+                    pk=payload['versions'][str(practice_id)], company_id=int(practice_id), status__in=statuses).first()
         except (KeyError, TypeError, ValueError, AttributeError):
             version = None
         if version is None:

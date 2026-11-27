@@ -417,7 +417,7 @@ class EligibilityQuestionnaireForm(forms.Form):
         if kind == Type.LONG_TEXT:
             return forms.CharField(max_length=2000, widget=forms.Textarea(attrs={'rows': 4}), strip=False, **common)
         if kind == Type.NUMBER:
-            return forms.DecimalField(min_value=question.number_min, max_value=question.number_max,
+            return DecimalCommaField(min_value=question.number_min, max_value=question.number_max,
                                       max_digits=10, decimal_places=2, **common)
         return forms.CharField(max_length=200, **common)
 
@@ -437,7 +437,7 @@ class EligibilityQuestionnaireForm(forms.Form):
             if question.answer_type == ScreeningQuestion.AnswerType.MULTIPLE:
                 answers[question.key] = list(value or [])
             else:
-                answers[question.key] = '' if value is None else str(value)
+                answers[question.key] = '' if value is None else format(value, 'f') if isinstance(value, Decimal) else str(value)
         return answers
 
     def cleaned_answers(self):

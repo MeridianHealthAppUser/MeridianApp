@@ -65,9 +65,19 @@ class ScreeningLeadPageTests(OperationsFixture):
 
     def test_questionnaire_without_version_uses_version_1(self):
         lead = self.lead(None, {'adult': 'yes', 'pancreatitis': 'unsure'})
+        from care.screening import publish_draft, save_question, start_draft
+        from django.contrib.auth import get_user_model
+        actor = get_user_model().objects.first()
+        draft = start_draft(company=self.company, actor=actor)
+        row = draft.questions.get(key='pancreatitis')
+        save_question(question=row, actor=actor, cleaned={'label': 'Version 2 pancreatitis wording?', 'help_text': ''})
+        publish_draft(company=self.company, actor=actor)
+        self.assertEqual(live_version(self.company).number, 2)
         response = self.page(lead)
         self.assertContains(response, 'Have you ever had pancreatitis?')
+        self.assertNotContains(response, 'Version 2 pancreatitis wording?')
         self.assertContains(response, 'Not sure')
+        self.assertNotContains(response, 'Answered Version')
 
     def test_leads_list_marks_and_filters_flagged(self):
         self.lead(self.v1, {}, flagged=True, first='Flaggy')

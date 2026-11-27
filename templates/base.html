@@ -37,7 +37,7 @@
     {% if is_patient_portal %}<link rel="stylesheet" href="{% static 'css/patient_mobile.css' %}?v=20261115d">{% endif %}
     {# Staff use phones too: the same phone layout for staff pages (bottom sheets, list then conversation, card tables). #}
     {% if is_workspace_page and not is_patient_portal %}<link rel="stylesheet" href="{% static 'css/staff_mobile.css' %}?v=20261120e">{% endif %}
-    {% if page_navigation_config %}<script src="{% static 'js/app_navigation.js' %}?v=20261120c" defer></script>{% endif %}
+    {% if page_navigation_config %}<script src="{% static 'js/app_navigation.js' %}?v=20261127a" defer></script>{% endif %}
   </head>
   <body{% if is_workspace_page or is_patient_portal %} class="{% if is_workspace_page %}workspace-page{% endif %}{% if is_patient_portal %}{% if is_workspace_page %} {% endif %}patient-app{% endif %}"{% endif %}>
     {% if page_navigation_config %}{{ page_navigation_config|json_script:"page-navigation-config" }}{% endif %}

@@ -42,10 +42,10 @@ INSIGHTS_TABS = (
 SETTINGS_TABS = (
     ('review_rules', 'Review rules', 'portal:treatment-review-rules'),
     ('users', 'Users and roles', 'portal:management-users'),
-    ('screening', 'Screening questions', 'portal:screening-questions'),
     ('email_journeys', 'Email journeys', 'portal:email-journeys'),
     ('policies', 'Policy versions', 'portal:policy-list'),
     ('practice_settings', 'Practice settings', 'portal:practice-settings'),
+    ('screening', 'Screening questions', 'portal:screening-questions'),
 )
 # Calendar's tabs (Calendar & Bookings until Nov 2026; templates/portal/includes/schedule_tabs.html). For Super Admins
 # they are three pages in Care (James, 20 Nov 2026); the flat menu has one Calendar entry opening Appointments.

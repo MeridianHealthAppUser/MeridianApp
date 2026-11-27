@@ -78,11 +78,16 @@ class StaffMenuTests(TestCase):
                 self.assertEqual(self.client.get(reverse('portal:staff-menu-section', args=[section])).status_code, 404)
         self.assertEqual(self.client.get(reverse('portal:staff-menu-section', args=['invented'])).status_code, 404)
 
+    def test_screening_questions_is_the_last_settings_tab(self):
+        from .navigation import SETTINGS_TABS
+        self.assertEqual(SETTINGS_TABS[-1][0], 'screening')
+        self.assertEqual(SETTINGS_TABS[-2][0], 'practice_settings')
+
     def test_insights_and_settings_are_pages_of_tabs_for_super_admins(self):
         # James, 6 Nov 2026: like Operations and Administration, each is one page with its pages as tabs.
         self.login('super_admin')
         groups = (('Insights', ('metrics', 'activity-statements')),
-                  ('Settings', ('treatment-review-rules', 'management-users', 'screening-questions', 'email-journeys', 'practice-settings')))
+                  ('Settings', ('treatment-review-rules', 'management-users', 'email-journeys', 'practice-settings', 'screening-questions')))
         for heading, pages in groups:
             for name in pages:
                 with self.subTest(page=name):

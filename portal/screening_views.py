@@ -98,6 +98,11 @@ def row_html(request, question, selected=False):
                              'draft_id': question.version_id}, request=request)
 
 
+def summary_html(request, draft, live):
+    return render_to_string('portal/includes/screening_change_summary.html',
+                            {'summary': change_summary(draft, live), 'live': live}, request=request)
+
+
 def draft_url(key=''):
     return reverse('portal:screening-draft') + (f'?q={key}' if key else '')
 
@@ -197,7 +202,8 @@ class QuestionSaveView(ScreeningStaffView):
         except ValidationError as error:
             return self.fail(request, key, 409, {'__all__': list(error.messages)})
         if self.wants_json(request):
-            return JsonResponse({'ok': True, 'row_html': row_html(request, saved, selected=True)})
+            return JsonResponse({'ok': True, 'row_html': row_html(request, saved, selected=True),
+                                 'summary_html': summary_html(request, draft, live_version(self.company))})
         messages.success(request, 'Question saved in the draft.')
         return redirect(draft_url(saved.key))
 
@@ -232,11 +238,11 @@ class ReorderView(ScreeningStaffView):
         if not isinstance(keys, list) or not all(isinstance(k, str) for k in keys):
             return JsonResponse({'ok': False, 'errors': {'__all__': ['The order could not be read. Reload the page.']}}, status=400)
         try:
-            self.check_draft(request, number)
+            draft = self.check_draft(request, number)
             reorder(company=self.company, actor=request.user, keys=keys, request=request)
         except ValidationError as error:
             return JsonResponse({'ok': False, 'errors': {'__all__': list(error.messages)}}, status=409)
-        return JsonResponse({'ok': True})
+        return JsonResponse({'ok': True, 'summary_html': summary_html(request, draft, live_version(self.company))})
 
 
 @method_decorator(never_cache, name='dispatch')

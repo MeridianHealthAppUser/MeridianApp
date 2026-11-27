@@ -1,12 +1,12 @@
 {% extends 'portal/staff_page_base.html' %}{% load static workspace_ui %}
-{% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/screening_builder.css' %}?v=20261127a"><link rel="stylesheet" href="{% static 'css/dialogs.css' %}?v=20261115a"><script src="{% static 'js/dialogs.js' %}?v=20261115b" defer></script><script src="{% static 'js/screening_builder.js' %}?v=20261127a" defer></script>{% endblock %}
+{% block extra_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'css/screening_builder.css' %}?v=20261127b"><link rel="stylesheet" href="{% static 'css/dialogs.css' %}?v=20261115a"><script src="{% static 'js/dialogs.js' %}?v=20261115b" defer></script><script src="{% static 'js/screening_builder.js' %}?v=20261127b" defer></script>{% endblock %}
 {% block title %}Screening questions draft | {{ company.name }} | Meridian{% endblock %}
 {% block breadcrumbs %}{% breadcrumbs 'Settings' %}{% endblock %}
 {% block page_heading %}<header class="staff-page-header"><div><h1>Settings</h1><p>Settings for {{ company.name }}. Only Super Admins can change these.</p></div></header>{% page_tabs %}{% endblock %}
 {% block page_content %}
 <section class="staff-page-card screening-bar" aria-label="Draft">
   <div><strong>Draft · Version {{ draft.number }}</strong>
-    <span class="screening-summary" data-screening-summary>{% if summary.added or summary.reworded or summary.retired or summary.reordered %}{% if summary.added %}Added {{ summary.added|join:', ' }}. {% endif %}{% if summary.reworded %}Reworded {{ summary.reworded|join:', ' }}. {% endif %}{% if summary.retired %}Retired {{ summary.retired|join:', ' }}. {% endif %}{% if summary.reordered %}Reordered.{% endif %}{% else %}No changes from Version {{ live.number }} yet.{% endif %}</span></div>
+    <div class="screening-summary" data-screening-summary>{% include 'portal/includes/screening_change_summary.html' %}</div></div>
   <div class="screening-bar__actions">
     <a class="console-button console-button--secondary" href="{% url 'portal:screening-questions' %}">Back</a>
     <button class="console-button console-button--secondary screening-preview-open" type="button" data-preview-open data-modal-open="screening-preview-dialog" aria-haspopup="dialog">Preview</button>
@@ -24,9 +24,7 @@
   <div class="app-dialog__body">
     <h2 id="screening-publish-title">Publish Version {{ draft.number }}?</h2>
     <p class="app-dialog__sub">New enquiries on the website and your WordPress page get these questions from now on. Leads that already answered keep Version {{ live.number }}.</p>
-    {% if summary.added or summary.reworded or summary.retired or summary.reordered %}<ul>
-      {% for label in summary.added %}<li>Added: {{ label }}</li>{% endfor %}{% for label in summary.reworded %}<li>Reworded: {{ label }}</li>{% endfor %}{% for label in summary.retired %}<li>Retired: {{ label }}</li>{% endfor %}{% if summary.reordered %}<li>Questions reordered</li>{% endif %}
-    </ul>{% endif %}
+    <div class="screening-publish-summary" data-screening-summary>{% include 'portal/includes/screening_change_summary.html' %}</div>
     <form method="post" action="{% url 'portal:screening-publish' %}" class="app-dialog__actions">{% csrf_token %}<input type="hidden" name="draft_id" value="{{ draft.pk }}">
       <button class="console-button console-button--secondary" type="button" data-dialog-close>Cancel</button>
       <button class="console-button console-button--primary" type="submit">Publish Version {{ draft.number }}</button>

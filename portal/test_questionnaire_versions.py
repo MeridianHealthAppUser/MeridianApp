@@ -113,6 +113,17 @@ class QuestionnaireVersionTests(TestCase):
         self.assertRedirects(post, reverse('portal:questionnaire-result'), fetch_redirect_response=False)
         self.assertEqual(ScreeningQuestionnaire.objects.get().form_version.number, 1)
 
+    def test_token_issued_before_versions_existed_submits_against_version_1(self):
+        response = self.page()
+        token = response.context['form']['submission_token'].value()
+        payload = signing.loads(token, salt=TOKEN_SALT)
+        del payload['versions']
+        old_token = signing.dumps(payload, salt=TOKEN_SALT, compress=True)
+        publish_next(self.company, custom=[('c_surgery', 'Any weight-loss surgery?', 6, False)])
+        post = self.client.post(reverse('portal:questionnaire'), self.post_data(response, submission_token=old_token))
+        self.assertRedirects(post, reverse('portal:questionnaire-result'), fetch_redirect_response=False)
+        self.assertEqual(ScreeningQuestionnaire.objects.get().form_version.number, 1)
+
     def test_tampered_version_is_rejected(self):
         other = Company.objects.create(name='Other', slug='other')
         foreign = live_version(other)

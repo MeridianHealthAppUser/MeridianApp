@@ -1,7 +1,9 @@
 /* Settings > Screening questions: list left, edit panel middle, phone-width preview right. */
 .screening-bar { align-items: center; display: flex; flex-wrap: wrap; gap: 1rem; justify-content: space-between; }
 .screening-bar__actions { display: flex; flex-wrap: wrap; gap: .5rem; }
-.screening-summary { color: var(--console-muted, var(--c-627883)); font-size: .85rem; margin-left: .5rem; }
+.screening-summary { color: var(--console-muted, var(--c-627883)); display: inline-block; font-size: .85rem; margin-left: .5rem; }
+.screening-summary .screening-summary__list { display: none; }
+.screening-publish-summary .screening-summary__text { display: none; }
 .screening-editor { align-items: start; display: grid; gap: 1rem; grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr) minmax(14rem, 22rem); }
 .screening-editor--readonly { grid-template-columns: minmax(0, 1fr) minmax(14rem, 22rem); }
 .screening-rows { display: grid; gap: .5rem; list-style: none; margin: .5rem 0; padding: 0; }

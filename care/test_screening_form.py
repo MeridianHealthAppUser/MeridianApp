@@ -90,6 +90,16 @@ class ScreeningFormTests(TestCase):
             with self.subTest(bad=bad):
                 self.assertFalse(self.form(version, **{**good, **bad}).is_valid())
 
+    def test_number_answer_accepts_a_comma_and_is_saved_plainly(self):
+        version = self.v2()
+        self.custom(version, 'c_num', AT.NUMBER, 10, number_min=18, number_max=99)
+        form = self.form(version, custom_c_num='72,5')
+        self.assertTrue(form.is_valid(), form.errors)
+        self.assertEqual(form.cleaned_answers()['custom'], {'c_num': '72.5'})
+        sci = self.form(version, custom_c_num='2e1')
+        if sci.is_valid():
+            self.assertEqual(sci.cleaned_answers()['custom'], {'c_num': '20'})
+
     def test_long_text_and_optional_blanks(self):
         version = self.v2()
         self.custom(version, 'c_long', AT.LONG_TEXT, 10, required=False)

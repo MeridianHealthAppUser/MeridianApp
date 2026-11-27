@@ -112,6 +112,25 @@ class ScreeningBuilderTests(BillingFixture):
         self.assertEqual(self.client.get(reverse('portal:screening-draft')).status_code, 404)
         self.assertNotEqual(live_version(self.company).questions.get(key=live_key).label, 'Hacked')
 
+    def test_save_and_reorder_return_the_current_change_summary(self):
+        self.start()
+        self.client.post(reverse('portal:screening-question-add'), {'draft_id': self.number()})
+        key = draft_version(self.company).questions.get(tier='custom').key
+        saved = self.client.post(reverse('portal:screening-question-save', args=[key]), {
+            'draft_id': self.number(), 'answer_type': 'yes_no', 'label': 'Renamed after adding?', 'options': '[]'},
+            HTTP_ACCEPT='application/json')
+        self.assertEqual(saved.status_code, 200)
+        self.assertIn('Added: Renamed after adding?', saved.json()['summary_html'])
+        self.assertNotIn('New question', saved.json()['summary_html'])
+        draft = draft_version(self.company)
+        from care.screening import movable_questions
+        keys = [q.key for q in movable_questions(draft)]
+        moved = self.client.post(reverse('portal:screening-reorder'), json.dumps({'keys': keys[::-1], 'draft_id': draft.pk}),
+                                 content_type='application/json')
+        self.assertIn('Renamed after adding?', moved.json()['summary_html'])
+        page = self.client.get(reverse('portal:screening-draft'))
+        self.assertContains(page, 'Added: Renamed after adding?')
+
     def test_reorder_and_stale_responses(self):
         self.start()
         draft = draft_version(self.company)
@@ -171,8 +190,8 @@ class ScreeningBuilderTests(BillingFixture):
         self.assertContains(page, 'class="screening-preview"')
         self.assertContains(page, 'title="Patient preview"')
         self.assertContains(page, 'data-preview-open')
-        self.assertContains(page, 'js/screening_builder.js?v=20261127a')
-        self.assertContains(page, 'css/screening_builder.css?v=20261127a')
+        self.assertContains(page, 'js/screening_builder.js?v=20261127b')
+        self.assertContains(page, 'css/screening_builder.css?v=20261127b')
         self.assertContains(page, 'data-preview-slot')
         self.assertContains(page, 'id="screening-preview-dialog"')
         for text in ('The app needs these', 'Used for BMI', 'Wording comes from Policy versions',

@@ -153,7 +153,7 @@ class BuilderServiceTests(TestCase):
     def test_saves_to_a_published_or_missing_draft_are_refused(self):
         from care.screening import add_question, discard_draft, publish_draft, save_question, start_draft
         start_draft(company=self.company, actor=self.actor)
-        row = add_question(company=self.company, actor=self.actor)
+        row = add_question(company=self.company, actor=self.actor, label='Surgery?')
         publish_draft(company=self.company, actor=self.actor)
         with self.assertRaises(ValidationError):
             save_question(question=row, actor=self.actor, cleaned={'label': 'x'})
@@ -251,6 +251,14 @@ class BuilderServiceTests(TestCase):
         summary = change_summary(draft, self.live)
         self.assertEqual(summary, {'added': ['Surgery?'], 'reworded': ['Over 18?'], 'retired': [], 'reordered': False})
         self.assertEqual(change_summary(self.live, draft)['retired'], ['Surgery?'])
+
+    def test_publish_refuses_a_placeholder_question(self):
+        from care.screening import add_question, publish_draft, start_draft
+        start_draft(company=self.company, actor=self.actor)
+        add_question(company=self.company, actor=self.actor)
+        with self.assertRaisesMessage(ValidationError, 'real wording'):
+            publish_draft(company=self.company, actor=self.actor)
+        self.assertEqual(ScreeningFormVersion.objects.get(company=self.company, number=2).status, 'draft')
 
     def test_publish_refuses_an_invalid_draft(self):
         from care.screening import add_question, publish_draft, start_draft

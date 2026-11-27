@@ -6,7 +6,7 @@ from django.utils.decorators import method_decorator
 from django.views.decorators.cache import never_cache
 
 from care.models import ConsentRecord, Lead, ScreeningQuestionnaire
-from care.screening import display_answers, live_version
+from care.screening import display_answers
 from care.services import record_audit
 from practices.models import CompanyMembership
 
@@ -93,7 +93,7 @@ class LeadDetailView(LeadPageView):
         answers = questionnaire.answers if questionnaire else {}
         display = display_answers(questionnaire) if questionnaire else []
         context.update(lead=lead, questionnaire=questionnaire, answers_display=display,
-                       form_version_number=(questionnaire.form_version or live_version(self.company)).number if questionnaire else None,
+                       form_version_number=questionnaire.form_version.number if questionnaire and questionnaire.form_version else None,
                        screening_reasons=answers.get('screening_reasons', []),
                        consents=ConsentRecord.objects.for_company(self.company).filter(lead=lead).select_related('document'))
         record_audit(company=self.company, actor=self.request.user, action='lead.viewed', target=lead, request=self.request)

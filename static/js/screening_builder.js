@@ -17,6 +17,7 @@
   const STALE = 'This draft was published or discarded. Reload the page.';
   const DELAY = 600;
   let stale = false;
+  let leaving = false;
   let selectedKey = document.querySelector('[data-panel-for]:not([hidden])')?.dataset.panelFor || '';
   const MAX_ANSWERS = 12;
   const timers = new Map();
@@ -280,6 +281,7 @@
         }
         const heading = form.querySelector('h3');
         if (heading) heading.textContent = form.elements.label.value;
+        showSummary(data.summary_html);
         status.textContent = 'Saved';
         previewKey = key;
         reloadPreview();
@@ -300,6 +302,10 @@
       status.textContent = 'Could not save. Check your connection; the next change tries again.';
     }
     return false;
+  }
+  function showSummary(html) {
+    if (typeof html !== 'string') return;
+    document.querySelectorAll('[data-screening-summary]').forEach(box => { box.innerHTML = html; });
   }
   // Saves every panel with an unsaved change and waits for saves and reorders in flight.
   // Resolves 'ok', 'invalid' (a 400 shows field errors), 'stale' (draft gone) or 'error' (anything else).
@@ -347,12 +353,20 @@
     flush().then(result => {
       note?.remove();
       buttons.forEach(button => { button.disabled = false; });
-      if (result === 'ok') { go(); return; }
+      // Cancel, Keep editing or Escape while the flush ran: the user said no, so do nothing further.
+      const dismissed = dlg && !dlg.open;
+      if (result === 'ok') {
+        if (dismissed) return;
+        leaving = true;
+        go();
+        return;
+      }
       dlg?.close();
       if (result === 'stale') { alertBox.scrollIntoView({ block: 'center' }); return; }
       if (result === 'invalid') { flushFailed(); return; }
       status.textContent = 'Could not save your last change.';
-      if (window.confirm('Could not save your last change. Leave anyway?')) go();
+      if (dismissed) return;
+      if (window.confirm('Could not save your last change. Leave anyway?')) { leaving = true; go(); }
     }).finally(() => guarding.delete(control));
   }
   listen(document, 'input', event => {
@@ -430,6 +444,7 @@
       });
       const data = await readJson(response);
       if (response.ok && data?.ok && !response.redirected) {
+        showSummary(data.summary_html);
         status.textContent = 'Saved';
         previewKey = movedKey;
         reloadPreview();
@@ -519,7 +534,7 @@
     });
   }, true);
   listen(window, 'beforeunload', event => {
-    if (stale || !hasPending()) return;
+    if (stale || leaving || !hasPending()) return;
     event.preventDefault();
     event.returnValue = '';
   });
