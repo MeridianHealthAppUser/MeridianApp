@@ -39,3 +39,20 @@ def movable_questions(version):
 
 def questions_by_key(version):
     return {q.key: q for q in version.questions.all()}
+
+
+def evaluate_flags(version, custom_answers):
+    """Flag entries for every chosen flagged option, in the order the patient sees the questions."""
+    if version is None:
+        return []
+    Type = ScreeningQuestion.AnswerType
+    flags = []
+    for question in movable_questions(version):
+        if question.tier != ScreeningQuestion.Tier.CUSTOM or question.answer_type not in (Type.YES_NO, Type.SINGLE, Type.MULTIPLE):
+            continue
+        answer = custom_answers.get(question.key)
+        chosen = answer if isinstance(answer, list) else [answer]
+        for option in question.options:
+            if option.get('flag') and option.get('value') in chosen:
+                flags.append({'key': question.key, 'answer': option['value'], 'reason': option.get('reason', '')})
+    return flags

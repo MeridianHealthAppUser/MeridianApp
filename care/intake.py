@@ -17,6 +17,7 @@ from practices.models import Company
 from practices.tenancy import company_is_enabled
 
 from .models import ConsentDocument, ConsentRecord, Lead, ScreeningQuestionnaire
+from .screening import evaluate_flags
 from .services import record_audit
 
 
@@ -54,9 +55,11 @@ def notice_fingerprint(documents):
     return hashlib.sha256(json.dumps(documents, sort_keys=True).encode()).hexdigest()
 
 
-def screening_outcome(data):
+def screening_outcome(data, flags=()):
+    """A flag only ever refers or holds a lead for review; it never declines."""
+    flag_reasons = list(dict.fromkeys(flag['reason'] for flag in flags if flag['reason']))
     if not settings.DEBUG:
-        return Lead.ScreeningStatus.PENDING, [], 'clinical-review-required'
+        return Lead.ScreeningStatus.PENDING, flag_reasons, 'clinical-review-required'
     # Mirror the supplied mock for demo navigation only. Use unrounded BMI at
     # thresholds: a displayed 27.00 must not round a sub-threshold value up.
     bmi = data['weight_kg'] / (data['height_cm'] / 100) ** 2
@@ -73,6 +76,7 @@ def screening_outcome(data):
     for needs_review, reason in checks:
         if needs_review:
             reasons.append(reason)
+    reasons = list(dict.fromkeys(reasons + flag_reasons))
     return (Lead.ScreeningStatus.REFERRED if reasons else Lead.ScreeningStatus.CLEARED,
             reasons, 'prototype-rev2.6-demo')
 
@@ -90,11 +94,13 @@ def save_intake(*, form, submission_key, expected_notices, request=None):
         documents = practice_notices(company)
         if len(documents) != len(CONSENT_KINDS) or notice_fingerprint(documents) != expected_notices:
             raise ValidationError('The practice notices have changed or are unavailable. Reload the questionnaire and read them before accepting again.')
-        status, reasons, rules_version = screening_outcome(data)
-        values = {field: data[field] for field in ('first_name', 'last_name', 'email', 'phone', 'id_number')}
         answers = form.cleaned_answers()
-        answers.update(screening_reasons=reasons, screening_rules_version=rules_version, consent_snapshot=documents)
-        values.update(bmi=answers['bmi'], screening_status=status)
+        flags = evaluate_flags(form.version, answers['custom']) if form.version is not None else []
+        status, reasons, rules_version = screening_outcome(data, flags)
+        values = {field: data[field] for field in ('first_name', 'last_name', 'email', 'phone', 'id_number')}
+        answers.update(screening_reasons=reasons, screening_rules_version=rules_version, consent_snapshot=documents,
+                       flags=flags, form_version=form.version.number if form.version is not None else None)
+        values.update(bmi=answers['bmi'], screening_status=status, screening_flagged=bool(flags))
         lead = Lead.objects.select_for_update().filter(submission_key=submission_key).first()
         created = lead is None
         if created:
@@ -122,7 +128,7 @@ def save_intake(*, form, submission_key, expected_notices, request=None):
         lead.save()
         ScreeningQuestionnaire.objects.update_or_create(
             company=company, lead=lead, stage=1,
-            defaults={'status': ScreeningQuestionnaire.Status.SUBMITTED, 'answers': answers,
+            defaults={'status': ScreeningQuestionnaire.Status.SUBMITTED, 'answers': answers, 'form_version': form.version,
                       'submitted_at': timezone.now(), 'reviewed_by': None, 'clinical_notes': ''},
         )
         for document in documents:
