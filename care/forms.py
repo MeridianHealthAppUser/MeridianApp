@@ -478,7 +478,8 @@ class ScreeningQuestionForm(forms.Form):
 
     def __init__(self, *args, question=None, **kwargs):
         super().__init__(*args, **kwargs)
-        self.existing_values = {o.get('value') for o in (question.options if question is not None else []) if isinstance(o, dict)}
+        self.existing_values = {o['value'] for o in (question.options if question is not None else [])
+                                if isinstance(o, dict) and o.get('value')}
 
     def clean_label(self):
         return self.cleaned_data['label'].strip()
@@ -526,7 +527,7 @@ class ScreeningQuestionForm(forms.Form):
                 if not 2 <= len(items) <= 12:
                     raise ValidationError('Choice questions need 2 to 12 answers.')
                 options = [self._clean_item(i) for i in items]
-                taken = {i['value'] for i in items if i.get('value') in self.existing_values}
+                taken = {i['value'] for i in items if i.get('value') and i['value'] in self.existing_values}
                 for source, option in zip(items, options):
                     if source.get('value') in self.existing_values:
                         option['value'] = source['value']

@@ -136,9 +136,9 @@ def draft_version(company):
     return ScreeningFormVersion.objects.filter(company=company, status=_Status.DRAFT).first()
 
 
-def new_custom_key(company, label, exclude_pk=None):
+def new_custom_key(company, label):
     """`c_` + slug of the label (50 characters at most), `-2`, `-3`... if any version of the company already uses it."""
-    used = set(ScreeningQuestion.objects.filter(company=company).exclude(pk=exclude_pk).values_list('key', flat=True))
+    used = set(ScreeningQuestion.objects.filter(company=company).values_list('key', flat=True))
     base = ('c_' + (slugify(label) or 'question'))[:50].rstrip('-_')
     key, n = base, 2
     while key in used:
@@ -275,6 +275,11 @@ def publish_draft(*, company, actor, request=None):
         if not form.is_valid():
             problems = '; '.join(m for errors in form.errors.values() for m in errors)
             raise ValidationError(f'“{row.label}” needs fixing before you publish: {problems}')
+        # The form normalises (it can synthesise Yes/No); a stored row must already be exactly what it produces.
+        cleaned = form.cleaned_data
+        if (cleaned['options'] != row.options or cleaned['number_min'] != row.number_min
+                or cleaned['number_max'] != row.number_max):
+            raise ValidationError(f'“{row.label}” has answers or limits that are not valid. Open it and save it again.')
     live = ScreeningFormVersion.objects.filter(company=company, status=_Status.PUBLISHED).first()
     changes = change_summary(draft, live)
     if live is not None:

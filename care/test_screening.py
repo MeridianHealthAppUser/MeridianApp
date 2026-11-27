@@ -270,3 +270,20 @@ class BuilderServiceTests(TestCase):
         save_question(question=other_row, actor=self.actor, cleaned={'label': 'Theirs'})
         row.refresh_from_db()
         self.assertEqual(row.label, 'Are you 18 or older?')
+
+    def test_publish_refuses_a_yes_no_row_with_no_options(self):
+        from care.screening import add_question, publish_draft, start_draft
+        start_draft(company=self.company, actor=self.actor)
+        row = add_question(company=self.company, actor=self.actor, label='Surgery?')
+        ScreeningQuestion.objects.filter(pk=row.pk).update(options=[])
+        with self.assertRaisesMessage(ValidationError, 'Surgery?'):
+            publish_draft(company=self.company, actor=self.actor)
+
+    def test_publish_refuses_a_choice_option_without_a_value(self):
+        from care.screening import add_question, publish_draft, start_draft
+        start_draft(company=self.company, actor=self.actor)
+        row = add_question(company=self.company, actor=self.actor, label='Which?')
+        ScreeningQuestion.objects.filter(pk=row.pk).update(answer_type='single', options=[
+            {'label': 'A', 'flag': False, 'reason': ''}, {'label': 'B', 'flag': False, 'reason': ''}])
+        with self.assertRaisesMessage(ValidationError, 'Which?'):
+            publish_draft(company=self.company, actor=self.actor)
