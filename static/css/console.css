@@ -1481,32 +1481,3 @@
 /* The video consultation note on an appointment's page, on its own line under Join: the join window, then why the room isn't open, smaller and in italics. */
 .video-join-note { display: flex; flex-direction: column; gap: .2rem; width: 100%; }
 .video-join-note small { color: var(--console-muted); font-size: .78rem; font-style: italic; }
-
-/* Settings > Screening questions: list left, edit panel middle, phone-width preview right. */
-.screening-bar { align-items: center; display: flex; flex-wrap: wrap; gap: 1rem; justify-content: space-between; }
-.screening-bar__actions { display: flex; flex-wrap: wrap; gap: .5rem; }
-.screening-summary { color: var(--console-muted, var(--c-627883)); font-size: .85rem; margin-left: .5rem; }
-.screening-editor { align-items: start; display: grid; gap: 1rem; grid-template-columns: minmax(16rem, 1fr) minmax(18rem, 1.2fr) 22rem; }
-.screening-editor--readonly { grid-template-columns: minmax(16rem, 1fr) 22rem; }
-.screening-rows { display: grid; gap: .5rem; list-style: none; margin: .5rem 0; padding: 0; }
-.screening-row { align-items: center; background: var(--c-ffffff); border: 1px solid var(--console-line, var(--c-d8e2e6)); border-radius: .6rem; display: flex; flex-wrap: wrap; gap: .5rem; padding: .6rem .75rem; }
-.screening-row.is-selected { border-color: var(--console-teal, var(--c-1d6f7a)); box-shadow: 0 0 0 1px var(--console-teal, var(--c-1d6f7a)); }
-.screening-row__text { flex: 1 1 10rem; min-width: 0; }
-.screening-row__actions { display: flex; flex-wrap: wrap; gap: .35rem; }
-.screening-row__handle { color: var(--console-muted, var(--c-627883)); cursor: grab; }
-.screening-tag { border-radius: 999px; font-size: .72rem; font-weight: 700; padding: .15rem .55rem; }
-.screening-tag--core { background: var(--c-e6f1f4); color: var(--c-1d5360); }
-.screening-tag--custom { background: var(--c-efe8fa); color: var(--c-54337f); }
-.screening-tag--lock { background: var(--c-eef3f5); color: var(--c-4d6c7b); }
-.screening-flag { color: var(--c-b4540a); }
-.screening-locked { background: var(--c-f3f6f7); border-radius: .6rem; color: var(--c-4d6c7b); margin: .5rem 0; padding: .6rem .75rem; }
-.screening-locked small { display: block; }
-.screening-note { background: var(--c-f3f6f7); border-radius: .5rem; padding: .5rem .75rem; }
-.screening-option { display: grid; gap: .35rem; margin-bottom: .75rem; }
-.screening-preview { border: 1px solid var(--console-line, var(--c-d8e2e6)); border-radius: 1.2rem; height: 40rem; max-width: 22rem; width: 100%; }
-.screening-preview-open { display: none; }
-@media (max-width: 1100px) {
-  .screening-editor, .screening-editor--readonly { grid-template-columns: 1fr; }
-  .screening-editor__preview { display: none; }
-  .screening-preview-open { display: inline-flex; }
-}

@@ -171,6 +171,9 @@ class ScreeningBuilderTests(BillingFixture):
         self.assertContains(page, 'class="screening-preview"')
         self.assertContains(page, 'title="Patient preview"')
         self.assertContains(page, 'data-preview-open')
+        self.assertContains(page, 'js/screening_builder.js?v=20261127a')
+        self.assertContains(page, 'css/screening_builder.css?v=20261127a')
+        self.assertContains(page, 'data-preview-slot')
         self.assertContains(page, 'id="screening-preview-dialog"')
         for text in ('The app needs these', 'Used for BMI', 'Wording comes from Policy versions',
                      'The eligibility checks and the medical profile use this answer', 'Core · reword only'):
