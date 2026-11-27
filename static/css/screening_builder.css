@@ -28,7 +28,7 @@
 }
 
 .screening-row.is-dragging { opacity: .5; }
-.screening-row[draggable="true"] { cursor: grab; }
+.screening-row[draggable="true"] { cursor: pointer; }
 .screening-row .console-button[disabled] { opacity: .45; }
 .screening-alert { background: var(--c-fff3f1); border: 1px solid var(--c-f1d3ce); border-radius: .6rem; color: var(--console-red); font-weight: 600; margin: 0 0 1rem; padding: .7rem .9rem; }
 .screening-status { color: var(--console-muted, var(--c-627883)); font-size: .8rem; margin: 0 0 .5rem; min-height: 1.1rem; }
@@ -41,3 +41,4 @@
 .screening-option label { align-items: center; display: flex; gap: .4rem; }
 .screening-option input[type="checkbox"] { width: auto; }
 .screening-option .console-button { justify-self: start; }
+.screening-row { cursor: pointer; }

@@ -18,9 +18,14 @@
   const DELAY = 600;
   let stale = false;
   let selectedKey = document.querySelector('[data-panel-for]:not([hidden])')?.dataset.panelFor || '';
+  const MAX_ANSWERS = 12;
   const timers = new Map();
   const saving = new Map();
   const again = new Set();
+  const unsaved = new Map();
+  let reorderRun = null;
+  let previewKey = selectedKey;
+  let bypass = false;
 
   const csrf = form => form.querySelector('[name=csrfmiddlewaretoken]')?.value || '';
   const panelFor = key => document.querySelector(`form[data-screening-panel="${CSS.escape(key)}"]`);
@@ -40,23 +45,28 @@
     stale = true;
     timers.forEach(timer => window.clearTimeout(timer));
     timers.clear();
+    unsaved.clear();
     showAlert(message);
     status.textContent = '';
   }
   async function readJson(response) {
     try { return await response.json(); } catch (error) { return null; }
   }
-  function refusal(response, data) {
+  // Only a 409, a 404 or a login redirect means the draft is gone; a 500 or 403 can be retried.
+  function staleMessage(response, data) {
     if (response.status === 404) return STALE;
-    return data?.errors?.__all__?.[0] || STALE;
+    if (response.status === 409) return data?.errors?.__all__?.[0] || STALE;
+    if (response.redirected) return 'Your session ended. Reload the page.';
+    return null;
   }
+  const hasPending = () => unsaved.size > 0 || saving.size > 0 || reorderRun !== null;
 
   /* Preview */
   const frames = () => [mainFrame, dialog?.querySelector('iframe')].filter(Boolean);
   function scrollFrame(frame) {
     try {
       const doc = frame.contentDocument;
-      const card = selectedKey && doc?.getElementById(`screening-q-${selectedKey}`);
+      const card = previewKey && doc?.getElementById(`screening-q-${previewKey}`);
       if (!card) return;
       const top = card.getBoundingClientRect().top + frame.contentWindow.scrollY - 16;
       frame.contentWindow.scrollTo(0, Math.max(0, top));
@@ -91,6 +101,7 @@
   function select(key, { push = true } = {}) {
     if (!panelFor(key)) return;
     selectedKey = key;
+    previewKey = key;
     document.querySelectorAll('[data-panel-for]').forEach(panel => { panel.hidden = panel.dataset.panelFor !== key; });
     list.querySelectorAll('.screening-row').forEach(row => {
       row.classList.toggle('is-selected', (row.dataset.questionKey || row.dataset.fixedKey) === key);
@@ -101,10 +112,11 @@
     frames().forEach(scrollFrame);
   }
   listen(list, 'click', event => {
-    const link = event.target.closest('[data-screening-edit]');
-    if (!link || event.metaKey || event.ctrlKey || event.shiftKey || event.button) return;
-    event.preventDefault();
-    select(link.dataset.screeningEdit);
+    const row = event.target.closest('.screening-row');
+    if (!row || event.button || event.metaKey || event.ctrlKey || event.shiftKey) return;
+    if (event.target.closest('[data-move], .screening-row__retire, .screening-row__handle')) return;
+    if (event.target.closest('[data-screening-edit]')) event.preventDefault();
+    select(row.dataset.questionKey || row.dataset.fixedKey);
   });
 
   /* Options editor */
@@ -131,7 +143,7 @@
       const fixed = type === 'yes_no';
       const items = optionRows(form);
       const add = fieldset.querySelector('[data-option-add]');
-      if (add) add.hidden = fixed;
+      if (add) { add.hidden = fixed; add.disabled = items.length >= MAX_ANSWERS; }
       items.forEach(row => {
         const remove = row.querySelector('[data-option-remove]');
         remove.hidden = fixed;
@@ -149,6 +161,26 @@
     const row = template.content.firstElementChild.cloneNode(true);
     add.before(row);
     return row;
+  }
+  // Yes/No is exactly the two rows yes and no: keep those, make any that is missing, drop the rest.
+  function setYesNo(form) {
+    const add = form.querySelector('[data-option-add]');
+    if (!add) return;
+    const byValue = {};
+    optionRows(form).forEach(row => {
+      const value = row.querySelector('[data-option-value]').value;
+      if ((value === 'yes' || value === 'no') && !byValue[value]) byValue[value] = row; else row.remove();
+    });
+    [['yes', 'Yes'], ['no', 'No']].forEach(([value, label]) => {
+      let row = byValue[value];
+      if (!row) {
+        row = addOption(form);
+        if (!row) return;
+        row.querySelector('[data-option-value]').value = value;
+        row.querySelector('[data-option-label]').value = label;
+      }
+      add.before(row);
+    });
   }
   document.querySelectorAll('form[data-screening-panel]').forEach(form => {
     syncPanel(form);
@@ -174,12 +206,26 @@
     Object.entries(errors || {}).forEach(([name, messages]) => {
       (messages || []).forEach(message => {
         if (name === 'options') {
-          const flagged = optionRows(form).find(row => {
-            const label = row.querySelector('[data-option-label]').value.trim();
-            return message.includes(`“${label}”`) && row.querySelector('[data-option-flag]').checked;
-          });
-          const target = message.startsWith('Say why') && flagged ? flagged.querySelector('[data-option-reason]') : null;
-          if (target) attach(target, message); else loose.push(message);
+          const items = optionRows(form);
+          let target = null;
+          if (message.startsWith('Say why')) {
+            const found = items.find(row => message.includes(`“${row.querySelector('[data-option-label]').value.trim()}”`) && row.querySelector('[data-option-flag]').checked);
+            target = found?.querySelector('[data-option-reason]');
+          } else if (message.startsWith('Every answer needs a label')) {
+            target = items.find(row => !row.querySelector('[data-option-label]').value.trim())?.querySelector('[data-option-label]');
+          } else if (message.startsWith('An answer label')) {
+            target = items.find(row => row.querySelector('[data-option-label]').value.trim().length > 120)?.querySelector('[data-option-label]');
+          }
+          if (target) attach(target, message);
+          else {
+            const fieldset = form.querySelector('[data-screening-options]');
+            if (fieldset) {
+              const span = document.createElement('span');
+              span.className = 'screening-field-error';
+              span.textContent = message;
+              fieldset.append(span);
+            } else loose.push(message);
+          }
           return;
         }
         const field = form.elements[name];
@@ -196,13 +242,22 @@
     if (stale) return;
     const key = form.dataset.screeningPanel;
     window.clearTimeout(timers.get(key));
+    unsaved.set(key, form);
     timers.set(key, window.setTimeout(() => { timers.delete(key); save(form); }, delay));
   }
-  async function save(form) {
-    if (stale) return;
+  function save(form) {
     const key = form.dataset.screeningPanel;
-    if (saving.get(key)) { again.add(key); return; }
-    saving.set(key, true);
+    if (stale) return Promise.resolve(false);
+    if (saving.has(key)) { again.add(key); return saving.get(key); }
+    const run = doSave(form, key).finally(() => {
+      saving.delete(key);
+      if (again.delete(key) && !stale) schedule(form, 0);
+    });
+    saving.set(key, run);
+    return run;
+  }
+  async function doSave(form, key) {
+    unsaved.delete(key);
     serializeOptions(form);
     status.textContent = 'Saving…';
     try {
@@ -211,9 +266,10 @@
         headers: { Accept: 'application/json', 'X-CSRFToken': csrf(form), 'X-Requested-With': 'XMLHttpRequest' },
         body: new URLSearchParams(new FormData(form)),
         credentials: 'same-origin',
+        keepalive: true,
       });
       const data = await readJson(response);
-      if (response.ok && data?.ok) {
+      if (response.ok && data?.ok && !response.redirected) {
         clearErrors(form);
         const row = rowFor(key);
         if (row && data.row_html) {
@@ -225,19 +281,44 @@
         const heading = form.querySelector('h3');
         if (heading) heading.textContent = form.elements.label.value;
         status.textContent = 'Saved';
+        previewKey = key;
         reloadPreview();
-      } else if (response.status === 400) {
+        return true;
+      }
+      const gone = staleMessage(response, data);
+      if (gone) { refuse(gone); return false; }
+      unsaved.set(key, form);
+      if (response.status === 400) {
         status.textContent = '';
         showErrors(form, data?.errors);
       } else {
-        refuse(refusal(response, data));
+        status.textContent = 'Could not save. Try again.';
       }
     } catch (error) {
+      unsaved.set(key, form);
       status.textContent = 'Could not save. Check your connection; the next change tries again.';
-    } finally {
-      saving.set(key, false);
-      if (again.delete(key) && !stale) schedule(form, 0);
     }
+    return false;
+  }
+  // Saves every panel with an unsaved change and waits for saves and reorders in flight. False if any failed.
+  async function flush() {
+    let ok = true;
+    let forms = [...unsaved.values()];
+    for (let pass = 0; pass < 5; pass += 1) {
+      forms.forEach(form => { window.clearTimeout(timers.get(form.dataset.screeningPanel)); timers.delete(form.dataset.screeningPanel); });
+      const runs = [...forms.map(save), ...saving.values()];
+      if (reorderRun) runs.push(reorderRun);
+      if (!runs.length) break;
+      if ((await Promise.all(runs)).includes(false)) ok = false;
+      forms = [...timers.keys()].map(key => unsaved.get(key)).filter(Boolean);
+      if (!forms.length) break;
+    }
+    return ok && !stale;
+  }
+  function flushFailed() {
+    const bad = document.querySelector('form[data-screening-panel] [aria-invalid]')?.closest('form[data-screening-panel]');
+    if (bad && !stale) select(bad.dataset.screeningPanel);
+    if (!stale) status.textContent = 'Fix the highlighted problem first. Your last change is not saved yet.';
   }
   listen(document, 'input', event => {
     const form = event.target.closest?.('form[data-screening-panel]');
@@ -248,6 +329,7 @@
     if (!form) return;
     if (event.target.name === 'answer_type') {
       const type = event.target.value;
+      if (type === 'yes_no') setYesNo(form);
       if (CHOICE.includes(type)) while (optionRows(form).length < 2) addOption(form);
       syncPanel(form);
     } else if (event.target.matches('[data-option-flag]')) {
@@ -266,6 +348,7 @@
     const form = event.target.closest?.('form[data-screening-panel]');
     if (!form) return;
     if (event.target.closest('[data-option-add]')) {
+      if (optionRows(form).length >= MAX_ANSWERS) return;
       const row = addOption(form);
       syncPanel(form);
       row?.querySelector('[data-option-label]')?.focus();
@@ -290,8 +373,17 @@
       if (down) down.disabled = index === items.length - 1;
     });
   }
-  async function reorder(previous) {
-    if (stale) return false;
+  function reorder(previous, movedKey) {
+    if (stale) return Promise.resolve(false);
+    const run = doReorder(previous, movedKey).finally(() => { reorderRun = null; });
+    reorderRun = run;
+    return run;
+  }
+  function revert(previous) {
+    previous.forEach(key => { const row = rowFor(key); if (row) rows.append(row); });
+    syncMoves();
+  }
+  async function doReorder(previous, movedKey) {
     status.textContent = 'Saving…';
     try {
       const response = await fetch(reorderUrl, {
@@ -299,19 +391,20 @@
         headers: { Accept: 'application/json', 'Content-Type': 'application/json', 'X-CSRFToken': csrf(document), 'X-Requested-With': 'XMLHttpRequest' },
         body: JSON.stringify({ keys: order(), draft_id: Number(draftId) }),
         credentials: 'same-origin',
+        keepalive: true,
       });
       const data = await readJson(response);
-      if (response.ok && data?.ok) {
+      if (response.ok && data?.ok && !response.redirected) {
         status.textContent = 'Saved';
+        previewKey = movedKey;
         reloadPreview();
         return true;
       }
-      previous.forEach(key => { const row = rowFor(key); if (row) rows.append(row); });
-      syncMoves();
-      refuse(refusal(response, data));
+      revert(previous);
+      const gone = staleMessage(response, data);
+      if (gone) refuse(gone); else status.textContent = response.status === 400 ? 'Could not reorder.' : 'Could not save. Try again.';
     } catch (error) {
-      previous.forEach(key => { const row = rowFor(key); if (row) rows.append(row); });
-      syncMoves();
+      revert(previous);
       status.textContent = 'Could not reorder. Check your connection and try again.';
     }
     return false;
@@ -326,7 +419,7 @@
     if (button.dataset.move === 'up') sibling.before(row); else sibling.after(row);
     syncMoves();
     button.focus();
-    reorder(previous);
+    reorder(previous, row.dataset.questionKey);
   });
 
   /* Dragging (native HTML5 events on the rows; the buttons above cover keyboards) */
@@ -357,9 +450,10 @@
   listen(rows, 'dragend', () => {
     if (!dragged) return;
     dragged.classList.remove('is-dragging');
+    const movedRow = dragged;
     dragged = null;
     syncMoves();
-    if (order().join() !== before.join()) reorder(before);
+    if (order().join() !== before.join()) reorder(before, movedRow.dataset.questionKey);
   });
 
   document.querySelectorAll('form[data-screening-panel]').forEach(form => {
@@ -367,5 +461,33 @@
     form.elements.options.value = form.elements.options.value || '[]';
   });
   prepareRows();
-  lifecycle?.cleanup(() => { timers.forEach(timer => window.clearTimeout(timer)); alertBox.remove(); status.remove(); });
+
+  /* Leaving the page or posting another form first saves what is pending. */
+  listen(document, 'submit', event => {
+    const form = event.target;
+    if (!(form instanceof HTMLFormElement) || form.matches('[data-screening-panel]') || !hasPending()) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    flush().then(ok => { if (ok) form.submit(); else flushFailed(); });
+  }, true);
+  listen(document, 'click', event => {
+    if (bypass || event.defaultPrevented || event.button || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    const link = event.target.closest?.('a[href]');
+    if (!link || link.hasAttribute('data-screening-edit') || link.target || link.hasAttribute('download') || !hasPending()) return;
+    const href = link.getAttribute('href');
+    if (!href || href.startsWith('#') || href.startsWith('javascript:')) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    flush().then(ok => {
+      if (!ok) { flushFailed(); return; }
+      bypass = true;
+      try { link.click(); } finally { bypass = false; }
+    });
+  }, true);
+  listen(window, 'beforeunload', event => {
+    if (stale || !hasPending()) return;
+    event.preventDefault();
+    event.returnValue = '';
+  });
+  lifecycle?.cleanup(() => { flush(); alertBox.remove(); status.remove(); });
 });

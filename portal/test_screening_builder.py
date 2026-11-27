@@ -179,6 +179,29 @@ class ScreeningBuilderTests(BillingFixture):
                      'The eligibility checks and the medical profile use this answer', 'Core · reword only'):
             self.assertContains(page, text)
 
+    def test_every_question_renders_the_remaining_script_hooks(self):
+        from portal.screening_views import FIXED_CORE_KEYS
+        self.start()
+        self.client.post(reverse('portal:screening-question-add'), {'draft_id': self.number()})
+        draft = draft_version(self.company)
+        page = self.client.get(reverse('portal:screening-draft'))
+        html = page.content.decode()
+        questions = list(draft.questions.all())
+        custom = [q for q in questions if q.tier != ScreeningQuestion.Tier.CORE]
+        self.assertTrue(custom)
+        self.assertContains(page, 'data-screening-rows')
+        self.assertContains(page, f'data-draft-id="{draft.pk}"')
+        for question in questions:
+            with self.subTest(key=question.key):
+                self.assertEqual(html.count(f'data-panel-for="{question.key}"'), 1)
+                self.assertEqual(html.count(f'data-screening-panel="{question.key}"'), 1)
+                row_attr = 'data-fixed-key' if question.key in FIXED_CORE_KEYS else 'data-question-key'
+                self.assertEqual(html.count(f'{row_attr}="{question.key}"'), 1)
+        self.assertEqual(html.count('data-panel-errors'), len(questions))
+        self.assertEqual(html.count('data-screening-options'), len(custom))
+        self.assertEqual(html.count('name="options"'), len(custom))
+        self.assertEqual(html.count('screening-number'), len(custom))
+
     def test_custom_panel_shows_flag_hint(self):
         self.start()
         self.client.post(reverse('portal:screening-question-add'), {'draft_id': self.number()})
