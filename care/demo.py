@@ -41,6 +41,7 @@ from .models import (
 )
 from .journeys import default_journeys
 from .parcels import schedule_parcels
+from .screening import live_version
 from .services import post_patient_message
 
 
@@ -482,6 +483,7 @@ def seed_demo_care(*, meridian, orion, users, nadia):
             'answers': {'demo': True, 'goal': 'sustainable weight management'},
             'submitted_at': timezone.now() - timedelta(days=1),
             'reviewed_by': sam,
+            'form_version': live_version(meridian),
         },
     )
     payout_run, _ = PayoutRun.objects.update_or_create(
