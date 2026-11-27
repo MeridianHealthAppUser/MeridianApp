@@ -22,7 +22,7 @@ from care.forms import EligibilityQuestionnaireForm, ScreeningQuestionForm
 from care.intake import practice_notices
 from care.models import ScreeningFormVersion, ScreeningQuestion
 from care.screening import (
-    FIXED_CORE_KEYS, add_question, change_summary, discard_draft, draft_version, live_version,
+    FIXED_CORE_KEYS, STALE_DRAFT, add_question, change_summary, discard_draft, draft_version, live_version,
     movable_questions, publish_draft, reorder, retire_question, save_question, start_draft)
 from practices.models import CompanyMembership
 
@@ -63,6 +63,14 @@ class SuperAdminView(View):
             raise Http404('There is no draft.')
         return draft
 
+    def check_draft(self, request, posted=None):
+        """The editor that posted this was showing the company's current draft, not an older or newer one."""
+        draft = draft_version(self.company)
+        posted = request.POST.get('draft_number') if posted is None else posted
+        if draft is None or str(draft.number) != str(posted):
+            raise ValidationError(STALE_DRAFT)
+        return draft
+
     def wants_json(self, request):
         return 'application/json' in request.headers.get('Accept', '')
 
@@ -86,7 +94,8 @@ def decorate(question):
 
 def row_html(request, question, selected=False):
     return render_to_string('portal/includes/screening_builder_row.html',
-                            {'question': decorate(question), 'selected_key': question.key if selected else ''}, request=request)
+                            {'question': decorate(question), 'selected_key': question.key if selected else '', 'can_edit': True,
+                             'draft_number': question.version.number}, request=request)
 
 
 def draft_url(key=''):
@@ -153,6 +162,7 @@ class QuestionAddView(ScreeningStaffView):
 
     def post(self, request):
         try:
+            self.check_draft(request)
             question = add_question(company=self.company, actor=request.user, request=request)
         except ValidationError as error:
             return self.refused(request, error)
@@ -172,6 +182,10 @@ class QuestionSaveView(ScreeningStaffView):
     def post(self, request, key):
         draft = self.draft_or_404()
         question = get_object_or_404(draft.questions, key=key)
+        try:
+            self.check_draft(request)
+        except ValidationError as error:
+            return self.fail(request, key, 409, {'__all__': list(error.messages)})
         if question.tier == ScreeningQuestion.Tier.CORE:
             form = CoreWordingForm(request.POST)
         else:
@@ -196,6 +210,7 @@ class QuestionRetireView(ScreeningStaffView):
         draft = self.draft_or_404()
         question = get_object_or_404(draft.questions, key=key)
         try:
+            self.check_draft(request)
             retire_question(question=question, actor=request.user, request=request)
         except ValidationError as error:
             return self.refused(request, error)
@@ -209,12 +224,15 @@ class ReorderView(ScreeningStaffView):
 
     def post(self, request):
         try:
-            keys = json.loads(request.body or b'{}').get('keys') if 'json' in request.content_type else request.POST.getlist('keys')
+            body = json.loads(request.body) if 'json' in request.content_type else {
+                'keys': request.POST.getlist('keys'), 'draft_number': request.POST.get('draft_number')}
+            keys, number = body.get('keys'), body.get('draft_number')
         except (ValueError, AttributeError):
-            keys = None
+            keys = number = None
         if not isinstance(keys, list) or not all(isinstance(k, str) for k in keys):
             return JsonResponse({'ok': False, 'errors': {'__all__': ['The order could not be read. Reload the page.']}}, status=400)
         try:
+            self.check_draft(request, number)
             reorder(company=self.company, actor=request.user, keys=keys, request=request)
         except ValidationError as error:
             return JsonResponse({'ok': False, 'errors': {'__all__': list(error.messages)}}, status=409)
@@ -227,6 +245,7 @@ class PublishView(ScreeningStaffView):
 
     def post(self, request):
         try:
+            self.check_draft(request)
             version = publish_draft(company=self.company, actor=request.user, request=request)
         except ValidationError as error:
             return self.refused(request, error)
@@ -240,6 +259,7 @@ class DiscardView(ScreeningStaffView):
 
     def post(self, request):
         try:
+            self.check_draft(request)
             discard_draft(company=self.company, actor=request.user, request=request)
         except ValidationError as error:
             return self.refused(request, error, to_editor=False)

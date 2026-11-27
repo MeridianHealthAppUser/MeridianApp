@@ -1,6 +1,6 @@
 {# One question row in the editor's list. `question` is decorated (flagged, is_core, movable); selected_key marks the open one. #}
 <li class="screening-row{% if question.key == selected_key %} is-selected{% endif %}" {% if question.movable %}data-question-key="{{ question.key }}"{% else %}data-fixed-key="{{ question.key }}"{% endif %}>
-  {% if question.movable %}<span class="screening-row__handle" aria-hidden="true" title="Drag to reorder">⠿</span>{% endif %}
+  {% if can_edit and question.movable %}<span class="screening-row__handle" aria-hidden="true" title="Drag to reorder">⠿</span>{% endif %}
   <div class="screening-row__text">
     <strong class="screening-row__label">{{ question.label }}</strong>
     <span class="screening-row__meta">
@@ -9,13 +9,13 @@
     </span>
   </div>
   <div class="screening-row__actions">
-    {% if question.movable %}
+    {% if can_edit and question.movable %}
     <button class="console-button console-button--secondary" type="button" data-move="up">Move up<span class="sr-only"> {{ question.label }}</span></button>
     <button class="console-button console-button--secondary" type="button" data-move="down">Move down<span class="sr-only"> {{ question.label }}</span></button>
     {% endif %}
-    <a class="console-button console-button--secondary" href="{% url 'portal:screening-draft' %}?q={{ question.key }}" data-screening-edit="{{ question.key }}">Edit<span class="sr-only"> {{ question.label }}</span></a>
-    {% if not question.is_core %}
-    <form method="post" action="{% url 'portal:screening-question-retire' question.key %}" class="screening-row__retire">{% csrf_token %}<button class="console-button console-button--secondary" type="submit">Retire<span class="sr-only"> {{ question.label }}</span></button></form>
+    {% if can_edit %}<a class="console-button console-button--secondary" href="{% url 'portal:screening-draft' %}?q={{ question.key }}" data-screening-edit="{{ question.key }}">Edit<span class="sr-only"> {{ question.label }}</span></a>{% endif %}
+    {% if can_edit and not question.is_core %}
+    <form method="post" action="{% url 'portal:screening-question-retire' question.key %}" class="screening-row__retire">{% csrf_token %}<input type="hidden" name="draft_number" value="{{ draft_number }}"><button class="console-button console-button--secondary" type="submit">Retire<span class="sr-only"> {{ question.label }}</span></button></form>
     {% endif %}
   </div>
 </li>

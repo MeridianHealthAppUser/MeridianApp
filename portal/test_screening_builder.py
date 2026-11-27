@@ -24,6 +24,9 @@ class ScreeningBuilderTests(BillingFixture):
         session[ACTIVE_PATIENT_COMPANY_SESSION_KEY] = self.company.pk
         session.save()
 
+    def number(self):
+        return draft_version(self.company).number
+
     def start(self):
         self.login(self.super_admin)
         return self.client.post(reverse('portal:screening-draft-start'))
@@ -63,38 +66,39 @@ class ScreeningBuilderTests(BillingFixture):
     def test_editor_flow_start_add_save_publish(self):
         response = self.start()
         self.assertRedirects(response, reverse('portal:screening-draft'), fetch_redirect_response=False)
-        add = self.client.post(reverse('portal:screening-question-add'))
+        add = self.client.post(reverse('portal:screening-question-add'), {'draft_number': self.number()})
         key = draft_version(self.company).questions.get(tier='custom').key
         self.assertRedirects(add, f'{reverse("portal:screening-draft")}?q={key}', fetch_redirect_response=False)
         options = [{'value': 'yes', 'label': 'Yes', 'flag': True, 'reason': 'Needs a doctor to look'},
                    {'value': 'no', 'label': 'No', 'flag': False, 'reason': ''}]
         saved = self.client.post(reverse('portal:screening-question-save', args=[key]), {
-            'answer_type': 'yes_no', 'label': 'Surgery?', 'options': json.dumps(options)}, HTTP_ACCEPT='application/json')
+            'draft_number': self.number(), 'answer_type': 'yes_no', 'label': 'Surgery?', 'options': json.dumps(options)}, HTTP_ACCEPT='application/json')
         self.assertEqual(saved.status_code, 200)
         self.assertTrue(saved.json()['ok'])
         self.assertIn('Surgery?', saved.json()['row_html'])
-        published = self.client.post(reverse('portal:screening-publish'))
+        published = self.client.post(reverse('portal:screening-publish'), {'draft_number': self.number()})
         self.assertRedirects(published, reverse('portal:screening-questions'), fetch_redirect_response=False)
         self.assertEqual(live_version(self.company).number, 2)
         page = self.client.get(reverse('portal:screening-questions'))
         self.assertContains(page, 'Version 2')
-        self.assertContains(page, 'Published')
+        row = page.content.decode().split('Version 2</td>', 1)[1].split('</tr>', 1)[0]
+        self.assertIn('Published', row)
 
     def test_save_without_json_redirects_back_to_the_editor(self):
         self.start()
-        self.client.post(reverse('portal:screening-question-add'))
+        self.client.post(reverse('portal:screening-question-add'), {'draft_number': self.number()})
         key = draft_version(self.company).questions.get(tier='custom').key
         response = self.client.post(reverse('portal:screening-question-save', args=[key]), {
-            'answer_type': 'yes_no', 'label': 'Plain post', 'options': '[]'})
+            'draft_number': self.number(), 'answer_type': 'yes_no', 'label': 'Plain post', 'options': '[]'})
         self.assertRedirects(response, f'{reverse("portal:screening-draft")}?q={key}', fetch_redirect_response=False)
         self.assertEqual(ScreeningQuestion.objects.get(version=draft_version(self.company), key=key).label, 'Plain post')
 
     def test_save_with_errors_returns_400_json(self):
         self.start()
-        self.client.post(reverse('portal:screening-question-add'))
+        self.client.post(reverse('portal:screening-question-add'), {'draft_number': self.number()})
         key = draft_version(self.company).questions.get(tier='custom').key
         response = self.client.post(reverse('portal:screening-question-save', args=[key]), {
-            'answer_type': 'single', 'label': 'Pick', 'options': '[]'}, HTTP_ACCEPT='application/json')
+            'draft_number': self.number(), 'answer_type': 'single', 'label': 'Pick', 'options': '[]'}, HTTP_ACCEPT='application/json')
         self.assertEqual(response.status_code, 400)
         self.assertFalse(response.json()['ok'])
         self.assertIn('options', response.json()['errors'])
@@ -104,37 +108,36 @@ class ScreeningBuilderTests(BillingFixture):
         live_key = live_version(self.company).questions.filter(tier='core').first().key
         # No draft: 404, never a lookup in the live version.
         self.assertEqual(self.client.post(reverse('portal:screening-question-save', args=[live_key]), {
-            'label': 'Hacked'}).status_code, 404)
+            'label': 'Hacked', 'draft_number': 1}).status_code, 404)
         self.assertEqual(self.client.get(reverse('portal:screening-draft')).status_code, 404)
-        self.assertEqual(live_version(self.company).questions.get(key=live_key).label,
-                         ScreeningQuestion.objects.filter(version=live_version(self.company), key=live_key).first().label)
+        self.assertNotEqual(live_version(self.company).questions.get(key=live_key).label, 'Hacked')
 
     def test_reorder_and_stale_responses(self):
         self.start()
         draft = draft_version(self.company)
         from care.screening import movable_questions
         keys = [q.key for q in movable_questions(draft)]
-        ok = self.client.post(reverse('portal:screening-reorder'), json.dumps({'keys': keys[::-1]}), content_type='application/json')
+        ok = self.client.post(reverse('portal:screening-reorder'), json.dumps({'keys': keys[::-1], 'draft_number': draft.number}), content_type='application/json')
         self.assertEqual(ok.status_code, 200)
         self.assertTrue(ok.json()['ok'])
-        bad = self.client.post(reverse('portal:screening-reorder'), json.dumps({'keys': keys[:1]}), content_type='application/json')
+        bad = self.client.post(reverse('portal:screening-reorder'), json.dumps({'keys': keys[:1], 'draft_number': draft.number}), content_type='application/json')
         self.assertEqual(bad.status_code, 409)
         self.assertIn('__all__', bad.json()['errors'])
 
     def test_publish_error_redirects_back_with_a_message(self):
         self.login(self.super_admin)
-        response = self.client.post(reverse('portal:screening-publish'), follow=True)
+        response = self.client.post(reverse('portal:screening-publish'), {'draft_number': 2}, follow=True)
         self.assertRedirects(response, reverse('portal:screening-questions'))
         self.assertContains(response, 'This draft was published or discarded')
 
     def test_retire_discard_and_read_only_version(self):
         self.start()
-        self.client.post(reverse('portal:screening-question-add'))
+        self.client.post(reverse('portal:screening-question-add'), {'draft_number': self.number()})
         key = draft_version(self.company).questions.get(tier='custom').key
-        self.assertRedirects(self.client.post(reverse('portal:screening-question-retire', args=[key])),
+        self.assertRedirects(self.client.post(reverse('portal:screening-question-retire', args=[key]), {'draft_number': self.number()}),
                              reverse('portal:screening-draft'), fetch_redirect_response=False)
         self.assertFalse(draft_version(self.company).questions.filter(key=key).exists())
-        self.assertRedirects(self.client.post(reverse('portal:screening-discard')), reverse('portal:screening-questions'),
+        self.assertRedirects(self.client.post(reverse('portal:screening-discard'), {'draft_number': self.number()}), reverse('portal:screening-questions'),
                              fetch_redirect_response=False)
         self.assertIsNone(draft_version(self.company))
         page = self.client.get(reverse('portal:screening-version', args=[1]))
@@ -175,7 +178,7 @@ class ScreeningBuilderTests(BillingFixture):
 
     def test_custom_panel_shows_flag_hint(self):
         self.start()
-        self.client.post(reverse('portal:screening-question-add'))
+        self.client.post(reverse('portal:screening-question-add'), {'draft_number': self.number()})
         page = self.client.get(reverse('portal:screening-draft'))
         self.assertContains(page, 'The patient sees this reason.')
         self.assertContains(page, 'Flag for review')
@@ -186,3 +189,44 @@ class ScreeningBuilderTests(BillingFixture):
         self.assertContains(page, 'New enquiries on the website and your WordPress page get these questions from now on. '
                                   'Leads that already answered keep Version 1.')
         self.assertContains(page, 'Version 2')
+
+    def test_read_only_version_page_has_no_editing_hooks(self):
+        self.start()
+        self.client.post(reverse('portal:screening-question-add'), {'draft_number': self.number()})
+        self.client.post(reverse('portal:screening-publish'), {'draft_number': self.number()})
+        self.client.post(reverse('portal:screening-draft-start'))
+        page = self.client.get(reverse('portal:screening-version', args=[2])).content.decode()
+        self.assertIn('c_new-question', page)
+        for hook in ('data-move', 'data-reorder-url', 'data-screening-list', '/retire/', 'data-screening-edit'):
+            self.assertNotIn(hook, page)
+
+    def test_stale_editor_tabs_are_refused_and_change_nothing(self):
+        self.start()
+        self.client.post(reverse('portal:screening-question-add'), {'draft_number': self.number()})
+        draft = draft_version(self.company)
+        key = draft.questions.get(tier='custom').key
+        from care.screening import movable_questions
+        keys = [q.key for q in movable_questions(draft)]
+        old = draft.number - 1
+        save = self.client.post(reverse('portal:screening-question-save', args=[key]), {
+            'draft_number': old, 'answer_type': 'yes_no', 'label': 'Stale', 'options': '[]'}, HTTP_ACCEPT='application/json')
+        self.assertEqual(save.status_code, 409)
+        self.assertEqual(draft.questions.get(key=key).label, 'New question')
+        pub = self.client.post(reverse('portal:screening-publish'), {'draft_number': old}, follow=True)
+        self.assertContains(pub, 'This draft was published or discarded')
+        self.assertEqual(draft_version(self.company).pk, draft.pk)
+        self.assertEqual(live_version(self.company).number, 1)
+        order = self.client.post(reverse('portal:screening-reorder'), json.dumps({'keys': keys[::-1], 'draft_number': old}),
+                                 content_type='application/json')
+        self.assertEqual(order.status_code, 409)
+        self.assertEqual([q.key for q in movable_questions(draft)], keys)
+        self.assertEqual(self.client.post(reverse('portal:screening-discard'), {'draft_number': old}).status_code, 302)
+        self.assertIsNotNone(draft_version(self.company))
+
+    def test_option_editor_hooks(self):
+        self.start()
+        self.client.post(reverse('portal:screening-question-add'), {'draft_number': self.number()})
+        page = self.client.get(reverse('portal:screening-draft'))
+        for hook in ('data-option-row', 'data-option-remove', 'data-option-add', 'data-option-template', 'data-option-value',
+                     'data-option-label', 'data-option-flag', 'data-option-reason', '+ Add answer', '>Remove<'):
+            self.assertContains(page, hook)

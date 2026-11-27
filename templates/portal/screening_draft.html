@@ -14,7 +14,7 @@
   </div>
 </section>
 <div class="screening-editor">
-  <div class="screening-editor__list">{% include 'portal/includes/screening_builder_list.html' with can_edit=True %}</div>
+  <div class="screening-editor__list">{% include 'portal/includes/screening_builder_list.html' with can_edit=True draft_number=draft.number %}</div>
   <div class="screening-editor__panels">{% for question in movable %}{% include 'portal/includes/screening_question_panel.html' %}{% endfor %}{% for question in fixed %}{% include 'portal/includes/screening_question_panel.html' %}{% endfor %}</div>
   <div class="screening-editor__preview"><iframe class="screening-preview" src="{% url 'portal:screening-preview' draft.number %}" title="Patient preview"></iframe></div>
 </div>
@@ -26,7 +26,7 @@
     {% if summary.added or summary.reworded or summary.retired or summary.reordered %}<ul>
       {% for label in summary.added %}<li>Added: {{ label }}</li>{% endfor %}{% for label in summary.reworded %}<li>Reworded: {{ label }}</li>{% endfor %}{% for label in summary.retired %}<li>Retired: {{ label }}</li>{% endfor %}{% if summary.reordered %}<li>Questions reordered</li>{% endif %}
     </ul>{% endif %}
-    <form method="post" action="{% url 'portal:screening-publish' %}" class="app-dialog__actions">{% csrf_token %}
+    <form method="post" action="{% url 'portal:screening-publish' %}" class="app-dialog__actions">{% csrf_token %}<input type="hidden" name="draft_number" value="{{ draft.number }}">
       <button class="console-button console-button--secondary" type="button" data-dialog-close>Cancel</button>
       <button class="console-button console-button--primary" type="submit">Publish Version {{ draft.number }}</button>
     </form>
@@ -36,7 +36,7 @@
   <div class="app-dialog__body">
     <h2 id="screening-discard-title">Discard this draft?</h2>
     <p class="app-dialog__sub">Your changes to Version {{ draft.number }} are deleted. Version {{ live.number }} stays live.</p>
-    <form method="post" action="{% url 'portal:screening-discard' %}" class="app-dialog__actions">{% csrf_token %}
+    <form method="post" action="{% url 'portal:screening-discard' %}" class="app-dialog__actions">{% csrf_token %}<input type="hidden" name="draft_number" value="{{ draft.number }}">
       <button class="console-button console-button--secondary" type="button" data-dialog-close>Keep editing</button>
       <button class="console-button console-button--primary" type="submit">Discard draft</button>
     </form>
