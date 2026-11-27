@@ -1,12 +1,13 @@
 import importlib
 
 from django.apps import apps as django_apps
-from django.db import IntegrityError, transaction
+from django.db import IntegrityError, connection, transaction
 from django.test import TestCase
+from django.test.utils import CaptureQueriesContext
 
 from care.forms import EligibilityQuestionnaireForm
 from care.models import Lead, ScreeningFormVersion, ScreeningQuestion, ScreeningQuestionnaire
-from care.screening import CORE_KEYS, live_version
+from care.screening import MOVABLE_CORE_KEYS, live_version
 from care.screening_v1 import VERSION_1_NOTE, VERSION_1_QUESTIONS
 from practices.models import Company
 
@@ -53,12 +54,21 @@ class VersionOneTests(TestCase):
         self.assertEqual(live_version(company).pk, version.pk)
         self.assertEqual(ScreeningFormVersion.objects.filter(company=company).count(), 1)
 
+    def test_live_version_fast_path_does_not_lock(self):
+        company = Company.objects.create(name='Fast Practice', slug='fast-practice')
+        version = live_version(company)
+        with CaptureQueriesContext(connection) as ctx:
+            self.assertEqual(live_version(company).pk, version.pk)
+        self.assertEqual(len(ctx), 1)
+        self.assertFalse(any('FOR UPDATE' in q['sql'] for q in ctx.captured_queries))
+
     def test_version_1_matches_todays_form(self):
         by_key = {q['key']: q for q in VERSION_1_QUESTIONS}
-        for key in CORE_KEYS[:5]:
+        for key in MOVABLE_CORE_KEYS:
             field = EligibilityQuestionnaireForm.base_fields[key]
             self.assertEqual([o['value'] for o in by_key[key]['options']], [v for v, _ in field.choices])
             self.assertEqual(by_key[key]['required'], field.required)
+        # A point-in-time check of Version 1 against today's Lead.HEARD_FROM.
         self.assertEqual([(o['value'], o['label']) for o in by_key['heard_from']['options']], list(Lead.HEARD_FROM))
 
     def test_migration_copy_matches_module(self):

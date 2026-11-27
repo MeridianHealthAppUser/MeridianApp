@@ -13,6 +13,9 @@ CORE_KEYS = MOVABLE_CORE_KEYS + FIXED_CORE_KEYS
 
 def live_version(company):
     """The published screening form version; Version 1 is created only for a company with no version at all."""
+    published = ScreeningFormVersion.objects.filter(company=company, status=ScreeningFormVersion.Status.PUBLISHED).first()
+    if published is not None:
+        return published  # fast path: no lock on the common read path
     with transaction.atomic():
         Company.objects.select_for_update().get(pk=company.pk)
         published = ScreeningFormVersion.objects.filter(company=company, status=ScreeningFormVersion.Status.PUBLISHED).first()
