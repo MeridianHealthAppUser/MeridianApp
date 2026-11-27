@@ -87,12 +87,12 @@ def save_intake(*, form, submission_key, expected_notices, request=None):
         raise ValidationError('Correct the questionnaire before submitting.')
     data = form.cleaned_data
     company = data['practice']
-    if form.version is not None and form.version.company_id != company.pk:
-        raise ValidationError('This questionnaire belongs to a different practice. Reload it before submitting.')
     with transaction.atomic():
         company = Company.objects.select_for_update().filter(pk=company.pk).first()
         if company is None or not company.is_active or not company_is_enabled(company):
             raise ValidationError('This practice is no longer accepting enquiries.')
+        if form.version is not None and form.version.company_id != company.pk:
+            raise ValidationError('This questionnaire belongs to a different practice. Reload it before submitting.')
         documents = practice_notices(company)
         if len(documents) != len(CONSENT_KINDS) or notice_fingerprint(documents) != expected_notices:
             raise ValidationError('The practice notices have changed or are unavailable. Reload the questionnaire and read them before accepting again.')

@@ -60,6 +60,16 @@ class ScreeningIntakeFlagTests(TestCase):
     def questionnaire(self, lead):
         return ScreeningQuestionnaire.objects.get(lead=lead, stage=1)
 
+    def test_save_intake_refuses_a_version_from_another_practice(self):
+        from django.core.exceptions import ValidationError
+        other = Company.objects.create(name='Other Clinic', slug='other-clinic')
+        form = EligibilityQuestionnaireForm(self.data(), version=live_version(other))
+        self.assertTrue(form.is_valid(), form.errors)
+        notices = notice_fingerprint(practice_notices(self.company))
+        with self.assertRaises(ValidationError):
+            save_intake(form=form, submission_key=uuid.uuid4(), expected_notices=notices)
+        self.assertFalse(Lead.objects.exists())
+
     def test_evaluate_flags_lists_flagged_choices_only(self):
         flags = evaluate_flags(self.version, {'c_surgery': 'yes', 'c_meds': ['a', 'b', 'c']})
         self.assertEqual(flags, [
