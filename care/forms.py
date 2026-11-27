@@ -1,3 +1,4 @@
+import json
 from datetime import datetime, time as time_of_day
 from decimal import Decimal
 from urllib.parse import urlsplit
@@ -8,6 +9,7 @@ from django.core.exceptions import NON_FIELD_ERRORS, ValidationError
 from django.core.validators import MaxLengthValidator
 from django.db.models import Case, When
 from django.utils import timezone
+from django.utils.text import slugify
 
 from practices.models import Company, CompanyMembership, Patient
 
@@ -458,3 +460,95 @@ class EligibilityQuestionnaireForm(forms.Form):
             'bmi': str(bmi),
             'custom': self._custom_answers(),
         }
+
+
+class ScreeningQuestionForm(forms.Form):
+    """Validates one custom screening question. `options` is a JSON list of {value?, label, flag, reason}.
+
+    Pass `question=` (the existing row) so option values that already exist are kept when an answer is renamed."""
+
+    CUSTOM_TYPES = [(v, l) for v, l in ScreeningQuestion.AnswerType.choices if v != ScreeningQuestion.AnswerType.YES_NO_UNSURE]
+    answer_type = forms.ChoiceField(choices=CUSTOM_TYPES)
+    label = forms.CharField(max_length=300)
+    help_text = forms.CharField(max_length=500, required=False)
+    required = forms.BooleanField(required=False)
+    options = forms.CharField(required=False)
+    number_min = forms.DecimalField(required=False, max_digits=10, decimal_places=2)
+    number_max = forms.DecimalField(required=False, max_digits=10, decimal_places=2)
+
+    def __init__(self, *args, question=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.existing_values = {o.get('value') for o in (question.options if question is not None else []) if isinstance(o, dict)}
+
+    def clean_label(self):
+        return self.cleaned_data['label'].strip()
+
+    def _parse_options(self):
+        raw = self.cleaned_data.get('options') or '[]'
+        try:
+            items = json.loads(raw)
+        except ValueError:
+            raise ValidationError('The answers could not be read. Reload the page and try again.')
+        if not isinstance(items, list) or not all(isinstance(i, dict) for i in items):
+            raise ValidationError('The answers could not be read. Reload the page and try again.')
+        return items
+
+    def _clean_item(self, item):
+        label = str(item.get('label') or '').strip()
+        flag = bool(item.get('flag'))
+        reason = str(item.get('reason') or '').strip() if flag else ''
+        if not label:
+            raise ValidationError('Every answer needs a label.')
+        if len(label) > 120:
+            raise ValidationError('An answer label can be at most 120 characters.')
+        if flag and not reason:
+            raise ValidationError(f'Say why “{label}” is flagged.')
+        if len(reason) > 300:
+            raise ValidationError('A flag reason can be at most 300 characters.')
+        return {'label': label, 'flag': flag, 'reason': reason}
+
+    def clean(self):
+        cleaned = super().clean()
+        answer_type = cleaned.get('answer_type')
+        if answer_type is None:
+            return cleaned
+        Type = ScreeningQuestion.AnswerType
+        try:
+            items = self._parse_options()
+            if answer_type == Type.YES_NO:
+                by_value = {i.get('value'): i for i in items}
+                options = []
+                for value, default in (('yes', 'Yes'), ('no', 'No')):
+                    item = {**by_value.get(value, {})}
+                    item['label'] = item.get('label') or default
+                    options.append({'value': value, **self._clean_item(item)})
+            elif answer_type in (Type.SINGLE, Type.MULTIPLE):
+                if not 2 <= len(items) <= 12:
+                    raise ValidationError('Choice questions need 2 to 12 answers.')
+                options = [self._clean_item(i) for i in items]
+                taken = {i['value'] for i in items if i.get('value') in self.existing_values}
+                for source, option in zip(items, options):
+                    if source.get('value') in self.existing_values:
+                        option['value'] = source['value']
+                        continue
+                    base = slugify(option['label'])[:50] or 'option'
+                    value, n = base, 2
+                    while value in taken:
+                        value, n = f'{base}-{n}', n + 1
+                    taken.add(value)
+                    option['value'] = value
+                options = [{'value': o['value'], 'label': o['label'], 'flag': o['flag'], 'reason': o['reason']} for o in options]
+                if len({o['value'] for o in options}) != len(options):
+                    raise ValidationError('Each answer needs a different value.')
+            else:
+                options = []
+        except ValidationError as error:
+            self.add_error('options', error)
+            options = []
+        cleaned['options'] = options
+        if answer_type != Type.NUMBER:
+            cleaned['number_min'] = cleaned['number_max'] = None
+        elif cleaned.get('number_min') is not None and cleaned.get('number_max') is not None \
+                and cleaned['number_min'] > cleaned['number_max']:
+            self.add_error('number_max', 'The maximum must not be below the minimum.')
+        return cleaned
